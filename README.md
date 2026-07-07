@@ -1,0 +1,167 @@
+# PiServ
+
+PiServ is the setup and recovery project for a Raspberry Pi 5 server at
+`piserv.example.com` / `192.0.2.181`.
+
+## Table of Contents
+
+- [Purpose](#purpose)
+- [Local Repository](#local-repository)
+- [Server Facts](#server-facts)
+- [Access](#access)
+- [Operating Model](#operating-model)
+- [Repository Layout](#repository-layout)
+- [Vendor Resources](#vendor-resources)
+- [Storage Direction](#storage-direction)
+- [Automation](#automation)
+- [Initial Workflow](#initial-workflow)
+- [Validation](#validation)
+
+## Purpose
+
+This repository captures the live setup, automation, runbooks, and decisions
+needed to operate and reproduce the PiServ Raspberry Pi server.
+
+## Local Repository
+
+Use this local repository path for all commands, downloads, and generated files:
+
+```text
+$HOME/Development/RaspberryPi/PiServ
+```
+
+Do not use the old renamed path:
+
+```text
+$HOME/Development/RaspberryPi/PiServ
+```
+
+## Server Facts
+
+| Item | Value |
+| --- | --- |
+| Hostname | `piserv.example.com` |
+| IP address | `192.0.2.181` |
+| Hardware | Raspberry Pi 5 |
+| RAM | 4 GB |
+| Storage | 128 GB NVMe SSD |
+| Current network | Wi-Fi |
+| Future network | Ethernet may be added |
+| Sudo user | `operator` |
+| Access | SSH key-based access from this host |
+
+## Access
+
+Primary SSH targets:
+
+```sh
+ssh operator@piserv.example.com
+ssh operator@192.0.2.181
+```
+
+Use `piserv.example.com` when mDNS resolution is healthy. Use the IP address when
+validating network or name-resolution issues.
+
+## Operating Model
+
+PiServ is production-first: live commands are tested directly on the server,
+then converted into repeatable automation once the desired state is confirmed.
+
+The current project is private and work in progress. Backward compatibility is
+not a constraint until the project is prepared for public reuse.
+
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `AGENTS.md` | Project-specific agent rules and server context |
+| `README.md` | Operator entry point |
+| `TODO.md` | Current setup backlog |
+| `CHANGELOG.md` | Project change history |
+| `LICENSE` | Private-use license notice |
+| `docs/` | Runbooks, decisions, and supporting documentation |
+| `docs/runbooks/` | Step-by-step operational procedures |
+| `docs/decisions/` | Durable setup and architecture decisions |
+| `ansible/` | Inventory and playbooks |
+| `scripts/` | Operator scripts and remote helpers |
+| `vendor/` | Downloaded upstream references and third-party setup material |
+
+## Vendor Resources
+
+Freenove FNK0100 resources are stored locally under `vendor/freenove/`.
+That path is intentionally ignored by Git.
+
+Recreate the Freenove content with:
+
+```sh
+mkdir -p vendor/freenove
+git clone https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi.git \
+  vendor/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
+```
+
+The local copy currently includes `Tutorial.pdf`, `Installing Raspberry Pi
+OS.pdf`, Freenove case-control code, images, and the MS51FB9AE datasheet.
+
+Freenove publishes these files under Creative Commons
+Attribution-NonCommercial-ShareAlike 3.0 Unported. Keep this resource private
+and use it as a vendor reference unless licensing is reviewed for broader use.
+
+Vendored upstream files are not first-party project code. Do not edit them for
+project lint conformance unless PiServ intentionally forks or patches them.
+
+## Storage Direction
+
+Podcast-producing jobs should use pCloud-backed storage only after the official
+pCloud setup is validated on PiServ.
+
+Current decision:
+
+| Rank | Option | Recommendation |
+| --- | --- | --- |
+| 1 | Official `pcloudcc` FUSE mount | Selected backend for scheduled podcast jobs |
+| 2 | Official pCloud Drive AppImage | Future manual/touchscreen option only |
+| 3 | Local NVMe staging plus WebDAV sync | Fallback when `pcloudcc` is not reliable |
+
+Do not plan around pCloud rsync until pCloud releases official rsync support.
+
+## Automation
+
+Migrate a microSD-booted PiServ system to NVMe:
+
+```sh
+scripts/migrate-sd-to-nvme.sh --yes --reboot
+```
+
+Run the same migration through Ansible:
+
+```sh
+ansible-playbook -i ansible/inventory.ini ansible/playbooks/migrate-sd-to-nvme.yml \
+  -e allow_destructive_nvme_reimage=true
+```
+
+Both paths repartition and format `/dev/nvme0n1`. Use them only when the Pi is
+booted from microSD and the NVMe drive is the intended destructive target.
+
+## Initial Workflow
+
+1. Verify SSH access and sudo behavior on the live server.
+2. Capture a baseline inventory of OS, kernel, storage, network, users, and
+   enabled services.
+3. Apply small live setup changes directly on the server.
+4. Record the command, result, and reasoning in a runbook or decision document.
+5. Convert confirmed setup into Ansible playbooks or shell scripts.
+6. Re-run automation against the server and document validation.
+
+## Validation
+
+Run Markdown validation after documentation changes:
+
+```sh
+markdownlint --config "$HOME/.markdownlint.json" AGENTS.md README.md TODO.md CHANGELOG.md docs/**/*.md
+```
+
+Run ShellCheck on shell scripts when any are added or changed:
+
+```sh
+shellcheck --enable=all scripts/*.sh
+```

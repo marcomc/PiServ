@@ -1,0 +1,65 @@
+# PiServ Agent Instructions
+
+Follow `$HOME/AGENTS.md` for canonical user-wide policy.
+
+## Project Context
+
+- Canonical repository path: `$HOME/Development/RaspberryPi/PiServ`.
+- Stale repository path: `$HOME/Development/RaspberryPi/PiServ`.
+  Do not use it for commands, downloads, or generated files.
+- Purpose: configure and reproduce the PiServ Raspberry Pi server.
+- Status: private work in progress; backward compatibility is not required yet.
+- Target host: `piserv.example.com`.
+- Target IP: `192.0.2.181`.
+- Hardware: Raspberry Pi 5, 4 GB RAM, 128 GB NVMe SSD.
+- Current network: Wi-Fi only.
+- Future network: Ethernet may be added.
+- Sudo user: `operator`.
+- Access model: SSH key-based access from this host is allowed.
+
+## Operating Rules
+
+- Treat the Raspberry Pi as the production test target.
+- Test setup changes directly on `piserv.example.com` before marking them done.
+- Prefer the simplest live command that proves the intended state.
+- After a live setup step is correct, codify it in Ansible and, where useful,
+  supporting shell scripts.
+- Keep runbooks, decisions, and validation notes current with every meaningful
+  setup change.
+- Do not preserve compatibility with obsolete local decisions unless the user
+  explicitly asks for it.
+
+## Automation Rules
+
+- Ansible should become the authoritative reproduction path once the live setup
+  is understood.
+- Shell scripts should wrap repeatable operator commands, preflight checks, or
+  narrow tasks that do not fit cleanly in Ansible.
+- Keep automation idempotent where practical.
+- Document any intentionally non-idempotent operation in the relevant runbook.
+- Do not commit secrets, private keys, tokens, or host-specific credentials.
+- Treat `vendor/` as upstream reference material. Do not rewrite vendored files
+  solely to satisfy project lint rules unless PiServ intentionally forks or
+  patches that upstream code.
+
+## Documentation Rules
+
+- Update `README.md` when the project purpose, layout, access model, or core
+  workflow changes.
+- Update `TODO.md` when planned setup work is discovered, completed, or dropped.
+- Update `CHANGELOG.md` for meaningful project changes.
+- Add runbooks under `docs/runbooks/`.
+- Add architecture or operational decisions under `docs/decisions/`.
+- Include the command run, observed result, and follow-up action in runbooks
+  when documenting live server changes.
+
+## Validation
+
+- Run `markdownlint --config "$HOME/.markdownlint.json"` on every
+  Markdown file created or changed.
+- Run `shellcheck --enable=all` on every shell script created or changed.
+- Exclude unmodified upstream files under `vendor/` from first-party lint
+  gates. If a vendored file is intentionally patched, document the patch and
+  validate that file too.
+- Before declaring work complete, report which validation commands passed and
+  any checks that were not applicable.
