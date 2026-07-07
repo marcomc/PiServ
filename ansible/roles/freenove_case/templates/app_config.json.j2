@@ -1,0 +1,35 @@
+{
+  "Monitor": {
+    "screen_orientation": {{ freenove_case_monitor_screen_orientation | int }},
+    "follow_led_color": {{ freenove_case_monitor_follow_led_color | int }}
+  },
+  "LED": {
+    "mode": {{ freenove_case_led_mode | int }},
+    "red_value": {{ freenove_case_led_red_value | int }},
+    "green_value": {{ freenove_case_led_green_value | int }},
+    "blue_value": {{ freenove_case_led_blue_value | int }},
+    "task_name": "task_led.py",
+    "is_run_on_startup": {{ freenove_case_led_task_enabled | bool | to_json }}
+  },
+  "Fan": {
+    "mode": {{ freenove_case_fan_mode | int }},
+    "task_name": "task_fan.py",
+    "is_run_on_startup": {{ freenove_case_fan_task_enabled | bool | to_json }},
+    "mode1_fan_group1": {{ freenove_case_fan_mode1_group1 | int }},
+    "mode1_fan_group2": {{ freenove_case_fan_mode1_group2 | int }},
+    "mode2_low_temp_threshold": {{ freenove_case_fan_mode2_low_temp_threshold | int }},
+    "mode2_high_temp_threshold": {{ freenove_case_fan_mode2_high_temp_threshold | int }}
+  },
+  "OLED": {
+    "task_name": "task_oled.py",
+    "is_run_on_startup": {{ freenove_case_oled_task_enabled | bool | to_json }},
+    "screen1": {{ freenove_case_oled_screen1 | to_json }},
+    "screen2": {{ freenove_case_oled_screen2 | to_json }},
+    "screen3": {{ freenove_case_oled_screen3 | to_json }},
+    "screen4": {{ freenove_case_oled_screen4 | to_json }}
+  },
+  "Service": {
+    "is_exist_on_rpi": {{ freenove_case_manage_background_service | bool | to_json }},
+    "is_run_on_startup": {{ (freenove_case_service_enabled | bool and freenove_case_service_state != "stopped") | to_json }}
+  }
+}

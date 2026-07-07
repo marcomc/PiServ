@@ -18,6 +18,7 @@ Decision records explain why PiServ setup choices were made.
 | [0002: NVMe primary boot](0002-nvme-primary-boot.md) | Accepted |
 | [0003: pCloud-backed podcast storage](0003-pcloud-backed-podcast-storage.md) | Accepted |
 | [0004: Local repository path](0004-local-repository-path.md) | Accepted |
+| [0005: Ansible-managed Freenove background control](0005-ansible-managed-freenove-background-control.md) | Accepted |
 
 ## Template
 

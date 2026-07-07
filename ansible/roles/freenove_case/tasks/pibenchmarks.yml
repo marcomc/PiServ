@@ -1,0 +1,44 @@
+---
+- name: Configure PiBenchmarks optional repository
+  when: freenove_case_install_pibenchmarks | bool
+  block:
+    - name: Clone PiBenchmarks repository
+      ansible.builtin.git:
+        repo: "{{ freenove_case_pibenchmarks_repo_url }}"
+        dest: "{{ freenove_case_pibenchmarks_dir }}"
+        version: master
+        update: true
+      become: true
+      become_user: "{{ freenove_case_install_user }}"
+
+    - name: Ensure PiBenchmarks storage script is executable
+      ansible.builtin.file:
+        path: "{{ freenove_case_pibenchmarks_dir }}/Storage.sh"
+        state: file
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0755"
+      become: true
+
+    - name: Run PiBenchmarks storage test once
+      when: freenove_case_run_pibenchmarks | bool
+      ansible.builtin.command:
+        argv:
+          - "{{ freenove_case_pibenchmarks_dir }}/Storage.sh"
+          - "/home/{{ freenove_case_install_user }}/"
+        chdir: "{{ freenove_case_pibenchmarks_dir }}"
+        creates: "{{ freenove_case_pibenchmarks_marker }}"
+      become: true
+      register: freenove_case_pibenchmarks_result
+
+    - name: Mark PiBenchmarks storage test as completed
+      when:
+        - freenove_case_run_pibenchmarks | bool
+        - freenove_case_pibenchmarks_result is changed
+      ansible.builtin.file:
+        path: "{{ freenove_case_pibenchmarks_marker }}"
+        state: touch
+        owner: root
+        group: root
+        mode: "0644"
+      become: true

@@ -1,0 +1,13 @@
+[Unit]
+Description=Freenove Computer Case Kit background tasks
+
+[Service]
+ExecStart=/usr/bin/python3 {{ freenove_case_install_dir }}/Code/task_manager.py
+WorkingDirectory={{ freenove_case_install_dir }}/Code
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User={{ freenove_case_install_user }}
+
+[Install]
+WantedBy=multi-user.target

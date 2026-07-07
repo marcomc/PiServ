@@ -1,0 +1,212 @@
+---
+argument_specs:
+  main:
+    short_description: Configure a Freenove FNK0100 case after OS installation.
+    description:
+      - Installs runtime packages for the Freenove case software.
+      - Enables Raspberry Pi I2C support and validates the expected I2C device.
+      - Clones Freenove's upstream case-control application.
+      - Optionally manages the Freenove background service, PiBenchmarks clone,
+        and PCIe Gen3 configuration.
+    options:
+      freenove_case_install_user:
+        type: str
+        default: "{{ ansible_user | default('operator') }}"
+        description: User that owns the Freenove checkout and desktop launchers.
+      freenove_case_install_dir:
+        type: path
+        default: /opt/freenove-case
+        description: Destination for Freenove runtime files.
+      freenove_case_source_mode:
+        type: str
+        default: git
+        choices:
+          - git
+          - controller_copy
+          - archive_url
+        description: Source strategy for installing Freenove runtime files.
+      freenove_case_repo_url:
+        type: str
+        default: "https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi.git"
+        description: Freenove upstream Git repository URL.
+      freenove_case_repo_version:
+        type: str
+        default: main
+        description: Branch, tag, or commit to check out from the Freenove repository.
+      freenove_case_repo_update:
+        type: bool
+        default: false
+        description: Whether to fetch and update an existing Freenove checkout on each run.
+      freenove_case_controller_src:
+        type: path
+        default: ""
+        description: Controller-side Freenove checkout path used by controller_copy mode.
+      freenove_case_archive_url:
+        type: str
+        default: ""
+        description: Remote archive URL used by archive_url mode.
+      freenove_case_archive_extra_opts:
+        type: list
+        elements: str
+        default: []
+        description: Extra unarchive options for archive_url mode.
+      freenove_case_archive_creates:
+        type: path
+        default: "{{ freenove_case_install_dir }}/Code/app_ui.py"
+        description: Idempotence marker used by archive_url mode.
+      freenove_case_boot_config_path:
+        type: path
+        default: /boot/firmware/config.txt
+        description: Raspberry Pi firmware config path.
+      freenove_case_apt_packages:
+        type: list
+        elements: str
+        description: Debian packages required by the Freenove software.
+      freenove_case_manage_desktop_launcher:
+        type: bool
+        default: true
+        description: Whether to create desktop and application-menu launchers.
+      freenove_case_app_name:
+        type: str
+        default: FNK0100
+        description: Desktop launcher application name and Freenove icon basename.
+      freenove_case_app_comment:
+        type: str
+        default: Freenove Computer Case Kit for Raspberry Pi
+        description: Desktop launcher comment.
+      freenove_case_reboot_on_i2c_config_change:
+        type: bool
+        default: true
+        description: Whether to reboot when I2C firmware configuration changes.
+      freenove_case_reboot_timeout:
+        type: int
+        default: 600
+        description: Reboot timeout in seconds.
+      freenove_case_i2c_device:
+        type: path
+        default: /dev/i2c-1
+        description: I2C device expected by the Freenove FNK0100 software.
+      freenove_case_manage_background_service:
+        type: bool
+        default: false
+        description: Whether to install and manage the Freenove background task service.
+      freenove_case_service_name:
+        type: str
+        default: my_app_running.service
+        description: Freenove background task systemd service name.
+      freenove_case_service_enabled:
+        type: bool
+        default: true
+        description: Whether the Freenove background task service is enabled at boot.
+      freenove_case_service_state:
+        type: str
+        default: started
+        choices:
+          - started
+          - stopped
+          - restarted
+        description: Desired Freenove background task service state.
+      freenove_case_validate_expansion_controller:
+        type: bool
+        default: "{{ freenove_case_manage_background_service }}"
+        description: Whether to require Freenove controller detection before service management.
+      freenove_case_manage_app_config:
+        type: bool
+        default: "{{ freenove_case_manage_background_service }}"
+        description: Whether to manage the Freenove Code/app_config.json file.
+      freenove_case_monitor_screen_orientation:
+        type: int
+        default: 0
+        description: Freenove monitor screen orientation setting.
+      freenove_case_monitor_follow_led_color:
+        type: int
+        default: 0
+        description: Freenove monitor follow-LED-color setting.
+      freenove_case_led_task_enabled:
+        type: bool
+        default: true
+        description: Whether the background manager runs task_led.py.
+      freenove_case_led_mode:
+        type: int
+        default: 0
+        description: Freenove LED mode value.
+      freenove_case_led_red_value:
+        type: int
+        default: 0
+        description: Red component for Freenove manual LED color.
+      freenove_case_led_green_value:
+        type: int
+        default: 0
+        description: Green component for Freenove manual LED color.
+      freenove_case_led_blue_value:
+        type: int
+        default: 255
+        description: Blue component for Freenove manual LED color.
+      freenove_case_fan_task_enabled:
+        type: bool
+        default: true
+        description: Whether the background manager runs task_fan.py.
+      freenove_case_fan_mode:
+        type: int
+        default: 0
+        description: Freenove fan mode value.
+      freenove_case_fan_mode1_group1:
+        type: int
+        default: 75
+        description: Freenove manual fan group 1 value.
+      freenove_case_fan_mode1_group2:
+        type: int
+        default: 75
+        description: Freenove manual fan group 2 value.
+      freenove_case_fan_mode2_low_temp_threshold:
+        type: int
+        default: 30
+        description: Freenove low temperature fan threshold.
+      freenove_case_fan_mode2_high_temp_threshold:
+        type: int
+        default: 50
+        description: Freenove high temperature fan threshold.
+      freenove_case_oled_task_enabled:
+        type: bool
+        default: true
+        description: Whether the background manager runs task_oled.py.
+      freenove_case_oled_screen1:
+        type: dict
+        description: Freenove OLED screen 1 settings.
+      freenove_case_oled_screen2:
+        type: dict
+        description: Freenove OLED screen 2 settings.
+      freenove_case_oled_screen3:
+        type: dict
+        description: Freenove OLED screen 3 settings.
+      freenove_case_oled_screen4:
+        type: dict
+        description: Freenove OLED screen 4 settings.
+      freenove_case_manage_pcie_gen3:
+        type: bool
+        default: false
+        description: Whether the role manages the PCIe Gen3 firmware setting.
+      freenove_case_enable_pcie_gen3:
+        type: bool
+        default: false
+        description: Whether PCIe Gen3 is enabled when PCIe management is opted in.
+      freenove_case_install_pibenchmarks:
+        type: bool
+        default: false
+        description: Whether to clone the PiBenchmarks repository.
+      freenove_case_pibenchmarks_repo_url:
+        type: str
+        default: "https://github.com/TheRemote/PiBenchmarks"
+        description: PiBenchmarks upstream repository URL.
+      freenove_case_pibenchmarks_dir:
+        type: path
+        default: "/home/{{ freenove_case_install_user }}/PiBenchmarks"
+        description: Destination for the PiBenchmarks checkout.
+      freenove_case_run_pibenchmarks:
+        type: bool
+        default: false
+        description: Whether to run the storage benchmark once.
+      freenove_case_pibenchmarks_marker:
+        type: path
+        default: /var/lib/piserv/freenove-pibenchmarks.done
+        description: Marker path used to keep the storage benchmark one-shot.

@@ -1,0 +1,42 @@
+---
+- name: Enable I2C in boot firmware config
+  ansible.builtin.lineinfile:
+    path: "{{ freenove_case_boot_config_path }}"
+    regexp: '^#?\s*dtparam=i2c_arm='
+    line: 'dtparam=i2c_arm=on'
+  become: true
+  register: freenove_case_i2c_config
+
+- name: Ensure boot firmware config permissions
+  ansible.builtin.file:
+    path: "{{ freenove_case_boot_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Ensure i2c-dev loads at boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/i2c-dev.conf
+    content: "i2c-dev\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Reboot after changing I2C firmware config
+  when:
+    - freenove_case_reboot_on_i2c_config_change | bool
+    - freenove_case_i2c_config.changed
+  ansible.builtin.reboot:
+    msg: "Rebooting after enabling I2C for Freenove FNK0100K"
+    reboot_timeout: "{{ freenove_case_reboot_timeout }}"
+  become: true
+
+- name: Load i2c-dev for current boot
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/modprobe
+      - i2c-dev
+  changed_when: false
+  become: true

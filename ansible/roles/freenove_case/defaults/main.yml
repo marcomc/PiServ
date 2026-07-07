@@ -1,0 +1,79 @@
+---
+freenove_case_install_user: "{{ ansible_user | default('operator') }}"
+freenove_case_install_dir: /opt/freenove-case
+freenove_case_source_mode: git
+
+freenove_case_repo_url: "https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi.git"
+freenove_case_repo_version: "main"
+freenove_case_repo_update: false
+freenove_case_controller_src: ""
+freenove_case_archive_url: ""
+freenove_case_archive_extra_opts: []
+freenove_case_archive_creates: "{{ freenove_case_install_dir }}/Code/app_ui.py"
+freenove_case_boot_config_path: /boot/firmware/config.txt
+
+freenove_case_apt_packages:
+  - git
+  - i2c-tools
+  - python-is-python3
+  - python3
+  - python3-luma.oled
+  - python3-psutil
+  - python3-pyqt5
+  - python3-smbus
+
+freenove_case_manage_desktop_launcher: true
+freenove_case_app_name: "FNK0100"
+freenove_case_app_comment: "Freenove Computer Case Kit for Raspberry Pi"
+freenove_case_reboot_on_i2c_config_change: true
+freenove_case_reboot_timeout: 600
+freenove_case_i2c_device: /dev/i2c-1
+
+freenove_case_manage_background_service: false
+freenove_case_service_name: "my_app_running.service"
+freenove_case_service_enabled: true
+freenove_case_service_state: "started"
+freenove_case_validate_expansion_controller: "{{ freenove_case_manage_background_service }}"
+freenove_case_manage_app_config: "{{ freenove_case_manage_background_service }}"
+freenove_case_monitor_screen_orientation: 0
+freenove_case_monitor_follow_led_color: 0
+freenove_case_led_task_enabled: true
+freenove_case_led_mode: 0
+freenove_case_led_red_value: 0
+freenove_case_led_green_value: 0
+freenove_case_led_blue_value: 255
+freenove_case_fan_task_enabled: true
+freenove_case_fan_mode: 0
+freenove_case_fan_mode1_group1: 75
+freenove_case_fan_mode1_group2: 75
+freenove_case_fan_mode2_low_temp_threshold: 30
+freenove_case_fan_mode2_high_temp_threshold: 50
+freenove_case_oled_task_enabled: true
+freenove_case_oled_screen1:
+  data_format: 0
+  time_format: 0
+  display_time: 3.0
+  is_run_on_oled: true
+freenove_case_oled_screen2:
+  interchange: 0
+  display_time: 3.0
+  is_run_on_oled: true
+freenove_case_oled_screen3:
+  interchange: 0
+  display_time: 3.0
+  cpu_temp_celsius_or_fahrenheit: false
+  case_temp_celsius_or_fahrenheit: false
+  is_run_on_oled: true
+freenove_case_oled_screen4:
+  interchange: 0
+  display_time: 3.0
+  is_run_on_oled: true
+
+freenove_case_manage_pcie_gen3: false
+freenove_case_enable_pcie_gen3: false
+
+freenove_case_install_pibenchmarks: false
+freenove_case_pibenchmarks_repo_url: "https://github.com/TheRemote/PiBenchmarks"
+freenove_case_pibenchmarks_dir: "/home/{{ freenove_case_install_user }}/PiBenchmarks"
+freenove_case_run_pibenchmarks: false
+freenove_case_pibenchmarks_marker: "/var/lib/piserv/freenove-pibenchmarks.done"

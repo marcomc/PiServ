@@ -1,0 +1,12 @@
+---
+- name: Manage Freenove app configuration
+  when: freenove_case_manage_app_config | bool
+  ansible.builtin.template:
+    src: app_config.json.j2
+    dest: "{{ freenove_case_install_dir }}/Code/app_config.json"
+    owner: "{{ freenove_case_install_user }}"
+    group: "{{ freenove_case_install_user }}"
+    mode: "0644"
+    validate: "/usr/bin/python3 -m json.tool %s"
+  become: true
+  notify: Restart Freenove background service

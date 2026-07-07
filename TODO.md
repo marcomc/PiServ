@@ -12,7 +12,8 @@
 - Validate `pcloudcc -s` saved credential location and permissions on PiServ.
 - Automate the validated `pcloudcc` setup.
 - Verify Freenove FNK0100K first-boot behavior.
-- Decide whether the Freenove UI should run manually or as a managed service.
+- Fix or replace the small OLED module/cable path that pulls SDA low.
+- Verify physical LED, fan, and OLED behavior under the managed Freenove service.
 - Create initial bootstrap playbook after live commands are validated.
 
 ## Done
@@ -29,6 +30,11 @@
   `/mnt/pcloud/My Music/Podcasts/raiplaypodcast`.
 - Downloaded Freenove FNK0100 resources into `vendor/freenove/`.
 - Documented the canonical local repository path.
+- Added and tested Freenove FNK0100K post-OS Ansible automation.
+- Enabled and validated I2C for the Freenove GPIO adapter and OLED.
+- Selected Ansible-managed Freenove background service and runtime config.
+- Isolated Freenove controller detection failure to the small OLED module/cable
+  path; the FNK0100 controller is detected when that cable is disconnected.
 
 ## Later
 

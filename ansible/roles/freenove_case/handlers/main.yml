@@ -1,0 +1,14 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  become: true
+
+- name: Restart Freenove background service
+  when:
+    - freenove_case_manage_background_service | bool
+    - freenove_case_service_state != "stopped"
+  ansible.builtin.systemd_service:
+    name: "{{ freenove_case_service_name }}"
+    state: restarted
+  become: true

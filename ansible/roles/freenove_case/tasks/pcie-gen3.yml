@@ -1,0 +1,9 @@
+---
+- name: Configure optional PCIe Gen3 setting
+  when: freenove_case_manage_pcie_gen3 | bool
+  ansible.builtin.lineinfile:
+    path: "{{ freenove_case_boot_config_path }}"
+    regexp: '^#?\s*dtparam=pciex1_gen='
+    line: 'dtparam=pciex1_gen=3'
+    state: "{{ 'present' if freenove_case_enable_pcie_gen3 | bool else 'absent' }}"
+  become: true

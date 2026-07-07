@@ -1,0 +1,26 @@
+---
+- name: Require Debian-family target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "Debian"
+    fail_msg: "Freenove FNK0100K automation expects a Debian-family Raspberry Pi OS target."
+
+- name: Require supported Freenove source mode
+  ansible.builtin.assert:
+    that:
+      - freenove_case_source_mode in ["git", "controller_copy", "archive_url"]
+    fail_msg: "freenove_case_source_mode must be one of: git, controller_copy, archive_url."
+
+- name: Require controller source path for controller copy mode
+  when: freenove_case_source_mode == "controller_copy"
+  ansible.builtin.assert:
+    that:
+      - freenove_case_controller_src | length > 0
+    fail_msg: "Set freenove_case_controller_src when freenove_case_source_mode is controller_copy."
+
+- name: Require archive URL for archive URL mode
+  when: freenove_case_source_mode == "archive_url"
+  ansible.builtin.assert:
+    that:
+      - freenove_case_archive_url | length > 0
+    fail_msg: "Set freenove_case_archive_url when freenove_case_source_mode is archive_url."

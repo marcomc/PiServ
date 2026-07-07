@@ -13,6 +13,7 @@ PiServ is the setup and recovery project for a Raspberry Pi 5 server at
 - [Repository Layout](#repository-layout)
 - [Vendor Resources](#vendor-resources)
 - [Storage Direction](#storage-direction)
+- [Implementation Tracks](#implementation-tracks)
 - [Automation](#automation)
 - [Initial Workflow](#initial-workflow)
 - [Validation](#validation)
@@ -147,6 +148,19 @@ Active implementation tracks:
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 
 ## Automation
+
+Configure the Freenove FNK0100K post-OS setup:
+
+```sh
+ansible-playbook ansible/playbooks/freenove-post-os.yml
+```
+
+The Freenove playbook installs runtime packages, enables I2C, clones the
+official Freenove code from the controller-managed local vendor copy into
+`/opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi`, creates desktop
+launchers, enables the Freenove background service, manages `Code/app_config.json`
+for LED/fan/OLED startup behavior, and validates Python imports/source syntax.
+It reboots only when the I2C firmware setting changes.
 
 Migrate a microSD-booted PiServ system to NVMe:
 

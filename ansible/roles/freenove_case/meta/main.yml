@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: freenove_case
+  author: PiServ maintainers
+  description: Configure the Freenove FNK0100 computer case kit after Raspberry Pi OS installation.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - raspberrypi
+    - freenove
+    - fnk0100
+    - i2c
+    - oled
+    - hardware
+    - debian
+    - trixie
+dependencies: []

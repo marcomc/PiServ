@@ -1,0 +1,6 @@
+---
+- name: Test freenove_case role
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: freenove_case

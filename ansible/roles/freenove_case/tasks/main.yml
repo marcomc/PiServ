@@ -1,0 +1,33 @@
+---
+- name: Validate target platform
+  ansible.builtin.import_tasks: validate-target.yml
+
+- name: Install runtime packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Configure I2C
+  ansible.builtin.import_tasks: i2c.yml
+
+- name: Install Freenove case software
+  ansible.builtin.import_tasks: freenove-code.yml
+
+- name: Configure Freenove runtime config
+  ansible.builtin.import_tasks: app-config.yml
+
+- name: Validate Freenove expansion controller
+  ansible.builtin.import_tasks: expansion-controller.yml
+
+- name: Configure desktop launchers
+  ansible.builtin.import_tasks: desktop-launchers.yml
+
+- name: Configure optional background service
+  ansible.builtin.import_tasks: background-service.yml
+
+- name: Configure optional PCIe Gen3
+  ansible.builtin.import_tasks: pcie-gen3.yml
+
+- name: Configure optional PiBenchmarks
+  ansible.builtin.import_tasks: pibenchmarks.yml
+
+- name: Validate Freenove runtime
+  ansible.builtin.import_tasks: validate-runtime.yml

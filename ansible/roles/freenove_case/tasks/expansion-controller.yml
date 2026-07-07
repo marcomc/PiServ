@@ -1,0 +1,34 @@
+---
+- name: Probe Freenove expansion controller
+  when: freenove_case_validate_expansion_controller | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timeout
+      - "10"
+      - /usr/bin/python3
+      - -c
+      - |
+        from api_expansion import Expansion
+        try:
+            expansion = Expansion()
+            board_type = expansion.get_board_type()
+            print(board_type)
+            raise SystemExit(0 if board_type in ("FNK0100", "FNK0107") else 1)
+        except Exception as exc:
+            print(f"{type(exc).__name__}: {exc}")
+            raise SystemExit(1)
+  args:
+    chdir: "{{ freenove_case_install_dir }}/Code"
+  register: freenove_case_expansion_probe
+  changed_when: false
+  failed_when: false
+
+- name: Require Freenove expansion controller for background service
+  when: freenove_case_validate_expansion_controller | bool
+  ansible.builtin.assert:
+    that:
+      - freenove_case_expansion_probe.rc == 0
+    fail_msg: >-
+      Freenove expansion controller was not detected, so the background
+      service will not be enabled. Check the FNK0100 I2C controller at 0x21,
+      GPIO adapter seating, FPC cables, and power before rerunning.

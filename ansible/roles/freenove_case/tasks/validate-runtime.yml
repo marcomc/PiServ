@@ -1,0 +1,60 @@
+---
+- name: Validate I2C device exists
+  ansible.builtin.stat:
+    path: "{{ freenove_case_i2c_device }}"
+  register: freenove_case_i2c_device_stat
+
+- name: Require I2C device after setup
+  ansible.builtin.assert:
+    that:
+      - freenove_case_i2c_device_stat.stat.exists
+    fail_msg: "{{ freenove_case_i2c_device }} is missing. Reboot may be required after enabling I2C."
+
+- name: Validate Freenove Python runtime imports
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - "import luma.oled; import PyQt5; import psutil; import smbus"
+  changed_when: false
+
+- name: Validate Freenove Python source syntax
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - "import ast, pathlib, sys; [ast.parse(pathlib.Path(path).read_text(encoding='utf-8'), filename=path) for path in sys.argv[1:]]"
+      - "{{ freenove_case_install_dir }}/Code/app_ui.py"
+      - "{{ freenove_case_install_dir }}/Code/task_manager.py"
+      - "{{ freenove_case_install_dir }}/Code/task_led.py"
+      - "{{ freenove_case_install_dir }}/Code/task_fan.py"
+      - "{{ freenove_case_install_dir }}/Code/task_oled.py"
+  changed_when: false
+
+- name: Validate Freenove app configuration JSON
+  when: freenove_case_manage_app_config | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -m
+      - json.tool
+      - "{{ freenove_case_install_dir }}/Code/app_config.json"
+  changed_when: false
+
+- name: Wait before validating Freenove background service stability
+  when:
+    - freenove_case_manage_background_service | bool
+    - freenove_case_service_state != "stopped"
+  ansible.builtin.pause:
+    seconds: 8
+
+- name: Validate Freenove background service is active
+  when:
+    - freenove_case_manage_background_service | bool
+    - freenove_case_service_state != "stopped"
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ freenove_case_service_name }}"
+  changed_when: false

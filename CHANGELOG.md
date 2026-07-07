@@ -21,17 +21,25 @@ All notable project changes are documented here.
 - Added `.gitignore` exclusion for `vendor/freenove/`.
 - Documented the exact Freenove Git clone command in the README.
 - Replaced personal absolute paths with `$HOME`-relative paths.
+- Added idempotent Freenove FNK0100K post-OS Ansible role and playbook.
+- Prepared the Freenove role for standalone Ansible Galaxy publication with
+  metadata, argument specs, role docs, release runbook, tests, and a role
+  license file.
+- Added Freenove role source modes for Git, controller copy, and archive URL
+  installs.
 - Documented manual `pcloudcc -p -s` credential bootstrap for PiServ.
 - Documented the European Union pCloud data region for PiServ `pcloudcc`
   validation without embedding the account email.
 - Added a pCloud `pcloudcc` implementation track for live build, validation,
   systemd, and automation work.
-
-### Changed
-
-- Renamed the local project from PiServ to PiServ.
-- Corrected the documented hostname from `piserv.local` to `piserv.example.com`.
-- Migrated PiServ to boot from NVMe with microSD fallback.
+- Added Ansible-managed Freenove background service and runtime configuration
+  for LED, fan, and OLED control.
+- Added a Freenove expansion-controller preflight to avoid enabling a failing
+  background service.
+- Added the Freenove background-control decision record.
+- PiServ to boot from NVMe with microSD fallback.
 - Selected `pcloudcc` as the pCloud storage backend for scheduled podcast jobs.
 - Set the pCloud mount root to `/mnt/pcloud` and the RaiPlaySound podcast
   target to `/mnt/pcloud/My Music/Podcasts/raiplaypodcast`.
+- Changed PiServ Freenove installation to copy the local vendored Freenove
+  checkout from the Ansible controller into `/opt/freenove/`.

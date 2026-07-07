@@ -1,0 +1,33 @@
+---
+- name: Configure Freenove launchers
+  when: freenove_case_manage_desktop_launcher | bool
+  block:
+    - name: Ensure launcher directories exist
+      ansible.builtin.file:
+        path: "/home/{{ freenove_case_install_user }}/{{ item }}"
+        state: directory
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0755"
+      become: true
+      loop:
+        - .local/share/applications
+        - Desktop
+
+    - name: Install Freenove application launcher
+      ansible.builtin.template:
+        src: freenove.desktop.j2
+        dest: "/home/{{ freenove_case_install_user }}/.local/share/applications/{{ freenove_case_app_name }}.desktop"
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0755"
+      become: true
+
+    - name: Install Freenove desktop launcher
+      ansible.builtin.template:
+        src: freenove.desktop.j2
+        dest: "/home/{{ freenove_case_install_user }}/Desktop/{{ freenove_case_app_name }}.desktop"
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0755"
+      become: true

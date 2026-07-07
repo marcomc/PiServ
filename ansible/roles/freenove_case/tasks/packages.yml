@@ -1,0 +1,20 @@
+---
+- name: Install Freenove runtime packages
+  ansible.builtin.apt:
+    name: "{{ freenove_case_apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Ensure case user has hardware access groups
+  ansible.builtin.user:
+    name: "{{ freenove_case_install_user }}"
+    groups:
+      - gpio
+      - i2c
+      - input
+      - render
+      - video
+    append: true
+  become: true

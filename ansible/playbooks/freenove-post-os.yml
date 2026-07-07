@@ -1,0 +1,15 @@
+---
+- name: Configure Freenove FNK0100K post-OS setup
+  hosts: piserv
+  gather_facts: true
+  roles:
+    - role: freenove_case
+      vars:
+        freenove_case_source_mode: controller_copy
+        freenove_case_controller_src: "{{ playbook_dir }}/../../vendor/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi-main"
+        freenove_case_install_dir: /opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
+        freenove_case_manage_background_service: true
+        freenove_case_manage_app_config: true
+        freenove_case_led_task_enabled: true
+        freenove_case_fan_task_enabled: true
+        freenove_case_oled_task_enabled: true

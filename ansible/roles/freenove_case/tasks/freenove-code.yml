@@ -1,0 +1,67 @@
+---
+- name: Ensure Freenove install parent exists
+  ansible.builtin.file:
+    path: "{{ freenove_case_install_dir | dirname }}"
+    state: directory
+    owner: "{{ freenove_case_install_user }}"
+    group: "{{ freenove_case_install_user }}"
+    mode: "0755"
+  become: true
+
+- name: Ensure Freenove install directory exists for non-git sources
+  when: freenove_case_source_mode != "git"
+  ansible.builtin.file:
+    path: "{{ freenove_case_install_dir }}"
+    state: directory
+    owner: "{{ freenove_case_install_user }}"
+    group: "{{ freenove_case_install_user }}"
+    mode: "0755"
+  become: true
+
+- name: Clone Freenove case repository
+  when: freenove_case_source_mode == "git"
+  ansible.builtin.git:
+    repo: "{{ freenove_case_repo_url }}"
+    dest: "{{ freenove_case_install_dir }}"
+    version: "{{ freenove_case_repo_version }}"
+    update: "{{ freenove_case_repo_update }}"
+  become: true
+  become_user: "{{ freenove_case_install_user }}"
+
+- name: Validate controller Freenove source exists
+  when: freenove_case_source_mode == "controller_copy"
+  ansible.builtin.stat:
+    path: "{{ freenove_case_controller_src }}/Code/app_ui.py"
+  delegate_to: localhost
+  become: false
+  register: freenove_case_controller_src_stat
+
+- name: Require controller Freenove source files
+  when: freenove_case_source_mode == "controller_copy"
+  ansible.builtin.assert:
+    that:
+      - freenove_case_controller_src_stat.stat.exists
+    fail_msg: "Controller source does not look like a Freenove checkout: {{ freenove_case_controller_src }}"
+
+- name: Copy Freenove case repository from controller
+  when: freenove_case_source_mode == "controller_copy"
+  ansible.builtin.copy:
+    src: "{{ freenove_case_controller_src }}/"
+    dest: "{{ freenove_case_install_dir }}/"
+    owner: "{{ freenove_case_install_user }}"
+    group: "{{ freenove_case_install_user }}"
+    mode: preserve
+    directory_mode: "0755"
+  become: true
+
+- name: Extract Freenove case archive URL
+  when: freenove_case_source_mode == "archive_url"
+  ansible.builtin.unarchive:
+    src: "{{ freenove_case_archive_url }}"
+    dest: "{{ freenove_case_install_dir }}"
+    remote_src: true
+    creates: "{{ freenove_case_archive_creates }}"
+    extra_opts: "{{ freenove_case_archive_extra_opts }}"
+    owner: "{{ freenove_case_install_user }}"
+    group: "{{ freenove_case_install_user }}"
+  become: true
