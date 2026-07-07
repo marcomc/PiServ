@@ -21,6 +21,11 @@ All notable project changes are documented here.
 - Added `.gitignore` exclusion for `vendor/freenove/`.
 - Documented the exact Freenove Git clone command in the README.
 - Replaced personal absolute paths with `$HOME`-relative paths.
+- Documented manual `pcloudcc -p -s` credential bootstrap for PiServ.
+- Documented the European Union pCloud data region for PiServ `pcloudcc`
+  validation without embedding the account email.
+- Added a pCloud `pcloudcc` implementation track for live build, validation,
+  systemd, and automation work.
 
 ### Changed
 
@@ -28,3 +33,5 @@ All notable project changes are documented here.
 - Corrected the documented hostname from `piserv.local` to `piserv.example.com`.
 - Migrated PiServ to boot from NVMe with microSD fallback.
 - Selected `pcloudcc` as the pCloud storage backend for scheduled podcast jobs.
+- Set the pCloud mount root to `/mnt/pcloud` and the RaiPlaySound podcast
+  target to `/mnt/pcloud/My Music/Podcasts/raiplaypodcast`.

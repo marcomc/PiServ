@@ -82,6 +82,7 @@ not a constraint until the project is prepared for public reuse.
 | `docs/` | Runbooks, decisions, and supporting documentation |
 | `docs/runbooks/` | Step-by-step operational procedures |
 | `docs/decisions/` | Durable setup and architecture decisions |
+| `docs/tracks/` | Implementation checklists for active workstreams |
 | `ansible/` | Inventory and playbooks |
 | `scripts/` | Operator scripts and remote helpers |
 | `vendor/` | Downloaded upstream references and third-party setup material |
@@ -122,7 +123,28 @@ Current decision:
 | 2 | Official pCloud Drive AppImage | Future manual/touchscreen option only |
 | 3 | Local NVMe staging plus WebDAV sync | Fallback when `pcloudcc` is not reliable |
 
+Selected pCloud settings:
+
+| Item | Value |
+| --- | --- |
+| pCloud account email | Operator-provided; do not store in docs |
+| pCloud data region | European Union |
+| pCloud mount root | `/mnt/pcloud` |
+| RaiPlaySound podcast target | `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` |
+
+The mount is expected to expose the user's full pCloud account for now.
+Folder-scoped pCloud accounts or shared-folder-only access are out of scope for
+the current setup.
+
 Do not plan around pCloud rsync until pCloud releases official rsync support.
+
+## Implementation Tracks
+
+Active implementation tracks:
+
+| Track | Purpose |
+| --- | --- |
+| [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 
 ## Automation
 

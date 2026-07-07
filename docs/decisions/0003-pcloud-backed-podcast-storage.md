@@ -38,6 +38,35 @@ than for a standard Raspberry Pi desktop workflow.
 Use the official pCloud Linux console client, `pcloudcc`, as the selected
 pCloud-backed storage backend for podcast media on PiServ.
 
+Mount the pCloud account at:
+
+```text
+/mnt/pcloud
+```
+
+Use this `raiplaysound-cli` podcast target:
+
+```text
+/mnt/pcloud/My Music/Podcasts/raiplaypodcast
+```
+
+This mirrors the current Mac path:
+
+```text
+pCloud Drive/My Music/Podcasts/raiplaypodcast
+```
+
+For now, use the user's existing pCloud account with access to the full pCloud
+storage tree. Do not embed the account email in project documentation.
+
+| Item | Value |
+| --- | --- |
+| Account email | Operator-provided |
+| Data region | European Union |
+
+A dedicated pCloud account or folder-scoped sharing model may be considered
+later, but it is out of scope for this project phase.
+
 Selection rationale:
 
 - `pcloudcc` matches the server workload: a FUSE mount managed by systemd and
@@ -65,14 +94,22 @@ staging area and sync completed outputs to pCloud after a successful run.
   writeability, and sync/mount health.
 - The fallback path preserves job reliability even if pCloud is temporarily
   unavailable.
-- Secrets for pCloud credentials must not be committed. Store them outside the
-  repository and wire them through Ansible variables or operator-provided
-  secret files.
+- Bootstrap pCloud authentication manually with `pcloudcc -p -s` as `operator`.
+  Automate only non-secret service settings such as account email and mount
+  path until live validation proves a safer secret-handling requirement.
+- Because the account data region is European Union, validate source-built
+  `pcloudcc` EU-region login before automating systemd startup.
+- Do not store the pCloud password in Ansible variables, environment files,
+  systemd units, command lines, or this repository.
+- Because the selected account can access the full pCloud tree, PiServ
+  automation must constrain `raiplaysound-cli` to the documented podcast target
+  path and avoid broad writes elsewhere under `/mnt/pcloud`.
 
 ## Follow-Up
 
-- Identify the exact pCloud remote folder for `raiplaysound-cli` podcast media.
 - Build and test `pcloudcc` on PiServ.
+- Validate EU-region login with the source-built `pcloudcc` client.
+- Validate first-login saved credential file locations and permissions.
 - Validate `pcloudcc` startup through systemd.
 - Validate a write/read/delete test in the mounted target path.
 - Decide whether completed media should be written directly to the pCloud mount

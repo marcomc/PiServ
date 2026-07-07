@@ -6,13 +6,12 @@
 - Document Wi-Fi configuration and current network path.
 - Inventory enabled services and open listening sockets.
 - Decide base security posture for SSH, firewall, updates, and user access.
-- Decide the pCloud remote folder for `raiplaysound-cli` podcast media.
 - Build and test the official `pcloudcc` console client on PiServ.
+- Validate EU-region pCloud login with source-built `pcloudcc` on PiServ.
 - Validate `pcloudcc` systemd startup and mount health on PiServ.
-- Define pCloud credential storage for Ansible without committing secrets.
+- Validate `pcloudcc -s` saved credential location and permissions on PiServ.
 - Automate the validated `pcloudcc` setup.
 - Verify Freenove FNK0100K first-boot behavior.
-- Enable and validate I2C for the Freenove GPIO adapter and OLED.
 - Decide whether the Freenove UI should run manually or as a managed service.
 - Create initial bootstrap playbook after live commands are validated.
 
@@ -26,6 +25,8 @@
 - Created initial Ansible inventory for PiServ.
 - Added guarded NVMe migration shell automation.
 - Added guarded NVMe migration Ansible playbook.
+- Decided the pCloud podcast target path:
+  `/mnt/pcloud/My Music/Podcasts/raiplaypodcast`.
 - Downloaded Freenove FNK0100 resources into `vendor/freenove/`.
 - Documented the canonical local repository path.
 

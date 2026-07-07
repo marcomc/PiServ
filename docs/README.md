@@ -8,8 +8,8 @@
 
 ## Purpose
 
-This directory stores runbooks, decisions, and supporting notes for the PiServ
-server setup.
+This directory stores runbooks, decisions, implementation tracks, and
+supporting notes for the PiServ server setup.
 
 ## Structure
 
@@ -17,6 +17,7 @@ server setup.
 | --- | --- |
 | `runbooks/` | Step-by-step operational procedures |
 | `decisions/` | Durable architecture and operations decisions |
+| `tracks/` | Active implementation checklists and validation gates |
 
 ## Writing Rules
 
