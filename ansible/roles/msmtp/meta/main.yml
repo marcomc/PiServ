@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: msmtp
+  author: Role maintainers
+  description: Install and configure msmtp with managed, create-only, or unmanaged config modes.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - msmtp
+    - smtp
+    - mail
+    - sendmail
+    - mta
+    - debian
+dependencies: []

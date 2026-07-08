@@ -1,0 +1,9 @@
+---
+- name: Install msmtp system-config compatibility wrapper
+  ansible.builtin.template:
+    src: msmtp-system.sh.j2
+    dest: "{{ msmtp_compat_wrapper_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true

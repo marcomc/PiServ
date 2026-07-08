@@ -1,0 +1,74 @@
+---
+- name: Install msmtp packages
+  ansible.builtin.apt:
+    name: "{{ msmtp_packages }}"
+    state: present
+    update_cache: "{{ msmtp_apt_update_cache | bool }}"
+    cache_valid_time: "{{ msmtp_apt_cache_valid_time }}"
+  become: true
+
+- name: Ensure msmtp group exists
+  when: msmtp_manage_group | bool
+  ansible.builtin.group:
+    name: "{{ msmtp_group }}"
+    system: true
+    state: present
+  become: true
+
+- name: Read msmtp binary statoverride
+  when: msmtp_manage_binary_statoverride | bool
+  ansible.builtin.command:
+    argv:
+      - dpkg-statoverride
+      - --list
+      - "{{ msmtp_binary_path }}"
+  register: msmtp_binary_statoverride
+  changed_when: false
+  failed_when: msmtp_binary_statoverride.rc not in [0, 1]
+  become: true
+
+- name: Remove mismatched msmtp binary statoverride
+  when:
+    - msmtp_manage_binary_statoverride | bool
+    - msmtp_binary_statoverride.stdout | trim | length > 0
+    - msmtp_binary_statoverride.stdout | trim != msmtp_binary_statoverride_expected
+  ansible.builtin.command:
+    argv:
+      - dpkg-statoverride
+      - --remove
+      - "{{ msmtp_binary_path }}"
+  changed_when: true
+  become: true
+  vars:
+    msmtp_binary_statoverride_expected: >-
+      {{ msmtp_binary_owner }} {{ msmtp_binary_group }}
+      {{ msmtp_binary_mode }} {{ msmtp_binary_path }}
+
+- name: Configure persistent msmtp binary statoverride
+  when:
+    - msmtp_manage_binary_statoverride | bool
+    - msmtp_binary_statoverride.stdout | trim != msmtp_binary_statoverride_expected
+  ansible.builtin.command:
+    argv:
+      - dpkg-statoverride
+      - --add
+      - --update
+      - "{{ msmtp_binary_owner }}"
+      - "{{ msmtp_binary_group }}"
+      - "{{ msmtp_binary_mode }}"
+      - "{{ msmtp_binary_path }}"
+  changed_when: true
+  become: true
+  vars:
+    msmtp_binary_statoverride_expected: >-
+      {{ msmtp_binary_owner }} {{ msmtp_binary_group }}
+      {{ msmtp_binary_mode }} {{ msmtp_binary_path }}
+
+- name: Ensure msmtp binary metadata is active
+  when: msmtp_manage_binary_statoverride | bool
+  ansible.builtin.file:
+    path: "{{ msmtp_binary_path }}"
+    owner: "{{ msmtp_binary_owner }}"
+    group: "{{ msmtp_binary_group }}"
+    mode: "{{ msmtp_binary_mode }}"
+  become: true

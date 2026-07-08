@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+{% if msmtp_aliases is mapping %}
+{% for local_user, mail_address in msmtp_aliases.items() %}
+{{ local_user }}: {{ mail_address }}
+{% endfor %}
+{% else %}
+{% for alias in msmtp_aliases %}
+{{ alias.user }}: {{ alias.mail }}
+{% endfor %}
+{% endif %}
+{% if msmtp_alias_default | length > 0 %}
+default: {{ msmtp_alias_default }}
+{% endif %}
+

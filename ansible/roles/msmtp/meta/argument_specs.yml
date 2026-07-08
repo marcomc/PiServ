@@ -1,0 +1,116 @@
+---
+argument_specs:
+  main:
+    short_description: Install and configure msmtp.
+    description:
+      - Installs msmtp and sendmail-compatible packages.
+      - Optionally manages /etc/msmtprc and aliases in managed, create-only, or
+        unmanaged modes.
+      - Can harden an existing operator-managed config without owning secrets.
+      - Can install a compatibility wrapper for callers that pass the system
+        config path with explicit --file.
+    options:
+      msmtp_manage_packages:
+        type: bool
+        default: true
+        description: Whether to install msmtp packages.
+      msmtp_packages:
+        type: list
+        elements: str
+        description: Package names installed for msmtp support.
+      msmtp_manage_group:
+        type: bool
+        default: true
+        description: Whether to create the msmtp group.
+      msmtp_group:
+        type: str
+        default: msmtp
+        description: Group used for system config access.
+      msmtp_manage_binary_statoverride:
+        type: bool
+        default: true
+        description: Whether to persist msmtp binary setgid metadata.
+      msmtp_binary_path:
+        type: path
+        default: /usr/bin/msmtp
+        description: msmtp binary path.
+      msmtp_binary_mode:
+        type: str
+        default: "2755"
+        description: Mode applied to the msmtp binary.
+      msmtp_config_path:
+        type: path
+        default: /etc/msmtprc
+        description: System msmtp config path.
+      msmtp_config_management:
+        type: str
+        default: unmanaged
+        choices:
+          - managed
+          - create
+          - unmanaged
+        description: Whether to manage, create once, or preserve the config.
+      msmtp_config_mode:
+        type: str
+        default: "0640"
+        description: Mode applied to the msmtp config.
+      msmtp_harden_existing_config:
+        type: bool
+        default: true
+        description: Whether to harden existing config metadata.
+      msmtp_config_required:
+        type: bool
+        default: false
+        description: Whether to fail if the config file is missing.
+      msmtp_allow_empty_config:
+        type: bool
+        default: false
+        description: Whether managed/create config may render without accounts.
+      msmtp_aliases_path:
+        type: path
+        default: /etc/aliases
+        description: msmtp aliases path.
+      msmtp_aliases_management:
+        type: str
+        default: unmanaged
+        choices:
+          - managed
+          - create
+          - unmanaged
+        description: Whether to manage, create once, or preserve aliases.
+      msmtp_harden_existing_aliases:
+        type: bool
+        default: true
+        description: Whether to harden existing aliases metadata.
+      msmtp_allow_empty_aliases:
+        type: bool
+        default: false
+        description: Whether managed/create aliases may render without mappings.
+      msmtp_manage_compat_wrapper:
+        type: bool
+        default: false
+        description: Whether to install the system-config compatibility wrapper.
+      msmtp_compat_wrapper_path:
+        type: path
+        default: /usr/local/bin/msmtp-system
+        description: Compatibility wrapper path.
+      msmtp_global_settings:
+        type: dict
+        description: Global settings rendered under the defaults section.
+      msmtp_accounts:
+        type: list
+        elements: dict
+        default: []
+        description: msmtp accounts rendered when config is managed or created.
+      msmtp_default_account:
+        type: str
+        default: ""
+        description: Account name used for the account default alias.
+      msmtp_aliases:
+        type: raw
+        default: {}
+        description: Aliases as a mapping or list of user/mail dictionaries.
+      msmtp_alias_default:
+        type: str
+        default: ""
+        description: Default alias target.

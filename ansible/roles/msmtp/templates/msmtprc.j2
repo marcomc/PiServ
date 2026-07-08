@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+defaults
+{% for key, value in msmtp_global_settings.items() %}
+{% if value is not none and (value | string | length > 0) %}
+{{ key }} {{ value }}
+{% endif %}
+{% endfor %}
+{% for account in msmtp_accounts %}
+
+account {{ account.name | default(account.account) }}
+host {{ account.host }}
+port {{ account.port | default(587) }}
+{% if account.auth is defined %}
+auth {{ account.auth }}
+{% endif %}
+{% if account.tls is defined %}
+tls {{ account.tls }}
+{% endif %}
+{% if account.tls_starttls is defined %}
+tls_starttls {{ account.tls_starttls }}
+{% endif %}
+from {{ account.from }}
+user {{ account.user }}
+{% if account.password is defined %}
+password {{ account.password }}
+{% endif %}
+{% if account.passwordeval is defined %}
+passwordeval {{ account.passwordeval }}
+{% endif %}
+{% endfor %}
+{% if msmtp_default_account | length > 0 %}
+
+account default : {{ msmtp_default_account }}
+{% endif %}
+

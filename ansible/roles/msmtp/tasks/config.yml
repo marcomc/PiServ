@@ -1,0 +1,86 @@
+---
+- name: Check msmtp config file
+  ansible.builtin.stat:
+    path: "{{ msmtp_config_path }}"
+  register: msmtp_config_stat
+
+- name: Write msmtp config file
+  when: >-
+    msmtp_config_management == 'managed'
+    or (
+      msmtp_config_management == 'create'
+      and not msmtp_config_stat.stat.exists
+    )
+  ansible.builtin.template:
+    src: msmtprc.j2
+    dest: "{{ msmtp_config_path }}"
+    owner: "{{ msmtp_config_owner }}"
+    group: "{{ msmtp_config_group }}"
+    mode: "{{ msmtp_config_mode }}"
+  no_log: "{{ msmtp_config_no_log | bool }}"
+  become: true
+
+- name: Recheck msmtp config file
+  ansible.builtin.stat:
+    path: "{{ msmtp_config_path }}"
+  register: msmtp_config_stat_after
+
+- name: Harden existing msmtp config metadata
+  when:
+    - msmtp_harden_existing_config | bool
+    - msmtp_config_stat_after.stat.exists
+    - msmtp_config_stat_after.stat.isreg
+  ansible.builtin.file:
+    path: "{{ msmtp_config_path }}"
+    owner: "{{ msmtp_config_owner }}"
+    group: "{{ msmtp_config_group }}"
+    mode: "{{ msmtp_config_mode }}"
+  become: true
+
+- name: Assert required msmtp config exists
+  when: msmtp_config_required | bool
+  ansible.builtin.assert:
+    that:
+      - msmtp_config_stat_after.stat.exists
+      - msmtp_config_stat_after.stat.isreg
+    fail_msg: >-
+      msmtp_config_required is true, but {{ msmtp_config_path }} does not
+      exist.
+
+- name: Check msmtp aliases file
+  ansible.builtin.stat:
+    path: "{{ msmtp_aliases_path }}"
+  register: msmtp_aliases_stat
+
+- name: Write msmtp aliases file
+  when: >-
+    msmtp_aliases_management == 'managed'
+    or (
+      msmtp_aliases_management == 'create'
+      and not msmtp_aliases_stat.stat.exists
+    )
+  ansible.builtin.template:
+    src: aliases.j2
+    dest: "{{ msmtp_aliases_path }}"
+    owner: "{{ msmtp_aliases_owner }}"
+    group: "{{ msmtp_aliases_group }}"
+    mode: "{{ msmtp_aliases_mode }}"
+  no_log: "{{ msmtp_aliases_no_log | bool }}"
+  become: true
+
+- name: Recheck msmtp aliases file
+  ansible.builtin.stat:
+    path: "{{ msmtp_aliases_path }}"
+  register: msmtp_aliases_stat_after
+
+- name: Harden existing msmtp aliases metadata
+  when:
+    - msmtp_harden_existing_aliases | bool
+    - msmtp_aliases_stat_after.stat.exists
+    - msmtp_aliases_stat_after.stat.isreg
+  ansible.builtin.file:
+    path: "{{ msmtp_aliases_path }}"
+    owner: "{{ msmtp_aliases_owner }}"
+    group: "{{ msmtp_aliases_group }}"
+    mode: "{{ msmtp_aliases_mode }}"
+  become: true

@@ -1,0 +1,14 @@
+---
+- name: Validate msmtp role inputs
+  ansible.builtin.import_tasks: validate.yml
+
+- name: Install msmtp packages
+  when: msmtp_manage_packages | bool
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Configure msmtp files
+  ansible.builtin.import_tasks: config.yml
+
+- name: Configure msmtp compatibility wrapper
+  when: msmtp_manage_compat_wrapper | bool
+  ansible.builtin.import_tasks: wrapper.yml

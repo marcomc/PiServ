@@ -1,0 +1,40 @@
+---
+- name: Assert target OS is supported by msmtp role
+  ansible.builtin.assert:
+    that:
+      - (ansible_facts | default({})).get('os_family', '') in msmtp_supported_os_families
+    fail_msg: >-
+      The msmtp role currently supports only these OS families:
+      {{ msmtp_supported_os_families | join(', ') }}.
+
+- name: Assert msmtp management modes are valid
+  ansible.builtin.assert:
+    that:
+      - msmtp_config_management in ['managed', 'create', 'unmanaged']
+      - msmtp_aliases_management in ['managed', 'create', 'unmanaged']
+    fail_msg: >-
+      msmtp_config_management and msmtp_aliases_management must be one of:
+      managed, create, unmanaged.
+
+- name: Assert managed msmtp config has accounts
+  when:
+    - msmtp_config_management != 'unmanaged'
+    - not (msmtp_allow_empty_config | bool)
+  ansible.builtin.assert:
+    that:
+      - msmtp_accounts | length > 0
+    fail_msg: >-
+      msmtp_config_management={{ msmtp_config_management }} requires at least
+      one msmtp_accounts entry unless msmtp_allow_empty_config is true.
+
+- name: Assert managed msmtp aliases have mappings
+  when:
+    - msmtp_aliases_management != 'unmanaged'
+    - not (msmtp_allow_empty_aliases | bool)
+  ansible.builtin.assert:
+    that:
+      - (msmtp_aliases | length > 0) or (msmtp_alias_default | length > 0)
+    fail_msg: >-
+      msmtp_aliases_management={{ msmtp_aliases_management }} requires
+      msmtp_aliases or msmtp_alias_default unless msmtp_allow_empty_aliases is
+      true.

@@ -1,0 +1,60 @@
+---
+msmtp_manage_packages: true
+msmtp_packages:
+  - msmtp
+  - msmtp-mta
+  - bsd-mailx
+msmtp_apt_update_cache: true
+msmtp_apt_cache_valid_time: 3600
+
+msmtp_manage_group: true
+msmtp_group: msmtp
+
+msmtp_manage_binary_statoverride: true
+msmtp_binary_path: /usr/bin/msmtp
+msmtp_binary_owner: root
+msmtp_binary_group: "{{ msmtp_group }}"
+msmtp_binary_mode: "2755"
+
+msmtp_config_path: /etc/msmtprc
+msmtp_config_management: unmanaged
+msmtp_config_owner: root
+msmtp_config_group: "{{ msmtp_group }}"
+msmtp_config_mode: "0640"
+msmtp_harden_existing_config: true
+msmtp_config_required: false
+msmtp_config_no_log: true
+msmtp_allow_empty_config: false
+
+msmtp_aliases_path: /etc/aliases
+msmtp_aliases_management: unmanaged
+msmtp_aliases_owner: root
+msmtp_aliases_group: root
+msmtp_aliases_mode: "0644"
+msmtp_harden_existing_aliases: true
+msmtp_aliases_no_log: false
+msmtp_allow_empty_aliases: false
+
+msmtp_manage_compat_wrapper: false
+msmtp_compat_wrapper_path: /usr/local/bin/msmtp-system
+
+msmtp_supported_os_families:
+  - Debian
+
+msmtp_global_settings:
+  auth: "on"
+  tls: "on"
+  tls_starttls: "on"
+  tls_trust_file: /etc/ssl/certs/ca-certificates.crt
+  syslog: "on"
+  aliases: "{{ msmtp_aliases_path }}"
+  domain: "{{ (ansible_facts | default({})).get('fqdn', inventory_hostname | default('localhost')) }}"
+  auto_from: "off"
+  allow_from_override: "off"
+  set_from_header: "on"
+
+msmtp_accounts: []
+msmtp_default_account: ""
+
+msmtp_aliases: {}
+msmtp_alias_default: ""

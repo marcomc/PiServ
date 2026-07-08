@@ -1,0 +1,13 @@
+---
+- name: Test msmtp role syntax
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: msmtp
+      vars:
+        msmtp_manage_packages: false
+        msmtp_manage_group: false
+        msmtp_manage_binary_statoverride: false
+        msmtp_config_management: unmanaged
+        msmtp_aliases_management: unmanaged
+        msmtp_manage_compat_wrapper: false

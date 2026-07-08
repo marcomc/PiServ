@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "--file" ] && [ "${2:-}" = "{{ msmtp_config_path }}" ]; then
+    shift 2
+fi
+
+exec {{ msmtp_binary_path }} "$@"
+
