@@ -60,6 +60,7 @@ Observed install facts:
 | --- | --- |
 | Source repository | `https://github.com/pcloudcom/console-client.git` |
 | Source revision | `980d2cadf670f1b14642c7dbe015f95bd2306175` |
+| Desired client version | `2.0.1` |
 | Source path | `/opt/pcloudcc/console-client` |
 | Installed binary | `/usr/local/bin/pcloudcc` |
 | Installed library | `/usr/local/lib/libpcloudcc_lib.so` |
@@ -72,10 +73,17 @@ Use the Ansible reproduction path:
 ansible-playbook ansible/playbooks/pcloudcc-install.yml
 ```
 
+The role validates the installed client against `pcloudcc_version`, currently
+`2.0.1`. The Git source pin is separate: `pcloudcc_repo_version` stores the
+exact upstream revision used to build that client.
+
 The role applies a Debian 13 `arm64` source patch because the official source
-contains x86 compiler tuning and legacy C constructs rejected by current Debian
-GCC. The role is intentionally limited to build/install and mount-root
-preparation; it does not store credentials or manage the mount service.
+contains x86 `-mtune=core2` compiler tuning and legacy C constructs rejected by
+current Debian GCC. The patch removes the x86 tuning flag, relaxes GCC 14 C
+diagnostics that block the legacy code, and fixes several pointer/conversion
+sites needed for a successful `arm64` build. The role is intentionally limited
+to build/install and mount-root preparation; it does not store credentials or
+manage the mount service.
 
 ## Credential Bootstrap
 

@@ -73,13 +73,14 @@ ansible-playbook --syntax-check tests/test.yml
 | `pcloudcc_source_dir` | `/opt/pcloudcc/console-client` | Official source checkout path |
 | `pcloudcc_repo_url` | pCloud console-client GitHub repository | Upstream source repository |
 | `pcloudcc_repo_version` | `980d2cadf670f1b14642c7dbe015f95bd2306175` | pCloud source revision |
+| `pcloudcc_version` | `2.0.1` | Expected pcloudcc client version after install |
 | `pcloudcc_repo_update` | `false` | Fetch or refresh an existing checkout |
 | `pcloudcc_repo_force` | `false` | Allow Git to discard local checkout changes during updates |
 | `pcloudcc_mount_root` | `/mnt/pcloud` | Mount point prepared for later pcloudcc use |
 | `pcloudcc_patch_file` | `pcloudcc-debian13-arm64.patch` | Debian arm64 source patch |
 | `pcloudcc_force_rebuild` | `false` | Rebuild even when `pcloudcc` is installed |
 | `pcloudcc_build_jobs` | CPU count or `2` | Parallel make job count |
-| `pcloudcc_expected_version_output` | `pCloud console client v.2.0.1` | Expected help/version output |
+| `pcloudcc_expected_version_output` | `pCloud console client v.{{ pcloudcc_version }}` | Expected help/version output |
 | `pcloudcc_apt_packages` | See `defaults/main.yml` | Debian packages required to build pcloudcc |
 
 ## Example Playbook
@@ -119,6 +120,11 @@ Override the source checkout path:
 The role pins the pCloud source revision validated for Debian 13 `arm64`.
 Upstream Git updates are disabled by default after the initial clone so repeat
 runs do not depend on GitHub availability.
+
+`pcloudcc_version` is the expected installed client version. `pcloudcc_repo_version`
+is the exact upstream Git ref used to build that client. When changing the
+desired client version, update both values and set `pcloudcc_repo_update: true`
+on hosts that already have a source checkout.
 
 The role applies `files/pcloudcc-debian13-arm64.patch` because the official
 source currently ships x86 tuning flags and legacy C constructs that Debian 13

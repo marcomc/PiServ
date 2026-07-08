@@ -30,6 +30,10 @@ argument_specs:
         type: str
         default: "980d2cadf670f1b14642c7dbe015f95bd2306175"
         description: Branch, tag, or commit to check out from the pCloud repository.
+      pcloudcc_version:
+        type: str
+        default: "2.0.1"
+        description: pcloudcc client version expected after installation.
       pcloudcc_repo_update:
         type: bool
         default: false
@@ -56,7 +60,7 @@ argument_specs:
         description: Parallel make job count used for mbedtls and pcloudcc builds.
       pcloudcc_expected_version_output:
         type: str
-        default: "pCloud console client v.2.0.1"
+        default: "pCloud console client v.{{ pcloudcc_version }}"
         description: Expected pcloudcc help/version line after installation.
       pcloudcc_apt_packages:
         type: list

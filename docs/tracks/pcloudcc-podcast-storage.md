@@ -35,6 +35,7 @@ all validation gates in this track pass on PiServ.
 | Live client install | Done | `/usr/local/bin/pcloudcc` prints `pCloud console client v.2.0.1` |
 | Install automation | Done | `ansible/playbooks/pcloudcc-install.yml` reports `changed=0` on repeat run |
 | Galaxy-ready role shape | Done | `ansible/roles/pcloudcc/` has metadata, argument specs, docs, tests, and license |
+| Version pin | Done | Role default `pcloudcc_version` is `2.0.1`; source revision remains pinned separately |
 | Credential bootstrap | Pending | Requires manual `pcloudcc -p -s` operator login |
 | pCloud mount validation | Pending | Requires successful credential bootstrap |
 | Podcast workload integration | Pending | Requires mounted and writable pCloud target |
@@ -87,7 +88,7 @@ all validation gates in this track pass on PiServ.
 | --- | --- | --- |
 | 1 | Reconfirm live baseline | SSH, sudo, OS, arch, FUSE, `/dev/fuse`, and systemd state are captured |
 | 2 | Install build prerequisites | Required Debian packages are installed and documented |
-| 3 | Build official `pcloudcc` | Binary path, version, source revision, and install method are recorded |
+| 3 | Build official `pcloudcc` | Binary path, client version, source revision, and install method are recorded |
 | 4 | Prepare mount point | `/mnt/pcloud` exists, is owned for the selected runtime model, and is empty before mount |
 | 5 | Manual credential bootstrap | Operator enters the password with `-p -s`; no password appears in files we manage |
 | 6 | Validate EU-region behavior | Login succeeds for the European Union account or the exact extra setting is identified |
@@ -161,3 +162,4 @@ them only when deliberately deauthorizing PiServ from pCloud.
 | 2026-07-07 | Track created | Ready for live build validation | This document |
 | 2026-07-08 | Live client install | Passed | `/usr/local/bin/pcloudcc`; source revision `980d2cadf670f1b14642c7dbe015f95bd2306175` |
 | 2026-07-08 | Install automation | Passed | `ansible-playbook ansible/playbooks/pcloudcc-install.yml` ended with `changed=0` on repeat run |
+| 2026-07-08 | Version default | Passed | `pcloudcc_version` defaults to `2.0.1`; expected output is derived from that value |

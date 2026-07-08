@@ -170,8 +170,8 @@ ansible-playbook ansible/playbooks/pcloudcc-install.yml
 
 The pCloud playbook installs the source-built `pcloudcc` binary, applies the
 Debian 13 `arm64` build patch, prepares `/mnt/pcloud`, and validates the
-installed client. It does not perform pCloud credential login or systemd mount
-management.
+installed client against the role's `pcloudcc_version` default. It does not
+perform pCloud credential login or systemd mount management.
 
 Migrate a microSD-booted PiServ system to NVMe:
 

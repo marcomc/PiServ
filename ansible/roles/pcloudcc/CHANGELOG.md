@@ -8,6 +8,8 @@ All notable changes for the pcloudcc Ansible role are documented here.
 
 - Added Galaxy-ready standalone role metadata.
 - Added argument specifications for role variables.
+- Added a separate `pcloudcc_version` default for expected client-version
+  validation.
 - Added pcloudcc build dependency installation.
 - Added official pCloud console-client source checkout.
 - Added Debian 13 `arm64` compatibility patch for the official source.

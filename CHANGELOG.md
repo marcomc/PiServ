@@ -39,6 +39,8 @@ All notable project changes are documented here.
   console client on PiServ.
 - Added the `pcloudcc-install.yml` playbook and validated idempotent client
   installation on PiServ.
+- Added a `pcloudcc_version` role default for expected pCloud console-client
+  version validation.
 - Added Ansible-managed Freenove background service and runtime configuration
   for LED, fan, and OLED control.
 - Added a Freenove expansion-controller preflight to avoid enabling a failing
