@@ -23,10 +23,13 @@ mount.
 
 ## Status
 
-Client install and install automation are complete. Manual credential
-bootstrap, EU-region login validation, mount validation, systemd startup, and
-workload integration remain open. Do not enable scheduled podcast writes until
-all validation gates in this track pass on PiServ.
+Client install and install automation are complete, including a CLI patch that
+adds TOTP and recovery-code prompts. Manual credential bootstrap with the real
+pCloud account, EU-region login validation, mount validation, and podcast
+target write validation have passed. User-scoped systemd startup and saved-auth
+service restart have passed. Reboot recovery and workload integration remain
+open. Do not enable scheduled podcast writes until all validation gates in this
+track pass on PiServ.
 
 ## Progress Snapshot
 
@@ -36,8 +39,14 @@ all validation gates in this track pass on PiServ.
 | Install automation | Done | `ansible/playbooks/pcloudcc-install.yml` reports `changed=0` on repeat run |
 | Galaxy-ready role shape | Done | `ansible/roles/pcloudcc/` has metadata, argument specs, docs, tests, and license |
 | Version pin | Done | Role default `pcloudcc_version` is `2.0.1`; source revision remains pinned separately |
-| Credential bootstrap | Pending | Requires manual `pcloudcc -p -s` operator login |
-| pCloud mount validation | Pending | Requires successful credential bootstrap |
+| TOTP CLI patch | Done | `pcloudcc -h` exposes `--trustdevice` and `--recoverycode` |
+| Credential bootstrap | Done | TOTP login succeeded and reached `READY` |
+| pCloud mount validation | Done | `/mnt/pcloud` is mounted from `pCloud.fs` |
+| Podcast target write test | Done | `.piserv-write-test` write/read/delete passed |
+| Credential storage audit | Done | `~operator/.pcloud` hardened to `0700`; DB files hardened to `0600`; no `pass` key present |
+| User service startup | Done | `pcloudcc.service` starts with `/usr/local/bin/pcloudcc -m /mnt/pcloud` |
+| Service restart | Done | Stop/start remounted `/mnt/pcloud` without email, password, or TOTP |
+| Reboot recovery | Pending | Requires reboot and post-boot mount/write validation |
 | Podcast workload integration | Pending | Requires mounted and writable pCloud target |
 
 ## References
@@ -61,7 +70,7 @@ all validation gates in this track pass on PiServ.
 | Mount root | `/mnt/pcloud` |
 | Podcast target | `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` |
 | Producer workload | `raiplaysound-cli-daily-sync` |
-| Initial credential bootstrap | `pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -m /mnt/pcloud` |
+| Initial credential bootstrap | `pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud` |
 
 ## Scope
 
@@ -90,15 +99,16 @@ all validation gates in this track pass on PiServ.
 | 2 | Install build prerequisites | Required Debian packages are installed and documented |
 | 3 | Build official `pcloudcc` | Binary path, client version, source revision, and install method are recorded |
 | 4 | Prepare mount point | `/mnt/pcloud` exists, is owned for the selected runtime model, and is empty before mount |
-| 5 | Manual credential bootstrap | Operator enters the password with `-p -s`; no password appears in files we manage |
-| 6 | Validate EU-region behavior | Login succeeds for the European Union account or the exact extra setting is identified |
-| 7 | Validate mount | `findmnt --mountpoint /mnt/pcloud` reports the expected FUSE mount |
-| 8 | Validate podcast path | `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` exists and is writable |
-| 9 | Validate write round trip | Test file can be written, read, removed, and observed from another pCloud client |
-| 10 | Add systemd startup | Service starts without a password on the command line or in unit files |
-| 11 | Validate reboot recovery | Reboot returns PiServ to a mounted and writable pCloud state |
-| 12 | Integrate workload | `raiplaysound-cli-daily-sync` writes only after the pCloud preflight passes |
-| 13 | Automate | Ansible reproduces the non-secret setup and validates the mount health check |
+| 5 | Patch TOTP bootstrap | CLI exposes TOTP and recovery-code prompt support |
+| 6 | Manual credential bootstrap | Done; operator entered password and TOTP interactively |
+| 7 | Validate EU-region behavior | Done; login succeeded for the European Union account |
+| 8 | Validate mount | Done; `findmnt --mountpoint /mnt/pcloud` reports `pCloud.fs` |
+| 9 | Validate podcast path | Done; `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` exists and is writable |
+| 10 | Validate write round trip | Done for local write/read/delete; external visibility still pending |
+| 11 | Add systemd startup | Done; user service starts without email, password, or TOTP in unit files |
+| 12 | Validate reboot recovery | Reboot returns PiServ to a mounted and writable pCloud state |
+| 13 | Integrate workload | `raiplaysound-cli-daily-sync` writes only after the pCloud preflight passes |
+| 14 | Automate | Done for install, credential hardening, and user service; workload gate remains pending |
 
 ## Validation Gates
 
@@ -111,6 +121,8 @@ all validation gates in this track pass on PiServ.
 | Round trip | Write, read, and delete `.piserv-write-test` | Contents match and cleanup succeeds |
 | External visibility | Check from Mac pCloud client or web UI | Test file appears before deletion |
 | Secret hygiene | Inspect unit files, Ansible vars, shell scripts, and docs | Password is absent |
+| Credential file mode | `find /home/operator/.pcloud -maxdepth 2 -printf ...` | Directories `0700`, files `0600` |
+| Saved password absence | Inspect `setting` keys in `data.db` without values | `auth` and `saveauth` present; `pass` absent |
 | Reboot | Reboot PiServ and rerun mount/write checks | Mount recovers without manual shell state |
 | Workload | Run non-destructive `raiplaysound-cli` test | Output lands only in the target path |
 
@@ -124,7 +136,7 @@ Automate only after the matching manual step has passed on PiServ.
 | Source checkout/build | Idempotent Ansible role or task file pinned to a source revision |
 | Mount point | Ansible file task |
 | Credential bootstrap | Manual runbook step only |
-| systemd startup | Unit or user unit without password material |
+| systemd startup | User unit without password material |
 | pCloud health check | Small shell script plus Ansible validation |
 | Scheduled workload dependency | Timer/service preflight or wrapper script |
 | Disaster recovery | Runbook section plus playbook entry point |
@@ -136,21 +148,17 @@ would risk partial output.
 
 ```sh
 systemctl --user stop pcloudcc.service
-fusermount3 -u /mnt/pcloud
+fusermount -u /mnt/pcloud
 findmnt --mountpoint /mnt/pcloud || true
 ```
-
-If systemd is implemented as a system service instead of a user service, use
-the matching `sudo systemctl stop ...` command documented during that phase.
 
 Do not delete saved `pcloudcc` credentials during ordinary rollback. Remove
 them only when deliberately deauthorizing PiServ from pCloud.
 
 ## Open Items
 
-- Confirm whether source-built `pcloudcc` needs explicit EU-region settings.
-- Decide user service versus system service after credential and mount behavior
-  are observed.
+- Confirm a write-test file appears in pCloud from another client or the web UI.
+- Validate reboot recovery for `pcloudcc.service`.
 - Decide whether completed media should write directly to the mount or stage on
   local NVMe before copy.
 - Define the final scheduled `raiplaysound-cli` timer/service shape.
@@ -163,3 +171,10 @@ them only when deliberately deauthorizing PiServ from pCloud.
 | 2026-07-08 | Live client install | Passed | `/usr/local/bin/pcloudcc`; source revision `980d2cadf670f1b14642c7dbe015f95bd2306175` |
 | 2026-07-08 | Install automation | Passed | `ansible-playbook ansible/playbooks/pcloudcc-install.yml` ended with `changed=0` on repeat run |
 | 2026-07-08 | Version default | Passed | `pcloudcc_version` defaults to `2.0.1`; expected output is derived from that value |
+| 2026-07-08 | First login with TOTP-enabled account | Blocked | pCloud returned API error `2297 Two factor authentication required`; `/mnt/pcloud` remained unmounted |
+| 2026-07-08 | CLI TOTP patch | Passed | Rebuilt `pcloudcc`; `pcloudcc -h` exposes `--trustdevice` and `--recoverycode` |
+| 2026-07-08 | TOTP login and mount | Passed | `pcloudcc` reached `READY`; `/mnt/pcloud` mounted as `pCloud.fs` |
+| 2026-07-08 | Podcast target write test | Passed | `.piserv-write-test` write/read/delete passed under `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` |
+| 2026-07-08 | User service install | Passed | `pcloudcc.service` enabled and active for `operator`; `Linger=yes` |
+| 2026-07-08 | Credential storage audit | Passed | `~operator/.pcloud` mode `0700`; DB files mode `0600`; `auth` present; `pass` absent |
+| 2026-07-08 | Saved-auth service restart | Passed | Stop/start remounted `/mnt/pcloud` without interactive login |

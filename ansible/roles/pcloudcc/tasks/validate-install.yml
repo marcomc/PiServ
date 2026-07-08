@@ -19,13 +19,31 @@
     that:
       - "'libpcloudcc_lib.so => /usr/local/lib/libpcloudcc_lib.so' in pcloudcc_ldd.stdout"
 
+- name: Check whether pCloud mount root is mounted
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/findmnt
+      - --mountpoint
+      - "{{ pcloudcc_mount_root }}"
+  register: pcloudcc_validate_mount_root_mount
+  changed_when: false
+  failed_when: false
+
 - name: Validate pCloud mount root directory
+  when: pcloudcc_validate_mount_root_mount.rc != 0
   ansible.builtin.stat:
     path: "{{ pcloudcc_mount_root }}"
   register: pcloudcc_mount_root_stat
 
 - name: Assert pCloud mount root is prepared
+  when: pcloudcc_validate_mount_root_mount.rc != 0
   ansible.builtin.assert:
     that:
       - pcloudcc_mount_root_stat.stat.isdir
       - pcloudcc_mount_root_stat.stat.pw_name == pcloudcc_runtime_user
+
+- name: Assert pCloud mount root is active
+  when: pcloudcc_validate_mount_root_mount.rc == 0
+  ansible.builtin.assert:
+    that:
+      - pcloudcc_mount_root in pcloudcc_validate_mount_root_mount.stdout

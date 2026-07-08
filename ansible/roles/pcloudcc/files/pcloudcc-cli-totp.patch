@@ -1,0 +1,244 @@
+diff --git a/pCloudCC/main.cpp b/pCloudCC/main.cpp
+index d2f6a8f..caffb23 100644
+--- a/pCloudCC/main.cpp
++++ b/pCloudCC/main.cpp
+@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
+   bool passwordsw = false;
+   bool save_pass = false;
+   bool crypto = false;
++  bool tfa_recovery = false;
++  bool tfa_trust = false;
+   
+   try {
+     po::options_description desc("Allowed options");
+@@ -34,6 +36,8 @@ int main(int argc, char **argv) {
+         ("commands_only,k", po::bool_switch(&commands_only),"Daemon already started pass only commands")
+         ("newuser,n", po::bool_switch(&newuser), "Switch if this is a new user to be registered.")
+         ("savepassword,s", po::bool_switch(&save_pass), "Save password in database.")
++        ("recoverycode,r", po::bool_switch(&tfa_recovery), "Treat two-factor code as a recovery code.")
++        ("trustdevice,t", po::bool_switch(&tfa_trust), "Mark this device trusted after two-factor login.")
+     ;
+ 
+     po::variables_map vm;        
+@@ -58,7 +62,7 @@ int main(int argc, char **argv) {
+       return 0;
+     }
+     
+-    if ((!vm.count("username"))) {
++    if ((!vm.count("username")) && (passwordsw || newuser)) {
+       std::cout << "Username option is required!!!"  << "\n";
+       return 1;
+     }
+@@ -73,7 +77,6 @@ int main(int argc, char **argv) {
+       if (vm.count("passascrypto"))
+         console_client::clibrary::pclsync_lib::get_lib().set_crypto_pass(password) ;
+       else {
+-        std::cout << "Enter crypto password."  << "\n";
+         console_client::clibrary::pclsync_lib::get_lib().get_cryptopass_from_console();
+       }
+     } else 
+@@ -85,6 +88,8 @@ int main(int argc, char **argv) {
+     console_client::clibrary::pclsync_lib::get_lib().newuser_ = newuser;
+     console_client::clibrary::pclsync_lib::get_lib().set_savepass(save_pass);
+     console_client::clibrary::pclsync_lib::get_lib().set_daemon(daemon);
++    console_client::clibrary::pclsync_lib::get_lib().set_tfa_recovery(tfa_recovery);
++    console_client::clibrary::pclsync_lib::get_lib().set_tfa_trust(tfa_trust);
+   }
+   catch(std::exception& e) {
+     std::cerr << "error: " << e.what() << "\n";
+diff --git a/pCloudCC/pclsync_lib.cpp b/pCloudCC/pclsync_lib.cpp
+index 4f49a59..bed3d3a 100644
+--- a/pCloudCC/pclsync_lib.cpp
++++ b/pCloudCC/pclsync_lib.cpp
+@@ -65,29 +65,42 @@ char * clib::pclsync_lib::get_token(){
+ 
+ void clib::pclsync_lib::get_pass_from_console()
+ {
+-  do_get_pass_from_console(password_);
++  do_get_pass_from_console(password_, "Please, enter password");
+ }
+ 
+ void clib::pclsync_lib::get_cryptopass_from_console()
+ {
+-  do_get_pass_from_console(crypto_pass_);
++  do_get_pass_from_console(crypto_pass_, "Please, enter crypto password");
+ }
+ 
+-void clib::pclsync_lib::do_get_pass_from_console(std::string& password)
++void clib::pclsync_lib::get_tfa_code_from_console()
++{
++  do_get_pass_from_console(tfa_code_, "Please, enter two-factor authentication code");
++}
++
++void clib::pclsync_lib::do_get_pass_from_console(std::string& password, const char *prompt)
+ {
+   if (daemon_) {
+-     std::cout << "Not able to read password when started as daemon." << std::endl;
++     std::cout << "Not able to read interactive input when started as daemon." << std::endl;
+      exit(1);
+   }
+ #ifdef P_OS_POSIX
+   termios oldt;
+-  tcgetattr(STDIN_FILENO, &oldt);
++  bool have_tty = isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &oldt) == 0;
+   termios newt = oldt;
+-  newt.c_lflag &= ~ECHO;
+-  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+-  std::cout << "Please, enter password" << std::endl;
+-  getline(std::cin, password);
+-  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
++  if (have_tty) {
++    newt.c_lflag &= ~ECHO;
++    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
++  }
++  std::cout << prompt << std::endl;
++  if (!getline(std::cin, password)) {
++    if (have_tty)
++      tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
++    std::cerr << "Interactive input is required but not available." << std::endl;
++    exit(1);
++  }
++  if (have_tty)
++    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+ #else  
+   HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+   DWORD modeoff;
+@@ -97,8 +110,12 @@ void clib::pclsync_lib::do_get_pass_from_console(std::string& password)
+     modeoff = mode & ~ENABLE_ECHO_INPUT;
+     modeon = mode | ENABLE_ECHO_INPUT;
+   SetConsoleMode(hStdin, modeoff);
+-  std::cout << "Please, enter password" << std::endl;
+-  getline(std::cin, password);
++  std::cout << prompt << std::endl;
++  if (!getline(std::cin, password)) {
++    SetConsoleMode(hStdin, modeon);
++    std::cerr << "Interactive input is required but not available." << std::endl;
++    exit(1);
++  }
+   SetConsoleMode(hStdin, modeon);
+   //std::cout << "Password is " << password << std::endl;
+ #endif
+@@ -163,6 +180,11 @@ static char const * status2string (uint32_t status){
+     case PSTATUS_SCANNING: return "SCANNING";
+     case PSTATUS_USER_MISMATCH: return "USER_MISMATCH";
+     case PSTATUS_ACCOUT_EXPIRED: return "ACCOUT_EXPIRED";
++    case PSTATUS_TFA_REQUIRED: return "TFA_REQUIRED";
++    case PSTATUS_BAD_TFA_CODE: return "BAD_TFA_CODE";
++    case PSTATUS_VERIFY_REQUIRED: return "VERIFY_REQUIRED";
++    case PSTATUS_RELOCATION: return "RELOCATION";
++    case PSTATUS_RELOCATED: return "RELOCATED";
+     default :return "Unrecognized status";
+   }
+ }
+@@ -207,6 +229,26 @@ static void status_change(pstatus_t* status) {
+       
+     }
+   }
++  else if (status->status==PSTATUS_TFA_REQUIRED || status->status==PSTATUS_BAD_TFA_CODE){
++    if (status->status==PSTATUS_BAD_TFA_CODE)
++      std::cout << "Bad two-factor authentication code." << std::endl;
++
++    switch (psync_tfa_type()){
++      case 1:
++        std::cout << "Two-factor authentication type: SMS." << std::endl;
++        break;
++      case 2:
++        std::cout << "Two-factor authentication type: authenticator app." << std::endl;
++        break;
++      default:
++        std::cout << "Two-factor authentication required." << std::endl;
++        break;
++    }
++
++    clib::pclsync_lib::get_lib().get_tfa_code_from_console();
++    psync_tfa_set_code(clib::pclsync_lib::get_lib().get_tfa_code().c_str(), clib::pclsync_lib::get_lib().get_tfa_trust(), clib::pclsync_lib::get_lib().get_tfa_recovery());
++    std::cout << "two-factor authentication code submitted" << std::endl;
++  }
+   if (status->status==PSTATUS_READY || status->status==PSTATUS_UPLOADING || status->status==PSTATUS_DOWNLOADING || status->status==PSTATUS_DOWNLOADINGANDUPLOADING){
+     if (!cryptocheck){
+       cryptocheck=1;
+@@ -268,7 +310,7 @@ int clib::pclsync_lib::init()//std::string& username, std::string& password, std
+   psync_start_sync(status_change, event_handler);
+   char * username_old = psync_get_username();
+ 
+-  if (username_old){
++  if (username_old && !username_.empty()){
+     if (username_.compare(username_old) != 0){
+       std::cout << "logged in with user " << username_old <<", not "<< username_ <<", unlinking"<<std::endl;
+       psync_unlink();
+@@ -277,6 +319,9 @@ int clib::pclsync_lib::init()//std::string& username, std::string& password, std
+     }
+     psync_free(username_old);
+   }
++  else if (username_old){
++    psync_free(username_old);
++  }
+   
+   psync_add_overlay_callback(20,&clib::pclsync_lib::statrt_crypto);
+   psync_add_overlay_callback(21,&clib::pclsync_lib::stop_crypto);
+@@ -307,12 +352,10 @@ int clib::pclsync_lib::unlink () {
+   return 0;
+ }
+ 
+-clib::pclsync_lib::pclsync_lib() : status_(new pstatus_struct_() ), was_init_(false), setup_crypto_(false)
++clib::pclsync_lib::pclsync_lib() : crypto_on_(false), save_pass_(false), setup_crypto_(false), status_(new pstatus_struct_() ), newuser_(false), status_callback_(0), was_init_(false), tfa_recovery_(false), tfa_trust_(false), to_set_mount_(false), daemon_(false)
+ {}
+ 
+ clib::pclsync_lib::~pclsync_lib()
+ {
+ 
+ }
+-
+-
+diff --git a/pCloudCC/pclsync_lib.h b/pCloudCC/pclsync_lib.h
+index 17d8b41..16af2f3 100644
+--- a/pCloudCC/pclsync_lib.h
++++ b/pCloudCC/pclsync_lib.h
+@@ -48,6 +48,9 @@ namespace console_client {
+       const std::string& get_password() {return password_;}
+       const std::string& get_crypto_pass() {return crypto_pass_;};
+       const std::string& get_mount() {return mount_;}
++      const std::string& get_tfa_code() {return tfa_code_;}
++      bool get_tfa_recovery() {return tfa_recovery_;}
++      bool get_tfa_trust() {return tfa_trust_;}
+       //Setters
+       void set_username(const std::string& arg) { username_ = arg;}
+       void set_password(const std::string& arg) { password_ = arg;}
+@@ -57,10 +60,13 @@ namespace console_client {
+       void setupsetup_crypto(bool p) {setup_crypto_ = p;}
+       void set_newuser(bool p) {newuser_ = p;}
+       void set_daemon(bool p) {daemon_ = p;}
++      void set_tfa_recovery(bool p) {tfa_recovery_ = p;}
++      void set_tfa_trust(bool p) {tfa_trust_ = p;}
+       void set_status_callback(status_callback_t p) {status_callback_ = p;}
+       //Console 
+       void get_pass_from_console();
+       void get_cryptopass_from_console();
++      void get_tfa_code_from_console();
+       //API calls
+       int init();//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto = 1, int usesrypto_userpass = 0);
+       static int statrt_crypto (const char* pass, void * rep);
+@@ -81,19 +87,22 @@ namespace console_client {
+       bool newuser_;
+       status_callback_t status_callback_;
+       bool was_init_;
++      bool tfa_recovery_;
++      bool tfa_trust_;
+ 
+     private:
+       std::string username_;
+       std::string password_;
+       std::string crypto_pass_;
+       std::string mount_;
++      std::string tfa_code_;
+        
+       bool to_set_mount_;
+       bool daemon_;
+ 
+ 
+     private:
+-      void do_get_pass_from_console(std::string& password);
++      void do_get_pass_from_console(std::string& password, const char *prompt);
+      
+ 
+     };

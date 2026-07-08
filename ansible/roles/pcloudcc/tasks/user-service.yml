@@ -1,0 +1,95 @@
+---
+- name: Configure pcloudcc user service
+  when: pcloudcc_manage_user_service | bool
+  block:
+    - name: Require saved pcloudcc auth database before service management
+      ansible.builtin.stat:
+        path: "{{ pcloudcc_runtime_user_home }}/.pcloud/data.db"
+      register: pcloudcc_saved_auth_db_stat
+
+    - name: Assert pcloudcc saved auth database exists
+      ansible.builtin.assert:
+        that:
+          - pcloudcc_saved_auth_db_stat.stat.exists
+        fail_msg: >-
+          pcloudcc user service requires a completed manual login first. Run
+          pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m {{ pcloudcc_mount_root }}
+          as {{ pcloudcc_runtime_user }} before enabling the service.
+
+    - name: Ensure pcloudcc user systemd directory exists
+      ansible.builtin.file:
+        path: "{{ pcloudcc_runtime_user_home }}/.config/systemd/user"
+        state: directory
+        owner: "{{ pcloudcc_runtime_user }}"
+        group: "{{ pcloudcc_runtime_user }}"
+        mode: "0755"
+      become: true
+
+    - name: Install pcloudcc user service
+      ansible.builtin.template:
+        src: pcloudcc.service.j2
+        dest: "{{ pcloudcc_runtime_user_home }}/.config/systemd/user/{{ pcloudcc_user_service_name }}"
+        owner: "{{ pcloudcc_runtime_user }}"
+        group: "{{ pcloudcc_runtime_user }}"
+        mode: "0644"
+      become: true
+
+    - name: Read pcloudcc runtime user linger state
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - show-user
+          - "{{ pcloudcc_runtime_user }}"
+          - -p
+          - Linger
+      register: pcloudcc_linger_state
+      changed_when: false
+
+    - name: Enable pcloudcc runtime user linger
+      when:
+        - pcloudcc_enable_linger | bool
+        - "'Linger=yes' not in pcloudcc_linger_state.stdout"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - enable-linger
+          - "{{ pcloudcc_runtime_user }}"
+      become: true
+      changed_when: true
+
+    - name: Manage pcloudcc user service
+      ansible.builtin.systemd_service:
+        name: "{{ pcloudcc_user_service_name }}"
+        scope: user
+        daemon_reload: true
+        enabled: "{{ pcloudcc_user_service_enabled }}"
+        state: "{{ pcloudcc_user_service_state }}"
+      become: true
+      become_user: "{{ pcloudcc_runtime_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path={{ pcloudcc_runtime_dir }}/bus"
+
+    - name: Validate pcloudcc user service is active
+      when: pcloudcc_user_service_state == "started"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemctl
+          - --user
+          - is-active
+          - "{{ pcloudcc_user_service_name }}"
+      become: true
+      become_user: "{{ pcloudcc_runtime_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path={{ pcloudcc_runtime_dir }}/bus"
+      changed_when: false
+
+    - name: Validate pcloudcc mount is active
+      when: pcloudcc_user_service_state == "started"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/findmnt
+          - --mountpoint
+          - "{{ pcloudcc_mount_root }}"
+      changed_when: false

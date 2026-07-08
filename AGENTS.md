@@ -49,6 +49,19 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   solely to satisfy project lint rules unless PiServ intentionally forks or
   patches that upstream code.
 
+## pCloud / FUSE Rules
+
+- For `pcloudcc` on Debian arm64, pin the upstream source revision and carry
+  documented patches in Ansible instead of editing `/opt` manually.
+- Generate role-managed source patches from a clean or known checkout with
+  `git diff`; do not hand-write unified diff hunks.
+- Before automating `pcloudcc` mounts for a TOTP-enabled account, validate the
+  bootstrap path explicitly. If login fails, inspect then remove
+  `/tmp/psync_err.log` because it may contain authentication-derived material.
+- For role tasks that manage FUSE mount roots, detect active mounts first and
+  skip root-side directory ownership or creation tasks while the user mount is
+  active; validate the mounted state separately.
+
 ## Documentation Rules
 
 - Update `README.md` when the project purpose, layout, access model, or core

@@ -1,0 +1,11 @@
+---
+- name: Read pcloudcc runtime user account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ pcloudcc_runtime_user }}"
+
+- name: Store pcloudcc runtime user facts
+  ansible.builtin.set_fact:
+    pcloudcc_runtime_user_uid: "{{ ansible_facts.getent_passwd[pcloudcc_runtime_user][1] }}"
+    pcloudcc_runtime_user_home: "{{ ansible_facts.getent_passwd[pcloudcc_runtime_user][4] }}"
+    pcloudcc_runtime_dir: "/run/user/{{ ansible_facts.getent_passwd[pcloudcc_runtime_user][1] }}"

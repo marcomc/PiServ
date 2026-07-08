@@ -25,13 +25,16 @@ This role automates the validated pcloudcc installation path:
 - install Debian build dependencies
 - check out the official pCloud console-client source
 - apply the Debian arm64 compatibility patch
+- apply the CLI TOTP prompt patch
 - build the FUSE-enabled pcloudcc client
 - install `pcloudcc` and its shared library under `/usr/local`
 - prepare the pCloud mount root directory
+- harden the runtime user's saved pCloud state directory
+- optionally manage a user-scoped systemd service after manual login
 
-The role intentionally stops before credential bootstrap and mount service
-management. Use a separate runbook or role for interactive `pcloudcc -p -s`
-login and systemd startup after live account validation.
+The role intentionally does not perform credential bootstrap. Use a separate
+runbook for interactive `pcloudcc -p -s -t` login before enabling service
+management.
 
 ## Requirements
 
@@ -77,8 +80,15 @@ ansible-playbook --syntax-check tests/test.yml
 | `pcloudcc_repo_update` | `false` | Fetch or refresh an existing checkout |
 | `pcloudcc_repo_force` | `false` | Allow Git to discard local checkout changes during updates |
 | `pcloudcc_mount_root` | `/mnt/pcloud` | Mount point prepared for later pcloudcc use |
-| `pcloudcc_patch_file` | `pcloudcc-debian13-arm64.patch` | Debian arm64 source patch |
+| `pcloudcc_patch_files` | Debian arm64 and CLI TOTP patches | Source patches applied before build |
 | `pcloudcc_force_rebuild` | `false` | Rebuild even when `pcloudcc` is installed |
+| `pcloudcc_harden_credentials` | `true` | Restrict the runtime user's `.pcloud` state tree |
+| `pcloudcc_manage_user_service` | `false` | Manage a user-scoped systemd service |
+| `pcloudcc_user_service_name` | `pcloudcc.service` | User service name |
+| `pcloudcc_user_service_enabled` | `true` | Enable the user service |
+| `pcloudcc_user_service_state` | `started` | Desired user service state |
+| `pcloudcc_enable_linger` | `true` | Enable linger for the runtime user |
+| `pcloudcc_user_service_restart_sec` | `15` | Restart delay for the user service |
 | `pcloudcc_build_jobs` | CPU count or `2` | Parallel make job count |
 | `pcloudcc_expected_version_output` | `pCloud console client v.{{ pcloudcc_version }}` | Expected help/version output |
 | `pcloudcc_apt_packages` | See `defaults/main.yml` | Debian packages required to build pcloudcc |
@@ -130,16 +140,28 @@ The role applies `files/pcloudcc-debian13-arm64.patch` because the official
 source currently ships x86 tuning flags and legacy C constructs that Debian 13
 GCC rejects on `arm64`.
 
+The role applies `files/pcloudcc-cli-totp.patch` because the upstream sync
+library supports two-factor authentication, but the console-client wrapper does
+not expose an operator prompt for TOTP or recovery codes.
+
 The role does not configure a pCloud account email and does not store a pCloud
 password. First login remains an operator action:
 
 ```sh
-pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -m /mnt/pcloud
+pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud
 ```
 
-The role does not create a systemd unit. Add systemd management only after the
-interactive credential bootstrap, EU-region login behavior, and mount recovery
-have been validated on the target.
+With `pcloudcc_manage_user_service: true`, the role requires an existing
+`~/.pcloud/data.db` for `pcloudcc_runtime_user`, installs a user unit, enables
+linger when requested, and starts:
+
+```sh
+/usr/local/bin/pcloudcc -m /mnt/pcloud
+```
+
+The service command intentionally contains no account email, password, TOTP, or
+recovery code. It depends on the saved auth token created by manual login. If
+pCloud invalidates that token, rerun the manual login and restart the service.
 
 ## Task Layout
 
@@ -153,6 +175,8 @@ task files:
 | `source.yml` | Source checkout, patch application, and mount root |
 | `build.yml` | pcloudcc build and install |
 | `validate-install.yml` | Installed binary, library, and mount root validation |
+| `credentials.yml` | Runtime user's `.pcloud` permission hardening |
+| `user-service.yml` | Optional user-scoped systemd service management |
 
 ## Validation
 

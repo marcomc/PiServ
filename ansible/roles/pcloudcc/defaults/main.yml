@@ -8,8 +8,17 @@ pcloudcc_version: "2.0.1"
 pcloudcc_repo_update: false
 pcloudcc_repo_force: false
 pcloudcc_mount_root: /mnt/pcloud
-pcloudcc_patch_file: pcloudcc-debian13-arm64.patch
+pcloudcc_patch_files:
+  - pcloudcc-debian13-arm64.patch
+  - pcloudcc-cli-totp.patch
 pcloudcc_force_rebuild: false
+pcloudcc_harden_credentials: true
+pcloudcc_manage_user_service: false
+pcloudcc_user_service_name: pcloudcc.service
+pcloudcc_user_service_enabled: true
+pcloudcc_user_service_state: started
+pcloudcc_enable_linger: true
+pcloudcc_user_service_restart_sec: 15
 pcloudcc_build_jobs: >-
   {{ ansible_facts["processor_vcpus"] | default(ansible_facts["processor_nproc"] | default(2)) }}
 pcloudcc_expected_version_output: "pCloud console client v.{{ pcloudcc_version }}"

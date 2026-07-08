@@ -10,6 +10,13 @@ All notable changes for the pcloudcc Ansible role are documented here.
 - Added argument specifications for role variables.
 - Added a separate `pcloudcc_version` default for expected client-version
   validation.
+- Added a CLI TOTP prompt patch for pCloud accounts with two-factor
+  authentication enabled.
+- Added saved-auth startup support without requiring the account email in
+  service commands.
+- Added runtime-user `.pcloud` permission hardening.
+- Added optional user-scoped systemd service management.
+- Added runtime user linger management for user services.
 - Added pcloudcc build dependency installation.
 - Added official pCloud console-client source checkout.
 - Added Debian 13 `arm64` compatibility patch for the official source.

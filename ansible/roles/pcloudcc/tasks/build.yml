@@ -7,7 +7,7 @@
 
 - name: Build and install pcloudcc
   when: >-
-    pcloudcc_force_rebuild
+    pcloudcc_force_rebuild | bool
     or pcloudcc_git_checkout.changed
     or pcloudcc_patch_apply.changed
     or pcloudcc_binary_check.rc != 0

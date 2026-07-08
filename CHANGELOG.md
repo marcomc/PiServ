@@ -41,6 +41,17 @@ All notable project changes are documented here.
   installation on PiServ.
 - Added a `pcloudcc_version` role default for expected pCloud console-client
   version validation.
+- Documented the `pcloudcc` first-login blocker for TOTP-enabled pCloud
+  accounts.
+- Added and installed patched `pcloudcc` CLI support for TOTP and recovery-code
+  prompts.
+- Validated patched `pcloudcc` TOTP login, pCloud FUSE mount, and local
+  podcast-target write/read/delete on PiServ.
+- Added `pcloudcc` credential hardening for the saved pCloud state directory.
+- Added optional user-scoped `pcloudcc` systemd service management to the
+  `pcloudcc` Ansible role.
+- Validated credential-free `pcloudcc.service` startup and saved-auth restart
+  on PiServ.
 - Added Ansible-managed Freenove background service and runtime configuration
   for LED, fan, and OLED control.
 - Added a Freenove expansion-controller preflight to avoid enabling a failing
@@ -73,3 +84,6 @@ All notable project changes are documented here.
   to amber in software.
 - Made Ansible role defaults and role documentation agnostic of PiServ-specific
   host values so roles remain suitable for standalone Galaxy publication.
+- Changed the `pcloudcc` CLI patch so saved-auth startup can run without an
+  account email in the service command and fails visibly when interactive login
+  would be required.

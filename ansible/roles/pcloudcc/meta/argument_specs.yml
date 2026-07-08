@@ -8,7 +8,8 @@ argument_specs:
       - Applies the Debian arm64 source patch carried by this role.
       - Builds and installs pcloudcc under C(/usr/local).
       - Prepares the pCloud mount root directory.
-      - Does not manage pCloud credentials, account email, or systemd mount services.
+      - Can harden saved pCloud state and manage a user-scoped systemd service.
+      - Does not perform pCloud credential login or store the account password.
     options:
       pcloudcc_runtime_user:
         type: str
@@ -46,14 +47,45 @@ argument_specs:
         type: path
         default: /mnt/pcloud
         description: Mount point directory prepared for later pcloudcc use.
-      pcloudcc_patch_file:
-        type: str
-        default: pcloudcc-debian13-arm64.patch
-        description: Role file patch applied to build pcloudcc on Debian arm64.
+      pcloudcc_patch_files:
+        type: list
+        elements: str
+        default:
+          - pcloudcc-debian13-arm64.patch
+          - pcloudcc-cli-totp.patch
+        description: Role file patches applied to the pcloudcc source checkout.
       pcloudcc_force_rebuild:
         type: bool
         default: false
         description: Whether to rebuild pcloudcc even when the binary is already installed.
+      pcloudcc_harden_credentials:
+        type: bool
+        default: true
+        description: Whether to restrict the pcloudcc state directory to the runtime user.
+      pcloudcc_manage_user_service:
+        type: bool
+        default: false
+        description: Whether to manage a user-scoped systemd service for pcloudcc.
+      pcloudcc_user_service_name:
+        type: str
+        default: pcloudcc.service
+        description: Name of the user-scoped systemd service.
+      pcloudcc_user_service_enabled:
+        type: bool
+        default: true
+        description: Whether the pcloudcc user service is enabled.
+      pcloudcc_user_service_state:
+        type: str
+        default: started
+        description: Desired state for the pcloudcc user service.
+      pcloudcc_enable_linger:
+        type: bool
+        default: true
+        description: Whether to enable lingering for the runtime user.
+      pcloudcc_user_service_restart_sec:
+        type: int
+        default: 15
+        description: Restart delay for the pcloudcc user service.
       pcloudcc_build_jobs:
         type: str
         default: "{{ ansible_facts['processor_vcpus'] | default(ansible_facts['processor_nproc'] | default(2)) }}"

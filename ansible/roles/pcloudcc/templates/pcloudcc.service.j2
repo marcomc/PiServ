@@ -1,0 +1,21 @@
+[Unit]
+Description=pCloud console client FUSE mount
+Documentation=https://github.com/pcloudcom/console-client
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=%h/.pcloud/data.db
+ConditionPathIsDirectory={{ pcloudcc_mount_root }}
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=/usr/local/bin/pcloudcc -m {{ pcloudcc_mount_root }}
+ExecStop=/usr/bin/fusermount -u {{ pcloudcc_mount_root }}
+Restart=on-failure
+RestartSec={{ pcloudcc_user_service_restart_sec | int }}
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

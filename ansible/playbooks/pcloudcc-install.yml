@@ -7,3 +7,6 @@
       vars:
         pcloudcc_runtime_user: operator
         pcloudcc_mount_root: /mnt/pcloud
+        pcloudcc_harden_credentials: true
+        pcloudcc_manage_user_service: true
+        pcloudcc_enable_linger: true

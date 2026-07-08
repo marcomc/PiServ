@@ -23,20 +23,23 @@
   register: pcloudcc_git_checkout
   when: pcloudcc_repo_update or not pcloudcc_source_checkout.stat.isdir
 
-- name: Copy Debian arm64 pcloudcc source patch
+- name: Copy pcloudcc source patches
   ansible.builtin.copy:
-    src: "{{ pcloudcc_patch_file }}"
-    dest: "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file }}"
+    src: "{{ pcloudcc_patch_file_item }}"
+    dest: "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file_item }}"
     owner: "{{ pcloudcc_runtime_user }}"
     group: "{{ pcloudcc_runtime_user }}"
     mode: "0644"
   register: pcloudcc_patch_copy
+  loop: "{{ pcloudcc_patch_files }}"
+  loop_control:
+    loop_var: pcloudcc_patch_file_item
 
-- name: Apply Debian arm64 pcloudcc source patch
+- name: Apply pcloudcc source patches
   ansible.builtin.shell: |
     set -eu
     cd "{{ pcloudcc_source_dir }}"
-    patch_path="{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file }}"
+    patch_path="{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file_item }}"
     if git apply --reverse --check "${patch_path}" >/dev/null 2>&1; then
       echo "already-applied"
     elif git apply --check "${patch_path}" >/dev/null 2>&1; then
@@ -45,6 +48,9 @@
     else
       echo "pcloudcc patch does not apply cleanly" >&2
       git diff -- pCloudCC/lib/pclsync/Makefile \
+        pCloudCC/main.cpp \
+        pCloudCC/pclsync_lib.h \
+        pCloudCC/pclsync_lib.cpp \
         pCloudCC/lib/pclsync/ptools.h \
         pCloudCC/lib/pclsync/ptools.c \
         pCloudCC/lib/pclsync/psynclib.c \
@@ -57,8 +63,22 @@
     executable: /bin/bash
   register: pcloudcc_patch_apply
   changed_when: pcloudcc_patch_apply.stdout | trim == "applied"
+  loop: "{{ pcloudcc_patch_files }}"
+  loop_control:
+    loop_var: pcloudcc_patch_file_item
+
+- name: Check whether pCloud mount root is already mounted
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/findmnt
+      - --mountpoint
+      - "{{ pcloudcc_mount_root }}"
+  register: pcloudcc_source_mount_root_mount
+  changed_when: false
+  failed_when: false
 
 - name: Ensure pCloud mount root exists
+  when: pcloudcc_source_mount_root_mount.rc != 0
   ansible.builtin.file:
     path: "{{ pcloudcc_mount_root }}"
     state: directory
