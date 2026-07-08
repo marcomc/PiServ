@@ -1,0 +1,142 @@
+---
+argument_specs:
+  main:
+    short_description: Install RaiPlaySound CLI and manage an optional user timer.
+    description:
+      - Installs Python, ffmpeg, yt-dlp, and related runtime packages.
+      - Checks out the RaiPlaySound CLI source.
+      - Runs the project's standalone C(make install) path for a runtime user.
+      - Optionally writes a config file and manages a user-scoped systemd timer.
+    options:
+      raiplaysound_cli_runtime_user:
+        type: str
+        description: User that owns the install, config, service, and timer.
+      raiplaysound_cli_source_dir:
+        type: path
+        default: /opt/raiplaysound-cli
+        description: Source checkout directory.
+      raiplaysound_cli_repo_url:
+        type: str
+        default: "https://github.com/marcomc/raiplaysound-cli.git"
+        description: Git repository URL.
+      raiplaysound_cli_repo_version:
+        type: str
+        default: main
+        description: Git ref to check out.
+      raiplaysound_cli_repo_update:
+        type: bool
+        default: false
+        description: Whether to update an existing checkout.
+      raiplaysound_cli_repo_force:
+        type: bool
+        default: false
+        description: Whether Git may discard local checkout changes.
+      raiplaysound_cli_force_install:
+        type: bool
+        default: false
+        description: Whether to rerun C(make install).
+      raiplaysound_cli_expected_version:
+        type: str
+        default: ""
+        description: Optional expected CLI version substring.
+      raiplaysound_cli_config_path:
+        type: path
+        default: ""
+        description: Config file path. Empty uses the runtime user's config dir.
+      raiplaysound_cli_config_mode:
+        type: str
+        default: managed
+        choices:
+          - managed
+          - create
+          - unmanaged
+        description: Config file behavior.
+      raiplaysound_cli_config_favorites:
+        type: list
+        elements: str
+        description: Default favourites used by the role default config.
+      raiplaysound_cli_config_defaults:
+        type: dict
+        description: Default KEY=VALUE config entries.
+      raiplaysound_cli_config:
+        type: dict
+        default: {}
+        description: Partial KEY=VALUE config overrides merged with defaults.
+      raiplaysound_cli_manage_user_timer:
+        type: bool
+        default: false
+        description: Whether to manage the user service and timer.
+      raiplaysound_cli_user_service_name:
+        type: str
+        default: raiplaysound-cli-daily-sync.service
+        description: User service unit name.
+      raiplaysound_cli_user_timer_name:
+        type: str
+        default: raiplaysound-cli-daily-sync.timer
+        description: User timer unit name.
+      raiplaysound_cli_user_timer_enabled:
+        type: bool
+        default: true
+        description: Whether the user timer is enabled.
+      raiplaysound_cli_user_timer_state:
+        type: str
+        default: started
+        description: Desired user timer state.
+      raiplaysound_cli_enable_linger:
+        type: bool
+        default: true
+        description: Whether to enable linger for the runtime user.
+      raiplaysound_cli_timer_on_calendar:
+        type: str
+        default: "*-*-* 08:00:00"
+        description: systemd OnCalendar value.
+      raiplaysound_cli_timer_persistent:
+        type: bool
+        default: true
+        description: Whether missed timer runs should be triggered later.
+      raiplaysound_cli_timer_randomized_delay_sec:
+        type: str
+        default: 5m
+        description: Timer randomized delay.
+      raiplaysound_cli_service_timeout_start_sec:
+        type: str
+        default: 3h
+        description: Service start timeout.
+      raiplaysound_cli_service_working_directory:
+        type: str
+        default: "%h"
+        description: systemd WorkingDirectory value.
+      raiplaysound_cli_service_environment_path:
+        type: str
+        default: "%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        description: PATH value for the service.
+      raiplaysound_cli_service_wants:
+        type: list
+        elements: str
+        default:
+          - network-online.target
+        description: Units listed in Wants.
+      raiplaysound_cli_service_after:
+        type: list
+        elements: str
+        default:
+          - network-online.target
+        description: Units listed in After.
+      raiplaysound_cli_service_requires_mounts_for:
+        type: list
+        elements: str
+        default: []
+        description: Mount paths listed in RequiresMountsFor.
+      raiplaysound_cli_service_exec_start_pre:
+        type: list
+        elements: str
+        default: []
+        description: Optional ExecStartPre commands.
+      raiplaysound_cli_daily_sync_command:
+        type: str
+        default: "%h/.local/bin/raiplaysound-cli-daily-sync"
+        description: Daily sync command path for ExecStart.
+      raiplaysound_cli_apt_packages:
+        type: list
+        elements: str
+        description: Debian packages required to install and run the CLI.

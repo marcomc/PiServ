@@ -1,0 +1,25 @@
+[Unit]
+Description=RaiPlaySound CLI daily favourites sync
+Documentation=https://github.com/marcomc/raiplaysound-cli
+{% if raiplaysound_cli_service_wants | length > 0 %}
+Wants={{ raiplaysound_cli_service_wants | join(' ') }}
+{% endif %}
+{% if raiplaysound_cli_service_after | length > 0 %}
+After={{ raiplaysound_cli_service_after | join(' ') }}
+{% endif %}
+{% for mount_path in raiplaysound_cli_service_requires_mounts_for %}
+RequiresMountsFor={{ mount_path }}
+{% endfor %}
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ raiplaysound_cli_service_working_directory }}
+Environment=PATH={{ raiplaysound_cli_service_environment_path }}
+{% for command in raiplaysound_cli_service_exec_start_pre %}
+ExecStartPre={{ command }}
+{% endfor %}
+ExecStart={{ raiplaysound_cli_daily_sync_command }} --config {{ raiplaysound_cli_effective_config_path }}
+TimeoutStartSec={{ raiplaysound_cli_service_timeout_start_sec }}
+
+[Install]
+WantedBy=default.target

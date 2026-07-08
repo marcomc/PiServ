@@ -1,0 +1,66 @@
+---
+raiplaysound_cli_runtime_user: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+raiplaysound_cli_source_dir: /opt/raiplaysound-cli
+raiplaysound_cli_repo_url: "https://github.com/marcomc/raiplaysound-cli.git"
+raiplaysound_cli_repo_version: main
+raiplaysound_cli_repo_update: false
+raiplaysound_cli_repo_force: false
+raiplaysound_cli_force_install: false
+raiplaysound_cli_expected_version: ""
+
+raiplaysound_cli_config_path: ""
+raiplaysound_cli_config_mode: managed
+raiplaysound_cli_config_favorites: []
+  # - america7
+  # - musicalbox
+raiplaysound_cli_config_defaults:
+  TARGET_BASE: /mnt/Podcasts/raiplaypodcast
+  AUDIO_FORMAT: m4a
+  JOBS: 3
+  CHECK_JOBS: 8
+  METADATA_MAX_AGE_HOURS: 24
+  CATALOG_MAX_AGE_HOURS: 2160
+  FAVORITES: "{{ raiplaysound_cli_config_favorites | join(',') }}"
+  HTTP_TIMEOUT_SECONDS: 30
+  HTTP_RETRIES: 2
+  HTTP_BACKOFF_SECONDS: 2
+  FAVORITES_PROGRAM_TIMEOUT_SECONDS: 1800
+  FAVORITES_MAX_SECONDS: 7200
+  DAILY_SYNC_MAX_SECONDS: 9000
+  DAILY_SYNC_SCAN_TIMEOUT_SECONDS: 120
+  DAILY_SYNC_LOG: $HOME/.local/state/raiplaysound-cli/daily-sync.log
+  RSS_FEED: true
+  RSS_BASE_URL: ""  # http://yourpodcast.com/raiplaypodcast
+  APPLE_PODCASTS: false
+  PLAYLIST: false
+raiplaysound_cli_config: {}
+
+raiplaysound_cli_manage_user_timer: false
+raiplaysound_cli_user_service_name: raiplaysound-cli-daily-sync.service
+raiplaysound_cli_user_timer_name: raiplaysound-cli-daily-sync.timer
+raiplaysound_cli_user_timer_enabled: true
+raiplaysound_cli_user_timer_state: started
+raiplaysound_cli_enable_linger: true
+raiplaysound_cli_timer_on_calendar: "*-*-* 08:00:00"
+raiplaysound_cli_timer_persistent: true
+raiplaysound_cli_timer_randomized_delay_sec: 5m
+raiplaysound_cli_service_timeout_start_sec: 3h
+raiplaysound_cli_service_working_directory: "%h"
+raiplaysound_cli_service_environment_path: "%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+raiplaysound_cli_service_wants:
+  - network-online.target
+raiplaysound_cli_service_after:
+  - network-online.target
+raiplaysound_cli_service_requires_mounts_for: []
+raiplaysound_cli_service_exec_start_pre: []
+raiplaysound_cli_daily_sync_command: "%h/.local/bin/raiplaysound-cli-daily-sync"
+
+raiplaysound_cli_apt_packages:
+  - ca-certificates
+  - ffmpeg
+  - git
+  - make
+  - python3
+  - python3-pip
+  - python3-venv
+  - yt-dlp

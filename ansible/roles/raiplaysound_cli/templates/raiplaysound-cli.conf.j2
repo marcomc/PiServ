@@ -1,0 +1,4 @@
+# Created by Ansible.
+{% for key, value in raiplaysound_cli_effective_config | dictsort %}
+{{ key }}={{ value | to_json }}
+{% endfor %}

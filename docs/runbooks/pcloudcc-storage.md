@@ -25,8 +25,8 @@ adds TOTP and recovery-code prompts. Credential bootstrap with the real pCloud
 account, pCloud mount validation, and podcast target write tests have passed.
 User-scoped systemd startup, saved-auth service restart, and credential
 permission hardening have passed. Reboot recovery, external pCloud visibility,
-and repeatable health-check automation have passed. Do not enable scheduled
-podcast jobs until the workload is gated on the health check.
+repeatable health-check automation, and scheduled workload integration have
+passed.
 
 ## Preconditions
 
@@ -227,7 +227,7 @@ systemctl --user start pcloudcc.service
 10. Wrap the mount in systemd without passing the pCloud password. Done.
 11. Reboot PiServ and confirm the mount recovers without manual shell state.
     Done.
-12. Run `raiplaysound-cli-daily-sync` against a non-destructive test folder.
+12. Run `raiplaysound-cli-daily-sync` with health-check gating. Done.
 
 ## Health Checks
 
@@ -260,5 +260,4 @@ The target path contains a space in `My Music`; quote it in shell commands.
 
 ## Automation Follow-Up
 
-- Make `raiplaysound-cli` scheduling depend on the pCloud health check.
 - Keep password bootstrap manual; automate only non-secret service settings.

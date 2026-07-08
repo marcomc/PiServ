@@ -1,0 +1,6 @@
+---
+- name: Test raiplaysound_cli role
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: raiplaysound_cli

@@ -113,5 +113,6 @@ staging area and sync completed outputs to pCloud after a successful run.
 - Validate `pcloudcc` startup through systemd.
 - Validate a write/read/delete test in the mounted target path.
 - Decide whether completed media should be written directly to the pCloud mount
-  or staged locally and copied after successful downloads.
+  or staged locally and copied after successful downloads. Resolved by
+  [Decision 0006](0006-raiplaysound-direct-write-scheduling.md).
 - Automate the selected `pcloudcc` setup after live validation.

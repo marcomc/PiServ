@@ -57,6 +57,17 @@ All notable project changes are documented here.
 - Added `pcloudcc-health-check.yml` for Ansible-driven pCloud health checks.
 - Validated `pcloudcc.service` reboot recovery and external pCloud visibility
   from the Mac pCloud Drive path.
+- Added a Galaxy-ready `raiplaysound_cli` role for installing RaiPlaySound CLI
+  and managing a user-scoped daily sync timer.
+- Added `raiplaysound-cli-daily-sync.yml` for PiServ scheduled podcast sync.
+- Added the RaiPlaySound direct-write scheduling decision record.
+- Added the RaiPlaySound CLI daily sync runbook.
+- Installed and validated `raiplaysound-cli-daily-sync` on PiServ with direct
+  writes to the pCloud-backed podcast target.
+- Added managed, create-only, and unmanaged config modes to the
+  `raiplaysound_cli` role.
+- Added explicit merging of partial `raiplaysound_cli_config` overrides with
+  role config defaults.
 - Added Ansible-managed Freenove background service and runtime configuration
   for LED, fan, and OLED control.
 - Added a Freenove expansion-controller preflight to avoid enabling a failing
@@ -92,3 +103,9 @@ All notable project changes are documented here.
 - Changed the `pcloudcc` CLI patch so saved-auth startup can run without an
   account email in the service command and fails visibly when interactive login
   would be required.
+- Changed scheduled RaiPlaySound output from unresolved staging/direct-write
+  planning to direct writes gated by the pCloud health check.
+- Changed the PiServ RaiPlaySound config to create-only management so direct
+  edits on the server are preserved by future playbook runs.
+- Changed the PiServ RaiPlaySound playbook to create config from role defaults
+  when missing instead of carrying config values in the playbook.

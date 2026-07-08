@@ -15,7 +15,7 @@ checklists. Use them for active work that is not yet fully automated.
 
 | Track | Status |
 | --- | --- |
-| [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Ready for live build validation |
+| [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
 
 ## Template
 

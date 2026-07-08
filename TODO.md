@@ -45,6 +45,12 @@
 - Validated `pcloudcc` reboot recovery and mount health on PiServ.
 - Confirmed pCloud write-test visibility from the Mac pCloud Drive path.
 - Added repeatable `pcloudcc` health-check script and Ansible playbook.
+- Added a Galaxy-ready `raiplaysound_cli` Ansible role and PiServ daily-sync
+  playbook.
+- Installed and validated `raiplaysound-cli-daily-sync` as a user-scoped
+  systemd timer on PiServ.
+- Accepted direct writes to the pCloud-backed podcast target for the scheduled
+  RaiPlaySound workload.
 
 ## Later
 
@@ -53,3 +59,5 @@
 - Add disaster recovery playbook.
 - Add monitoring and alerting decisions.
 - Add service-specific runbooks as workloads are deployed.
+- Before publishing `raiplaysound_cli`, move private bootstrap config defaults
+  into inventory, group vars, or role examples.

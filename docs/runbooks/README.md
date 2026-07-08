@@ -18,6 +18,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |
 | [Freenove FNK0100K post-OS](freenove-fnk0100k-post-os.md) | Configure the case after OS boot |
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |
+| [RaiPlaySound CLI daily sync](raiplaysound-cli-daily-sync.md) | Operate the scheduled podcast sync |
 
 ## Template
 

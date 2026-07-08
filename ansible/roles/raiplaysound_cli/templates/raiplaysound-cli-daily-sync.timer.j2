@@ -1,0 +1,11 @@
+[Unit]
+Description=Run RaiPlaySound CLI daily favourites sync
+
+[Timer]
+OnCalendar={{ raiplaysound_cli_timer_on_calendar }}
+Persistent={{ raiplaysound_cli_timer_persistent | ternary('true', 'false') }}
+RandomizedDelaySec={{ raiplaysound_cli_timer_randomized_delay_sec }}
+Unit={{ raiplaysound_cli_user_service_name }}
+
+[Install]
+WantedBy=timers.target

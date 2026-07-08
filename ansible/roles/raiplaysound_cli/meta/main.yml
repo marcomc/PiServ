@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: raiplaysound_cli
+  author: raiplaysound-cli role maintainers
+  description: Install RaiPlaySound CLI and optionally manage a user systemd timer.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - raspberrypi
+    - podcast
+    - raiplaysound
+    - systemd
+    - timer
+    - python
+dependencies: []

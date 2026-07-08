@@ -28,9 +28,8 @@ adds TOTP and recovery-code prompts. Manual credential bootstrap with the real
 pCloud account, EU-region login validation, mount validation, and podcast
 target write validation have passed. User-scoped systemd startup and saved-auth
 service restart have passed. Reboot recovery, external visibility, and
-repeatable health-check automation have passed. Workload integration remains
-open. Do not enable scheduled podcast writes until the scheduled workload is
-gated on the health check.
+repeatable health-check automation have passed. The scheduled RaiPlaySound
+workload is installed, health-check gated, and validated with direct writes.
 
 ## Progress Snapshot
 
@@ -50,14 +49,16 @@ gated on the health check.
 | Reboot recovery | Done | Reboot changed boot ID and `/mnt/pcloud` remounted automatically |
 | External visibility | Done | PiServ marker appeared under the Mac pCloud Drive target path |
 | Health-check automation | Done | SSH wrapper and Ansible playbook both report `pcloudcc_health=ok` |
-| Podcast workload integration | Pending | Requires mounted and writable pCloud target |
+| Podcast workload integration | Done | Manual systemd service run completed with `done=10`, `errors=0` |
 
 ## References
 
 | Document | Purpose |
 | --- | --- |
 | [Decision 0003](../decisions/0003-pcloud-backed-podcast-storage.md) | Accepted storage backend and target paths |
+| [Decision 0006](../decisions/0006-raiplaysound-direct-write-scheduling.md) | Accepted direct-write scheduled workload |
 | [pCloud runbook](../runbooks/pcloudcc-storage.md) | Manual validation and health-check commands |
+| [RaiPlaySound runbook](../runbooks/raiplaysound-cli-daily-sync.md) | Scheduled workload operation |
 
 ## Inputs
 
@@ -92,8 +93,7 @@ gated on the health check.
 - Do not create or manage a dedicated folder-scoped pCloud account yet.
 - Do not store the pCloud password in this repository, Ansible, systemd, shell
   history, or environment files.
-- Do not enable production scheduled writes before the workload is gated on the
-  pCloud health check.
+- Do not run production scheduled writes without the pCloud health check.
 
 ## Implementation Phases
 
@@ -111,8 +111,8 @@ gated on the health check.
 | 10 | Validate write round trip | Done for local write/read/delete and external visibility |
 | 11 | Add systemd startup | Done; user service starts without email, password, or TOTP in unit files |
 | 12 | Validate reboot recovery | Done; reboot returns PiServ to a mounted and writable pCloud state |
-| 13 | Integrate workload | `raiplaysound-cli-daily-sync` writes only after the pCloud preflight passes |
-| 14 | Automate | Done for install, credential hardening, user service, and health checks; workload gate remains pending |
+| 13 | Integrate workload | Done; `raiplaysound-cli-daily-sync` writes only after the pCloud preflight passes |
+| 14 | Automate | Done for install, credential hardening, user service, health checks, and scheduled workload |
 
 ## Validation Gates
 
@@ -130,7 +130,7 @@ gated on the health check.
 | Reboot | Reboot PiServ and rerun mount/write checks | Mount recovers without manual shell state |
 | Health script | `scripts/check-pcloudcc-health.sh` | `pcloudcc_health=ok` |
 | Health playbook | `ansible-playbook ansible/playbooks/pcloudcc-health-check.yml` | `pcloudcc_health=ok` |
-| Workload | Run non-destructive `raiplaysound-cli` test | Output lands only in the target path |
+| Workload | Run `raiplaysound-cli-daily-sync.service` | Output lands only in the target path |
 
 ## Automation Scope
 
@@ -144,7 +144,7 @@ Automate only after the matching manual step has passed on PiServ.
 | Credential bootstrap | Manual runbook step only |
 | systemd startup | User unit without password material |
 | pCloud health check | Small shell script plus Ansible validation |
-| Scheduled workload dependency | Timer/service preflight or wrapper script |
+| Scheduled workload dependency | User systemd service with pCloud health preflight |
 | Disaster recovery | Runbook section plus playbook entry point |
 
 ## Rollback
@@ -163,9 +163,7 @@ them only when deliberately deauthorizing PiServ from pCloud.
 
 ## Open Items
 
-- Decide whether completed media should write directly to the mount or stage on
-  local NVMe before copy.
-- Define the final scheduled `raiplaysound-cli` timer/service shape.
+- Monitor the first unattended 08:00 timer run.
 
 ## Evidence Log
 
@@ -185,3 +183,5 @@ them only when deliberately deauthorizing PiServ from pCloud.
 | 2026-07-08 | Reboot recovery | Passed | Boot ID changed; `pcloudcc.service` active; `/mnt/pcloud` remounted as `pCloud.fs` |
 | 2026-07-08 | External visibility | Passed | `.piserv-cloud-visibility-20260708-121151.txt` appeared in the Mac pCloud Drive path |
 | 2026-07-08 | Health-check automation | Passed | SSH wrapper and Ansible playbook both returned `pcloudcc_health=ok` |
+| 2026-07-08 | RaiPlaySound timer install | Passed | `raiplaysound-cli-daily-sync.timer` active and waiting |
+| 2026-07-08 | RaiPlaySound direct-write service run | Passed | Manual run ended `done=10`, `errors=0`; one new `seigradi` audio file written |

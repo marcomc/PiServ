@@ -182,6 +182,16 @@ scripts/check-pcloudcc-health.sh
 ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
 ```
 
+Install and manage the RaiPlaySound daily podcast sync:
+
+```sh
+ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
+```
+
+The RaiPlaySound playbook installs the pinned CLI source revision for `operator`,
+writes the PiServ config, installs a user-scoped daily systemd timer, and gates
+the direct-write sync on the pCloud health check.
+
 Migrate a microSD-booted PiServ system to NVMe:
 
 ```sh
