@@ -1,0 +1,22 @@
+---
+- name: Validate pCloud console client health
+  hosts: piserv
+  gather_facts: false
+  vars:
+    pcloudcc_health_mount_root: /mnt/pcloud
+    pcloudcc_health_target_subpath: My Music/Podcasts/raiplaypodcast
+    pcloudcc_health_service_name: pcloudcc.service
+  tasks:
+    - name: Run pcloudcc health check
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/../../scripts/remote/check-pcloudcc-health-remote.sh
+          --mount-root {{ pcloudcc_health_mount_root | quote }}
+          --target-subpath {{ pcloudcc_health_target_subpath | quote }}
+          --service-name {{ pcloudcc_health_service_name | quote }}
+      register: pcloudcc_health_check
+      changed_when: false
+
+    - name: Show pcloudcc health check result
+      ansible.builtin.debug:
+        var: pcloudcc_health_check.stdout_lines

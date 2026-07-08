@@ -6,8 +6,6 @@
 - Document Wi-Fi configuration and current network path.
 - Inventory enabled services and open listening sockets.
 - Decide base security posture for SSH, firewall, updates, and user access.
-- Validate `pcloudcc` reboot recovery and mount health on PiServ.
-- Confirm pCloud write-test visibility from another client or the web UI.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
 - Verify physical LED, fan, and OLED behavior under the managed Freenove service.
@@ -44,6 +42,9 @@
 - Added credential-free user-scoped `pcloudcc` systemd mount management.
 - Validated `pcloudcc` systemd startup and saved-auth service restart on
   PiServ.
+- Validated `pcloudcc` reboot recovery and mount health on PiServ.
+- Confirmed pCloud write-test visibility from the Mac pCloud Drive path.
+- Added repeatable `pcloudcc` health-check script and Ansible playbook.
 
 ## Later
 

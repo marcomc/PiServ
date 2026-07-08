@@ -52,6 +52,11 @@ All notable project changes are documented here.
   `pcloudcc` Ansible role.
 - Validated credential-free `pcloudcc.service` startup and saved-auth restart
   on PiServ.
+- Added `scripts/check-pcloudcc-health.sh` and the remote pCloud health-check
+  script for mount, service, and write/read/delete validation.
+- Added `pcloudcc-health-check.yml` for Ansible-driven pCloud health checks.
+- Validated `pcloudcc.service` reboot recovery and external pCloud visibility
+  from the Mac pCloud Drive path.
 - Added Ansible-managed Freenove background service and runtime configuration
   for LED, fan, and OLED control.
 - Added a Freenove expansion-controller preflight to avoid enabling a failing

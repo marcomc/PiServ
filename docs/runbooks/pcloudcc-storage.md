@@ -24,9 +24,9 @@ Client installation is complete on PiServ, including a local CLI patch that
 adds TOTP and recovery-code prompts. Credential bootstrap with the real pCloud
 account, pCloud mount validation, and podcast target write tests have passed.
 User-scoped systemd startup, saved-auth service restart, and credential
-permission hardening have passed. Reboot recovery and external pCloud
-visibility are still pending. Do not enable scheduled podcast jobs until the
-mount recovers through reboot validation.
+permission hardening have passed. Reboot recovery, external pCloud visibility,
+and repeatable health-check automation have passed. Do not enable scheduled
+podcast jobs until the workload is gated on the health check.
 
 ## Preconditions
 
@@ -223,12 +223,25 @@ systemctl --user start pcloudcc.service
 6. Confirm the mount appears in `findmnt`. Done.
 7. Confirm `My Music/Podcasts/raiplaypodcast` exists under the mount. Done.
 8. Write, read, and delete a small test file through the podcast target. Done.
-9. Confirm the file appears in pCloud from another client.
+9. Confirm the file appears in pCloud from another client. Done.
 10. Wrap the mount in systemd without passing the pCloud password. Done.
 11. Reboot PiServ and confirm the mount recovers without manual shell state.
+    Done.
 12. Run `raiplaysound-cli-daily-sync` against a non-destructive test folder.
 
 ## Health Checks
+
+Use the project wrapper from the repository root:
+
+```sh
+scripts/check-pcloudcc-health.sh
+```
+
+Or run the Ansible health-check entry point:
+
+```sh
+ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
+```
 
 Minimum checks before any scheduled podcast job writes output:
 
@@ -247,7 +260,5 @@ The target path contains a space in `My Music`; quote it in shell commands.
 
 ## Automation Follow-Up
 
-- Validate reboot recovery for the user-scoped `pcloudcc` service.
-- Add a preflight script for mount and write validation.
 - Make `raiplaysound-cli` scheduling depend on the pCloud health check.
 - Keep password bootstrap manual; automate only non-secret service settings.

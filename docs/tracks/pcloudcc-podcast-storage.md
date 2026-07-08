@@ -27,9 +27,10 @@ Client install and install automation are complete, including a CLI patch that
 adds TOTP and recovery-code prompts. Manual credential bootstrap with the real
 pCloud account, EU-region login validation, mount validation, and podcast
 target write validation have passed. User-scoped systemd startup and saved-auth
-service restart have passed. Reboot recovery and workload integration remain
-open. Do not enable scheduled podcast writes until all validation gates in this
-track pass on PiServ.
+service restart have passed. Reboot recovery, external visibility, and
+repeatable health-check automation have passed. Workload integration remains
+open. Do not enable scheduled podcast writes until the scheduled workload is
+gated on the health check.
 
 ## Progress Snapshot
 
@@ -46,7 +47,9 @@ track pass on PiServ.
 | Credential storage audit | Done | `~operator/.pcloud` hardened to `0700`; DB files hardened to `0600`; no `pass` key present |
 | User service startup | Done | `pcloudcc.service` starts with `/usr/local/bin/pcloudcc -m /mnt/pcloud` |
 | Service restart | Done | Stop/start remounted `/mnt/pcloud` without email, password, or TOTP |
-| Reboot recovery | Pending | Requires reboot and post-boot mount/write validation |
+| Reboot recovery | Done | Reboot changed boot ID and `/mnt/pcloud` remounted automatically |
+| External visibility | Done | PiServ marker appeared under the Mac pCloud Drive target path |
+| Health-check automation | Done | SSH wrapper and Ansible playbook both report `pcloudcc_health=ok` |
 | Podcast workload integration | Pending | Requires mounted and writable pCloud target |
 
 ## References
@@ -89,7 +92,8 @@ track pass on PiServ.
 - Do not create or manage a dedicated folder-scoped pCloud account yet.
 - Do not store the pCloud password in this repository, Ansible, systemd, shell
   history, or environment files.
-- Do not enable production scheduled writes before reboot validation passes.
+- Do not enable production scheduled writes before the workload is gated on the
+  pCloud health check.
 
 ## Implementation Phases
 
@@ -104,11 +108,11 @@ track pass on PiServ.
 | 7 | Validate EU-region behavior | Done; login succeeded for the European Union account |
 | 8 | Validate mount | Done; `findmnt --mountpoint /mnt/pcloud` reports `pCloud.fs` |
 | 9 | Validate podcast path | Done; `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` exists and is writable |
-| 10 | Validate write round trip | Done for local write/read/delete; external visibility still pending |
+| 10 | Validate write round trip | Done for local write/read/delete and external visibility |
 | 11 | Add systemd startup | Done; user service starts without email, password, or TOTP in unit files |
-| 12 | Validate reboot recovery | Reboot returns PiServ to a mounted and writable pCloud state |
+| 12 | Validate reboot recovery | Done; reboot returns PiServ to a mounted and writable pCloud state |
 | 13 | Integrate workload | `raiplaysound-cli-daily-sync` writes only after the pCloud preflight passes |
-| 14 | Automate | Done for install, credential hardening, and user service; workload gate remains pending |
+| 14 | Automate | Done for install, credential hardening, user service, and health checks; workload gate remains pending |
 
 ## Validation Gates
 
@@ -119,11 +123,13 @@ track pass on PiServ.
 | Target directory | `test -d "/mnt/pcloud/My Music/Podcasts/raiplaypodcast"` | Directory exists |
 | Target write | `test -w "/mnt/pcloud/My Music/Podcasts/raiplaypodcast"` | Directory is writable |
 | Round trip | Write, read, and delete `.piserv-write-test` | Contents match and cleanup succeeds |
-| External visibility | Check from Mac pCloud client or web UI | Test file appears before deletion |
+| External visibility | Check from Mac pCloud client or web UI | Test file appears in pCloud-backed storage |
 | Secret hygiene | Inspect unit files, Ansible vars, shell scripts, and docs | Password is absent |
 | Credential file mode | `find /home/operator/.pcloud -maxdepth 2 -printf ...` | Directories `0700`, files `0600` |
 | Saved password absence | Inspect `setting` keys in `data.db` without values | `auth` and `saveauth` present; `pass` absent |
 | Reboot | Reboot PiServ and rerun mount/write checks | Mount recovers without manual shell state |
+| Health script | `scripts/check-pcloudcc-health.sh` | `pcloudcc_health=ok` |
+| Health playbook | `ansible-playbook ansible/playbooks/pcloudcc-health-check.yml` | `pcloudcc_health=ok` |
 | Workload | Run non-destructive `raiplaysound-cli` test | Output lands only in the target path |
 
 ## Automation Scope
@@ -157,8 +163,6 @@ them only when deliberately deauthorizing PiServ from pCloud.
 
 ## Open Items
 
-- Confirm a write-test file appears in pCloud from another client or the web UI.
-- Validate reboot recovery for `pcloudcc.service`.
 - Decide whether completed media should write directly to the mount or stage on
   local NVMe before copy.
 - Define the final scheduled `raiplaysound-cli` timer/service shape.
@@ -178,3 +182,6 @@ them only when deliberately deauthorizing PiServ from pCloud.
 | 2026-07-08 | User service install | Passed | `pcloudcc.service` enabled and active for `operator`; `Linger=yes` |
 | 2026-07-08 | Credential storage audit | Passed | `~operator/.pcloud` mode `0700`; DB files mode `0600`; `auth` present; `pass` absent |
 | 2026-07-08 | Saved-auth service restart | Passed | Stop/start remounted `/mnt/pcloud` without interactive login |
+| 2026-07-08 | Reboot recovery | Passed | Boot ID changed; `pcloudcc.service` active; `/mnt/pcloud` remounted as `pCloud.fs` |
+| 2026-07-08 | External visibility | Passed | `.piserv-cloud-visibility-20260708-121151.txt` appeared in the Mac pCloud Drive path |
+| 2026-07-08 | Health-check automation | Passed | SSH wrapper and Ansible playbook both returned `pcloudcc_health=ok` |

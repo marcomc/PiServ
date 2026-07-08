@@ -175,6 +175,13 @@ Debian 13 `arm64` build patch and CLI TOTP prompt patch, prepares
 hardens `~operator/.pcloud` and manages a credential-free user service for the
 mount. It does not perform pCloud credential login.
 
+Validate the pCloud mount before scheduled podcast work:
+
+```sh
+scripts/check-pcloudcc-health.sh
+ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
+```
+
 Migrate a microSD-booted PiServ system to NVMe:
 
 ```sh
