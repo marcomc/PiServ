@@ -43,3 +43,22 @@ All notable project changes are documented here.
   target to `/mnt/pcloud/My Music/Podcasts/raiplaypodcast`.
 - Changed PiServ Freenove installation to copy the local vendored Freenove
   checkout from the Ansible controller into `/opt/freenove/`.
+- Added direct Ansible-side Freenove LED and fan hardware apply support so
+  playbook variable changes do not require the desktop app.
+- Changed PiServ Freenove LED and fan custom tasks to disabled so direct
+  Ansible-applied hardware settings remain authoritative.
+- Changed PiServ Freenove LED mode to Follow with a blue base color for live
+  inspection.
+- Raised PiServ Freenove automatic fan thresholds to `40 C` and `65 C`,
+  keeping fan mode `0`.
+- Changed PiServ Freenove LED mode to Breathing with a blue base color.
+- Changed PiServ Freenove LED color to very dim white.
+- Changed PiServ Freenove OLED screen display times to `5.0` seconds.
+- Changed PiServ Freenove LED mode to Close/off and cleared all stored RGB
+  groups to `0,0,0`.
+- Documented that PiServ's blue fan LEDs remain on even when FNK0100 fan PWM
+  is temporarily set to off.
+- Added Ansible-managed touchscreen idle backlight control with a two-minute
+  PiServ timeout.
+- Documented that the small Freenove OLED is monochrome and cannot be changed
+  to amber in software.

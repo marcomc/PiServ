@@ -92,10 +92,13 @@ ansible-playbook ansible/playbooks/freenove-post-os.yml
 | `freenove_case_service_name` | `my_app_running.service` | Background task service name |
 | `freenove_case_service_enabled` | `true` | Enable background service at boot |
 | `freenove_case_service_state` | `started` | Background service state |
-| `freenove_case_validate_expansion_controller` | `{{ freenove_case_manage_background_service }}` | Require Freenove controller detection before service management |
+| `freenove_case_validate_expansion_controller` | `{{ freenove_case_manage_background_service or freenove_case_apply_hardware_config }}` | Require Freenove controller detection before service or hardware management |
 | `freenove_case_manage_app_config` | `{{ freenove_case_manage_background_service }}` | Manage Freenove `Code/app_config.json` |
-| `freenove_case_led_task_enabled` | `true` | Run the Freenove LED background task |
-| `freenove_case_fan_task_enabled` | `true` | Run the Freenove fan background task |
+| `freenove_case_apply_hardware_config` | `{{ freenove_case_manage_app_config }}` | Apply managed LED and fan config directly to the expansion board |
+| `freenove_case_apply_hardware_save_flash` | `true` | Save changed hardware config to Freenove controller flash |
+| `freenove_case_hardware_apply_script` | `{{ freenove_case_install_dir }}/Code/ansible_apply_hardware_config.py` | Target path for the hardware apply helper |
+| `freenove_case_led_task_enabled` | `false` | Run the Freenove LED background task |
+| `freenove_case_fan_task_enabled` | `false` | Run the Freenove fan background task |
 | `freenove_case_oled_task_enabled` | `true` | Run the Freenove OLED background task |
 | `freenove_case_led_mode` | `0` | Freenove LED mode value |
 | `freenove_case_fan_mode` | `0` | Freenove fan mode value |
@@ -103,6 +106,11 @@ ansible-playbook ansible/playbooks/freenove-post-os.yml
 | `freenove_case_oled_screen2` | See `defaults/main.yml` | OLED usage screen settings |
 | `freenove_case_oled_screen3` | See `defaults/main.yml` | OLED temperature screen settings |
 | `freenove_case_oled_screen4` | See `defaults/main.yml` | OLED fan screen settings |
+| `freenove_case_manage_touchscreen_idle` | `false` | Manage touchscreen idle backlight control |
+| `freenove_case_touchscreen_idle_seconds` | `300` | Idle seconds before dimming the touchscreen |
+| `freenove_case_touchscreen_active_brightness` | `255` | Brightness restored on input |
+| `freenove_case_touchscreen_idle_brightness` | `0` | Brightness applied while idle |
+| `freenove_case_touchscreen_backlight_device` | `/sys/class/backlight/10-0045` | Touchscreen backlight device |
 | `freenove_case_manage_pcie_gen3` | `false` | Manage PCIe Gen3 config |
 | `freenove_case_enable_pcie_gen3` | `false` | Enable PCIe Gen3 when managed |
 | `freenove_case_install_pibenchmarks` | `false` | Clone PiBenchmarks |
@@ -134,8 +142,9 @@ Enable the Freenove background service explicitly:
       vars:
         freenove_case_manage_background_service: true
         freenove_case_manage_app_config: true
-        freenove_case_led_task_enabled: true
-        freenove_case_fan_task_enabled: true
+        freenove_case_apply_hardware_config: true
+        freenove_case_led_task_enabled: false
+        freenove_case_fan_task_enabled: false
         freenove_case_oled_task_enabled: true
 ```
 
@@ -188,6 +197,29 @@ When `freenove_case_manage_app_config` is enabled, the role owns
 reproducible, but Freenove UI changes to those managed values will be
 overwritten on the next Ansible run.
 
+When `freenove_case_apply_hardware_config` is enabled, the role also calls
+Freenove's Python expansion-board API directly after service management. This
+applies LED mode/color, fan mode, manual fan duty, and fan temperature
+thresholds without opening the desktop app. Custom `task_led.py` and
+`task_fan.py` processes can still override those values while they are running,
+so keep `freenove_case_led_task_enabled` and
+`freenove_case_fan_task_enabled` disabled for deterministic Ansible-managed
+LED and fan behavior. LED mode `5` maps to Freenove Close/off mode and also
+clears all stored RGB groups to `0,0,0`.
+
+On FNK0100 hardware, the Freenove API does not expose a separate fan-LED
+control. If illuminated fan LEDs remain on after RGB mode `5` and fan mode `3`
+or hardware fan mode `0`, they are outside this role's software control.
+
+When `freenove_case_manage_touchscreen_idle` is enabled, the role installs a
+user `swayidle` service that dims the Linux backlight device after the configured
+idle timeout and restores brightness when input resumes. This controls the
+4.3-inch DSI touchscreen backlight, not the small OLED.
+
+The small OLED is driven as an SSD1306 monochrome display with a 1-bit image
+buffer. Its visible color is a property of the physical OLED module, not a
+software setting.
+
 When background service management is enabled, the role probes the Freenove
 expansion controller before enabling the service. If the controller is not
 detected, the role fails before starting a systemd restart loop.
@@ -207,6 +239,8 @@ task files:
 | `expansion-controller.yml` | Optional Freenove controller preflight |
 | `desktop-launchers.yml` | Application and desktop launchers |
 | `background-service.yml` | Optional systemd service |
+| `hardware-config.yml` | Optional direct hardware config apply |
+| `touchscreen-idle.yml` | Optional touchscreen idle backlight service |
 | `pcie-gen3.yml` | Optional PCIe Gen3 firmware setting |
 | `pibenchmarks.yml` | Optional benchmark repository and one-shot run |
 | `validate-runtime.yml` | Runtime validation |

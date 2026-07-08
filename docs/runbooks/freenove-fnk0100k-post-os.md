@@ -69,6 +69,7 @@ The playbook performs the required post-OS setup:
 | Runtime config | Writes `Code/app_config.json` so LED, fan, and OLED startup behavior is reproducible |
 | Expansion preflight | Requires Freenove controller detection before enabling the background service |
 | Background service | Enables and starts `my_app_running.service` under the `operator` user |
+| Hardware apply | Applies LED and fan config directly through Freenove's expansion-board API |
 | Launchers | Creates application-menu and desktop launchers for `FNK0100` |
 | Validation | Checks `/dev/i2c-1`, Python imports, Freenove Python syntax, JSON config, and service state |
 
@@ -86,9 +87,22 @@ Optional Freenove tutorial operations are exposed as explicit variables:
 | `freenove_case_manage_background_service` | `true` in PiServ playbook | Creates and manages `my_app_running.service` |
 | `freenove_case_validate_expansion_controller` | `true` in PiServ playbook | Fails closed when the Freenove I2C controller is not detected |
 | `freenove_case_manage_app_config` | `true` in PiServ playbook | Manages `Code/app_config.json` |
-| `freenove_case_led_task_enabled` | `true` in PiServ playbook | Runs `task_led.py` through the background manager |
-| `freenove_case_fan_task_enabled` | `true` in PiServ playbook | Runs `task_fan.py` through the background manager |
+| `freenove_case_apply_hardware_config` | `true` in PiServ playbook | Applies managed LED and fan values directly to the case controller |
+| `freenove_case_led_task_enabled` | `false` in PiServ playbook | Keeps `task_led.py` from overriding Ansible-managed LED state |
+| `freenove_case_led_mode` | `5` in PiServ playbook | Uses Freenove Close/off RGB mode |
+| `freenove_case_led_red_value` | `0` in PiServ playbook | Clears the stored red component |
+| `freenove_case_led_green_value` | `0` in PiServ playbook | Clears the stored green component |
+| `freenove_case_led_blue_value` | `0` in PiServ playbook | Clears the stored blue component |
+| `freenove_case_fan_task_enabled` | `false` in PiServ playbook | Keeps `task_fan.py` from overriding Ansible-managed fan state |
+| `freenove_case_fan_mode` | `0` in PiServ playbook | Keeps Freenove case-controller automatic fan mode active |
+| `freenove_case_fan_mode2_low_temp_threshold` | `40` in PiServ playbook | Raises the lower automatic fan threshold from the Freenove default |
+| `freenove_case_fan_mode2_high_temp_threshold` | `65` in PiServ playbook | Aligns the upper automatic fan threshold with the PiGuard fan-on temperature |
 | `freenove_case_oled_task_enabled` | `true` in PiServ playbook | Runs `task_oled.py` through the background manager |
+| `freenove_case_oled_screen*_display_time` | `5.0` seconds in PiServ playbook | Keeps each enabled OLED screen visible longer before rotation |
+| `freenove_case_manage_touchscreen_idle` | `true` in PiServ playbook | Runs a user idle service for the 4.3-inch touchscreen backlight |
+| `freenove_case_touchscreen_idle_seconds` | `120` in PiServ playbook | Dims the touchscreen after two minutes without local input |
+| `freenove_case_touchscreen_idle_brightness` | `0` in PiServ playbook | Turns the touchscreen backlight off while idle |
+| `freenove_case_touchscreen_active_brightness` | `255` in PiServ playbook | Restores full touchscreen backlight brightness on input |
 | `freenove_case_repo_update` | `false` | Fetches updates for an existing Freenove checkout |
 | `freenove_case_install_pibenchmarks` | `false` | Clones the PiBenchmarks repository |
 | `freenove_case_run_pibenchmarks` | `false` | Runs the storage benchmark once with a marker file |
@@ -173,6 +187,7 @@ Do not blindly apply these tutorial suggestions on PiServ:
 | Disable sudo password through `raspi-config` | Decide explicitly before changing production sudo posture |
 | Create Freenove background service from UI | Avoid; Ansible owns the service and runtime config |
 | Edit `task_led.py`, `task_fan.py`, or `task_oled.py` | Back up or vendor upstream code before local changes |
+| Enable `task_led.py` or `task_fan.py` for normal operation | Avoid unless you want Freenove's custom/demo loops to override Ansible-applied LED or fan values |
 
 If the background-service preflight fails, check that the FNK0100 GPIO adapter
 is seated correctly and visible on I2C address `0x21` before trying to start
@@ -182,6 +197,20 @@ If bus 1 reports `SDA stuck at low`, isolate I2C devices on the GPIO adapter.
 On PiServ, disconnecting the small OLED module cable released SDA and exposed
 the FNK0100 controller at `0x21`, so the OLED module/cable path is the current
 suspect.
+
+PiServ's blue fan LEDs stayed on during a live 20-second hardware test with
+Freenove fan mode `0` and duty `[0,0]`. The FNK0100 API exposes case RGB
+control and fan PWM control, but no fan-LED-only control. Treat the blue fan
+LEDs as powered by the fan hardware path, not by `freenove_case_led_*`.
+
+The 4.3-inch DSI touchscreen exposes a Linux backlight device at
+`/sys/class/backlight/10-0045`. PiServ uses an Ansible-managed user `swayidle`
+service to set that backlight to `0` after 120 seconds of local input
+inactivity and restore brightness to `255` on input resume.
+
+The small OLED is an SSD1306 monochrome display driven through a 1-bit image
+buffer. Its visible color cannot be changed to amber in software; amber would
+require replacing the OLED module with an amber physical variant.
 
 ## Optional SSD Speed Test
 
@@ -236,3 +265,27 @@ To disable Gen3, remove that line and reboot.
 | 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Enabled and validated `my_app_running.service` with LED, fan, and OLED tasks running |
 | 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed repeat idempotence with `ok=31 changed=0` |
 | 2026-07-07 | `ssh operator@piserv.example.com` | Removed old home-directory Freenove checkout; verified launchers point to `/opt/freenove/` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied direct hardware config; disabled LED and fan custom tasks; first run changed 4 tasks |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed direct hardware apply repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | Freenove hardware helper readback | Reported `led_mode=4`, `fan_mode=2`, `fan_threshold=[30, 50]`, and `changed=false` |
+| 2026-07-08 | `pgrep -af task_.*\\.py` | Confirmed only `task_manager.py` and `task_oled.py` are running |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied LED Follow mode with blue RGB base color; first run changed 3 tasks |
+| 2026-07-08 | Freenove hardware helper readback | Reported `led_mode=2` and `all_led_color=[0, 0, 255]` for each LED group |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed LED Follow mode repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied automatic fan thresholds `[40, 65]`; first run changed 3 tasks |
+| 2026-07-08 | Freenove controller readback | Reported `case_temp=44`, `fan_mode=2`, `fan_threshold=[40, 65]`, `fan_duty=[100, 100]`, and CPU temperature `57.1 C` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed automatic fan-threshold repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied blue Breathing LED mode and OLED `5.0` second screen timing; first run changed 2 tasks |
+| 2026-07-08 | Freenove controller and app-config readback | Reported hardware `led_mode=3`, blue LED color, and all OLED screen `display_time` values at `5.0` seconds |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed Breathing LED/OLED timing repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied very dim white Breathing LED color `8,8,8`; first run changed 3 tasks |
+| 2026-07-08 | Freenove controller readback | Reported hardware `led_mode=3` and `all_led_color=[8, 8, 8]` for each LED group |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed very dim white LED repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Applied LED Close/off mode; first corrected run changed 2 tasks |
+| 2026-07-08 | Freenove controller readback | Reported hardware `led_mode=0` and `all_led_color=[0, 0, 0]` for each LED group |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed LED Close/off repeat idempotence with `ok=35 changed=0` |
+| 2026-07-08 | 20-second Freenove fan-off hardware test | Fan mode `0` and duty `[0,0]` were applied, but the physical blue fan LEDs remained on; fan mode was restored to automatic mode `2` afterward |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Installed touchscreen idle user service with a 120-second timeout; first run changed 4 tasks |
+| 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=192.0.2.181` | Passed touchscreen idle repeat idempotence with `ok=47 changed=0` |
+| 2026-07-08 | Live touchscreen idle timeout test | Restarted the idle service, waited 125 seconds, observed backlight brightness `0`, restored brightness to `255`, and confirmed the service remained active |
+| 2026-07-08 | Freenove OLED source readback | Confirmed the OLED uses `ssd1306` and a 1-bit image buffer, so amber is not software-configurable |

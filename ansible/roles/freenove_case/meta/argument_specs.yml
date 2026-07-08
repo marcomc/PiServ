@@ -108,12 +108,24 @@ argument_specs:
         description: Desired Freenove background task service state.
       freenove_case_validate_expansion_controller:
         type: bool
-        default: "{{ freenove_case_manage_background_service }}"
-        description: Whether to require Freenove controller detection before service management.
+        default: "{{ freenove_case_manage_background_service or freenove_case_apply_hardware_config }}"
+        description: Whether to require Freenove controller detection before service or hardware management.
       freenove_case_manage_app_config:
         type: bool
         default: "{{ freenove_case_manage_background_service }}"
         description: Whether to manage the Freenove Code/app_config.json file.
+      freenove_case_apply_hardware_config:
+        type: bool
+        default: "{{ freenove_case_manage_app_config }}"
+        description: Whether to apply managed LED and fan config directly to the expansion board.
+      freenove_case_apply_hardware_save_flash:
+        type: bool
+        default: true
+        description: Whether direct hardware changes are saved to the Freenove controller flash.
+      freenove_case_hardware_apply_script:
+        type: path
+        default: "{{ freenove_case_install_dir }}/Code/ansible_apply_hardware_config.py"
+        description: Target path for the Ansible hardware apply helper.
       freenove_case_monitor_screen_orientation:
         type: int
         default: 0
@@ -124,7 +136,7 @@ argument_specs:
         description: Freenove monitor follow-LED-color setting.
       freenove_case_led_task_enabled:
         type: bool
-        default: true
+        default: false
         description: Whether the background manager runs task_led.py.
       freenove_case_led_mode:
         type: int
@@ -144,7 +156,7 @@ argument_specs:
         description: Blue component for Freenove manual LED color.
       freenove_case_fan_task_enabled:
         type: bool
-        default: true
+        default: false
         description: Whether the background manager runs task_fan.py.
       freenove_case_fan_mode:
         type: int
@@ -182,6 +194,56 @@ argument_specs:
       freenove_case_oled_screen4:
         type: dict
         description: Freenove OLED screen 4 settings.
+      freenove_case_manage_touchscreen_idle:
+        type: bool
+        default: false
+        description: Whether to manage the touchscreen idle backlight service.
+      freenove_case_touchscreen_idle_service_name:
+        type: str
+        default: freenove-touchscreen-idle.service
+        description: User service name for touchscreen idle control.
+      freenove_case_touchscreen_idle_packages:
+        type: list
+        elements: str
+        default:
+          - swayidle
+        description: Packages required by the touchscreen idle service.
+      freenove_case_touchscreen_idle_helper_path:
+        type: path
+        default: /usr/local/bin/freenove-touchscreen-backlight
+        description: Helper command used to set touchscreen backlight brightness.
+      freenove_case_touchscreen_backlight_device:
+        type: path
+        default: /sys/class/backlight/10-0045
+        description: Linux backlight device for the touchscreen panel.
+      freenove_case_touchscreen_idle_seconds:
+        type: int
+        default: 300
+        description: Idle timeout before dimming the touchscreen backlight.
+      freenove_case_touchscreen_active_brightness:
+        type: int
+        default: 255
+        description: Brightness restored when input resumes.
+      freenove_case_touchscreen_idle_brightness:
+        type: int
+        default: 0
+        description: Brightness applied after the idle timeout.
+      freenove_case_touchscreen_wayland_display:
+        type: str
+        default: wayland-0
+        description: Wayland display socket used by swayidle.
+      freenove_case_touchscreen_idle_service_enabled:
+        type: bool
+        default: true
+        description: Whether the touchscreen idle user service is enabled.
+      freenove_case_touchscreen_idle_service_state:
+        type: str
+        default: started
+        choices:
+          - started
+          - stopped
+          - restarted
+        description: Desired touchscreen idle user service state.
       freenove_case_manage_pcie_gen3:
         type: bool
         default: false

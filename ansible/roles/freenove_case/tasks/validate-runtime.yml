@@ -31,6 +31,16 @@
       - "{{ freenove_case_install_dir }}/Code/task_oled.py"
   changed_when: false
 
+- name: Validate Freenove hardware apply helper syntax
+  when: freenove_case_apply_hardware_config | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -m
+      - py_compile
+      - "{{ freenove_case_hardware_apply_script }}"
+  changed_when: false
+
 - name: Validate Freenove app configuration JSON
   when: freenove_case_manage_app_config | bool
   ansible.builtin.command:
@@ -39,6 +49,32 @@
       - -m
       - json.tool
       - "{{ freenove_case_install_dir }}/Code/app_config.json"
+  changed_when: false
+
+- name: Validate touchscreen backlight helper syntax
+  when: freenove_case_manage_touchscreen_idle | bool
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - -n
+      - "{{ freenove_case_touchscreen_idle_helper_path }}"
+  changed_when: false
+
+- name: Validate touchscreen idle user service is active
+  when:
+    - freenove_case_manage_touchscreen_idle | bool
+    - freenove_case_touchscreen_idle_service_state != "stopped"
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - --user
+      - is-active
+      - "{{ freenove_case_touchscreen_idle_service_name }}"
+  become: true
+  become_user: "{{ freenove_case_install_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ freenove_case_touchscreen_idle_runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ freenove_case_touchscreen_idle_runtime_dir }}/bus"
   changed_when: false
 
 - name: Wait before validating Freenove background service stability

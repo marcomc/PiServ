@@ -33,16 +33,19 @@ freenove_case_manage_background_service: false
 freenove_case_service_name: "my_app_running.service"
 freenove_case_service_enabled: true
 freenove_case_service_state: "started"
-freenove_case_validate_expansion_controller: "{{ freenove_case_manage_background_service }}"
 freenove_case_manage_app_config: "{{ freenove_case_manage_background_service }}"
+freenove_case_apply_hardware_config: "{{ freenove_case_manage_app_config }}"
+freenove_case_apply_hardware_save_flash: true
+freenove_case_hardware_apply_script: "{{ freenove_case_install_dir }}/Code/ansible_apply_hardware_config.py"
+freenove_case_validate_expansion_controller: "{{ freenove_case_manage_background_service or freenove_case_apply_hardware_config }}"
 freenove_case_monitor_screen_orientation: 0
 freenove_case_monitor_follow_led_color: 0
-freenove_case_led_task_enabled: true
+freenove_case_led_task_enabled: false
 freenove_case_led_mode: 0
 freenove_case_led_red_value: 0
 freenove_case_led_green_value: 0
 freenove_case_led_blue_value: 255
-freenove_case_fan_task_enabled: true
+freenove_case_fan_task_enabled: false
 freenove_case_fan_mode: 0
 freenove_case_fan_mode1_group1: 75
 freenove_case_fan_mode1_group2: 75
@@ -68,6 +71,19 @@ freenove_case_oled_screen4:
   interchange: 0
   display_time: 3.0
   is_run_on_oled: true
+
+freenove_case_manage_touchscreen_idle: false
+freenove_case_touchscreen_idle_service_name: freenove-touchscreen-idle.service
+freenove_case_touchscreen_idle_packages:
+  - swayidle
+freenove_case_touchscreen_idle_helper_path: /usr/local/bin/freenove-touchscreen-backlight
+freenove_case_touchscreen_backlight_device: /sys/class/backlight/10-0045
+freenove_case_touchscreen_idle_seconds: 300
+freenove_case_touchscreen_active_brightness: 255
+freenove_case_touchscreen_idle_brightness: 0
+freenove_case_touchscreen_wayland_display: wayland-0
+freenove_case_touchscreen_idle_service_enabled: true
+freenove_case_touchscreen_idle_service_state: started
 
 freenove_case_manage_pcie_gen3: false
 freenove_case_enable_pcie_gen3: false

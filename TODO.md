@@ -14,6 +14,8 @@
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
 - Verify physical LED, fan, and OLED behavior under the managed Freenove service.
+- Decide whether to accept, physically disconnect, or replace the always-on
+  blue fan LEDs.
 - Create initial bootstrap playbook after live commands are validated.
 
 ## Done

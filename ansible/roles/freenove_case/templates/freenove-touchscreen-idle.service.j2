@@ -1,0 +1,17 @@
+[Unit]
+Description=Freenove touchscreen idle backlight control
+Documentation=https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
+ConditionPathExists={{ freenove_case_touchscreen_backlight_device }}/brightness
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR={{ freenove_case_touchscreen_idle_runtime_dir }}
+Environment=WAYLAND_DISPLAY={{ freenove_case_touchscreen_wayland_display }}
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path={{ freenove_case_touchscreen_idle_runtime_dir }}/bus
+ExecStart=/usr/bin/swayidle -w timeout {{ freenove_case_touchscreen_idle_seconds | int }} "{{ freenove_case_touchscreen_idle_helper_path }} {{ freenove_case_touchscreen_backlight_device }} {{ freenove_case_touchscreen_idle_brightness | int }}" resume "{{ freenove_case_touchscreen_idle_helper_path }} {{ freenove_case_touchscreen_backlight_device }} {{ freenove_case_touchscreen_active_brightness | int }}"
+ExecStopPost={{ freenove_case_touchscreen_idle_helper_path }} {{ freenove_case_touchscreen_backlight_device }} {{ freenove_case_touchscreen_active_brightness | int }}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

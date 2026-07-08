@@ -10,6 +10,37 @@
         freenove_case_install_dir: /opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
         freenove_case_manage_background_service: true
         freenove_case_manage_app_config: true
-        freenove_case_led_task_enabled: true
-        freenove_case_fan_task_enabled: true
+        freenove_case_apply_hardware_config: true
+        freenove_case_led_task_enabled: false
+        freenove_case_led_mode: 5
+        freenove_case_led_red_value: 0
+        freenove_case_led_green_value: 0
+        freenove_case_led_blue_value: 0
+        freenove_case_fan_task_enabled: false
+        freenove_case_fan_mode: 0
+        freenove_case_fan_mode2_low_temp_threshold: 40
+        freenove_case_fan_mode2_high_temp_threshold: 65
         freenove_case_oled_task_enabled: true
+        freenove_case_oled_screen1:
+          data_format: 0
+          time_format: 0
+          display_time: 5.0
+          is_run_on_oled: true
+        freenove_case_oled_screen2:
+          interchange: 0
+          display_time: 5.0
+          is_run_on_oled: true
+        freenove_case_oled_screen3:
+          interchange: 0
+          display_time: 5.0
+          cpu_temp_celsius_or_fahrenheit: false
+          case_temp_celsius_or_fahrenheit: false
+          is_run_on_oled: true
+        freenove_case_oled_screen4:
+          interchange: 0
+          display_time: 5.0
+          is_run_on_oled: true
+        freenove_case_manage_touchscreen_idle: true
+        freenove_case_touchscreen_idle_seconds: 120
+        freenove_case_touchscreen_active_brightness: 255
+        freenove_case_touchscreen_idle_brightness: 0

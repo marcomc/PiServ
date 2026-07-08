@@ -27,3 +27,14 @@ All notable changes for the Freenove Case Ansible role are documented here.
   LED, fan, and OLED background behavior.
 - Added a Freenove expansion-controller preflight before background service
   management.
+- Added direct Ansible-side LED and fan hardware apply support through
+  Freenove's expansion-board API.
+- Changed LED and fan custom background tasks to opt-in defaults so they do
+  not override Ansible-applied hardware values.
+- Changed Close/off LED mode handling to also clear stored RGB values on the
+  expansion board.
+- Documented that FNK0100 exposes no separate software control for fan LEDs.
+- Added optional touchscreen idle backlight control through a user `swayidle`
+  service.
+- Documented that the small OLED color is fixed by the physical monochrome
+  module.

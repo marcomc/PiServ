@@ -1,0 +1,80 @@
+---
+- name: Configure optional touchscreen idle service
+  when: freenove_case_manage_touchscreen_idle | bool
+  block:
+    - name: Require valid touchscreen idle values
+      ansible.builtin.assert:
+        that:
+          - freenove_case_touchscreen_idle_seconds | int > 0
+          - freenove_case_touchscreen_active_brightness | int >= 0
+          - freenove_case_touchscreen_idle_brightness | int >= 0
+        fail_msg: Touchscreen idle seconds and brightness values must be non-negative integers.
+
+    - name: Install touchscreen idle packages
+      ansible.builtin.apt:
+        name: "{{ freenove_case_touchscreen_idle_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Read Freenove install user account
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ freenove_case_install_user }}"
+
+    - name: Store touchscreen idle user facts
+      ansible.builtin.set_fact:
+        freenove_case_touchscreen_idle_user_home: "{{ ansible_facts.getent_passwd[freenove_case_install_user][4] }}"
+        freenove_case_touchscreen_idle_runtime_dir: "/run/user/{{ ansible_facts.getent_passwd[freenove_case_install_user][1] }}"
+
+    - name: Validate touchscreen backlight device
+      ansible.builtin.stat:
+        path: "{{ freenove_case_touchscreen_backlight_device }}/brightness"
+      register: freenove_case_touchscreen_brightness_stat
+
+    - name: Require touchscreen backlight brightness file
+      ansible.builtin.assert:
+        that:
+          - freenove_case_touchscreen_brightness_stat.stat.exists
+        fail_msg: "{{ freenove_case_touchscreen_backlight_device }}/brightness is missing."
+
+    - name: Ensure touchscreen idle user systemd directory exists
+      ansible.builtin.file:
+        path: "{{ freenove_case_touchscreen_idle_user_home }}/.config/systemd/user"
+        state: directory
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0755"
+      become: true
+
+    - name: Install touchscreen backlight helper
+      ansible.builtin.copy:
+        src: freenove-touchscreen-backlight
+        dest: "{{ freenove_case_touchscreen_idle_helper_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Install touchscreen idle user service
+      ansible.builtin.template:
+        src: freenove-touchscreen-idle.service.j2
+        dest: "{{ freenove_case_touchscreen_idle_user_home }}/.config/systemd/user/{{ freenove_case_touchscreen_idle_service_name }}"
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: "0644"
+      become: true
+
+    - name: Manage touchscreen idle user service
+      ansible.builtin.systemd_service:
+        name: "{{ freenove_case_touchscreen_idle_service_name }}"
+        scope: user
+        daemon_reload: true
+        enabled: "{{ freenove_case_touchscreen_idle_service_enabled }}"
+        state: "{{ freenove_case_touchscreen_idle_service_state }}"
+      become: true
+      become_user: "{{ freenove_case_install_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "{{ freenove_case_touchscreen_idle_runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path={{ freenove_case_touchscreen_idle_runtime_dir }}/bus"

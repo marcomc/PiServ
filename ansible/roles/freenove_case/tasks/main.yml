@@ -23,6 +23,12 @@
 - name: Configure optional background service
   ansible.builtin.import_tasks: background-service.yml
 
+- name: Apply optional Freenove hardware configuration
+  ansible.builtin.import_tasks: hardware-config.yml
+
+- name: Configure optional touchscreen idle service
+  ansible.builtin.import_tasks: touchscreen-idle.yml
+
 - name: Configure optional PCIe Gen3
   ansible.builtin.import_tasks: pcie-gen3.yml
 
