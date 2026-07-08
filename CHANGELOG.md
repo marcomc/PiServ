@@ -62,3 +62,5 @@ All notable project changes are documented here.
   PiServ timeout.
 - Documented that the small Freenove OLED is monochrome and cannot be changed
   to amber in software.
+- Made Ansible role defaults and role documentation agnostic of PiServ-specific
+  host values so roles remain suitable for standalone Galaxy publication.

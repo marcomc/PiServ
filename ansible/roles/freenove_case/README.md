@@ -60,17 +60,17 @@ Pinned install example:
 ansible-galaxy role install marcomc.freenove_case,0.1.0
 ```
 
-Local development from this repository:
+Standalone role syntax validation:
 
 ```sh
-ansible-playbook ansible/playbooks/freenove-post-os.yml
+ansible-playbook --syntax-check tests/test.yml
 ```
 
 ## Role Variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `freenove_case_install_user` | `{{ ansible_user \| default('operator') }}` | User that owns the checkout and launchers |
+| `freenove_case_install_user` | Remote user fact or `pi` fallback | User that owns the checkout and launchers |
 | `freenove_case_install_dir` | `/opt/freenove-case` | Freenove runtime path |
 | `freenove_case_source_mode` | `git` | Source mode: `git`, `controller_copy`, or `archive_url` |
 | `freenove_case_repo_url` | Freenove GitHub repository | Upstream case software repository |
@@ -110,14 +110,14 @@ ansible-playbook ansible/playbooks/freenove-post-os.yml
 | `freenove_case_touchscreen_idle_seconds` | `300` | Idle seconds before dimming the touchscreen |
 | `freenove_case_touchscreen_active_brightness` | `255` | Brightness restored on input |
 | `freenove_case_touchscreen_idle_brightness` | `0` | Brightness applied while idle |
-| `freenove_case_touchscreen_backlight_device` | `/sys/class/backlight/10-0045` | Touchscreen backlight device |
+| `freenove_case_touchscreen_backlight_device` | `""` | Touchscreen backlight device; required when touchscreen idle is enabled |
 | `freenove_case_manage_pcie_gen3` | `false` | Manage PCIe Gen3 config |
 | `freenove_case_enable_pcie_gen3` | `false` | Enable PCIe Gen3 when managed |
 | `freenove_case_install_pibenchmarks` | `false` | Clone PiBenchmarks |
 | `freenove_case_pibenchmarks_repo_url` | PiBenchmarks GitHub repository | Upstream benchmark repository |
 | `freenove_case_pibenchmarks_dir` | `/home/{{ freenove_case_install_user }}/PiBenchmarks` | PiBenchmarks checkout path |
 | `freenove_case_run_pibenchmarks` | `false` | Run storage benchmark once |
-| `freenove_case_pibenchmarks_marker` | `/var/lib/piserv/freenove-pibenchmarks.done` | Benchmark one-shot marker |
+| `freenove_case_pibenchmarks_marker` | `/var/lib/freenove-case/pibenchmarks.done` | Benchmark one-shot marker |
 
 ## Example Playbook
 
@@ -190,7 +190,7 @@ explicitly want to refresh upstream code.
 
 Private or air-gapped deployments can use `controller_copy` so the Ansible
 controller copies a pinned local Freenove checkout to the Raspberry Pi. This is
-the preferred PiServ mode.
+the preferred mode for pinned or private deployments.
 
 When `freenove_case_manage_app_config` is enabled, the role owns
 `Code/app_config.json`. This makes LED, fan, and OLED startup behavior
@@ -247,11 +247,11 @@ task files:
 
 ## Validation
 
-Project validation:
+Role validation:
 
 ```sh
-ansible-playbook --syntax-check ansible/playbooks/freenove-post-os.yml
-ansible-lint ansible/playbooks/freenove-post-os.yml
+ansible-playbook --syntax-check tests/test.yml
+ansible-lint .
 ```
 
 Role validation after Galaxy-style export:
@@ -264,8 +264,8 @@ ansible-lint .
 Live idempotence validation used during development:
 
 ```text
-ansible-playbook ansible/playbooks/freenove-post-os.yml
-ansible-playbook ansible/playbooks/freenove-post-os.yml
+ansible-playbook site.yml
+ansible-playbook site.yml
 ```
 
 The second run should report `changed=0`.

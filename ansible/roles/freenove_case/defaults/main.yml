@@ -1,5 +1,5 @@
 ---
-freenove_case_install_user: "{{ ansible_user | default('operator') }}"
+freenove_case_install_user: "{{ ansible_facts['user_id'] | default(ansible_user | default('pi')) }}"
 freenove_case_install_dir: /opt/freenove-case
 freenove_case_source_mode: git
 
@@ -77,11 +77,11 @@ freenove_case_touchscreen_idle_service_name: freenove-touchscreen-idle.service
 freenove_case_touchscreen_idle_packages:
   - swayidle
 freenove_case_touchscreen_idle_helper_path: /usr/local/bin/freenove-touchscreen-backlight
-freenove_case_touchscreen_backlight_device: /sys/class/backlight/10-0045
+freenove_case_touchscreen_backlight_device: ""
 freenove_case_touchscreen_idle_seconds: 300
 freenove_case_touchscreen_active_brightness: 255
 freenove_case_touchscreen_idle_brightness: 0
-freenove_case_touchscreen_wayland_display: wayland-0
+freenove_case_touchscreen_wayland_display: "{{ ansible_facts.env.WAYLAND_DISPLAY | default('wayland-0') }}"
 freenove_case_touchscreen_idle_service_enabled: true
 freenove_case_touchscreen_idle_service_state: started
 
@@ -92,4 +92,4 @@ freenove_case_install_pibenchmarks: false
 freenove_case_pibenchmarks_repo_url: "https://github.com/TheRemote/PiBenchmarks"
 freenove_case_pibenchmarks_dir: "/home/{{ freenove_case_install_user }}/PiBenchmarks"
 freenove_case_run_pibenchmarks: false
-freenove_case_pibenchmarks_marker: "/var/lib/piserv/freenove-pibenchmarks.done"
+freenove_case_pibenchmarks_marker: /var/lib/freenove-case/pibenchmarks.done

@@ -11,7 +11,7 @@ repository.
 | --- | --- | --- |
 | Galaxy namespace | `marcomc` | Assumed |
 | Galaxy role name | `freenove_case` | Set in metadata |
-| Source role path | `ansible/roles/freenove_case/` | Current repo |
+| Source role path | `/path/to/ansible/roles/freenove_case/` | Example |
 | Standalone repo name | `freenove_case` | Assumed |
 | Default branch | `main` | Current local branch |
 | Initial version | `0.1.0` | Assumed |
@@ -26,8 +26,8 @@ the role root. Export this subrole into a standalone repository before import.
 Example:
 
 ```sh
-src="$HOME/Development/RaspberryPi/PiServ/ansible/roles/freenove_case"
-dst="$HOME/Development/freenove_case"
+src="/path/to/ansible/roles/freenove_case"
+dst="/path/to/freenove_case"
 
 mkdir -p "$dst"
 rsync -a --delete \

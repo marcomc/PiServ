@@ -41,6 +41,8 @@
           display_time: 5.0
           is_run_on_oled: true
         freenove_case_manage_touchscreen_idle: true
+        freenove_case_touchscreen_backlight_device: /sys/class/backlight/10-0045
+        freenove_case_touchscreen_wayland_display: wayland-0
         freenove_case_touchscreen_idle_seconds: 120
         freenove_case_touchscreen_active_brightness: 255
         freenove_case_touchscreen_idle_brightness: 0

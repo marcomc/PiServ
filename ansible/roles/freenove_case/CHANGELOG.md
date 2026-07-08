@@ -38,3 +38,5 @@ All notable changes for the Freenove Case Ansible role are documented here.
   service.
 - Documented that the small OLED color is fixed by the physical monochrome
   module.
+- Generalized role defaults and documentation so project-specific values live
+  outside the Galaxy-ready role.

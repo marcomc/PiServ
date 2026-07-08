@@ -8,7 +8,10 @@
           - freenove_case_touchscreen_idle_seconds | int > 0
           - freenove_case_touchscreen_active_brightness | int >= 0
           - freenove_case_touchscreen_idle_brightness | int >= 0
-        fail_msg: Touchscreen idle seconds and brightness values must be non-negative integers.
+          - freenove_case_touchscreen_backlight_device | length > 0
+        fail_msg: >-
+          Touchscreen idle requires a backlight device path, positive idle
+          seconds, and non-negative brightness values.
 
     - name: Install touchscreen idle packages
       ansible.builtin.apt:

@@ -2,7 +2,7 @@
 galaxy_info:
   namespace: marcomc
   role_name: freenove_case
-  author: PiServ maintainers
+  author: Role maintainers
   description: Configure the Freenove FNK0100 computer case kit after Raspberry Pi OS installation.
   license: MIT
   min_ansible_version: "2.15"

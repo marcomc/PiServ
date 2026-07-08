@@ -33,6 +33,13 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 
 - Ansible should become the authoritative reproduction path once the live setup
   is understood.
+- Keep Ansible roles under `ansible/roles/` suitable for possible Ansible
+  Galaxy publication.
+- Roles must stay agnostic of the PiServ project: no PiServ hostnames, IPs,
+  local repository paths, private assumptions, or project-only defaults in role
+  tasks, defaults, templates, metadata, tests, or role documentation.
+- Put PiServ-specific values in project playbooks, inventory, group variables,
+  runbooks, or decision records instead of embedding them in reusable roles.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
