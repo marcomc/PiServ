@@ -50,3 +50,9 @@
         raiplaysound_cli_config:
           TARGET_BASE: /mnt/pcloud/My Music/Podcasts/raiplaypodcast
           RSS_BASE_URL: http://podcast.piguard.home.arpa/raiplaypodcast
+          EMAIL_TO: root
+          EMAIL_CONFIG: /etc/msmtprc
+          EMAIL_FROM: operator@example.com
+          EMAIL_FROM_NAME: PiServ RaiPlaySound
+          EMAIL_SUBJECT_PREFIX: "[PiServ raiplaysound-cli]"
+          MSMTP_BIN: /usr/local/bin/msmtp-system

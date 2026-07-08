@@ -1,0 +1,12 @@
+[Unit]
+Description=Send PiServ boot notification email
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists={{ base_reboot_notification_condition_path }}
+
+[Service]
+Type=oneshot
+ExecStart={{ base_reboot_notification_script_path }}
+
+[Install]
+WantedBy=multi-user.target

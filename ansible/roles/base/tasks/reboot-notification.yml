@@ -1,0 +1,25 @@
+---
+- name: Install reboot notification helper
+  ansible.builtin.template:
+    src: piserv-reboot-notify.py.j2
+    dest: "{{ base_reboot_notification_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install reboot notification service
+  ansible.builtin.template:
+    src: piserv-reboot-notify.service.j2
+    dest: "/etc/systemd/system/{{ base_reboot_notification_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable reboot notification service
+  ansible.builtin.systemd_service:
+    name: "{{ base_reboot_notification_service_name }}"
+    enabled: true
+    daemon_reload: true
+  become: true

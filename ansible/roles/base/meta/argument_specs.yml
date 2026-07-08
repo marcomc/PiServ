@@ -54,6 +54,38 @@ argument_specs:
         type: bool
         default: true
         description: Whether to run unattended-upgrade dry-run validation.
+      base_unattended_mail_to:
+        type: str
+        default: root
+        description: Recipient used by unattended-upgrades reports.
+      base_unattended_mail_report:
+        type: str
+        default: on-change
+        description: unattended-upgrades MailReport value.
+      base_manage_reboot_notification:
+        type: bool
+        default: true
+        description: Whether to install the boot notification systemd service.
+      base_reboot_notification_service_name:
+        type: str
+        default: piserv-reboot-notify.service
+        description: Boot notification service name.
+      base_reboot_notification_script_path:
+        type: path
+        default: /usr/local/sbin/piserv-reboot-notify
+        description: Boot notification helper path.
+      base_reboot_notification_recipient:
+        type: str
+        default: root
+        description: Local recipient used by boot notification email.
+      base_reboot_notification_subject_prefix:
+        type: str
+        default: "[PiServ]"
+        description: Subject prefix used by boot notification email.
+      base_reboot_notification_condition_path:
+        type: path
+        default: /etc/msmtprc
+        description: Path that must exist before the boot notification service runs.
       base_manage_cloud_init:
         type: bool
         default: true

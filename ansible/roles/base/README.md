@@ -17,6 +17,7 @@ This project-local role codifies live PiServ baseline hardening:
 - SSH root-login and password-auth policy
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
+- boot notification service
 - cloud-init disabled state
 
 ## Role Variables
@@ -34,6 +35,11 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_manage_unattended_upgrades` | `true` | Manage unattended upgrades |
 | `base_unattended_automatic_reboot_time` | `06:30` | Reboot window used only when upgrades require reboot |
 | `base_unattended_origins_patterns` | Debian and Raspberry Pi origins | Allowed unattended-upgrades origins |
+| `base_unattended_mail_to` | `root` | Local recipient for unattended-upgrades reports |
+| `base_unattended_mail_report` | `on-change` | Report when upgrades or errors occur |
+| `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
+| `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
+| `base_reboot_notification_condition_path` | `/etc/msmtprc` | Path required before boot notification runs |
 | `base_manage_cloud_init` | `true` | Manage cloud-init state |
 | `base_cloud_init_disable` | `true` | Disable cloud-init with marker file and units |
 
@@ -59,7 +65,12 @@ Services listed in `base_disabled_systemd_units` are disabled only when their
 unit files exist on the target.
 
 Unattended upgrades are installed, enabled, and dry-run validated by default.
-Automatic reboot is enabled only for upgrades that require a reboot.
+Automatic reboot is enabled only for upgrades that require a reboot. Reports are
+sent to local recipient `root` when upgrades or errors occur.
+
+The boot notification service is enabled by default, but systemd skips it until
+`base_reboot_notification_condition_path` exists. Configure a mail transport
+with a separate role before expecting delivery.
 
 Cloud-init is disabled with `/etc/cloud/cloud-init.disabled`; the package is not
 removed.
