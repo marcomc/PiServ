@@ -1,0 +1,11 @@
+---
+- name: Configure PiServ base host policy
+  hosts: piserv
+  gather_facts: true
+  roles:
+    - role: base
+      vars:
+        base_ssh_dropin_comment: "Managed by PiServ hardening."
+        base_cloud_init_disabled_marker_content: |
+          Disabled by PiServ hardening on 2026-07-08.
+          Configuration is managed by Ansible after SSH is reachable.

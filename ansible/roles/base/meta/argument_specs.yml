@@ -1,0 +1,72 @@
+---
+argument_specs:
+  main:
+    short_description: Configure base PiServ host policy.
+    description:
+      - Manages baseline SSH policy, disabled services, unattended upgrades, and cloud-init state.
+      - Intended for this PiServ project rather than standalone Galaxy publication.
+    options:
+      base_manage_ssh:
+        type: bool
+        default: true
+        description: Whether to manage SSH baseline policy.
+      base_ssh_dropin_path:
+        type: path
+        default: /etc/ssh/sshd_config.d/99-piserv-hardening.conf
+        description: SSH daemon drop-in path.
+      base_ssh_permit_root_login:
+        type: str
+        default: "no"
+        description: Effective PermitRootLogin value.
+      base_ssh_password_authentication:
+        type: str
+        default: "no"
+        description: Effective PasswordAuthentication value.
+      base_ssh_kbd_interactive_authentication:
+        type: str
+        default: "no"
+        description: Effective KbdInteractiveAuthentication value.
+      base_ssh_pubkey_authentication:
+        type: str
+        default: "yes"
+        description: Effective PubkeyAuthentication value.
+      base_manage_disabled_services:
+        type: bool
+        default: true
+        description: Whether to disable baseline unwanted services.
+      base_disabled_systemd_units:
+        type: list
+        elements: str
+        description: Systemd units that should be disabled and stopped when present.
+      base_manage_unattended_upgrades:
+        type: bool
+        default: true
+        description: Whether to manage unattended upgrades.
+      base_unattended_automatic_reboot_time:
+        type: str
+        default: "06:30"
+        description: Reboot time used only when unattended upgrades require reboot.
+      base_unattended_origins_patterns:
+        type: list
+        elements: str
+        description: Origins-Pattern entries for unattended-upgrades.
+      base_unattended_validate_dry_run:
+        type: bool
+        default: true
+        description: Whether to run unattended-upgrade dry-run validation.
+      base_manage_cloud_init:
+        type: bool
+        default: true
+        description: Whether to manage cloud-init state.
+      base_cloud_init_disable:
+        type: bool
+        default: true
+        description: Whether to disable cloud-init with a marker file and disabled units.
+      base_cloud_init_disabled_marker_path:
+        type: path
+        default: /etc/cloud/cloud-init.disabled
+        description: cloud-init disabled marker file path.
+      base_cloud_init_units:
+        type: list
+        elements: str
+        description: cloud-init units disabled when cloud-init is disabled.

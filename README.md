@@ -149,6 +149,16 @@ Active implementation tracks:
 
 ## Automation
 
+Configure the PiServ base host policy:
+
+```sh
+ansible-playbook ansible/playbooks/piserv-base.yml
+```
+
+The base playbook manages SSH root-login and password-auth policy, disables
+unneeded CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades, and
+disables cloud-init.
+
 Configure the Freenove FNK0100K post-OS setup:
 
 ```sh

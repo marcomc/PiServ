@@ -64,6 +64,16 @@ All notable project changes are documented here.
 - Added the RaiPlaySound CLI daily sync runbook.
 - Added the system baseline and inventory runbook covering OS, firmware,
   storage, network, packages, services, sockets, and security inputs.
+- Added a draft base security posture decision covering SSH, firewall,
+  Tailscale, VNC, service exposure, Bluetooth, updates, users, and cloud-init.
+- Added the base security hardening runbook with live SSH, service-disable, and
+  unattended-upgrades validation.
+- Applied live PiServ hardening for SSH root login, CUPS, `rpcbind`, NFS helper
+  exposure, and unattended upgrades.
+- Disabled cloud-init on PiServ by marker file while leaving the package
+  installed for recovery experiments.
+- Added the project-local `base` Ansible role and `piserv-base.yml` playbook to
+  reproduce live SSH, service, unattended-upgrades, and cloud-init hardening.
 - Installed and validated `raiplaysound-cli-daily-sync` on PiServ with direct
   writes to the pCloud-backed podcast target.
 - Added managed, create-only, and unmanaged config modes to the

@@ -1,0 +1,16 @@
+---
+- name: Configure base SSH policy
+  when: base_manage_ssh | bool
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Configure base disabled services
+  when: base_manage_disabled_services | bool
+  ansible.builtin.import_tasks: services.yml
+
+- name: Configure base unattended upgrades
+  when: base_manage_unattended_upgrades | bool
+  ansible.builtin.import_tasks: unattended-upgrades.yml
+
+- name: Configure base cloud-init policy
+  when: base_manage_cloud_init | bool
+  ansible.builtin.import_tasks: cloud-init.yml

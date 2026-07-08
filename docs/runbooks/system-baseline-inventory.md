@@ -212,6 +212,7 @@ ssh operator@piserv.example.com 'sudo awk "{ if (\$1 == \"password:\") print \" 
 ## Follow-Up
 
 - Decide the base security posture for SSH, firewall, updates, and user access.
-- Review whether VNC, `rpcbind`, CUPS, Bluetooth, and cloud-init should remain
-  enabled in the production profile.
+- Review whether VNC and Bluetooth should remain enabled in the production
+  profile. `rpcbind`, CUPS, and cloud-init were later disabled in the base
+  hardening pass.
 - Fold accepted service and firewall policy into the future bootstrap playbook.

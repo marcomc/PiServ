@@ -20,6 +20,7 @@ Decision records explain why PiServ setup choices were made.
 | [0004: Local repository path](0004-local-repository-path.md) | Accepted |
 | [0005: Ansible-managed Freenove background control](0005-ansible-managed-freenove-background-control.md) | Accepted |
 | [0006: RaiPlaySound direct-write scheduling](0006-raiplaysound-direct-write-scheduling.md) | Accepted |
+| [0007: Base security posture](0007-base-security-posture.md) | Partially implemented |
 
 ## Template
 

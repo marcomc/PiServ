@@ -1,0 +1,16 @@
+---
+- name: Validate sshd configuration
+  ansible.builtin.command:
+    argv:
+      - "{{ base_sshd_binary }}"
+      - -t
+  changed_when: false
+  become: true
+  listen: Validate and reload sshd
+
+- name: Reload ssh service
+  ansible.builtin.systemd_service:
+    name: "{{ base_ssh_service_name }}"
+    state: reloaded
+  become: true
+  listen: Validate and reload sshd

@@ -1,0 +1,39 @@
+---
+- name: Ensure sshd drop-in directory exists
+  ansible.builtin.file:
+    path: "{{ base_ssh_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install sshd hardening drop-in
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: "{{ base_ssh_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Validate and reload sshd
+
+- name: Apply sshd handler before validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Read effective sshd configuration
+  ansible.builtin.command:
+    argv:
+      - "{{ base_sshd_binary }}"
+      - -T
+  register: base_sshd_effective_config
+  changed_when: false
+  become: true
+
+- name: Assert effective sshd hardening
+  ansible.builtin.assert:
+    that:
+      - "'permitrootlogin ' ~ base_ssh_permit_root_login in base_sshd_effective_config.stdout"
+      - "'passwordauthentication ' ~ base_ssh_password_authentication in base_sshd_effective_config.stdout"
+      - "'kbdinteractiveauthentication ' ~ base_ssh_kbd_interactive_authentication in base_sshd_effective_config.stdout"
+      - "'pubkeyauthentication ' ~ base_ssh_pubkey_authentication in base_sshd_effective_config.stdout"

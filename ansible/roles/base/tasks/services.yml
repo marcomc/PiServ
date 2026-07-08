@@ -1,0 +1,25 @@
+---
+- name: Discover base-disabled systemd units
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - list-unit-files
+      - "{{ item }}"
+      - --no-legend
+  loop: "{{ base_disabled_systemd_units }}"
+  register: base_disabled_systemd_unit_files
+  changed_when: false
+  failed_when: false
+
+- name: Disable base-disabled systemd units
+  when:
+    - item.rc == 0
+    - item.stdout | trim | length > 0
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ base_disabled_systemd_unit_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true

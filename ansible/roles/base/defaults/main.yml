@@ -1,0 +1,50 @@
+---
+base_manage_ssh: true
+base_ssh_service_name: ssh.service
+base_sshd_binary: /usr/sbin/sshd
+base_ssh_dropin_dir: /etc/ssh/sshd_config.d
+base_ssh_dropin_path: "{{ base_ssh_dropin_dir }}/99-piserv-hardening.conf"
+base_ssh_dropin_comment: "Managed by Ansible base role."
+base_ssh_permit_root_login: "no"
+base_ssh_password_authentication: "no"
+base_ssh_kbd_interactive_authentication: "no"
+base_ssh_pubkey_authentication: "yes"
+
+base_manage_disabled_services: true
+base_disabled_systemd_units:
+  - cups.service
+  - cups.socket
+  - rpcbind.service
+  - rpcbind.socket
+  - nfs-blkmap.service
+
+base_manage_unattended_upgrades: true
+base_unattended_upgrade_packages:
+  - unattended-upgrades
+base_unattended_update_package_lists: "1"
+base_unattended_upgrade_enabled: "1"
+base_unattended_autoclean_interval: "7"
+base_unattended_origins_patterns:
+  - "origin=Debian,codename=${distro_codename},label=Debian"
+  - "origin=Debian,codename=${distro_codename}-updates,label=Debian"
+  - "origin=Debian,codename=${distro_codename},label=Debian-Security"
+  - "origin=Debian,codename=${distro_codename}-security,label=Debian-Security"
+  - "origin=Raspberry Pi Foundation,label=Raspberry Pi Foundation"
+base_unattended_automatic_reboot: true
+base_unattended_automatic_reboot_time: "06:30"
+base_unattended_remove_unused_dependencies: true
+base_unattended_remove_new_unused_dependencies: true
+base_unattended_validate_dry_run: true
+
+base_manage_cloud_init: true
+base_cloud_init_disable: true
+base_cloud_init_disabled_marker_path: /etc/cloud/cloud-init.disabled
+base_cloud_init_disabled_marker_content: |
+  Disabled by Ansible base role.
+  Configuration is managed by Ansible after SSH is reachable.
+base_cloud_init_units:
+  - cloud-init-local.service
+  - cloud-init-network.service
+  - cloud-init-main.service
+  - cloud-config.service
+  - cloud-final.service

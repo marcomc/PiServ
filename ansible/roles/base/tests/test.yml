@@ -1,0 +1,11 @@
+---
+- name: Test base role syntax
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: base
+      vars:
+        base_manage_ssh: false
+        base_manage_disabled_services: false
+        base_manage_unattended_upgrades: false
+        base_manage_cloud_init: false

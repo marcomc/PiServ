@@ -2,7 +2,10 @@
 
 ## Current
 
-- Decide base security posture for SSH, firewall, updates, and user access.
+- Decide final user-account policy.
+- Decide firewall policy after Tailscale is installed.
+- Install Tailscale and include Tailscale clients in the firewall access model.
+- Investigate VNC mirroring of the physical touchscreen session.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
 - Verify physical LED, fan, and OLED behavior under the managed Freenove service.
@@ -52,6 +55,12 @@
 - Documented Wi-Fi configuration and current network path without storing the
   Wi-Fi PSK.
 - Inventoried enabled services and open listening sockets.
+- Applied SSH root-login hardening while preserving `operator` sudo SSH access.
+- Disabled CUPS, `rpcbind`, and NFS block-mapper services.
+- Enabled unattended upgrades and automatic reboots at `06:30`.
+- Disabled cloud-init by marker file and disabled its systemd units.
+- Codified base hardening in the `base` Ansible role and `piserv-base.yml`
+  playbook.
 
 ## Later
 
