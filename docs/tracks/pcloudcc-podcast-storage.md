@@ -23,8 +23,21 @@ mount.
 
 ## Status
 
-Ready for live build validation. Do not enable scheduled podcast writes until
+Client install and install automation are complete. Manual credential
+bootstrap, EU-region login validation, mount validation, systemd startup, and
+workload integration remain open. Do not enable scheduled podcast writes until
 all validation gates in this track pass on PiServ.
+
+## Progress Snapshot
+
+| Area | Status | Evidence |
+| --- | --- | --- |
+| Live client install | Done | `/usr/local/bin/pcloudcc` prints `pCloud console client v.2.0.1` |
+| Install automation | Done | `ansible/playbooks/pcloudcc-install.yml` reports `changed=0` on repeat run |
+| Galaxy-ready role shape | Done | `ansible/roles/pcloudcc/` has metadata, argument specs, docs, tests, and license |
+| Credential bootstrap | Pending | Requires manual `pcloudcc -p -s` operator login |
+| pCloud mount validation | Pending | Requires successful credential bootstrap |
+| Podcast workload integration | Pending | Requires mounted and writable pCloud target |
 
 ## References
 
@@ -134,8 +147,6 @@ them only when deliberately deauthorizing PiServ from pCloud.
 
 ## Open Items
 
-- Confirm exact Debian package list needed for Raspberry Pi OS / Debian
-  `arm64`.
 - Confirm whether source-built `pcloudcc` needs explicit EU-region settings.
 - Decide user service versus system service after credential and mount behavior
   are observed.
@@ -148,3 +159,5 @@ them only when deliberately deauthorizing PiServ from pCloud.
 | Date | Step | Result | Evidence |
 | --- | --- | --- | --- |
 | 2026-07-07 | Track created | Ready for live build validation | This document |
+| 2026-07-08 | Live client install | Passed | `/usr/local/bin/pcloudcc`; source revision `980d2cadf670f1b14642c7dbe015f95bd2306175` |
+| 2026-07-08 | Install automation | Passed | `ansible-playbook ansible/playbooks/pcloudcc-install.yml` ended with `changed=0` on repeat run |

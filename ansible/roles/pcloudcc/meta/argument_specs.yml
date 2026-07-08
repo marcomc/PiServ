@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: Build and install pcloudcc.
+    description:
+      - Installs Debian build dependencies for pcloudcc.
+      - Checks out the official pCloud console-client source.
+      - Applies the Debian arm64 source patch carried by this role.
+      - Builds and installs pcloudcc under C(/usr/local).
+      - Prepares the pCloud mount root directory.
+      - Does not manage pCloud credentials, account email, or systemd mount services.
+    options:
+      pcloudcc_runtime_user:
+        type: str
+        default: "{{ ansible_facts['user_id'] | default(ansible_user | default('root')) }}"
+        description: User that owns the source checkout and pCloud mount root.
+      pcloudcc_install_root:
+        type: path
+        default: /opt/pcloudcc
+        description: Parent directory for pcloudcc source and role-managed patch files.
+      pcloudcc_source_dir:
+        type: path
+        default: "{{ pcloudcc_install_root }}/console-client"
+        description: Destination for the official pCloud console-client checkout.
+      pcloudcc_repo_url:
+        type: str
+        default: "https://github.com/pcloudcom/console-client.git"
+        description: Official pCloud console-client Git repository URL.
+      pcloudcc_repo_version:
+        type: str
+        default: "980d2cadf670f1b14642c7dbe015f95bd2306175"
+        description: Branch, tag, or commit to check out from the pCloud repository.
+      pcloudcc_repo_update:
+        type: bool
+        default: false
+        description: Whether to fetch or refresh an existing source checkout.
+      pcloudcc_repo_force:
+        type: bool
+        default: false
+        description: Whether Git may discard local checkout changes during updates.
+      pcloudcc_mount_root:
+        type: path
+        default: /mnt/pcloud
+        description: Mount point directory prepared for later pcloudcc use.
+      pcloudcc_patch_file:
+        type: str
+        default: pcloudcc-debian13-arm64.patch
+        description: Role file patch applied to build pcloudcc on Debian arm64.
+      pcloudcc_force_rebuild:
+        type: bool
+        default: false
+        description: Whether to rebuild pcloudcc even when the binary is already installed.
+      pcloudcc_build_jobs:
+        type: str
+        default: "{{ ansible_facts['processor_vcpus'] | default(ansible_facts['processor_nproc'] | default(2)) }}"
+        description: Parallel make job count used for mbedtls and pcloudcc builds.
+      pcloudcc_expected_version_output:
+        type: str
+        default: "pCloud console client v.2.0.1"
+        description: Expected pcloudcc help/version line after installation.
+      pcloudcc_apt_packages:
+        type: list
+        elements: str
+        description: Debian packages required to build pcloudcc.

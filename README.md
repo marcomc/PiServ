@@ -162,6 +162,17 @@ launchers, enables the Freenove background service, manages `Code/app_config.jso
 for LED/fan/OLED startup behavior, and validates Python imports/source syntax.
 It reboots only when the I2C firmware setting changes.
 
+Install the pCloud console client:
+
+```sh
+ansible-playbook ansible/playbooks/pcloudcc-install.yml
+```
+
+The pCloud playbook installs the source-built `pcloudcc` binary, applies the
+Debian 13 `arm64` build patch, prepares `/mnt/pcloud`, and validates the
+installed client. It does not perform pCloud credential login or systemd mount
+management.
+
 Migrate a microSD-booted PiServ system to NVMe:
 
 ```sh

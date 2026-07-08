@@ -1,0 +1,25 @@
+---
+pcloudcc_runtime_user: "{{ ansible_facts['user_id'] | default(ansible_user | default('root')) }}"
+pcloudcc_install_root: /opt/pcloudcc
+pcloudcc_source_dir: "{{ pcloudcc_install_root }}/console-client"
+pcloudcc_repo_url: "https://github.com/pcloudcom/console-client.git"
+pcloudcc_repo_version: "980d2cadf670f1b14642c7dbe015f95bd2306175"
+pcloudcc_repo_update: false
+pcloudcc_repo_force: false
+pcloudcc_mount_root: /mnt/pcloud
+pcloudcc_patch_file: pcloudcc-debian13-arm64.patch
+pcloudcc_force_rebuild: false
+pcloudcc_build_jobs: >-
+  {{ ansible_facts["processor_vcpus"] | default(ansible_facts["processor_nproc"] | default(2)) }}
+pcloudcc_expected_version_output: "pCloud console client v.2.0.1"
+
+pcloudcc_apt_packages:
+  - build-essential
+  - cmake
+  - git
+  - libboost-program-options-dev
+  - libboost-system-dev
+  - libfuse-dev
+  - libpthread-stubs0-dev
+  - libudev-dev
+  - pkg-config

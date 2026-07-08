@@ -6,6 +6,7 @@
 - [Status](#status)
 - [Preconditions](#preconditions)
 - [Target Shape](#target-shape)
+- [Client Installation](#client-installation)
 - [Credential Bootstrap](#credential-bootstrap)
 - [Validation Plan](#validation-plan)
 - [Health Checks](#health-checks)
@@ -18,7 +19,9 @@ storage layer for scheduled podcast-producing jobs.
 
 ## Status
 
-Planned. Do not enable scheduled podcast jobs until the mount and write tests
+Client installation is complete on PiServ. Credential bootstrap, EU-region
+login, pCloud mount validation, systemd startup, and write tests are still
+pending. Do not enable scheduled podcast jobs until the mount and write tests
 pass on PiServ.
 
 ## Preconditions
@@ -46,6 +49,33 @@ pass on PiServ.
 | Credential bootstrap | Manual first login with `pcloudcc -p -s` as `operator` |
 | Required preflight | Mount present, writable, and round-trip file test passes |
 | Account scope | Existing user pCloud account with full pCloud access |
+
+## Client Installation
+
+The `pcloudcc` client was built and installed live on PiServ on 2026-07-08.
+
+Observed install facts:
+
+| Item | Value |
+| --- | --- |
+| Source repository | `https://github.com/pcloudcom/console-client.git` |
+| Source revision | `980d2cadf670f1b14642c7dbe015f95bd2306175` |
+| Source path | `/opt/pcloudcc/console-client` |
+| Installed binary | `/usr/local/bin/pcloudcc` |
+| Installed library | `/usr/local/lib/libpcloudcc_lib.so` |
+| Help/version line | `pCloud console client v.2.0.1` |
+| Mount directory | `/mnt/pcloud`, owned by `operator` |
+
+Use the Ansible reproduction path:
+
+```sh
+ansible-playbook ansible/playbooks/pcloudcc-install.yml
+```
+
+The role applies a Debian 13 `arm64` source patch because the official source
+contains x86 compiler tuning and legacy C constructs rejected by current Debian
+GCC. The role is intentionally limited to build/install and mount-root
+preparation; it does not store credentials or manage the mount service.
 
 ## Credential Bootstrap
 
@@ -113,8 +143,6 @@ The target path contains a space in `My Music`; quote it in shell commands.
 
 ## Automation Follow-Up
 
-- Add Ansible tasks for build prerequisites.
-- Add Ansible tasks for building or installing `pcloudcc`.
 - Add a systemd unit for the `pcloudcc` mount.
 - Add a preflight script for mount and write validation.
 - Make `raiplaysound-cli` scheduling depend on the pCloud health check.

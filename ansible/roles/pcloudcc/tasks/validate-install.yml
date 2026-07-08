@@ -1,0 +1,31 @@
+---
+- name: Read pcloudcc help output
+  ansible.builtin.command: pcloudcc -h
+  register: pcloudcc_help
+  changed_when: false
+
+- name: Assert pcloudcc prints expected version
+  ansible.builtin.assert:
+    that:
+      - pcloudcc_expected_version_output in pcloudcc_help.stdout
+
+- name: Validate pcloudcc dynamic links
+  ansible.builtin.command: ldd /usr/local/bin/pcloudcc
+  register: pcloudcc_ldd
+  changed_when: false
+
+- name: Assert pcloudcc library resolves
+  ansible.builtin.assert:
+    that:
+      - "'libpcloudcc_lib.so => /usr/local/lib/libpcloudcc_lib.so' in pcloudcc_ldd.stdout"
+
+- name: Validate pCloud mount root directory
+  ansible.builtin.stat:
+    path: "{{ pcloudcc_mount_root }}"
+  register: pcloudcc_mount_root_stat
+
+- name: Assert pCloud mount root is prepared
+  ansible.builtin.assert:
+    that:
+      - pcloudcc_mount_root_stat.stat.isdir
+      - pcloudcc_mount_root_stat.stat.pw_name == pcloudcc_runtime_user

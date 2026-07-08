@@ -1,0 +1,183 @@
+diff --git a/pCloudCC/lib/pclsync/Makefile b/pCloudCC/lib/pclsync/Makefile
+index ffb8638..c7f163c 100644
+--- a/pCloudCC/lib/pclsync/Makefile
++++ b/pCloudCC/lib/pclsync/Makefile
+@@ -4,16 +4,16 @@ RANLIB=ranlib
+ #USESSL=openssl
+ USESSL=mbed
+ 
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2
+-CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -I../sqlite -DP_ELECTRON -fPIC
+-
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2 -I../sqlite
+-#CFLAGS=-Wall -Wpointer-arith -Os -g -mtune=core2 -I../sqlite -pg
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -I../sqlite/ -fPIC
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2 -I../sqlite -pg -m32 -D_FILE_OFFSET_BITS=64
+-#CFLAGS=-O2 -g -pg
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2 -I../../psync32/zlib -I../../psync32/sqlite -m32 -D_FILE_OFFSET_BITS=64
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -I../sqlite -DP_ELECTRON -fPIC -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -I../sqlite -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-Wall -Wpointer-arith -Os -g -I../sqlite -pg -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -I../sqlite/ -fPIC -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -I../sqlite -pg -m32 -D_FILE_OFFSET_BITS=64 -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-O2 -g -pg -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -I../../psync32/zlib -I../../psync32/sqlite -m32 -D_FILE_OFFSET_BITS=64 -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
+ 
+ LIB_A=psynclib.a
+ #LIB_A=libpsynclib.a
+diff --git a/pCloudCC/lib/pclsync/lib/poverlay_linux/Makefile b/pCloudCC/lib/pclsync/lib/poverlay_linux/Makefile
+index bd70588..b247eee 100644
+--- a/pCloudCC/lib/pclsync/lib/poverlay_linux/Makefile
++++ b/pCloudCC/lib/pclsync/lib/poverlay_linux/Makefile
+@@ -2,8 +2,8 @@ CC=cc
+ #USESSL=openssl
+ USESSL=mbed
+ 
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
+-CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -DPCLOUD_TESTING
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -DPCLOUD_TESTING -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
+ 
+ ifeq ($(OS),Windows_NT)
+     CFLAGS += -DP_OS_WINDOWS
+diff --git a/pCloudCC/lib/pclsync/pcallbacks.c b/pCloudCC/lib/pclsync/pcallbacks.c
+index e0b7418..b426565 100644
+--- a/pCloudCC/lib/pclsync/pcallbacks.c
++++ b/pCloudCC/lib/pclsync/pcallbacks.c
+@@ -435,7 +435,7 @@ void psync_send_eventdata(psync_eventtype_t eventid, void *eventdata){
+ data_event_callback data_event_fptr = NULL;
+ 
+ void psync_init_data_event(void *ptr) {
+-  data_event_fptr = (data_event_callback*)ptr;
++  data_event_fptr = (data_event_callback)ptr;
+   debug(D_NOTICE, "Data event handler set.");
+ }
+ /**********************************************************************************************/
+diff --git a/pCloudCC/lib/pclsync/pdiff.c b/pCloudCC/lib/pclsync/pdiff.c
+index c7f0040..64752d3 100644
+--- a/pCloudCC/lib/pclsync/pdiff.c
++++ b/pCloudCC/lib/pclsync/pdiff.c
+@@ -697,7 +697,7 @@ static psync_socket *get_connected_socket(){
+         P_OS_ID,
+         rawtime,
+         &params,
+-        res);
++        NULL);
+     }
+     else {
+       debug(D_NOTICE, "Not a first login. Run sync event.");
+diff --git a/pCloudCC/lib/pclsync/pfs.c b/pCloudCC/lib/pclsync/pfs.c
+index 165c085..7847d01 100644
+--- a/pCloudCC/lib/pclsync/pfs.c
++++ b/pCloudCC/lib/pclsync/pfs.c
+@@ -34,6 +34,7 @@
+ #include <errno.h>
+ #include <string.h>
+ #include <stdio.h>
++#include <stdint.h>
+ #include "pfs.h"
+ #include "pfsxattr.h"
+ #include "pfsfolder.h"
+@@ -2440,7 +2441,7 @@ static int psync_fs_unlink(const char *path){
+   if ((fpath->flags & PSYNC_FOLDER_FLAG_BACKUP) && ret == 0) {
+     //Send async event to UI to notify the user that he is deleting a backedup file.
+     debug(D_NOTICE, "Backedup file deleted in P drive. Send event. Flags: [%d]", fpath->flags);
+-    psync_run_thread1("psync_async_sync_delete", psync_async_ui_callback, PEVENT_BKUP_F_DEL_DRIVE);
++    psync_run_thread1("psync_async_sync_delete", psync_async_ui_callback, (void *)(intptr_t)PEVENT_BKUP_F_DEL_DRIVE);
+   }
+ 
+   psync_free(fpath);
+diff --git a/pCloudCC/lib/pclsync/psynclib.c b/pCloudCC/lib/pclsync/psynclib.c
+index 7bb8e56..9d23af6 100644
+--- a/pCloudCC/lib/pclsync/psynclib.c
++++ b/pCloudCC/lib/pclsync/psynclib.c
+@@ -66,6 +66,7 @@
+ #include <string.h>
+ #include <ctype.h>
+ #include <stddef.h>
++#include <stdint.h>
+ #include "ptools.h"
+ #include "papi.h"
+ 
+@@ -2867,7 +2868,8 @@ char* get_pc_name() {
+ }
+ /***********************************************************************************************************************************************/
+ void psync_async_delete_sync(void* ptr) {
+-  psync_syncid_t syncId = (psync_syncid_t*)ptr;
++  psync_syncid_t syncId = *((psync_syncid_t*)ptr);
++  psync_free(ptr);
+   int res;
+ 
+   res = psync_delete_sync(syncId);
+@@ -2880,7 +2882,7 @@ void psync_async_delete_sync(void* ptr) {
+ }
+ /***********************************************************************************************************************************************/
+ void psync_async_ui_callback(void* ptr) {
+-  int eventId = (int*)ptr;
++  int eventId = (int)(intptr_t)ptr;
+   time_t currTime = psync_time();
+ 
+   if (((currTime - lastBupDelEventTime) > bupNotifDelay) || (lastBupDelEventTime == 0)) {
+@@ -2896,7 +2898,7 @@ int psync_delete_sync_by_folderid(psync_folderid_t fId) {
+   psync_sql_res* sqlRes;
+   psync_uint_row row;
+ 
+-  psync_syncid_t* syncId;
++  psync_syncid_t syncId;
+   psync_syncid_t* syncIdT;
+ 
+   sqlRes = psync_sql_query_nolock("SELECT id FROM syncfolder WHERE folderid = ?");
+@@ -2915,7 +2917,7 @@ int psync_delete_sync_by_folderid(psync_folderid_t fId) {
+   psync_sql_free_result(sqlRes);
+ 
+   syncIdT = psync_new(psync_syncid_t);
+-  syncIdT = syncId;
++  *syncIdT = syncId;
+ 
+   psync_run_thread1("psync_async_sync_delete", psync_async_delete_sync, syncIdT);
+ 
+diff --git a/pCloudCC/lib/pclsync/ptools.c b/pCloudCC/lib/pclsync/ptools.c
+index e727e29..66604ea 100644
+--- a/pCloudCC/lib/pclsync/ptools.c
++++ b/pCloudCC/lib/pclsync/ptools.c
+@@ -398,7 +398,7 @@ char* get_machine_name() {
+   return psync_strdup(pcName);
+ }
+ /*************************************************************/
+-void parse_os_path(char* path, folderPath* folders, char* delim, int mode) {
++void parse_os_path(char* path, folderPath* folders, char delim, int mode) {
+   char fName[255];
+   char* buff;
+   int i = 0, j = 0, k = 0;
+diff --git a/pCloudCC/lib/pclsync/ptools.h b/pCloudCC/lib/pclsync/ptools.h
+index c4b0edd..29ac651 100644
+--- a/pCloudCC/lib/pclsync/ptools.h
++++ b/pCloudCC/lib/pclsync/ptools.h
+@@ -86,7 +86,7 @@ char* getMACaddr();
+ /**********************************************************************************************************/
+ char* get_machine_name();
+ /**********************************************************************************************************/
+-void parse_os_path(char* path, folderPath* folders, char* delim, int mode);
++void parse_os_path(char* path, folderPath* folders, char delim, int mode);
+ /**********************************************************************************************************/
+ void send_psyncs_event(const char* binapi,
+                        const char* auth);
+diff --git a/pCloudCC/lib/poverlay_linux/Makefile b/pCloudCC/lib/poverlay_linux/Makefile
+index bd70588..b247eee 100644
+--- a/pCloudCC/lib/poverlay_linux/Makefile
++++ b/pCloudCC/lib/poverlay_linux/Makefile
+@@ -2,8 +2,8 @@ CC=cc
+ #USESSL=openssl
+ USESSL=mbed
+ 
+-#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
+-CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -DPCLOUD_TESTING
++#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
++CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -DPCLOUD_TESTING -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration
+ 
+ ifeq ($(OS),Windows_NT)
+     CFLAGS += -DP_OS_WINDOWS

@@ -1,0 +1,67 @@
+---
+- name: Check existing pcloudcc binary
+  ansible.builtin.command: /usr/bin/which pcloudcc
+  register: pcloudcc_binary_check
+  changed_when: false
+  failed_when: false
+
+- name: Build and install pcloudcc
+  when: >-
+    pcloudcc_force_rebuild
+    or pcloudcc_git_checkout.changed
+    or pcloudcc_patch_apply.changed
+    or pcloudcc_binary_check.rc != 0
+  block:
+    - name: Clean pcloudcc sync library build
+      ansible.builtin.command: make clean
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC/lib/pclsync"
+      changed_when: true
+
+    - name: Build pcloudcc sync library with FUSE support
+      ansible.builtin.command: make fs
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC/lib/pclsync"
+      changed_when: true
+
+    - name: Configure bundled mbedtls
+      ansible.builtin.command: cmake .
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC/lib/mbedtls"
+      changed_when: true
+
+    - name: Clean bundled mbedtls build
+      ansible.builtin.command: make clean
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC/lib/mbedtls"
+      changed_when: true
+
+    - name: Build bundled mbedtls
+      ansible.builtin.command: "make -j{{ pcloudcc_build_jobs }}"
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC/lib/mbedtls"
+      changed_when: true
+
+    - name: Configure pcloudcc
+      ansible.builtin.command: cmake .
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC"
+      changed_when: true
+
+    - name: Build pcloudcc binary
+      ansible.builtin.command: "make -j{{ pcloudcc_build_jobs }}"
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC"
+      changed_when: true
+
+    - name: Install pcloudcc binary and shared library
+      ansible.builtin.command: make install
+      args:
+        chdir: "{{ pcloudcc_source_dir }}/pCloudCC"
+      become: true
+      changed_when: true
+
+    - name: Refresh dynamic linker cache
+      ansible.builtin.command: ldconfig
+      become: true
+      changed_when: true

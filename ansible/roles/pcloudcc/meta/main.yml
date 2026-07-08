@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: pcloudcc
+  author: pcloudcc role maintainers
+  description: Build and install the official pCloud console client on Raspberry Pi OS or Debian.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - raspberrypi
+    - pcloud
+    - pcloudcc
+    - fuse
+    - storage
+    - debian
+    - trixie
+    - arm64
+dependencies: []

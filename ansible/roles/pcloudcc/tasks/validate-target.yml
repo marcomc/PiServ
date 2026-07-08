@@ -1,0 +1,10 @@
+---
+- name: Assert supported pcloudcc target platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["os_family"] == "Debian"
+      - ansible_facts["architecture"] in ["aarch64", "arm64"]
+    fail_msg: >-
+      This role is validated only on Raspberry Pi OS / Debian arm64 targets.
+      Observed os_family={{ ansible_facts["os_family"] }},
+      architecture={{ ansible_facts["architecture"] }}.

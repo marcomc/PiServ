@@ -32,6 +32,13 @@ All notable project changes are documented here.
   validation without embedding the account email.
 - Added a pCloud `pcloudcc` implementation track for live build, validation,
   systemd, and automation work.
+- Built and installed source-built `pcloudcc` on PiServ.
+- Added a Galaxy-ready `pcloudcc` Ansible role with metadata, argument specs,
+  role docs, release runbook, tests, and role license file.
+- Added a Debian 13 `arm64` source patch for building the official pCloud
+  console client on PiServ.
+- Added the `pcloudcc-install.yml` playbook and validated idempotent client
+  installation on PiServ.
 - Added Ansible-managed Freenove background service and runtime configuration
   for LED, fan, and OLED control.
 - Added a Freenove expansion-controller preflight to avoid enabling a failing

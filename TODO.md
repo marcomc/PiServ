@@ -6,11 +6,11 @@
 - Document Wi-Fi configuration and current network path.
 - Inventory enabled services and open listening sockets.
 - Decide base security posture for SSH, firewall, updates, and user access.
-- Build and test the official `pcloudcc` console client on PiServ.
 - Validate EU-region pCloud login with source-built `pcloudcc` on PiServ.
 - Validate `pcloudcc` systemd startup and mount health on PiServ.
 - Validate `pcloudcc -s` saved credential location and permissions on PiServ.
-- Automate the validated `pcloudcc` setup.
+- Automate credential-free `pcloudcc` systemd mount management after live login
+  validation.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
 - Verify physical LED, fan, and OLED behavior under the managed Freenove service.
@@ -37,6 +37,8 @@
 - Selected Ansible-managed Freenove background service and runtime config.
 - Isolated Freenove controller detection failure to the small OLED module/cable
   path; the FNK0100 controller is detected when that cable is disconnected.
+- Built and installed source-built `pcloudcc` on PiServ.
+- Added a Galaxy-ready `pcloudcc` Ansible role and install playbook.
 
 ## Later
 

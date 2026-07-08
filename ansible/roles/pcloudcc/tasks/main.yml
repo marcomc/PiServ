@@ -1,0 +1,15 @@
+---
+- name: Validate pcloudcc target
+  ansible.builtin.import_tasks: validate-target.yml
+
+- name: Install pcloudcc build packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Prepare pcloudcc source
+  ansible.builtin.import_tasks: source.yml
+
+- name: Build pcloudcc
+  ansible.builtin.import_tasks: build.yml
+
+- name: Validate pcloudcc install
+  ansible.builtin.import_tasks: validate-install.yml

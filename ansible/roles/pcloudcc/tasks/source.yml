@@ -1,0 +1,68 @@
+---
+- name: Ensure pcloudcc install root exists
+  ansible.builtin.file:
+    path: "{{ pcloudcc_install_root }}"
+    state: directory
+    owner: "{{ pcloudcc_runtime_user }}"
+    group: "{{ pcloudcc_runtime_user }}"
+    mode: "0755"
+  become: true
+
+- name: Check pcloudcc source checkout
+  ansible.builtin.stat:
+    path: "{{ pcloudcc_source_dir }}/.git"
+  register: pcloudcc_source_checkout
+
+- name: Check out official pcloudcc source
+  ansible.builtin.git:
+    repo: "{{ pcloudcc_repo_url }}"
+    dest: "{{ pcloudcc_source_dir }}"
+    version: "{{ pcloudcc_repo_version }}"
+    update: "{{ pcloudcc_repo_update }}"
+    force: "{{ pcloudcc_repo_force }}"
+  register: pcloudcc_git_checkout
+  when: pcloudcc_repo_update or not pcloudcc_source_checkout.stat.isdir
+
+- name: Copy Debian arm64 pcloudcc source patch
+  ansible.builtin.copy:
+    src: "{{ pcloudcc_patch_file }}"
+    dest: "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file }}"
+    owner: "{{ pcloudcc_runtime_user }}"
+    group: "{{ pcloudcc_runtime_user }}"
+    mode: "0644"
+  register: pcloudcc_patch_copy
+
+- name: Apply Debian arm64 pcloudcc source patch
+  ansible.builtin.shell: |
+    set -eu
+    cd "{{ pcloudcc_source_dir }}"
+    patch_path="{{ pcloudcc_install_root }}/{{ pcloudcc_patch_file }}"
+    if git apply --reverse --check "${patch_path}" >/dev/null 2>&1; then
+      echo "already-applied"
+    elif git apply --check "${patch_path}" >/dev/null 2>&1; then
+      git apply "${patch_path}"
+      echo "applied"
+    else
+      echo "pcloudcc patch does not apply cleanly" >&2
+      git diff -- pCloudCC/lib/pclsync/Makefile \
+        pCloudCC/lib/pclsync/ptools.h \
+        pCloudCC/lib/pclsync/ptools.c \
+        pCloudCC/lib/pclsync/psynclib.c \
+        pCloudCC/lib/pclsync/pfs.c \
+        pCloudCC/lib/pclsync/pcallbacks.c \
+        pCloudCC/lib/pclsync/pdiff.c >&2
+      exit 1
+    fi
+  args:
+    executable: /bin/bash
+  register: pcloudcc_patch_apply
+  changed_when: pcloudcc_patch_apply.stdout | trim == "applied"
+
+- name: Ensure pCloud mount root exists
+  ansible.builtin.file:
+    path: "{{ pcloudcc_mount_root }}"
+    state: directory
+    owner: "{{ pcloudcc_runtime_user }}"
+    group: "{{ pcloudcc_runtime_user }}"
+    mode: "0755"
+  become: true

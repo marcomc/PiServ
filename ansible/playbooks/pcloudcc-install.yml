@@ -1,0 +1,9 @@
+---
+- name: Install pCloud console client
+  hosts: piserv
+  gather_facts: true
+  roles:
+    - role: pcloudcc
+      vars:
+        pcloudcc_runtime_user: operator
+        pcloudcc_mount_root: /mnt/pcloud
