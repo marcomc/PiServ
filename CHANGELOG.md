@@ -62,6 +62,8 @@ All notable project changes are documented here.
 - Added `raiplaysound-cli-daily-sync.yml` for PiServ scheduled podcast sync.
 - Added the RaiPlaySound direct-write scheduling decision record.
 - Added the RaiPlaySound CLI daily sync runbook.
+- Added the system baseline and inventory runbook covering OS, firmware,
+  storage, network, packages, services, sockets, and security inputs.
 - Installed and validated `raiplaysound-cli-daily-sync` on PiServ with direct
   writes to the pCloud-backed podcast target.
 - Added managed, create-only, and unmanaged config modes to the

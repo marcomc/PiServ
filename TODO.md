@@ -2,9 +2,6 @@
 
 ## Current
 
-- Capture OS, kernel, firmware, package, storage, and network baseline.
-- Document Wi-Fi configuration and current network path.
-- Inventory enabled services and open listening sockets.
 - Decide base security posture for SSH, firewall, updates, and user access.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
@@ -51,6 +48,10 @@
   systemd timer on PiServ.
 - Accepted direct writes to the pCloud-backed podcast target for the scheduled
   RaiPlaySound workload.
+- Captured OS, kernel, firmware, package, storage, and network baseline.
+- Documented Wi-Fi configuration and current network path without storing the
+  Wi-Fi PSK.
+- Inventoried enabled services and open listening sockets.
 
 ## Later
 
@@ -59,5 +60,3 @@
 - Add disaster recovery playbook.
 - Add monitoring and alerting decisions.
 - Add service-specific runbooks as workloads are deployed.
-- Before publishing `raiplaysound_cli`, move private bootstrap config defaults
-  into inventory, group vars, or role examples.
