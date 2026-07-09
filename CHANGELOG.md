@@ -7,13 +7,13 @@ All notable project changes are documented here.
 Initial PiServ release for reproducing and operating the Raspberry Pi 5 server
 at `piserv.example.com`.
 
-### Documentation And Operating Model
+### Documentation and Operating Model
 
 - Established the project documentation set: `README.md`, `AGENTS.md`,
   `TODO.md`, `CHANGELOG.md`, private license notice, runbooks, decisions, and
   implementation tracks.
-- Documented the canonical local repository path, stale renamed path, target
-  host facts, SSH access model, and production-first operating workflow.
+- Documented the canonical local repository path, target host facts, SSH access
+  model, and production-first operating workflow.
 - Added operator runbooks for server access, NVMe migration, Freenove FNK0100K
   setup, pCloud storage, RaiPlaySound scheduling, system baseline inventory,
   base security hardening, and system mail notifications.
@@ -34,7 +34,7 @@ at `piserv.example.com`.
 - Added a system baseline inventory covering OS, kernel, firmware, storage,
   network, packages, enabled services, listening sockets, and security inputs.
 
-### Boot And Storage
+### Boot and Storage
 
 - Added guarded shell and Ansible automation to migrate PiServ from microSD to
   NVMe.
