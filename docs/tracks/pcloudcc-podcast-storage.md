@@ -159,7 +159,8 @@ findmnt --mountpoint /mnt/pcloud || true
 ```
 
 Do not delete saved `pcloudcc` credentials during ordinary rollback. Remove
-them only when deliberately deauthorizing PiServ from pCloud.
+them only when deliberately deauthorizing PiServ from pCloud; see the
+[deauthorization runbook](../runbooks/pcloudcc-storage.md#deauthorization).
 
 ## Open Items
 

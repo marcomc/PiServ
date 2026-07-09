@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted on 2026-07-07.
+Accepted on 2026-07-07. Implemented on 2026-07-08.
 
 ## Context
 
@@ -94,11 +94,11 @@ staging area and sync completed outputs to pCloud after a successful run.
   writeability, and sync/mount health.
 - The fallback path preserves job reliability even if pCloud is temporarily
   unavailable.
-- Bootstrap pCloud authentication manually with `pcloudcc -p -s` as `operator`.
-  Automate only non-secret service settings such as account email and mount
-  path until live validation proves a safer secret-handling requirement.
-- Because the account data region is European Union, validate source-built
-  `pcloudcc` EU-region login before automating systemd startup.
+- Bootstrap pCloud authentication manually with `pcloudcc -p -s -t` as `operator`
+  for the current TOTP-enabled account. Automate only non-secret service
+  settings.
+- The European Union account-region login path has been validated with the
+  source-built `pcloudcc` client.
 - Do not store the pCloud password in Ansible variables, environment files,
   systemd units, command lines, or this repository.
 - Because the selected account can access the full pCloud tree, PiServ
@@ -107,12 +107,13 @@ staging area and sync completed outputs to pCloud after a successful run.
 
 ## Follow-Up
 
-- Build and test `pcloudcc` on PiServ.
-- Validate EU-region login with the source-built `pcloudcc` client.
-- Validate first-login saved credential file locations and permissions.
-- Validate `pcloudcc` startup through systemd.
-- Validate a write/read/delete test in the mounted target path.
-- Decide whether completed media should be written directly to the pCloud mount
-  or staged locally and copied after successful downloads. Resolved by
+Resolved:
+
+- Built and tested `pcloudcc` on PiServ.
+- Validated EU-region login with the source-built `pcloudcc` client.
+- Validated first-login saved credential file locations and permissions.
+- Validated `pcloudcc` startup through systemd.
+- Validated a write/read/delete test in the mounted target path.
+- Chose direct pCloud writes for the scheduled workload in
   [Decision 0006](0006-raiplaysound-direct-write-scheduling.md).
-- Automate the selected `pcloudcc` setup after live validation.
+- Automated the selected `pcloudcc` setup after live validation.

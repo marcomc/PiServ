@@ -33,17 +33,17 @@ helper is unnecessary while Gmail app passwords are available for the account.
 Use a dedicated project-local `msmtp` role, inspired by
 `fauch922.ansible_msmtp_setup`, for mail transport setup. The role supports
 `managed`, `create`, and `unmanaged` modes for `/etc/msmtprc` and aliases.
-PiServ uses `create` mode with empty bootstrap files allowed. The role creates
-`/etc/msmtprc` and `/etc/aliases` only when missing, then preserves operator
-edits on later runs.
+PiServ uses `unmanaged` mode for those files because they contain credentials
+and local delivery policy. The role installs packages, persists binary metadata,
+and hardens operator-created files when present.
 
 | Area | Decision |
 | --- | --- |
 | Role | Dedicated local `msmtp` role |
 | Upstream source | Inspired by `Fauch922/ansible-msmtp-setup` commit `ad915e0a2162bf1fa7b77211f1392a8bc879c94b` |
-| Config mode | `msmtp_config_management: create` |
-| Aliases mode | `msmtp_aliases_management: create` |
-| Empty bootstrap | `msmtp_allow_empty_config: true`, `msmtp_allow_empty_aliases: true` |
+| Config mode | `msmtp_config_management: unmanaged` |
+| Aliases mode | `msmtp_aliases_management: unmanaged` |
+| Empty bootstrap | Do not create empty mail config files |
 | Packages | Install `msmtp`, `msmtp-mta`, and `bsd-mailx` |
 | SMTP config | Operator-managed `/etc/msmtprc` |
 | SMTP config metadata | Harden existing config to `0640 root:msmtp` |
@@ -53,7 +53,7 @@ edits on later runs.
 | Local recipient | Send to `root` |
 | External recipient | Operator-managed aliases in `/etc/aliases` |
 | unattended-upgrades | Mail `root`, report `on-change` |
-| Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists |
+| Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists and is non-empty |
 | RaiPlaySound | Uses `/usr/local/bin/msmtp-system` for system-config compatibility |
 
 Do not add an external Galaxy `msmtp` dependency unless PiServ later switches
@@ -66,8 +66,8 @@ standalone role.
 - System services can use `/usr/sbin/sendmail` through `msmtp-mta`.
 - Local users can send through the configured system mail path without reading
   `/etc/msmtprc`.
-- Re-running Ansible will not overwrite `/etc/msmtprc` or `/etc/aliases` after
-  the files exist while PiServ uses `create` mode.
+- Re-running Ansible will not create or overwrite `/etc/msmtprc` or
+  `/etc/aliases`; it only hardens existing files.
 - Commands run as `operator` should not pass `--file /etc/msmtprc` directly; use
   the default system config path or `/usr/local/bin/msmtp-system`.
 - If the Google account password changes, the Gmail app password must be
@@ -85,7 +85,7 @@ Current validation:
 | `/usr/local/bin/msmtp-system --file /etc/msmtprc --serverinfo` | Wrapper strips the explicit system-config file |
 | `stat -c ... /etc/msmtprc /usr/bin/msmtp` | `0640 root:msmtp` config and `2755 root:msmtp` binary |
 | `mail -s ... root` | External notification received through alias |
-| PiServ base playbook | Create-only empty bootstrap mode validates and remains idempotent |
-| `piserv-reboot-notify.service` | Sends a boot email after reboot |
+| PiServ base playbook | Unmanaged mail config mode validates and remains idempotent |
+| `piserv-reboot-notify.service` | Sends a boot email after reboot when `/etc/msmtprc` is non-empty |
 | unattended-upgrades | Sends reports when upgrades or errors occur |
 | RaiPlaySound | Email configuration present; dry-run summary validation passed |

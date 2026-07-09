@@ -111,6 +111,7 @@ ansible-playbook --syntax-check tests/test.yml
 | `freenove_case_touchscreen_active_brightness` | `255` | Brightness restored on input |
 | `freenove_case_touchscreen_idle_brightness` | `0` | Brightness applied while idle |
 | `freenove_case_touchscreen_backlight_device` | `""` | Touchscreen backlight device; required when touchscreen idle is enabled |
+| `freenove_case_touchscreen_idle_enable_linger` | `true` | Enable linger for the touchscreen idle user service |
 | `freenove_case_manage_pcie_gen3` | `false` | Manage PCIe Gen3 config |
 | `freenove_case_enable_pcie_gen3` | `false` | Enable PCIe Gen3 when managed |
 | `freenove_case_install_pibenchmarks` | `false` | Clone PiBenchmarks |

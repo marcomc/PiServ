@@ -9,8 +9,8 @@ ConditionPathIsDirectory={{ pcloudcc_mount_root }}
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=/usr/local/bin/pcloudcc -m {{ pcloudcc_mount_root }}
-ExecStop=/usr/bin/fusermount -u {{ pcloudcc_mount_root }}
+ExecStart=/usr/local/bin/pcloudcc -m {{ pcloudcc_mount_root | quote }}
+ExecStop=/usr/bin/fusermount -u {{ pcloudcc_mount_root | quote }}
 Restart=on-failure
 RestartSec={{ pcloudcc_user_service_restart_sec | int }}
 StandardInput=null

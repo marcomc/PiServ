@@ -16,8 +16,9 @@
 
 ## Purpose
 
-Capture PiServ's current live operating baseline before the remaining bootstrap
-and security posture work.
+Capture the 2026-07-08 live operating baseline taken before the base hardening
+pass. For the current hardened SSH, service, cloud-init, and unattended-upgrades
+state, see [Base security hardening](base-security-hardening.md).
 
 ## Snapshot
 
@@ -110,7 +111,7 @@ Key package and command versions:
 
 ## Service Inventory
 
-Enabled system services:
+Enabled system services at the pre-hardening capture:
 
 | Service | Notes |
 | --- | --- |
@@ -151,7 +152,7 @@ Enabled user timer:
 
 ## Socket Inventory
 
-Open listening sockets at capture:
+Open listening sockets at the pre-hardening capture:
 
 | Protocol | Bind | Process | Notes |
 | --- | --- | --- | --- |
@@ -168,7 +169,8 @@ cloud-init hotplug, and hostnamed.
 
 ## Security Inputs
 
-These are inputs for the next security-posture decision, not final policy.
+These were inputs for the base security-posture decision, not the current final
+policy.
 
 | Area | Current state |
 | --- | --- |
@@ -211,8 +213,8 @@ ssh operator@piserv.example.com 'sudo awk "{ if (\$1 == \"password:\") print \" 
 
 ## Follow-Up
 
-- Decide the base security posture for SSH, firewall, updates, and user access.
-- Review whether VNC and Bluetooth should remain enabled in the production
-  profile. `rpcbind`, CUPS, and cloud-init were later disabled in the base
-  hardening pass.
-- Fold accepted service and firewall policy into the future bootstrap playbook.
+- Refresh the inventory after major baseline changes or before enabling a
+  firewall.
+- Install Tailscale before designing restrictive firewall rules for LAN and
+  Tailscale clients.
+- Validate whether VNC mirrors the physical touchscreen session.

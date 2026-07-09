@@ -11,7 +11,8 @@
 - Verify physical LED, fan, and OLED behavior under the managed Freenove service.
 - Decide whether to accept, physically disconnect, or replace the always-on
   blue fan LEDs.
-- Create initial bootstrap playbook after live commands are validated.
+- Create an umbrella bootstrap playbook that orchestrates the existing base,
+  Freenove, pCloud, mail, and workload playbooks after their ordering is final.
 
 ## Propositions
 

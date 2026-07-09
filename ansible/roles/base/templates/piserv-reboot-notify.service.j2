@@ -6,6 +6,7 @@ ConditionPathExists={{ base_reboot_notification_condition_path }}
 
 [Service]
 Type=oneshot
+ExecCondition=/usr/bin/test -s {{ base_reboot_notification_condition_path | quote }}
 ExecStart={{ base_reboot_notification_script_path }}
 
 [Install]

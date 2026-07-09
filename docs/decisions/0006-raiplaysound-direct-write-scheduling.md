@@ -49,8 +49,9 @@ The timer runs at 08:00 local time with a short randomized delay.
 - NVMe staging remains the fallback if direct-write reliability degrades.
 - Direct edits to the PiServ config are preserved by later playbook runs because
   the playbook uses create-only config mode.
-- Email summary settings are intentionally not configured on PiServ yet; the
-  daily sync logs that email is skipped.
+- The PiServ playbook supplies non-secret create-only defaults for the podcast
+  target, RSS base URL, and local email summary wiring. Existing live config
+  edits are preserved by later playbook runs.
 
 ## Validation
 

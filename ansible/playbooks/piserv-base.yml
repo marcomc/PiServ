@@ -5,10 +5,8 @@
   roles:
     - role: msmtp
       vars:
-        msmtp_config_management: create
-        msmtp_aliases_management: create
-        msmtp_allow_empty_config: true
-        msmtp_allow_empty_aliases: true
+        msmtp_config_management: unmanaged
+        msmtp_aliases_management: unmanaged
         msmtp_harden_existing_config: true
         msmtp_harden_existing_aliases: true
         msmtp_manage_compat_wrapper: true

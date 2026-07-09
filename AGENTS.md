@@ -33,16 +33,24 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 
 - Ansible should become the authoritative reproduction path once the live setup
   is understood.
-- Keep Ansible roles under `ansible/roles/` suitable for possible Ansible
-  Galaxy publication.
-- Roles must stay agnostic of the PiServ project: no PiServ hostnames, IPs,
-  local repository paths, private assumptions, or project-only defaults in role
-  tasks, defaults, templates, metadata, tests, or role documentation.
-- Put PiServ-specific values in project playbooks, inventory, group variables,
-  runbooks, or decision records instead of embedding them in reusable roles.
+- Keep reusable Ansible roles under `ansible/roles/` suitable for possible
+  Ansible Galaxy publication.
+- Exception: `ansible/roles/base` is the project-local PiServ host baseline role.
+  It may carry PiServ-specific policy, service names, defaults, and documentation,
+  and is not intended for standalone Galaxy publication.
+- Reusable roles must stay agnostic of the PiServ project: no PiServ hostnames,
+  IPs, local repository paths, private assumptions, or project-only defaults in
+  role tasks, defaults, templates, metadata, tests, or role documentation.
+- Put PiServ-specific values for reusable roles in project playbooks, inventory,
+  group variables, runbooks, or decision records instead of embedding them in
+  those roles.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Do not stage executable helpers at predictable fixed paths under `/tmp`. Stream
+  short remote helpers over SSH stdin, use `mktemp -d` with restrictive
+  ownership, or install privileged helpers under a root-owned project libexec
+  path.
 - When role variables accept arbitrary config file paths, stat the parent
   directory before creating it. Create missing private parents, but do not
   change ownership or mode of an existing system directory such as `/tmp` or

@@ -1,5 +1,11 @@
 ---
+- name: Check Freenove install parent
+  ansible.builtin.stat:
+    path: "{{ freenove_case_install_dir | dirname }}"
+  register: freenove_case_install_parent_stat
+
 - name: Ensure Freenove install parent exists
+  when: not freenove_case_install_parent_stat.stat.exists
   ansible.builtin.file:
     path: "{{ freenove_case_install_dir | dirname }}"
     state: directory
@@ -8,8 +14,16 @@
     mode: "0755"
   become: true
 
-- name: Ensure Freenove install directory exists for non-git sources
-  when: freenove_case_source_mode != "git"
+- name: Assert Freenove install parent is a directory
+  when: freenove_case_install_parent_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - freenove_case_install_parent_stat.stat.isdir
+    fail_msg: >-
+      Freenove install parent exists but is not a directory:
+      {{ freenove_case_install_dir | dirname }}.
+
+- name: Ensure Freenove install directory exists
   ansible.builtin.file:
     path: "{{ freenove_case_install_dir }}"
     state: directory

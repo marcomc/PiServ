@@ -9,6 +9,7 @@
 - [Client Installation](#client-installation)
 - [Credential Bootstrap](#credential-bootstrap)
 - [Credential Storage and Session Behavior](#credential-storage-and-session-behavior)
+- [Deauthorization](#deauthorization)
 - [Validation Plan](#validation-plan)
 - [Health Checks](#health-checks)
 - [Automation Follow-Up](#automation-follow-up)
@@ -108,7 +109,7 @@ Run first login manually on PiServ as `operator`:
 
 ```sh
 sudo install -d -o operator -g operator -m 0755 /mnt/pcloud
-pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -m /mnt/pcloud
+pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud
 ```
 
 `pcloudcc` prompts for the pCloud password and writes saved session state to
@@ -116,10 +117,10 @@ the local pCloud client database for the Unix user running the command. Do not
 put the password in the command line, a systemd unit, an environment file,
 Ansible variables, or this repository.
 
-For a TOTP-enabled account, prefer marking PiServ trusted during first login:
+If TOTP is not enabled on the account, the non-TOTP form is:
 
 ```sh
-pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud
+pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -m /mnt/pcloud
 ```
 
 Use `-r` / `--recoverycode` only when entering a pCloud recovery code instead
@@ -213,12 +214,28 @@ pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud
 systemctl --user start pcloudcc.service
 ```
 
+## Deauthorization
+
+Use this when deliberately removing PiServ's trusted pCloud session:
+
+```sh
+systemctl --user stop pcloudcc.service
+fusermount -u /mnt/pcloud || true
+rm -f ~/.pcloud/data.db ~/.pcloud/data.db-shm ~/.pcloud/data.db-wal
+systemctl --user start pcloudcc.service
+systemctl --user is-active pcloudcc.service && exit 1 || true
+```
+
+Then revoke PiServ from the pCloud account's trusted devices or active sessions
+through the pCloud account-security UI. After local cleanup and remote
+revocation, the service must not remount until a fresh manual login is completed.
+
 ## Validation Plan
 
 1. Install build prerequisites on PiServ.
 2. Build `pcloudcc` from the official pCloud console-client source.
 3. Run the patched TOTP bootstrap path for the current account. Done.
-4. Run the manual first login with `-p -s` as `operator`. Done.
+4. Run the manual first login with `-p -s -t` as `operator`. Done.
 5. Start `pcloudcc` manually with `/mnt/pcloud` as the mount point. Done.
 6. Confirm the mount appears in `findmnt`. Done.
 7. Confirm `My Music/Podcasts/raiplaypodcast` exists under the mount. Done.

@@ -21,6 +21,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |
 | [RaiPlaySound CLI daily sync](raiplaysound-cli-daily-sync.md) | Operate the scheduled podcast sync |
 | [System baseline and inventory](system-baseline-inventory.md) | Capture live OS, storage, network, service, and socket state |
+| [System mail notifications](system-mail-notifications.md) | Configure host mail delivery and notification checks |
 
 ## Template
 

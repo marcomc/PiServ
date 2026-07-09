@@ -129,7 +129,8 @@ Override the source checkout path:
 
 The role pins the pCloud source revision validated for Debian 13 `arm64`.
 Upstream Git updates are disabled by default after the initial clone so repeat
-runs do not depend on GitHub availability.
+runs do not depend on GitHub availability. Existing checkouts at a different
+pinned commit fail closed instead of silently building stale source.
 
 `pcloudcc_version` is the expected installed client version. `pcloudcc_repo_version`
 is the exact upstream Git ref used to build that client. When changing the

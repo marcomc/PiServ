@@ -98,7 +98,7 @@ Recreate the Freenove content with:
 ```sh
 mkdir -p vendor/freenove
 git clone https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi.git \
-  vendor/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
+  vendor/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi-main
 ```
 
 The local copy currently includes `Tutorial.pdf`, `Installing Raspberry Pi
@@ -159,7 +159,8 @@ The base playbook applies the dedicated `msmtp` role first, then manages SSH
 root-login and password-auth policy, disables unneeded CUPS, `rpcbind`, and NFS
 helper units, enables unattended upgrades, and disables cloud-init. PiServ uses
 `msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
-they contain SMTP credentials and local delivery policy.
+they contain SMTP credentials and local delivery policy. Boot notifications are
+skipped until `/etc/msmtprc` exists and is non-empty.
 
 Configure the Freenove FNK0100K post-OS setup:
 
@@ -201,10 +202,10 @@ ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
 The RaiPlaySound playbook installs the pinned CLI source revision for `operator`,
-writes the PiServ config, installs a user-scoped daily systemd timer, and gates
-the direct-write sync on the pCloud health check. New configs send summary mail
-to local recipient `root` through the system `msmtp` config wrapper; existing
-create-only configs must be edited manually.
+creates the PiServ config when missing, installs a user-scoped daily systemd
+timer, and gates the direct-write sync on the pCloud health check. New configs
+send summary mail to local recipient `root` through the system `msmtp` config
+wrapper; existing create-only configs must be edited manually.
 
 Migrate a microSD-booted PiServ system to NVMe:
 
@@ -237,11 +238,25 @@ booted from microSD and the NVMe drive is the intended destructive target.
 Run Markdown validation after documentation changes:
 
 ```sh
-markdownlint --config "$HOME/.markdownlint.json" AGENTS.md README.md TODO.md CHANGELOG.md docs/**/*.md
+markdownlint --config "$HOME/.markdownlint.json" $(rg --files -g '*.md' -g '!vendor/**')
 ```
 
-Run ShellCheck on shell scripts when any are added or changed:
+Run ShellCheck on tracked shell scripts, extensionless shebang helpers, and
+rendered shell templates:
 
 ```sh
-shellcheck --enable=all scripts/*.sh
+scripts/validate-shell.sh
+```
+
+Run the full static Ansible gate before release:
+
+```sh
+ansible-lint ansible/playbooks ansible/roles
+for playbook in $(rg --files ansible/playbooks -g '*.yml' | sort); do
+  ansible-playbook --syntax-check "$playbook"
+done
+for test_playbook in $(find ansible/roles -path '*/tests/test.yml' -print | sort); do
+  role_dir=${test_playbook%/tests/test.yml}
+  (cd "$role_dir" && ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check tests/test.yml)
+done
 ```

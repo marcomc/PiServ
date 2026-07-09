@@ -85,8 +85,8 @@ ssh operator@piserv.example.com \
 ```
 
 If the config file is deliberately deleted, the next playbook run recreates it
-from the `raiplaysound_cli` role defaults. The PiServ playbook intentionally
-does not carry the podcast sync config values.
+from the `raiplaysound_cli` role defaults plus PiServ's non-secret partial
+overrides for the podcast target, RSS base URL, and local mail summary wiring.
 
 When overrides are needed, define only changed keys in `raiplaysound_cli_config`.
 The role merges those partial values with `raiplaysound_cli_config_defaults`.

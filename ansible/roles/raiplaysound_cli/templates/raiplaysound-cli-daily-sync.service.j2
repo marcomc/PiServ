@@ -18,7 +18,7 @@ Environment=PATH={{ raiplaysound_cli_service_environment_path }}
 {% for command in raiplaysound_cli_service_exec_start_pre %}
 ExecStartPre={{ command }}
 {% endfor %}
-ExecStart={{ raiplaysound_cli_daily_sync_command }} --config {{ raiplaysound_cli_effective_config_path }}
+ExecStart={{ raiplaysound_cli_daily_sync_command | quote }} --config {{ raiplaysound_cli_effective_config_path | quote }}
 TimeoutStartSec={{ raiplaysound_cli_service_timeout_start_sec }}
 
 [Install]

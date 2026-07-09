@@ -67,24 +67,29 @@ done
 
 [[ "${CONFIRM}" -eq 1 ]] || fail "refusing to repartition ${TARGET_DISK} without --yes"
 
+case "${TARGET_DISK}" in
+  *[0-9])
+    TARGET_BOOT="${TARGET_DISK}p1"
+    TARGET_ROOT="${TARGET_DISK}p2"
+    ;;
+  *)
+    TARGET_BOOT="${TARGET_DISK}1"
+    TARGET_ROOT="${TARGET_DISK}2"
+    ;;
+esac
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REMOTE_SCRIPT="${SCRIPT_DIR}/remote/migrate-sd-to-nvme-remote.sh"
 [[ -r "${REMOTE_SCRIPT}" ]] || fail "missing remote script: ${REMOTE_SCRIPT}"
 
 printf 'Target host: %s\n' "${SSH_TARGET}"
 printf 'Target disk: %s\n' "${TARGET_DISK}"
+printf 'Target boot partition: %s\n' "${TARGET_BOOT}"
+printf 'Target root partition: %s\n' "${TARGET_ROOT}"
 printf 'Boot order: %s\n' "${BOOT_ORDER}"
 
-ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" \
-  sudo install -m 0755 /dev/stdin /tmp/piserv-migrate-sd-to-nvme-remote.sh \
+ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" sudo bash -s -- "${TARGET_DISK}" "${BOOT_ORDER}" \
   < "${REMOTE_SCRIPT}"
-
-ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" sudo bash -s -- "${TARGET_DISK}" "${BOOT_ORDER}" <<'REMOTE_RUN'
-set -euo pipefail
-target_disk=$1
-boot_order=$2
-/tmp/piserv-migrate-sd-to-nvme-remote.sh "${target_disk}" "${boot_order}"
-REMOTE_RUN
 
 if [[ "${REBOOT}" -ne 1 ]]; then
   printf 'Prepared. Reboot %s to apply EEPROM changes and boot from NVMe.\n' "${SSH_TARGET}"
@@ -95,11 +100,18 @@ ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" sudo reboot || true
 
 for attempt in $(seq 1 60); do
   sleep 5
-  if ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" sudo bash -s -- "${BOOT_ORDER}" <<'REMOTE_VERIFY'
+  if ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" sudo bash -s -- \
+    "${BOOT_ORDER}" "${TARGET_ROOT}" "${TARGET_BOOT}" <<'REMOTE_VERIFY'
 set -euo pipefail
 expected_boot_order=$1
-findmnt -n -o SOURCE /
-findmnt -n -o SOURCE /boot/firmware
+expected_root=$(readlink -f "$2")
+expected_boot=$(readlink -f "$3")
+actual_root=$(readlink -f "$(findmnt -n -o SOURCE /)")
+actual_boot=$(readlink -f "$(findmnt -n -o SOURCE /boot/firmware)")
+printf 'root source: %s\n' "${actual_root}"
+printf 'boot source: %s\n' "${actual_boot}"
+[[ "${actual_root}" = "${expected_root}" ]]
+[[ "${actual_boot}" = "${expected_boot}" ]]
 rpi-eeprom-config | grep "^BOOT_ORDER=${expected_boot_order}$"
 REMOTE_VERIFY
   then

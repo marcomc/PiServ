@@ -73,15 +73,9 @@ done
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REMOTE_SCRIPT="${SCRIPT_DIR}/remote/check-pcloudcc-health-remote.sh"
-REMOTE_PATH=/tmp/piserv-check-pcloudcc-health-remote.sh
 [[ -r "${REMOTE_SCRIPT}" ]] || fail "missing remote script: ${REMOTE_SCRIPT}"
 
-ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" \
-  install -m 0755 /dev/stdin "${REMOTE_PATH}" \
-  < "${REMOTE_SCRIPT}"
-
 remote_args=(
-  "${REMOTE_PATH}"
   --mount-root "${MOUNT_ROOT}"
   --target-subpath "${TARGET_SUBPATH}"
   --service-name "${SERVICE_NAME}"
@@ -95,9 +89,5 @@ if [[ "${KEEP_FILE}" -eq 1 ]]; then
   remote_args+=(--keep-file)
 fi
 
-{
-  printf 'set --'
-  printf ' %q' "${remote_args[@]}"
-  printf '\nexec "$@"\n'
-} | ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" bash -s
+ssh "${SSH_OPTIONS[@]}" "${SSH_TARGET}" bash -s -- "${remote_args[@]}" < "${REMOTE_SCRIPT}"
 exit 0

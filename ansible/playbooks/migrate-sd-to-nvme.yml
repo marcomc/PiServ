@@ -16,16 +16,26 @@
           Set allow_destructive_nvme_reimage=true to repartition and format the
           target NVMe disk.
 
+    - name: Ensure PiServ libexec directory exists
+      ansible.builtin.file:
+        path: /usr/local/libexec/piserv
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
     - name: Copy migration script
       ansible.builtin.copy:
         src: ../../scripts/remote/migrate-sd-to-nvme-remote.sh
-        dest: /tmp/piserv-migrate-sd-to-nvme-remote.sh
-        mode: "0755"
+        dest: /usr/local/libexec/piserv/migrate-sd-to-nvme-remote.sh
+        owner: root
+        group: root
+        mode: "0700"
 
     - name: Run migration script
       ansible.builtin.command:
         argv:
-          - /tmp/piserv-migrate-sd-to-nvme-remote.sh
+          - /usr/local/libexec/piserv/migrate-sd-to-nvme-remote.sh
           - "{{ target_disk }}"
           - "{{ boot_order }}"
       changed_when: true

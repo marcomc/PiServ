@@ -244,6 +244,10 @@ argument_specs:
           - stopped
           - restarted
         description: Desired touchscreen idle user service state.
+      freenove_case_touchscreen_idle_enable_linger:
+        type: bool
+        default: true
+        description: Whether to enable linger for the touchscreen idle user service.
       freenove_case_manage_pcie_gen3:
         type: bool
         default: false

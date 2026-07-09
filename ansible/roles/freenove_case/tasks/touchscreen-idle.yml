@@ -42,6 +42,29 @@
           - freenove_case_touchscreen_brightness_stat.stat.exists
         fail_msg: "{{ freenove_case_touchscreen_backlight_device }}/brightness is missing."
 
+    - name: Read Freenove touchscreen idle user linger state
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - show-user
+          - "{{ freenove_case_install_user }}"
+          - -p
+          - Linger
+      register: freenove_case_touchscreen_linger_state
+      changed_when: false
+
+    - name: Enable Freenove touchscreen idle user linger
+      when:
+        - freenove_case_touchscreen_idle_enable_linger | bool
+        - "'Linger=yes' not in freenove_case_touchscreen_linger_state.stdout"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - enable-linger
+          - "{{ freenove_case_install_user }}"
+      become: true
+      changed_when: true
+
     - name: Ensure touchscreen idle user systemd directory exists
       ansible.builtin.file:
         path: "{{ freenove_case_touchscreen_idle_user_home }}/.config/systemd/user"

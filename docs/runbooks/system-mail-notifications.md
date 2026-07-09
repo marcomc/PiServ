@@ -20,11 +20,11 @@ account credentials in Ansible or this repository.
 ## Status
 
 Applied on PiServ on 2026-07-08. The dedicated `msmtp` role installs the mail
-packages, creates missing bootstrap mail files, and hardens file metadata. After
-creation, PiServ's playbook preserves operator edits to the SMTP sender, user,
-password, and aliases. For Gmail SMTP, use a Gmail app password rather than the
-normal account password or the Mac-specific OAuth helper. Provider connectivity
-and one root-alias delivery test have been validated.
+packages and hardens operator-created file metadata without creating or owning
+SMTP credentials. PiServ's playbook preserves operator edits to the SMTP sender,
+user, password, and aliases. For Gmail SMTP, use a Gmail app password rather
+than the normal account password or the Mac-specific OAuth helper. Provider
+connectivity and one root-alias delivery test have been validated.
 
 ## Automation
 
@@ -40,9 +40,9 @@ The `msmtp` role configures:
 
 | Area | Value |
 | --- | --- |
-| config mode | `create` for PiServ |
-| aliases mode | `create` for PiServ |
-| empty bootstrap | allowed for PiServ |
+| config mode | `unmanaged` for PiServ |
+| aliases mode | `unmanaged` for PiServ |
+| empty bootstrap | not created by Ansible |
 | config metadata | `/etc/msmtprc` as `0640 root:msmtp` when present |
 | binary metadata | `/usr/bin/msmtp` as `2755 root:msmtp` |
 | compatibility wrapper | `/usr/local/bin/msmtp-system` |
@@ -55,7 +55,7 @@ The `base` role configures mail consumers:
 | unattended-upgrades report mode | `on-change` |
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
-| boot notification condition | skip until `/etc/msmtprc` exists |
+| boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
 
 ## Gmail App Password
 
@@ -81,7 +81,7 @@ Do not use the normal Gmail password in `/etc/msmtprc`.
 
 ## Manual Config
 
-Install the mail packages and create missing bootstrap files first:
+Install the mail packages and hardening policy first:
 
 ```sh
 ansible-playbook ansible/playbooks/piserv-base.yml
@@ -141,7 +141,7 @@ root-owned. Use the default system config path instead.
 
 ## Validation
 
-Stop here until the manual config exists.
+Stop here until the manual config exists and is non-empty.
 
 After `/etc/msmtprc` is configured, run the base playbook. The playbook applies
 the dedicated `msmtp` role before the `base` role:

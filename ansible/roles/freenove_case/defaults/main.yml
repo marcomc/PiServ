@@ -84,6 +84,7 @@ freenove_case_touchscreen_idle_brightness: 0
 freenove_case_touchscreen_wayland_display: "{{ ansible_facts.env.WAYLAND_DISPLAY | default('wayland-0') }}"
 freenove_case_touchscreen_idle_service_enabled: true
 freenove_case_touchscreen_idle_service_state: started
+freenove_case_touchscreen_idle_enable_linger: true
 
 freenove_case_manage_pcie_gen3: false
 freenove_case_enable_pcie_gen3: false
