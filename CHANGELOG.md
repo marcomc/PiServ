@@ -74,6 +74,24 @@ All notable project changes are documented here.
   installed for recovery experiments.
 - Added the project-local `base` Ansible role and `piserv-base.yml` playbook to
   reproduce live SSH, service, unattended-upgrades, and cloud-init hardening.
+- Added package-only system mail support to the `base` role with `msmtp`,
+  `msmtp-mta`, `bsd-mailx`, unattended-upgrades reports, and a boot notification
+  service gated on `/etc/msmtprc`.
+- Added a dedicated Galaxy-ready `msmtp` role, inspired by
+  `fauch922.ansible_msmtp_setup`, with `managed`, `create`, and `unmanaged`
+  config modes.
+- Moved mail transport installation, metadata hardening, setgid access, and the
+  compatibility wrapper out of `base` and into the dedicated `msmtp` role.
+- Added system `msmtp` metadata hardening and `/usr/local/bin/msmtp-system` for
+  tools that pass `/etc/msmtprc` with explicit `--file`.
+- Applied the system mail metadata hardening on PiServ and validated
+  server-info through the default system config and compatibility wrapper.
+- Added non-secret RaiPlaySound email wiring for newly created PiServ configs
+  using local recipient `root` and the system `msmtp` compatibility wrapper.
+- Documented operator-managed `msmtp` setup and the decision to keep SMTP
+  credentials out of Ansible Vault.
+- Documented Gmail app password setup as the preferred PiServ `msmtp`
+  credential path.
 - Installed and validated `raiplaysound-cli-daily-sync` on PiServ with direct
   writes to the pCloud-backed podcast target.
 - Added managed, create-only, and unmanaged config modes to the

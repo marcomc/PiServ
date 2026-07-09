@@ -155,9 +155,11 @@ Configure the PiServ base host policy:
 ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
-The base playbook manages SSH root-login and password-auth policy, disables
-unneeded CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades, and
-disables cloud-init.
+The base playbook applies the dedicated `msmtp` role first, then manages SSH
+root-login and password-auth policy, disables unneeded CUPS, `rpcbind`, and NFS
+helper units, enables unattended upgrades, and disables cloud-init. PiServ uses
+`msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
+they contain SMTP credentials and local delivery policy.
 
 Configure the Freenove FNK0100K post-OS setup:
 
@@ -200,7 +202,9 @@ ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 
 The RaiPlaySound playbook installs the pinned CLI source revision for `operator`,
 writes the PiServ config, installs a user-scoped daily systemd timer, and gates
-the direct-write sync on the pCloud health check.
+the direct-write sync on the pCloud health check. New configs send summary mail
+to local recipient `root` through the system `msmtp` config wrapper; existing
+create-only configs must be edited manually.
 
 Migrate a microSD-booted PiServ system to NVMe:
 

@@ -43,6 +43,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- When role variables accept arbitrary config file paths, stat the parent
+  directory before creating it. Create missing private parents, but do not
+  change ownership or mode of an existing system directory such as `/tmp` or
+  `/etc` unless the role explicitly owns that directory.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
 - Treat `vendor/` as upstream reference material. Do not rewrite vendored files

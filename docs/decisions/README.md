@@ -21,6 +21,7 @@ Decision records explain why PiServ setup choices were made.
 | [0005: Ansible-managed Freenove background control](0005-ansible-managed-freenove-background-control.md) | Accepted |
 | [0006: RaiPlaySound direct-write scheduling](0006-raiplaysound-direct-write-scheduling.md) | Accepted |
 | [0007: Base security posture](0007-base-security-posture.md) | Partially implemented |
+| [0008: System mail notifications](0008-system-mail-notifications.md) | Accepted and implemented |
 
 ## Template
 

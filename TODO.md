@@ -13,6 +13,48 @@
   blue fan LEDs.
 - Create initial bootstrap playbook after live commands are validated.
 
+## Propositions
+
+- [ ] **Install Glances for system observability**
+  - Assessment: Glances is a low-effort monitoring layer for live PiServ
+    visibility, but it should be installed with explicit service exposure and
+    firewall expectations instead of leaving another unaudited listener.
+  - Actions:
+    - Validate package availability and runtime behavior on `piserv.example.com`.
+    - Decide whether Glances should run CLI-only, web UI, API mode, or a
+      systemd-managed service.
+    - Document listening address, port, authentication model, and firewall
+      implications.
+    - Codify the final install and service configuration in Ansible.
+
+- [ ] **Build Apple Home-compatible Python camera streaming service**
+  - Assessment: A small Python stream service can expose the camera as MJPEG,
+    HTTP, or RTSP, but Apple Home support needs a HomeKit-compatible path rather
+    than assuming generic webcam streaming is enough.
+  - Actions:
+    - Identify the Pi camera hardware, driver stack, and supported capture
+      pipeline on `piserv.example.com`.
+    - Prototype a Python streaming endpoint with predictable startup, health
+      checks, and systemd logging.
+    - Decide the Apple Home integration path: direct HomeKit camera support if
+      feasible, or a documented bridge through an existing HomeKit-compatible
+      camera bridge.
+    - Keep Home Assistant integration out of scope unless it is requested later.
+    - Add Ansible configuration and a runbook after the live prototype works.
+
+- [ ] **Create Python web administration application**
+  - Assessment: A local operator web app can centralize project status and safe
+    operations, but it should start read-heavy and expose only explicit,
+    audited controls.
+  - Actions:
+    - Define the first operator views: system health, managed services, storage,
+      backup status, and recent logs.
+    - Choose a minimal Python web stack that fits PiServ maintenance needs.
+    - Add authentication, local-network exposure rules, and service hardening
+      before enabling write actions.
+    - Package the app as a systemd service and codify deployment in Ansible.
+    - Document operator workflows in a runbook.
+
 ## Done
 
 - Verified SSH and non-interactive sudo through `operator@piserv.example.com`.
@@ -47,6 +89,16 @@
 - Added repeatable `pcloudcc` health-check script and Ansible playbook.
 - Added a Galaxy-ready `raiplaysound_cli` Ansible role and PiServ daily-sync
   playbook.
+- Added a Galaxy-ready local `msmtp` role inspired by
+  `fauch922.ansible_msmtp_setup`.
+- Moved package-only system mail support out of `base` and into the dedicated
+  `msmtp` role.
+- Applied system mail metadata hardening and installed the `msmtp-system`
+  compatibility wrapper on PiServ.
+- Validated SMTP provider server-info through the default system config and
+  compatibility wrapper.
+- Validated one intentional system mail delivery test through the `root` alias.
+- Added RaiPlaySound email keys to the existing create-only PiServ config.
 - Installed and validated `raiplaysound-cli-daily-sync` as a user-scoped
   systemd timer on PiServ.
 - Accepted direct writes to the pCloud-backed podcast target for the scheduled

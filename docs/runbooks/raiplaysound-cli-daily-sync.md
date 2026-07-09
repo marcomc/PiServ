@@ -21,7 +21,8 @@ RaiPlaySound podcast output directly into the pCloud-backed podcast target.
 
 Installed and validated on PiServ on 2026-07-08. The user timer is active and
 the first manual service run completed successfully with direct writes to
-pCloud.
+pCloud. The existing live config now includes mail-summary keys and the email
+summary dry-run path has been validated without sending.
 
 ## Runtime Shape
 
@@ -44,8 +45,9 @@ The service runs the pCloud health helper as `ExecStartPre`. If the pCloud
 service, mount, target directory, or write/read/delete check fails, the sync
 does not start.
 
-PiServ email summary settings are intentionally omitted. The sync still runs
-and logs that email is skipped.
+New PiServ configs include non-secret email wiring that sends to local recipient
+`root` through the system `msmtp` config. The existing live config has been
+updated with the same non-secret keys.
 
 ## Install or Update
 
@@ -88,6 +90,17 @@ does not carry the podcast sync config values.
 
 When overrides are needed, define only changed keys in `raiplaysound_cli_config`.
 The role merges those partial values with `raiplaysound_cli_config_defaults`.
+
+The PiServ config includes these mail keys:
+
+```text
+EMAIL_TO="root"
+EMAIL_CONFIG="/etc/msmtprc"
+EMAIL_FROM="operator@example.com"
+EMAIL_FROM_NAME="PiServ RaiPlaySound"
+EMAIL_SUBJECT_PREFIX="[PiServ raiplaysound-cli]"
+MSMTP_BIN="/usr/local/bin/msmtp-system"
+```
 
 ## Operate
 
@@ -134,7 +147,7 @@ Process: ExecStartPre=...check-pcloudcc-health-remote.sh (status=0/SUCCESS)
 Process: ExecStart=...raiplaysound-cli-daily-sync ... (status=0/SUCCESS)
 ```
 
-Expected log ending:
+First validated direct-write log ending before mail wiring:
 
 ```text
 Favourites run completed: done=10, errors=0
@@ -144,6 +157,10 @@ EMAIL_TO is not configured; skipping email summary.
 The first validated direct-write run wrote one new `seigradi` audio file and
 refreshed metadata, feeds, cover assets, and the target index under the pCloud
 mount.
+
+Current email-summary validation uses the installed Python environment to call
+only the mail-summary path with `dry_run=True`; it does not start a podcast
+download and does not send email.
 
 ## Rollback
 
@@ -173,3 +190,5 @@ Rollback does not delete downloaded podcast files.
 | 2026-07-08 | pCloud preflight | Passed with `pcloudcc_health=ok` |
 | 2026-07-08 | Manual service run | Passed with `done=10`, `errors=0` |
 | 2026-07-08 | Direct-write proof | New `seigradi` `.m4a` written under the pCloud target |
+| 2026-07-08 | Email wiring | Existing live config now uses local `root` and `/usr/local/bin/msmtp-system` |
+| 2026-07-08 | Email dry run | `send_email_summary(..., dry_run=True)` returned `0` without sending |
