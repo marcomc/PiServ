@@ -2,7 +2,7 @@
 
 All notable project changes are documented here.
 
-## Unreleased
+## 0.1.0 - 20260709 - Initial release
 
 ### Added
 
@@ -139,3 +139,18 @@ All notable project changes are documented here.
   edits on the server are preserved by future playbook runs.
 - Changed the PiServ RaiPlaySound playbook to create config from role defaults
   when missing instead of carrying config values in the playbook.
+
+### Completed
+
+- Verified SSH key access and non-interactive sudo through
+  `operator@piserv.example.com` and `operator@192.0.2.181`.
+- Completed live NVMe migration validation, including EEPROM boot order,
+  microSD fallback, and root filesystem expansion to the available SSD capacity.
+- Completed Freenove FNK0100K live validation, including I2C, managed LED, fan,
+  and OLED control, and isolating the small OLED module/cable path that blocks
+  controller detection.
+- Validated `pcloudcc -s` saved credential location and permissions on PiServ.
+- Completed system mail validation, including SMTP provider server-info checks
+  and one intentional delivery test through the `root` alias.
+- Captured Wi-Fi network path and live service/socket inventory in the system
+  baseline runbook.
