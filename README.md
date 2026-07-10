@@ -195,6 +195,18 @@ scripts/check-pcloudcc-health.sh
 ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
 ```
 
+Install Tailscale and start `tailscaled`:
+
+```sh
+ansible-galaxy collection install -r ansible/requirements.yml
+ansible-playbook ansible/playbooks/tailscale.yml
+```
+
+The Tailscale playbook uses the `artis3n.tailscale.machine` Galaxy collection
+role to install `tailscale` and enable `tailscaled`. Tailnet login remains a
+manual runbook step unless a private runtime auth key is supplied. PiServ uses
+standard OpenSSH; Tailscale SSH is not enabled.
+
 Install and manage the RaiPlaySound daily podcast sync:
 
 ```sh

@@ -2,6 +2,20 @@
 
 All notable project changes are documented here.
 
+## 0.2.0 - Unreleased
+
+### Tailscale Remote Access
+
+- Added the pinned `artis3n.tailscale` Galaxy collection dependency and switched
+  PiServ Tailscale installation to the upstream `artis3n.tailscale.machine`
+  role.
+- Added a PiServ Tailscale playbook with the stable machine name `piserv`.
+- Added a Tailscale access runbook covering manual browser login, verification,
+  diagnostics, recovery, optional subnet-router configuration, key-expiry
+  trade-offs, and firewall follow-up.
+- Documented that PiServ keeps standard OpenSSH as the administration path and
+  does not enable Tailscale SSH for now.
+
 ## 0.1.0 - 2026-07-09
 
 Initial PiServ release for reproducing and operating the Raspberry Pi 5 server

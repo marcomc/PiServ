@@ -22,6 +22,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [RaiPlaySound CLI daily sync](raiplaysound-cli-daily-sync.md) | Operate the scheduled podcast sync |
 | [System baseline and inventory](system-baseline-inventory.md) | Capture live OS, storage, network, service, and socket state |
 | [System mail notifications](system-mail-notifications.md) | Configure host mail delivery and notification checks |
+| [Tailscale access](tailscale-access.md) | Install, login, route, verify, and debug Tailscale access |
 
 ## Template
 
