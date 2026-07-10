@@ -174,7 +174,7 @@ Verify from a Tailscale-connected client using a LAN-only device IP, not
 PiServ's own LAN address:
 
 ```sh
-ping 192.168.1.LAN_DEVICE
+ping 192.0.2.LAN_DEVICE
 ```
 
 Do not advertise `192.0.2.0/24` for clients that are themselves connected to

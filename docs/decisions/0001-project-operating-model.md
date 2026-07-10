@@ -6,7 +6,7 @@ Accepted on 2026-07-02.
 
 ## Context
 
-PiServ is a private work-in-progress project for configuring a Raspberry Pi 5
+PiServ is a work-in-progress project for configuring a Raspberry Pi 5
 server. The server is the production target, and the user wants live setup work
 performed over SSH before codifying successful commands into automation.
 
