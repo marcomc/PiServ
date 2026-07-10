@@ -121,7 +121,7 @@ at `piserv.example.com`.
   roles for standalone reuse with defaults, metadata, argument specs, tests,
   README files, changelogs, release notes, and role license files.
 - Kept reusable role defaults and documentation agnostic of PiServ-specific
-  hostnames, paths, and private project assumptions.
+  hostnames, paths, and project-only assumptions.
 - Documented `base` as the project-local exception to the reusable-role policy.
 - Added a repository shell validation script that covers tracked shebang files
   and rendered shell templates.
