@@ -31,12 +31,6 @@ Use this local repository path for all commands, downloads, and generated files:
 $HOME/Development/RaspberryPi/PiServ
 ```
 
-Do not use the old renamed path:
-
-```text
-$HOME/Development/RaspberryPi/PiServ
-```
-
 ## Server Facts
 
 | Item | Value |
@@ -68,8 +62,8 @@ validating network or name-resolution issues.
 PiServ is production-first: live commands are tested directly on the server,
 then converted into repeatable automation once the desired state is confirmed.
 
-The current project is private and work in progress. Backward compatibility is
-not a constraint until the project is prepared for public reuse.
+The current project is work in progress. Backward compatibility is not a
+constraint until the project is prepared for public reuse.
 
 ## Repository Layout
 

@@ -5,10 +5,8 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 ## Project Context
 
 - Canonical repository path: `$HOME/Development/RaspberryPi/PiServ`.
-- Stale repository path: `$HOME/Development/RaspberryPi/PiServ`.
-  Do not use it for commands, downloads, or generated files.
 - Purpose: configure and reproduce the PiServ Raspberry Pi server.
-- Status: private work in progress; backward compatibility is not required yet.
+- Status: work in progress; backward compatibility is not required yet.
 - Target host: `piserv.example.com`.
 - Target IP: `192.0.2.181`.
 - Hardware: Raspberry Pi 5, 4 GB RAM, 128 GB NVMe SSD.
