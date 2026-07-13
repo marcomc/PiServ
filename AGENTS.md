@@ -31,6 +31,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 
 - Ansible should become the authoritative reproduction path once the live setup
   is understood.
+- When integrating an external role, declare its required collections and make
+  the privilege-escalation boundary explicit. Validate the integration from a
+  clean dependency installation before live application.
 - Keep reusable Ansible roles under `ansible/roles/` suitable for possible
   Ansible Galaxy publication.
 - Exception: `ansible/roles/base` is the project-local PiServ host baseline role.

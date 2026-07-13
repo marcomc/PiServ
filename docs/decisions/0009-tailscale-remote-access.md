@@ -3,7 +3,8 @@
 ## Status
 
 Accepted and implemented for package installation, manual tailnet login, and
-firewall integration. Subnet routing remains incomplete.
+firewall integration. High-availability subnet-router policy is defined by
+decision 0011.
 
 ## Context
 
@@ -37,6 +38,11 @@ administration entry point.
 The host firewall permits ingress through `tailscale0` and leaves Tailscale in
 its default netfilter mode. See decision 0010 for the UFW policy boundary.
 
+PiServ must not accept advertised subnet routes. The Tailscale playbook enforces
+`tailscale set --accept-routes=false`. Accepting the local LAN prefix would
+route PiServ's replies through `tailscale0` instead of its physical LAN
+interface, preventing direct LAN connections from completing.
+
 ## Consequences
 
 - Tailscale package installation and `tailscaled` service state are delegated to
@@ -48,9 +54,8 @@ its default netfilter mode. See decision 0010 for the UFW policy boundary.
 - Device key expiry should be reviewed in the Tailscale operator console after
   login. Disabling key expiry improves server continuity but increases exposure
   if the device or node key is compromised.
-- Subnet routing remains opt-in and is separate from installation because it
-  expands the network surface. It requires IP forwarding, route advertisement,
-  route approval, and access-policy review.
+- PiServ subnet-router policy, including forwarding, route advertisement, SNAT,
+  and UFW forwarding rules, is defined by decision 0011.
 - Tailnet grants and ACLs govern which tailnet identities may use the accepted
   `tailscale0` ingress path.
 
@@ -79,7 +84,8 @@ Tailnet login validation:
 ssh operator@piserv.example.com 'tailscale status && tailscale ip -4'
 ```
 
-Observed result: PiServ is connected with Tailscale IPv4 `100.64.0.10`.
+Observed result: PiServ is connected with an assigned Tailscale IPv4 address.
 New standard OpenSSH and VNC connections over Tailscale passed after UFW was
-enabled. See the Tailscale access runbook for optional subnet-router
-configuration.
+enabled. On 2026-07-13, accepting an overlapping LAN route made direct LAN SSH
+and ICMP fail. Disabling route acceptance restored both paths. PiServ now keeps
+route acceptance disabled while advertising its own local IPv4 LAN for HA.

@@ -7,18 +7,19 @@
 - [Install](#install)
 - [First Login](#first-login)
 - [Client Access](#client-access)
-- [Optional Subnet Router](#optional-subnet-router)
+- [HA Subnet Router](#ha-subnet-router)
 - [Verify](#verify)
 - [Operate](#operate)
 - [Debug](#debug)
+- [LAN Reply Routing](#lan-reply-routing)
 - [Recovery](#recovery)
 - [Observed PiServ State](#observed-piserv-state)
 - [Automation Follow-Up](#automation-follow-up)
 
 ## Purpose
 
-Install Tailscale on PiServ, join it to the tailnet, and validate remote access
-for standard OpenSSH, firewall integration, and optional subnet routing.
+Install Tailscale on PiServ, join it to the tailnet, and validate standard
+OpenSSH, firewall integration, and high-availability subnet routing.
 
 ## Preconditions
 
@@ -137,69 +138,14 @@ Tailscale provides the network path only. Linux account access is still enforced
 by PiServ. A user needs an allowed Linux username and SSH key on PiServ before
 `ssh` will succeed.
 
-## Optional Subnet Router
+## HA Subnet Router
 
-Enable this only when tailnet devices must reach LAN-only devices through
-PiServ. It is not an exit node and does not route general internet traffic.
+PiServ advertises its local IPv4 LAN as one member of a high-availability
+subnet-router group. It enables IPv4 forwarding and default Tailscale SNAT, but
+rejects imported routes so directly connected LAN traffic remains local.
 
-PiServ is connected to the `192.0.2.0/24` LAN. Before advertising that
-subnet, confirm that PiServ has completed first login:
-
-```sh
-tailscale status
-tailscale ip -4
-```
-
-Enable persistent IPv4 forwarding:
-
-```sh
-printf '%s\n' 'net.ipv4.ip_forward = 1' \
-  | sudo tee /etc/sysctl.d/99-piserv-tailscale-router.conf >/dev/null
-sudo sysctl --system
-```
-
-If PiServ will later advertise an IPv6 subnet, enable IPv6 forwarding too:
-
-```sh
-printf '%s\n' 'net.ipv6.conf.all.forwarding = 1' \
-  | sudo tee -a /etc/sysctl.d/99-piserv-tailscale-router.conf >/dev/null
-sudo sysctl --system
-```
-
-Advertise the complete set of desired IPv4 routes. This command replaces the
-advertised-route list, so retain existing routes when adding another subnet:
-
-```sh
-sudo tailscale set --advertise-routes=192.0.2.0/24
-```
-
-Approve the proposed route in the Tailscale operator console:
-
-1. Open `Machines`, then select PiServ.
-2. Open `Subnets`, select `Edit`, approve `192.0.2.0/24`, and save.
-3. Confirm the tailnet policy allows the intended users or devices to reach
-   `192.0.2.0/24`.
-
-Route approval and tailnet access policy are independent. Leave subnet-route
-SNAT enabled, which is Tailscale's default, so LAN-only devices return traffic
-through PiServ without home-router changes.
-
-macOS, Windows, iOS, Android, and tvOS clients accept approved routes
-automatically. On a Linux client, opt in explicitly:
-
-```sh
-sudo tailscale set --accept-routes
-```
-
-Verify from a Tailscale-connected client using a LAN-only device IP, not
-PiServ's own LAN address:
-
-```sh
-ping 192.0.2.LAN_DEVICE
-```
-
-Do not advertise `192.0.2.0/24` for clients that are themselves connected to
-another `192.0.2.0/24` LAN. The overlapping local route will take precedence.
+See [Tailscale HA subnet routing](tailscale-ha-subnet-routing.md) for route
+approval, verification, controlled failover, and recovery.
 
 ## Verify
 
@@ -212,6 +158,7 @@ tailscale version
 tailscale status
 tailscale ip -4
 ip addr show tailscale0
+sudo tailscale debug prefs
 ```
 
 Run from a Tailscale-connected client:
@@ -225,6 +172,9 @@ Expected result:
 - `tailscaled` is enabled and active
 - `tailscale status` shows PiServ connected
 - `tailscale ip -4` returns a `100.x.y.z` address
+- `RouteAll` is `false` in `tailscale debug prefs`
+- `NoSNAT` is `false` in `tailscale debug prefs`
+- `net.ipv4.ip_forward` is `1`
 - SSH over the Tailscale IP reaches the same PiServ host
 
 ## Operate
@@ -262,6 +212,22 @@ ls -l /etc/apt/keyrings/tailscale.gpg
 apt-cache policy tailscale
 ```
 
+## LAN Reply Routing
+
+When direct LAN ICMP or SSH fails while Tailscale access works, check whether
+PiServ is accepting an overlapping advertised subnet route:
+
+```sh
+sudo tailscale debug prefs
+ip route get CLIENT_LAN_IP from PISERV_LAN_IP
+```
+
+Expected result: `RouteAll` is `false` and the route uses the physical LAN
+interface. On 2026-07-13, `RouteAll: true` selected `tailscale0` for a local
+client. PiServ received TCP SYN packets but the client never received its
+SYN-ACK. Running the Tailscale playbook, or the recovery command below,
+restored direct LAN ICMP and SSH.
+
 ## Recovery
 
 Reinstall package state:
@@ -274,21 +240,17 @@ The [official `tailscale up` reference](https://tailscale.com/docs/reference/tai
 states that flags are not persisted between runs. Force a fresh login while
 repeating every current non-default flag.
 
-When subnet routing is not enabled:
+For PiServ's HA subnet-router policy:
 
 ```sh
 sudo tailscale up --force-reauth --hostname=piserv
+sudo tailscale set --advertise-routes=LAN_IPV4_CIDR
+sudo tailscale set --accept-routes=false
+sudo tailscale set --snat-subnet-routes=true
 ```
 
-When PiServ advertises the subnet configured in this runbook:
-
-```sh
-sudo tailscale up --force-reauth --hostname=piserv \
-  --advertise-routes=192.0.2.0/24
-```
-
-Include any other non-default `tailscale up` flags that PiServ uses. If the CLI
-reports omitted settings, use its copyable command and add `--force-reauth`.
+Include any other non-default `tailscale up` flags that PiServ uses. Reapply the
+Tailscale playbook after recovery to restore forwarding and exact route policy.
 Do not use `--reset` unless the intent is to clear routes and other settings.
 
 If the tailnet record is wrong or stale, remove PiServ from the Tailscale operator
@@ -303,9 +265,11 @@ console and run first login again.
 | Ansible collection | `artis3n.tailscale` `1.2.1` |
 | Tailscale package version | `1.98.8` |
 | `tailscaled` state | `enabled`, `active` |
-| Tailscale IPv4 | `100.64.0.10` |
+| Tailscale IPv4 | `PISERV_TAILSCALE_IP` |
 | Tailscale backend state | `Running` |
-| Advertised routes | LAN route configured; forwarding disabled |
+| Accept advertised routes | `false` |
+| Source NAT for subnet routes | Enabled |
+| IPv4 forwarding | Enabled |
 | Login method | Manual browser login |
 
 Live installation validation:
@@ -321,20 +285,21 @@ tailscale status backend: NeedsLogin
 Latest connection and firewall verification on 2026-07-13:
 
 ```text
-tailscale IPv4: 100.64.0.10
+tailscale IPv4: PISERV_TAILSCALE_IP
 tailscale backend: Running
-IPv4 forwarding: disabled
-advertised LAN route: configured but non-operational
+IPv4 forwarding: enabled
+accept advertised routes: false
+subnet-route source NAT: enabled
 UFW tailscale0 ingress: allowed
-new OpenSSH and VNC connections: passed
+UFW Tailscale-to-LAN route: allowed
+advertised route activation: pending Tailscale admin-console approval
+new LAN and Tailscale OpenSSH connections: passed
 ```
 
 ## Automation Follow-Up
 
 - Keep `ansible/playbooks/tailscale.yml` as the installation path.
 - Keep auth keys out of repository files.
-- Keep subnet routing separate from the installation playbook. If enabled,
-  codify forwarding and `tailscale set --advertise-routes` in a dedicated
-  PiServ-owned routing role or playbook.
+- Keep route approval, grants, and failover validation under the HA subnet
+  routing runbook.
 - Keep `ansible/playbooks/firewall.yml` as the host firewall reproduction path.
-- Decide whether to complete or remove the currently advertised LAN route.

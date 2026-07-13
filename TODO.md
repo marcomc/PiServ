@@ -3,12 +3,12 @@
 ## Current
 
 - Decide final user-account policy.
-- Decide whether to complete or remove the advertised Tailscale subnet route;
-  kernel forwarding remains disabled.
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
-- Apply and verify the firewall automation after a PiServ SSH or Tailscale
-  administration path is reachable from this controller.
+- Approve PiServ's advertised subnet route in the Tailscale admin console and
+  validate failover through the existing primary subnet router.
+- Decide whether PiServ needs IPv6 LAN management access and, if so, add an
+  explicitly scoped dual-stack UFW policy with live validation.
 - Investigate VNC mirroring of the physical touchscreen session.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.

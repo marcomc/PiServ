@@ -22,11 +22,13 @@ Tailscale administration access.
 | --- | --- |
 | Established connections | Allowed by UFW state tracking |
 | Outgoing host traffic | Allowed |
-| Routed traffic | Denied |
-| LAN TCP `22` | Allowed for SSH |
-| LAN TCP `5900` | Allowed for VNC |
-| LAN UDP `5353` to `224.0.0.251` | Allowed for mDNS |
+| Routed traffic | Denied except Tailscale to the local IPv4 LAN |
+| IPv4 LAN TCP `22` | Allowed for SSH |
+| IPv4 LAN TCP `5900` | Allowed for VNC |
+| IPv4 LAN UDP `5353` to `224.0.0.251` | Allowed for mDNS |
+| IPv6 LAN ingress | Denied by default |
 | Ingress on `tailscale0` | Allowed |
+| Routed from `tailscale0` | Allowed only to the local IPv4 LAN |
 | UDP `41641` | Allowed for direct Tailscale connections |
 | Other unsolicited ingress | Denied |
 
@@ -49,6 +51,7 @@ ip -4 -brief address
 ip -4 route
 tailscale status
 tailscale ip -4
+sudo sysctl -n net.ipv4.ip_forward
 ```
 
 ## Apply
@@ -56,8 +59,8 @@ tailscale ip -4
 Install role and collection dependencies, then run the playbook:
 
 ```sh
-ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles
-ansible-galaxy collection install -r ansible/requirements.yml
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
+ansible-galaxy collection install -r ansible/requirements.yml --force
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
@@ -67,15 +70,22 @@ When those files change, its standard behavior resets UFW and then rebuilds the
 declared policies and rules in the same run. Verify both administration paths
 before applying configuration changes.
 
-`piserv_firewall_lan_interface` defaults to `wlan0`, and
-`piserv_firewall_lan_cidr` is derived from that interface. This prevents a
-future default-route change from implicitly trusting a different network.
-Override the CIDR when the permitted management LAN is different:
+The `--force` flags make a changed pin or collection version take effect on a
+controller that already has the dependencies installed.
+
+`piserv_firewall_lan_ipv4_cidr` is derived from the default IPv4 route rather
+than a fixed physical interface. A Wi-Fi-to-Ethernet change on the same LAN
+therefore needs no policy change. Override the IPv4 CIDR when the permitted
+management LAN is different:
 
 ```sh
 ansible-playbook ansible/playbooks/firewall.yml \
-  -e piserv_firewall_lan_cidr=192.0.2.0/24
+  -e piserv_firewall_lan_ipv4_cidr=192.0.2.0/24
 ```
+
+IPv6 support remains enabled in UFW, but this policy intentionally permits no
+IPv6 LAN ingress. Add IPv6 management rules only through a separately reviewed
+and live-validated dual-stack policy.
 
 The first live application used the equivalent UFW commands before the state
 was codified:
@@ -85,10 +95,11 @@ sudo apt-get install -y ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw default deny routed
-sudo ufw allow from LAN_CIDR to any port 22 proto tcp
-sudo ufw allow from LAN_CIDR to any port 5900 proto tcp
-sudo ufw allow from LAN_CIDR to 224.0.0.251 port 5353 proto udp
+sudo ufw allow from LAN_IPV4_CIDR to any port 22 proto tcp
+sudo ufw allow from LAN_IPV4_CIDR to any port 5900 proto tcp
+sudo ufw allow from LAN_IPV4_CIDR to 224.0.0.251 port 5353 proto udp
 sudo ufw allow in on tailscale0
+sudo ufw route allow in on tailscale0 from 100.64.0.0/10 to LAN_IPV4_CIDR
 sudo ufw allow 41641/udp
 sudo ufw logging low
 sudo ufw --force enable
@@ -124,6 +135,13 @@ nc -vz PISERV_TAILSCALE_IP 5900
 ssh operator@PISERV_TAILSCALE_IP true
 ```
 
+Run from a remote Tailscale client against a non-Tailscale LAN device:
+
+```sh
+ping LAN_DEVICE_IPV4
+nc -vz LAN_DEVICE_IPV4 PORT
+```
+
 Re-run the playbook. The steady-state result must be `changed=0`.
 
 ## Change Rules
@@ -138,8 +156,9 @@ it from the host. To withdraw a rule:
 2. Run the playbook and verify the rule is absent.
 3. Remove the bounded deletion entry from the steady-state playbook.
 
-When Ethernet is added, verify whether it uses the same LAN CIDR. Add an
+When Ethernet is added, verify whether it uses the same IPv4 LAN CIDR. Add an
 explicit additional rule set if it introduces a different trusted network.
+IPv6 management access requires a separately reviewed dual-stack policy.
 
 ## Recovery
 
@@ -173,18 +192,22 @@ Validated on 2026-07-13:
 | UFW runtime | Active |
 | UFW service | Enabled, active |
 | Default policies | Incoming deny, outgoing allow, routed deny |
-| LAN allowlist | SSH, VNC, mDNS |
+| LAN allowlist | IPv4 SSH, VNC, mDNS |
+| IPv6 LAN ingress | Denied by default |
 | Tailscale allowlist | `tailscale0`, UDP `41641` |
+| Tailscale routed allowlist | `tailscale0` to local IPv4 LAN |
 | Tailscale after enable | Connected, direct peer path |
 | New Tailscale SSH connection | Passed |
 | New Tailscale VNC TCP connection | Passed |
 | pCloud mount | Remained mounted |
 
-The same validation found a pre-existing Tailscale LAN route advertisement
-while IPv4 and IPv6 forwarding were disabled. Firewall routed traffic remains
-denied; completing or removing subnet routing is tracked separately.
+The same validation found that PiServ accepted an overlapping Tailscale LAN
+route. That sent replies to local clients through `tailscale0`, so direct LAN
+connections could not complete. Disabling accepted routes restored LAN access.
+The default routed policy remains deny. The explicit Tailscale-to-LAN route rule
+is required for PiServ's HA subnet-router participation.
 
-The firewall automation has not yet been applied because the controller could
-not reach PiServ on 2026-07-13. Re-establish a verified LAN or Tailscale SSH
-path, run the Apply section, and update this observed-state table with the
-playbook result before treating the automation as complete.
+The firewall automation was applied on 2026-07-13. A second playbook run
+returned `changed=0`; LAN and Tailscale SSH remained available. The routed rule
+is ready for PiServ's advertised subnet route after Tailscale admin-console
+approval.

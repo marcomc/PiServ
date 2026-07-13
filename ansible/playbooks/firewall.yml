@@ -2,14 +2,15 @@
 - name: Configure PiServ firewall policy
   hosts: piserv
   gather_facts: true
+  become: true
   vars:
-    piserv_firewall_lan_interface: wlan0
-    piserv_firewall_lan_cidr: >-
+    piserv_firewall_lan_ipv4_cidr: >-
       {{
-        ansible_facts[piserv_firewall_lan_interface].ipv4.network
+        ansible_facts.default_ipv4.network
         ~ '/'
-        ~ ansible_facts[piserv_firewall_lan_interface].ipv4.prefix
+        ~ ansible_facts.default_ipv4.prefix
       }}
+    piserv_firewall_tailscale_ipv4_cidr: 100.64.0.0/10
     piserv_firewall_default_incoming_policy: deny
     piserv_firewall_default_outgoing_policy: allow
     piserv_firewall_default_input_policy: DROP
@@ -18,17 +19,17 @@
     piserv_firewall_logging: low
     piserv_firewall_rules:
       - rule: allow
-        from_ip: "{{ piserv_firewall_lan_cidr }}"
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
         to_port: "22"
         protocol: tcp
         comment: PiServ LAN SSH
       - rule: allow
-        from_ip: "{{ piserv_firewall_lan_cidr }}"
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
         to_port: "5900"
         protocol: tcp
         comment: PiServ LAN VNC
       - rule: allow
-        from_ip: "{{ piserv_firewall_lan_cidr }}"
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
         to_ip: 224.0.0.251
         to_port: "5353"
         protocol: udp
@@ -37,6 +38,13 @@
         direction: in
         interface: tailscale0
         comment: PiServ Tailscale ingress
+      - rule: allow
+        route: true
+        direction: in
+        interface: tailscale0
+        from_ip: "{{ piserv_firewall_tailscale_ipv4_cidr }}"
+        to_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        comment: PiServ Tailscale subnet router
       - rule: allow
         to_port: "41641"
         protocol: udp

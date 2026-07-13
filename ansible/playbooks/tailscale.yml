@@ -2,6 +2,17 @@
 - name: Install Tailscale on PiServ
   hosts: piserv
   gather_facts: true
+  vars:
+    piserv_tailscale_lan_ipv4_cidr: >-
+      {{
+        ansible_facts.default_ipv4.network
+        ~ '/'
+        ~ ansible_facts.default_ipv4.prefix
+      }}
+    piserv_tailscale_advertised_routes:
+      - "{{ piserv_tailscale_lan_ipv4_cidr }}"
+    piserv_tailscale_advertised_routes_argument: >-
+      {{ piserv_tailscale_advertised_routes | join(',') }}
   roles:
     - role: artis3n.tailscale.machine
       vars:
@@ -9,3 +20,97 @@
         release_stability: stable
         tailscale_up_skip: true
         tailscale_args: --hostname=piserv
+
+  tasks:
+    - name: Enable IPv4 forwarding for the PiServ subnet router
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        state: present
+        sysctl_file: /etc/sysctl.d/99-piserv-tailscale-subnet-router.conf
+        reload: true
+      become: true
+
+    - name: Read Tailscale preferences
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - debug
+          - prefs
+      become: true
+      changed_when: false
+      register: piserv_tailscale_preferences
+
+    - name: Advertise the PiServ local IPv4 LAN
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - >-
+            --advertise-routes={{ piserv_tailscale_advertised_routes_argument }}
+      become: true
+      changed_when: true
+      when: >-
+        ((piserv_tailscale_preferences.stdout | from_json).AdvertiseRoutes
+        | default([])
+        | sort)
+        != (piserv_tailscale_advertised_routes | sort)
+
+    - name: Disable acceptance of advertised subnet routes
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - --accept-routes=false
+      become: true
+      changed_when: true
+      when: >-
+        (piserv_tailscale_preferences.stdout | from_json).RouteAll
+        | default(false)
+        | bool
+
+    - name: Enable subnet-route source NAT
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - --snat-subnet-routes=true
+      become: true
+      changed_when: true
+      when: >-
+        (piserv_tailscale_preferences.stdout | from_json).NoSNAT
+        | default(false)
+        | bool
+
+    - name: Read enforced Tailscale preferences
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - debug
+          - prefs
+      become: true
+      changed_when: false
+      register: piserv_tailscale_enforced_preferences
+
+    - name: Assert advertised subnet routes are not accepted
+      vars:
+        piserv_tailscale_enforced_state: >-
+          {{ piserv_tailscale_enforced_preferences.stdout | from_json }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            (piserv_tailscale_enforced_state.RouteAll
+            | default(false)
+            | bool) == false
+          - >-
+            (piserv_tailscale_enforced_state.AdvertiseRoutes
+            | default([])
+            | sort)
+            == (piserv_tailscale_advertised_routes | sort)
+          - >-
+            (piserv_tailscale_enforced_state.NoSNAT
+            | default(false)
+            | bool) == false
+        fail_msg: >-
+          PiServ subnet-router preferences do not match the required local-LAN
+          routing policy. Apply the Tailscale playbook again.
