@@ -45,6 +45,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Keep one-off migration cleanup out of steady-state playbooks after the live
+  host reaches the new source of truth. Use a bounded migration command or
+  temporary playbook for teardown, then remove it and update diagnostics to
+  check the replacement artifact.
 - Do not stage executable helpers at predictable fixed paths under `/tmp`. Stream
   short remote helpers over SSH stdin, use `mktemp -d` with restrictive
   ownership, or install privileged helpers under a root-owned project libexec
