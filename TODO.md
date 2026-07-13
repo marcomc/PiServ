@@ -56,6 +56,22 @@
     - Package the app as a systemd service and codify deployment in Ansible.
     - Document operator workflows in a runbook.
 
+- [ ] **Set up Hermes AI agent for Home Assistant integration**
+  - Assessment: Hermes should be treated as a local-network service first, with
+    explicit network exposure, authentication, and Home Assistant integration
+    boundaries before it controls or observes home automations.
+  - Actions:
+    - Identify the Hermes runtime, deployment model, and hardware requirements
+      suitable for PiServ.
+    - Decide whether Hermes should run directly on PiServ or as an isolated
+      service with a dedicated system user and systemd unit.
+    - Define the Home Assistant connection method for an instance on the same
+      network, including API endpoint, token storage, and allowed capabilities.
+    - Document firewall, Tailscale, and local-network access expectations before
+      exposing the service.
+    - Codify the final install, configuration, and service health checks in
+      Ansible after live validation.
+
 ## Later
 
 - Add Ethernet configuration notes when the server is connected by cable.
@@ -63,7 +79,3 @@
 - Add disaster recovery playbook.
 - Add monitoring and alerting decisions.
 - Add service-specific runbooks as workloads are deployed.
-
-## Done
-
-- Install Tailscale and include Tailscale clients in the firewall access model.
