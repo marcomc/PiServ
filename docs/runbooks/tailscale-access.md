@@ -64,9 +64,15 @@ For a recovery build where browser login is inconvenient, use a private one-off
 auth key from the Tailscale operator console:
 
 ```sh
-TAILSCALE_AUTHKEY=... ansible-playbook ansible/playbooks/tailscale.yml \
+printf 'Tailscale auth key: ' >&2
+IFS= read -r -s TAILSCALE_AUTHKEY
+printf '\n' >&2
+export TAILSCALE_AUTHKEY
+
+ansible-playbook ansible/playbooks/tailscale.yml \
   -e tailscale_up_skip=false \
   -e tailscale_authkey="$TAILSCALE_AUTHKEY"
+unset TAILSCALE_AUTHKEY
 ```
 
 Do not store auth keys in Git, shell history, runbooks, or project variables.
