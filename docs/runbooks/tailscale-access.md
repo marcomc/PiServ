@@ -76,14 +76,14 @@ import json
 import pathlib
 import sys
 
-pathlib.Path(sys.argv[1]).write_text(
-    json.dumps({"tailscale_authkey": getpass.getpass("Tailscale auth key: ")}),
-    encoding="utf-8",
-)
+variables = {
+    "tailscale_authkey": getpass.getpass("Tailscale auth key: "),
+    "tailscale_up_skip": False,
+}
+pathlib.Path(sys.argv[1]).write_text(json.dumps(variables), encoding="utf-8")
 PY
 
   ansible-playbook ansible/playbooks/tailscale.yml \
-    -e tailscale_up_skip=false \
     -e "@$tailscale_vars"
 )
 ```
