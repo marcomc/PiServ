@@ -53,16 +53,24 @@ tailscale ip -4
 
 ## Apply
 
-Install collection dependencies and run the playbook:
+Install role and collection dependencies, then run the playbook:
 
 ```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles
 ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
-`piserv_firewall_lan_cidr` defaults to the network and prefix from
-`ansible_facts.default_ipv4`. Override it when the permitted management LAN is
-not the default IPv4 network:
+The role dependency is pinned to the reviewed PiServ fork commit of
+`oefenweb.ufw`. The role remains the source of truth for its managed UFW files.
+When those files change, its standard behavior resets UFW and then rebuilds the
+declared policies and rules in the same run. Verify both administration paths
+before applying configuration changes.
+
+`piserv_firewall_lan_interface` defaults to `wlan0`, and
+`piserv_firewall_lan_cidr` is derived from that interface. This prevents a
+future default-route change from implicitly trusting a different network.
+Override the CIDR when the permitted management LAN is different:
 
 ```sh
 ansible-playbook ansible/playbooks/firewall.yml \
@@ -120,11 +128,11 @@ Re-run the playbook. The steady-state result must be `changed=0`.
 
 ## Change Rules
 
-Add host-specific desired rules to `firewall_rules` in
+Add host-specific desired rules to `piserv_firewall_rules` in
 `ansible/playbooks/firewall.yml`.
 
-UFW rules are additive. Removing a rule from the list does not remove it from
-the host. To withdraw a rule:
+Rule-only UFW runs are additive. Removing a rule from the list does not remove
+it from the host. To withdraw a rule:
 
 1. Keep the matching rule in the playbook and add `delete: true`.
 2. Run the playbook and verify the rule is absent.
@@ -151,8 +159,9 @@ Restore the managed policy:
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
-Do not reset UFW during ordinary role runs. A reset deletes all rules and can
-remove both administration paths if the allowlist is not rebuilt immediately.
+Do not run `ufw reset` manually during ordinary recovery. The role may reset UFW
+after a managed configuration change and then rebuild the declared allowlist in
+the same playbook run.
 
 ## Observed PiServ State
 
@@ -170,8 +179,12 @@ Validated on 2026-07-13:
 | New Tailscale SSH connection | Passed |
 | New Tailscale VNC TCP connection | Passed |
 | pCloud mount | Remained mounted |
-| First Ansible reproduction | `changed=0`, `failed=0` |
 
 The same validation found a pre-existing Tailscale LAN route advertisement
 while IPv4 and IPv6 forwarding were disabled. Firewall routed traffic remains
 denied; completing or removing subnet routing is tracked separately.
+
+The firewall automation has not yet been applied because the controller could
+not reach PiServ on 2026-07-13. Re-establish a verified LAN or Tailscale SSH
+path, run the Apply section, and update this observed-state table with the
+playbook result before treating the automation as complete.

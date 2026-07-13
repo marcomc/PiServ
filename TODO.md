@@ -5,6 +5,10 @@
 - Decide final user-account policy.
 - Decide whether to complete or remove the advertised Tailscale subnet route;
   kernel forwarding remains disabled.
+- Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
+  with an upstream release after the change is merged and published.
+- Apply and verify the firewall automation after a PiServ SSH or Tailscale
+  administration path is reachable from this controller.
 - Investigate VNC mirroring of the physical touchscreen session.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.

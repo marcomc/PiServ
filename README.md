@@ -189,10 +189,16 @@ scripts/check-pcloudcc-health.sh
 ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
 ```
 
+Install the pinned external role and collection dependencies:
+
+```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles
+ansible-galaxy collection install -r ansible/requirements.yml
+```
+
 Install Tailscale and start `tailscaled`:
 
 ```sh
-ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook ansible/playbooks/tailscale.yml
 ```
 
@@ -207,10 +213,12 @@ Configure and enable the PiServ firewall:
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
-The firewall playbook uses the reusable `firewall` role to deny unsolicited
-incoming and routed traffic while allowing outgoing traffic. PiServ permits
-SSH, VNC, and mDNS from its current local LAN, all ingress through
-`tailscale0`, and UDP port `41641` for direct Tailscale peer connections.
+The firewall playbook uses a commit-pinned PiServ fork of `oefenweb.ufw` for
+generic UFW configuration. PiServ-owned imported tasks verify prerequisites,
+enforce the UFW service state, and assert the applied runtime policy. The role
+remains the source of truth for its managed UFW configuration, policies, and
+rules. PiServ permits SSH, VNC, and mDNS from its current local LAN, all ingress
+through `tailscale0`, and UDP port `41641` for direct Tailscale peer connections.
 
 Install and manage the RaiPlaySound daily podcast sync:
 

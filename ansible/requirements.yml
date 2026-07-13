@@ -1,4 +1,9 @@
 ---
+roles:
+  - name: oefenweb.ufw
+    src: https://github.com/marcomc/ansible-ufw.git
+    version: c332b4be2d8557ba4a0532d43998c87d5dd90e59
+
 collections:
   - name: artis3n.tailscale
     version: "1.2.1"

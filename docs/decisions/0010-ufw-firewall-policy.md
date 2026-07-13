@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted and implemented on 2026-07-13.
+Accepted. The initial UFW policy was implemented on 2026-07-13; automation
+awaits a reachable live administration path.
 
 ## Context
 
@@ -32,13 +33,21 @@ default netfilter mode.
 | Tailscale direct path | Allow UDP `41641` |
 | Other LAN ingress | Deny by default |
 
-The PiServ playbook derives the current LAN CIDR from the default IPv4 Ansible
-fact. Additional or replacement LAN ranges must be added explicitly when the
-network topology changes.
+The PiServ playbook derives the current LAN CIDR from the configured LAN
+interface, which defaults to `wlan0`. A future default-route change therefore
+does not implicitly trust a new network. Additional or replacement LAN ranges
+must be configured explicitly when the network topology changes.
 
-The generic `firewall` role owns UFW package, policy, serial rule application,
-logging, service, and validation behavior. PiServ-specific ranges, ports,
-interfaces, and comments remain in `ansible/playbooks/firewall.yml`.
+The fork integration of `oefenweb.ufw` owns generic UFW package, policy, rule,
+and logging behavior. PiServ-specific ranges, ports, interfaces, and comments
+remain in `ansible/playbooks/firewall.yml`. Project task files own the
+preflight assertion, explicit UFW service state, and post-apply validation.
+
+The dependency is pinned to the reviewed fork commit while its mutation support
+is under upstream review. The external role remains the source of truth for its
+managed UFW configuration. When those files change, the role retains its
+standard behavior of resetting UFW before rebuilding the declared policies and
+rules in the same run.
 
 ## Tailscale Boundary
 
@@ -61,8 +70,10 @@ so completing or removing that route is tracked separately.
 - Tailscale can continue using direct UDP peer connections.
 - Adding a network service now requires an explicit LAN rule or a deliberate
   decision to expose it only through Tailscale.
-- UFW rule management is additive. Removing a desired rule requires a bounded
-  `delete: true` migration before the rule definition is removed.
+- Rule-only UFW runs are additive. Removing a desired rule requires a bounded
+  `delete: true` step before the rule definition is removed.
+- The fork role supports bounded rule deletion and explicit insertion order;
+  PiServ does not use those controls in its steady-state policy today.
 
 ## Validation
 
@@ -85,8 +96,13 @@ ufw.service enabled and active
 new SSH and VNC connections over Tailscale succeeded
 Tailscale remained on a direct peer path
 pCloud remained mounted
-firewall playbook: changed=0, failed=0
 ```
+
+Automation validation is pending because the controller could not reach PiServ
+on 2026-07-13. Direct SSH commands to the documented LAN hostname and IP
+returned no route, the local Tailscale client had no PiServ peer, and the
+supplied tmate session returned an internal error. Restore a verified SSH or
+Tailscale path, then run the firewall playbook and this validation set.
 
 ## References
 
@@ -94,3 +110,4 @@ firewall playbook: changed=0, failed=0
 - [Tailscale netfilter modes](https://tailscale.com/docs/reference/netfilter-modes)
 - [Tailscale firewall ports](https://tailscale.com/docs/reference/faq/firewall-ports)
 - [Ansible `community.general.ufw`](https://docs.ansible.com/projects/ansible/latest/collections/community/general/ufw_module.html)
+- [Upstream `ansible-ufw` PR #54](https://github.com/Oefenweb/ansible-ufw/pull/54)

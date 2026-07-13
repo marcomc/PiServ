@@ -1,0 +1,39 @@
+---
+- name: Assert PiServ firewall facts are available
+  ansible.builtin.assert:
+    that:
+      - piserv_firewall_lan_interface in ansible_facts.interfaces
+      - ansible_facts[piserv_firewall_lan_interface].ipv4 is defined
+      - ansible_facts[piserv_firewall_lan_interface].ipv4.network is defined
+      - ansible_facts[piserv_firewall_lan_interface].ipv4.prefix is defined
+      - "'tailscale0' in ansible_facts.interfaces"
+    fail_msg: >-
+      PiServ firewall policy requires the configured LAN interface and the
+      tailscale0 interface. Apply the Tailscale playbook and verify networking
+      before enabling UFW.
+
+- name: Read Tailscale connection state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tailscale
+      - status
+      - --json
+  register: piserv_firewall_tailscale_status
+  changed_when: false
+  check_mode: false
+
+- name: Assert Tailscale is connected
+  vars:
+    piserv_firewall_tailscale_state: >-
+      {{ piserv_firewall_tailscale_status.stdout | from_json }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (piserv_firewall_tailscale_state.BackendState | default(''))
+        == 'Running'
+      - >-
+        (piserv_firewall_tailscale_state.TailscaleIPs | default([]) | length)
+        > 0
+    fail_msg: >-
+      PiServ firewall policy requires a running Tailscale connection with an
+      assigned tailnet address.

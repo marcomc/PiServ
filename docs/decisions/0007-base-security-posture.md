@@ -82,10 +82,11 @@ Live validation on PiServ on 2026-07-08:
 | Ansible reproduction | `ansible/playbooks/piserv-base.yml` completed with `changed=0` |
 | Tailscale access | Connected; new OpenSSH connection passed |
 | UFW firewall | Active with incoming and routed traffic denied by default |
-| Firewall reproduction | `ansible/playbooks/firewall.yml` completed with `changed=0` |
+| Firewall automation | Pending live validation |
 
 Still pending:
 
+- Apply and validate the firewall automation.
 - Validate VNC behavior against the physical touchscreen session.
 - Decide the final human and service user-account policy.
 - Keep `ansible/playbooks/piserv-base.yml` as the reproduction path for the

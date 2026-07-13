@@ -18,8 +18,11 @@ All notable project changes are documented here.
 
 ### Firewall Policy
 
-- Added a reusable, Galaxy-ready `firewall` role using UFW and the pinned
-  `community.general` collection.
+- Added a commit-pinned `marcomc/ansible-ufw` fork integration.
+- Added UFW rule mutation pass-through for bounded deletion and ordered
+  insertion, with Debian 13 and Trixie validation in the fork.
+- Moved PiServ-only preflight, service enforcement, and runtime validation to
+  imported project task files alongside the firewall playbook.
 - Added a PiServ firewall playbook with default-deny incoming and routed
   policies, default-allow outgoing policy, low-volume logging, and runtime
   validation.
