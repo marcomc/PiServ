@@ -95,6 +95,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Run `markdownlint --config "$HOME/.markdownlint.json"` on every
   Markdown file created or changed.
 - Run `shellcheck --enable=all` on every shell script created or changed.
+- Set `check_mode: false` on read-only command tasks whose output is used by
+  assertions, so `ansible-playbook --check` evaluates live state rather than
+  skipped task results.
 - Exclude unmodified upstream files under `vendor/` from first-party lint
   gates. If a vendored file is intentionally patched, document the patch and
   validate that file too.

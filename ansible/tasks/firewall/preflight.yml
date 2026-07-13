@@ -45,6 +45,7 @@
       - net.ipv4.ip_forward
   register: piserv_firewall_ipv4_forwarding
   changed_when: false
+  check_mode: false
 
 - name: Assert IPv4 forwarding is enabled for the subnet router
   ansible.builtin.assert:

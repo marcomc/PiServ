@@ -243,10 +243,9 @@ repeating every current non-default flag.
 For PiServ's HA subnet-router policy:
 
 ```sh
-sudo tailscale up --force-reauth --hostname=piserv
-sudo tailscale set --advertise-routes=LAN_IPV4_CIDR
-sudo tailscale set --accept-routes=false
-sudo tailscale set --snat-subnet-routes=true
+sudo tailscale up --force-reauth --hostname=piserv \\
+  --advertise-routes=LAN_IPV4_CIDR --accept-routes=false \\
+  --snat-subnet-routes=true
 ```
 
 Include any other non-default `tailscale up` flags that PiServ uses. Reapply the

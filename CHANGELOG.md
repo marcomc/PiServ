@@ -15,7 +15,7 @@ All notable project changes are documented here.
 - Configured PiServ as a high-availability subnet router for its local IPv4 LAN
   with forwarding, default Tailscale SNAT, and an exact route advertisement.
 - Added a Tailscale access runbook covering manual browser login, verification,
-  diagnostics, recovery, deferred subnet-router configuration, key-expiry
+  diagnostics, recovery, route-approval and failover follow-up, key-expiry
   trade-offs, and firewall integration.
 - Documented that PiServ keeps standard OpenSSH as the administration path and
   does not enable Tailscale SSH for now.

@@ -106,9 +106,9 @@ Tailscale remained on a direct peer path
 pCloud remained mounted
 ```
 
-Automation validation remains pending. The controller now has verified LAN and
-Tailscale SSH paths, so the firewall playbook can be applied and this validation
-set rerun.
+Automation validation on 2026-07-13 applied
+`ansible/playbooks/firewall.yml`; a repeat run completed with `changed=0` while
+new LAN and Tailscale SSH connections remained available.
 
 ## References
 
