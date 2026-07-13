@@ -39,6 +39,7 @@
           - prefs
       become: true
       changed_when: false
+      check_mode: false
       register: piserv_tailscale_preferences
 
     - name: Advertise the PiServ local IPv4 LAN
@@ -52,7 +53,7 @@
       changed_when: true
       when: >-
         ((piserv_tailscale_preferences.stdout | from_json).AdvertiseRoutes
-        | default([])
+        | default([], true)
         | sort)
         != (piserv_tailscale_advertised_routes | sort)
 
@@ -90,6 +91,7 @@
           - prefs
       become: true
       changed_when: false
+      check_mode: false
       register: piserv_tailscale_enforced_preferences
 
     - name: Assert advertised subnet routes are not accepted
@@ -104,7 +106,7 @@
             | bool) == false
           - >-
             (piserv_tailscale_enforced_state.AdvertiseRoutes
-            | default([])
+            | default([], true)
             | sort)
             == (piserv_tailscale_advertised_routes | sort)
           - >-
