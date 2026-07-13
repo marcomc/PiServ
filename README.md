@@ -189,17 +189,40 @@ scripts/check-pcloudcc-health.sh
 ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
 ```
 
+Install the pinned external role and collection dependencies:
+
+```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
+ansible-galaxy collection install -r ansible/requirements.yml --force
+```
+
 Install Tailscale and start `tailscaled`:
 
 ```sh
-ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook ansible/playbooks/tailscale.yml
 ```
 
 The Tailscale playbook uses the `artis3n.tailscale.machine` Galaxy collection
 role to install `tailscale` and enable `tailscaled`. Tailnet login remains a
 manual runbook step unless a private runtime auth key is supplied. PiServ uses
-standard OpenSSH; Tailscale SSH is not enabled.
+standard OpenSSH; Tailscale SSH is not enabled. PiServ advertises its local IPv4
+LAN as a high-availability subnet router, while rejecting imported subnet routes
+so local replies remain on the physical LAN.
+
+Configure and enable the PiServ firewall:
+
+```sh
+ansible-playbook ansible/playbooks/firewall.yml
+```
+
+The firewall playbook uses a commit-pinned PiServ fork of `oefenweb.ufw` for
+generic UFW configuration. PiServ-owned imported tasks verify prerequisites,
+enforce the UFW service state, and assert the applied runtime policy. The role
+remains the source of truth for its managed UFW configuration, policies, and
+rules. PiServ permits SSH, VNC, and mDNS from its current IPv4 LAN; all ingress
+through `tailscale0`; and UDP port `41641` for direct Tailscale peer connections.
+It permits routed tailnet traffic only to its local IPv4 LAN. Other LAN IPv6
+ingress remains denied by default.
 
 Install and manage the RaiPlaySound daily podcast sync:
 

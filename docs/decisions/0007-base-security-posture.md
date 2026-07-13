@@ -20,8 +20,8 @@ capability.
 | --- | --- |
 | SSH root login | Disable root login as long as a sudo-enabled user can still SSH |
 | SSH user access | Keep key-based SSH for the sudo-enabled `operator` user |
-| Firewall reachability | Allow access from the LAN and future Tailscale devices |
-| Tailscale | Add installation and firewall integration to the backlog |
+| Firewall reachability | Allow selected LAN services and Tailscale interface ingress |
+| Tailscale | Install before enabling the restrictive firewall |
 | VNC | Keep VNC active |
 | VNC display model | Investigate mirroring the touchscreen display instead of a separate VNC screen |
 | `rpcbind` and NFS | Disable unless a concrete NFS requirement appears |
@@ -54,8 +54,8 @@ has been disabled because the recovery model is SSH followed by Ansible.
 ## Consequences
 
 - SSH remains the primary administration path.
-- LAN and Tailscale policy must be designed before enabling a restrictive
-  firewall.
+- LAN and Tailscale ingress is now managed by the separate UFW firewall
+  playbook.
 - VNC remains available, but its display behavior needs a separate validation
   pass.
 - Disabling `rpcbind`, NFS helpers, and CUPS reduces exposed surface area.
@@ -66,7 +66,7 @@ has been disabled because the recovery model is SSH followed by Ansible.
 
 ## Validation
 
-Live validation on PiServ on 2026-07-08:
+Live validation on PiServ:
 
 | Check | Result |
 | --- | --- |
@@ -80,10 +80,13 @@ Live validation on PiServ on 2026-07-08:
 | Unattended-upgrades dry run | Completed successfully |
 | Cloud-init | Disabled by `/etc/cloud/cloud-init.disabled`; units disabled and inactive |
 | Ansible reproduction | `ansible/playbooks/piserv-base.yml` completed with `changed=0` |
+| Tailscale access | Connected; new OpenSSH connection passed |
+| UFW firewall | Active with incoming and routed traffic denied by default |
+| Firewall automation | Applied on 2026-07-13; repeat run completed with `changed=0` |
 
 Still pending:
 
-- Install Tailscale before locking down firewall rules.
 - Validate VNC behavior against the physical touchscreen session.
+- Decide the final human and service user-account policy.
 - Keep `ansible/playbooks/piserv-base.yml` as the reproduction path for the
   implemented baseline hardening.

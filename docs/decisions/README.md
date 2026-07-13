@@ -23,6 +23,8 @@ Decision records explain why PiServ setup choices were made.
 | [0007: Base security posture](0007-base-security-posture.md) | Partially implemented |
 | [0008: System mail notifications](0008-system-mail-notifications.md) | Accepted and implemented |
 | [0009: Tailscale remote access](0009-tailscale-remote-access.md) | Accepted and partially implemented |
+| [0010: UFW firewall policy](0010-ufw-firewall-policy.md) | Accepted and applied |
+| [0011: High-availability Tailscale subnet router](0011-ha-tailscale-subnet-router.md) | Accepted; tailnet approval pending |
 
 ## Template
 

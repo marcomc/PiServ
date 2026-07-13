@@ -10,11 +10,36 @@ All notable project changes are documented here.
   PiServ Tailscale installation to the upstream `artis3n.tailscale.machine`
   role.
 - Added a PiServ Tailscale playbook with the stable machine name `piserv`.
+- Disabled acceptance of advertised subnet routes so PiServ always replies to
+  local-LAN clients through its physical network interface.
+- Configured PiServ as a high-availability subnet router for its local IPv4 LAN
+  with forwarding, default Tailscale SNAT, and an exact route advertisement.
+- Ensured manual and auth-key first login apply the complete HA subnet-router
+  policy.
 - Added a Tailscale access runbook covering manual browser login, verification,
-  diagnostics, recovery, optional subnet-router configuration, key-expiry
-  trade-offs, and firewall follow-up.
+  diagnostics, recovery, route-approval and failover follow-up, key-expiry
+  trade-offs, and firewall integration.
 - Documented that PiServ keeps standard OpenSSH as the administration path and
   does not enable Tailscale SSH for now.
+
+### Firewall Policy
+
+- Added a commit-pinned `marcomc/ansible-ufw` fork integration.
+- Declared its pinned `ansible.posix` dependency and configured the firewall
+  playbook to use the inventory user's sudo privileges.
+- Added UFW rule mutation pass-through for bounded deletion and ordered
+  insertion, with Debian 13 and Trixie validation in the fork.
+- Moved PiServ-only preflight, service enforcement, and runtime validation to
+  imported project task files alongside the firewall playbook.
+- Added a PiServ firewall playbook with default-deny incoming and routed
+  policies, default-allow outgoing policy, low-volume logging, and runtime
+  validation.
+- Allowed IPv4 LAN SSH, VNC, and mDNS; Tailscale interface ingress; and direct
+  Tailscale UDP while keeping unsolicited LAN, including IPv6, traffic blocked.
+- Allowed routed Tailscale IPv4 traffic only to the local IPv4 LAN for subnet
+  router operation.
+- Added the firewall decision record and operator runbook, including Tailscale
+  netfilter ownership, additive UFW rule behavior, validation, and recovery.
 
 ## 0.1.0 - 2026-07-09
 

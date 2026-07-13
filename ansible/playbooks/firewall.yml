@@ -1,0 +1,75 @@
+---
+- name: Configure PiServ firewall policy
+  hosts: piserv
+  gather_facts: true
+  become: true
+  vars:
+    piserv_firewall_lan_ipv4_cidr: >-
+      {{
+        ansible_facts.default_ipv4.network
+        ~ '/'
+        ~ ansible_facts.default_ipv4.prefix
+      }}
+    piserv_firewall_tailscale_ipv4_cidr: 100.64.0.0/10
+    piserv_firewall_default_incoming_policy: deny
+    piserv_firewall_default_outgoing_policy: allow
+    piserv_firewall_default_input_policy: DROP
+    piserv_firewall_default_output_policy: ACCEPT
+    piserv_firewall_default_forward_policy: DROP
+    piserv_firewall_logging: low
+    piserv_firewall_rules:
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_port: "22"
+        protocol: tcp
+        comment: PiServ LAN SSH
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_port: "5900"
+        protocol: tcp
+        comment: PiServ LAN VNC
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_ip: 224.0.0.251
+        to_port: "5353"
+        protocol: udp
+        comment: PiServ LAN mDNS
+      - rule: allow
+        direction: in
+        interface: tailscale0
+        comment: PiServ Tailscale ingress
+      - rule: allow
+        route: true
+        direction: in
+        interface: tailscale0
+        from_ip: "{{ piserv_firewall_tailscale_ipv4_cidr }}"
+        to_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        comment: PiServ Tailscale subnet router
+      - rule: allow
+        to_port: "41641"
+        protocol: udp
+        comment: Tailscale direct UDP
+  pre_tasks:
+    - name: Verify PiServ firewall preconditions
+      ansible.builtin.import_tasks: ../tasks/firewall/preflight.yml
+  roles:
+    - role: oefenweb.ufw
+      vars:
+        ufw_default_incoming_policy: >-
+          {{ piserv_firewall_default_incoming_policy }}
+        ufw_default_outgoing_policy: >-
+          {{ piserv_firewall_default_outgoing_policy }}
+        ufw_logging: "{{ piserv_firewall_logging }}"
+        ufw_etc_default_default_input_policy: >-
+          {{ piserv_firewall_default_input_policy }}
+        ufw_etc_default_default_output_policy: >-
+          {{ piserv_firewall_default_output_policy }}
+        ufw_etc_default_default_forward_policy: >-
+          {{ piserv_firewall_default_forward_policy }}
+        ufw_rules: "{{ piserv_firewall_rules }}"
+  post_tasks:
+    - name: Enforce PiServ UFW service state
+      ansible.builtin.import_tasks: ../tasks/firewall/enforce-service.yml
+
+    - name: Validate PiServ firewall state
+      ansible.builtin.import_tasks: ../tasks/firewall/validate-runtime.yml

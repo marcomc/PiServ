@@ -28,7 +28,7 @@ Applied on 2026-07-08.
 | NFS block mapper | Disabled and inactive |
 | Unattended upgrades | Installed, enabled, and active |
 | Automatic reboot | Enabled at `06:30` |
-| Firewall | Not enabled yet; pending Tailscale access model |
+| Firewall | Managed separately by the UFW firewall playbook |
 | VNC | Left enabled |
 | Bluetooth | Left enabled |
 | Cloud-init | Disabled by marker file; package left installed |
@@ -111,6 +111,7 @@ ssh operator@piserv.example.com 'sudo systemctl disable --now cloud-init-local.s
 | Cloud-init status | `disabled`, `disabled-by-marker-file` |
 | Cloud-init units | `disabled`, `inactive` |
 | Ansible reproduction | `piserv-base.yml` completed with `changed=0` |
+| UFW firewall | Active; see the dedicated firewall runbook |
 
 Current remaining listening sockets after this pass:
 
@@ -118,7 +119,7 @@ Current remaining listening sockets after this pass:
 | --- | --- | --- |
 | `0.0.0.0:22`, `[::]:22` | `sshd` | Administration |
 | `*:5900` | `wayvnc` | VNC retained |
-| `0.0.0.0:41609` | `pcloudcc` | pCloud client |
+| Dynamic TCP listener | `pcloudcc` | pCloud client |
 | `0.0.0.0:42420/udp` | `pcloudcc` | pCloud client |
 | `*:5353/udp` plus dynamic UDP ports | `avahi-daemon` | mDNS |
 
@@ -127,8 +128,8 @@ known-hosts file; it was not a service failure.
 
 ## Follow-Up
 
-- Install Tailscale before enabling a restrictive firewall.
-- Define the firewall allowlist for LAN and Tailscale clients.
+- Operate UFW through `ansible/playbooks/firewall.yml` and
+  [UFW firewall policy](ufw-firewall-policy.md).
 - Investigate VNC mirroring of the physical touchscreen display.
 - Reapply this baseline with
   `ansible-playbook ansible/playbooks/piserv-base.yml`.
