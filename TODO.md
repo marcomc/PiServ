@@ -3,8 +3,8 @@
 ## Current
 
 - Decide final user-account policy.
-- Decide firewall policy after Tailscale is installed.
-- Install Tailscale and include Tailscale clients in the firewall access model.
+- Complete Tailscale browser login and record the PiServ Tailscale IP.
+- Decide firewall policy after Tailscale login is verified.
 - Investigate VNC mirroring of the physical touchscreen session.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.
@@ -63,3 +63,7 @@
 - Add disaster recovery playbook.
 - Add monitoring and alerting decisions.
 - Add service-specific runbooks as workloads are deployed.
+
+## Done
+
+- Install Tailscale and include Tailscale clients in the firewall access model.

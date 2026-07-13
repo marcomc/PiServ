@@ -1,0 +1,11 @@
+---
+- name: Install Tailscale on PiServ
+  hosts: piserv
+  gather_facts: true
+  roles:
+    - role: artis3n.tailscale.machine
+      vars:
+        state: present
+        release_stability: stable
+        tailscale_up_skip: true
+        tailscale_args: --hostname=piserv
