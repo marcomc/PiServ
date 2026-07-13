@@ -1,0 +1,88 @@
+---
+- name: Read current UFW default policies
+  when: firewall_manage_defaults | bool
+  ansible.builtin.slurp:
+    src: /etc/default/ufw
+  register: firewall_current_defaults
+  become: true
+
+- name: Configure UFW default policies
+  when:
+    - firewall_manage_defaults | bool
+    - >-
+      (firewall_default_policy.config_key ~ '="'
+      ~ firewall_policy_actions[firewall_default_policy.policy] ~ '"')
+      not in (firewall_current_defaults.content | b64decode)
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/ufw
+      - default
+      - "{{ firewall_default_policy.policy }}"
+      - "{{ firewall_default_policy.direction }}"
+  loop:
+    - direction: incoming
+      policy: "{{ firewall_default_incoming_policy }}"
+      config_key: DEFAULT_INPUT_POLICY
+    - direction: outgoing
+      policy: "{{ firewall_default_outgoing_policy }}"
+      config_key: DEFAULT_OUTPUT_POLICY
+    - direction: routed
+      policy: "{{ firewall_default_routed_policy }}"
+      config_key: DEFAULT_FORWARD_POLICY
+  loop_control:
+    loop_var: firewall_default_policy
+    label: >-
+      {{ firewall_default_policy.direction }}={{ firewall_default_policy.policy }}
+  changed_when: true
+  become: true
+  vars:
+    firewall_policy_actions:
+      allow: ACCEPT
+      deny: DROP
+      reject: REJECT
+
+- name: Configure UFW rules
+  community.general.ufw:
+    rule: "{{ item.rule | default('allow') }}"
+    direction: "{{ item.direction | default(omit) }}"
+    interface: "{{ item.interface | default(omit) }}"
+    interface_in: "{{ item.interface_in | default(omit) }}"
+    interface_out: "{{ item.interface_out | default(omit) }}"
+    from_ip: "{{ item.from_ip | default(omit) }}"
+    from_port: "{{ item.from_port | default(omit) }}"
+    to_ip: "{{ item.to_ip | default(omit) }}"
+    to_port: "{{ item.to_port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    name: "{{ item.name | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+    log: "{{ item.log | default(omit) }}"
+    route: "{{ item.route | default(omit) }}"
+    delete: "{{ item.delete | default(omit) }}"
+    insert: "{{ item.insert | default(omit) }}"
+    insert_relative_to: "{{ item.insert_relative_to | default(omit) }}"
+  loop: "{{ firewall_rules }}"
+  loop_control:
+    label: "{{ item.comment | default(item.name | default(item.to_port | default('rule'))) }}"
+  become: true
+
+- name: Configure UFW logging
+  when: firewall_manage_logging | bool
+  community.general.ufw:
+    logging: "{{ firewall_logging }}"
+  become: true
+
+- name: Configure UFW state
+  when: firewall_manage_state | bool
+  community.general.ufw:
+    state: "{{ firewall_state }}"
+  become: true
+
+- name: Configure UFW systemd service
+  when:
+    - firewall_manage_state | bool
+    - firewall_manage_service | bool
+  ansible.builtin.systemd_service:
+    name: "{{ firewall_service_name }}"
+    enabled: "{{ firewall_state == 'enabled' }}"
+    state: "{{ 'started' if firewall_state == 'enabled' else 'stopped' }}"
+  become: true

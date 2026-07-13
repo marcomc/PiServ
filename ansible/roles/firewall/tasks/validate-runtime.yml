@@ -1,0 +1,133 @@
+---
+- name: Read UFW status
+  when: firewall_manage_state | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/ufw
+      - status
+      - verbose
+  register: firewall_ufw_status
+  changed_when: false
+  become: true
+
+- name: Assert UFW state matches requested policy
+  when: firewall_manage_state | bool
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_state == 'enabled' and 'Status: active' in firewall_ufw_status.stdout)
+        or
+        (firewall_state == 'disabled' and 'Status: inactive' in firewall_ufw_status.stdout)
+    fail_msg: >-
+      UFW runtime state does not match firewall_state={{ firewall_state }}.
+
+- name: Read persisted UFW default policies
+  when: firewall_manage_defaults | bool
+  ansible.builtin.slurp:
+    src: /etc/default/ufw
+  register: firewall_ufw_defaults
+  become: true
+
+- name: Assert persisted UFW default policies
+  when: firewall_manage_defaults | bool
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('DEFAULT_INPUT_POLICY="'
+        ~ firewall_policy_actions[firewall_default_incoming_policy] ~ '"')
+        in (firewall_ufw_defaults.content | b64decode)
+      - >-
+        ('DEFAULT_OUTPUT_POLICY="'
+        ~ firewall_policy_actions[firewall_default_outgoing_policy] ~ '"')
+        in (firewall_ufw_defaults.content | b64decode)
+      - >-
+        ('DEFAULT_FORWARD_POLICY="'
+        ~ firewall_policy_actions[firewall_default_routed_policy] ~ '"')
+        in (firewall_ufw_defaults.content | b64decode)
+    fail_msg: Persisted UFW default policies do not match role variables.
+  vars:
+    firewall_policy_actions:
+      allow: ACCEPT
+      deny: DROP
+      reject: REJECT
+
+- name: Read persisted UFW logging configuration
+  when: firewall_manage_logging | bool
+  ansible.builtin.slurp:
+    src: /etc/ufw/ufw.conf
+  register: firewall_ufw_config
+  become: true
+
+- name: Assert persisted UFW logging configuration
+  when: firewall_manage_logging | bool
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('LOGLEVEL=' ~ firewall_logging_levels[firewall_logging])
+        in (firewall_ufw_config.content | b64decode)
+    fail_msg: Persisted UFW logging does not match firewall_logging.
+  vars:
+    firewall_logging_levels:
+      "on": low
+      "off": "off"
+      low: low
+      medium: medium
+      high: high
+      full: full
+
+- name: Assert commented desired UFW rules are active
+  when:
+    - firewall_manage_state | bool
+    - firewall_state == 'enabled'
+    - not (item.delete | default(false) | bool)
+    - item.comment | default('') | length > 0
+  ansible.builtin.assert:
+    that:
+      - item.comment in firewall_ufw_status.stdout
+    fail_msg: "UFW status does not contain desired rule: {{ item.comment }}."
+  loop: "{{ firewall_rules }}"
+  loop_control:
+    label: "{{ item.comment | default('uncommented rule') }}"
+
+- name: Read UFW systemd enabled state
+  when:
+    - firewall_manage_state | bool
+    - firewall_manage_service | bool
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - "{{ firewall_service_name }}"
+  register: firewall_service_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Read UFW systemd active state
+  when:
+    - firewall_manage_state | bool
+    - firewall_manage_service | bool
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ firewall_service_name }}"
+  register: firewall_service_active
+  changed_when: false
+  failed_when: false
+
+- name: Assert UFW systemd state matches requested policy
+  when:
+    - firewall_manage_state | bool
+    - firewall_manage_service | bool
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_state == 'enabled'
+        and firewall_service_enabled.stdout == 'enabled'
+        and firewall_service_active.stdout == 'active')
+        or
+        (firewall_state == 'disabled'
+        and firewall_service_enabled.stdout == 'disabled'
+        and firewall_service_active.stdout == 'inactive')
+    fail_msg: >-
+      {{ firewall_service_name }} does not match firewall_state={{ firewall_state }}.

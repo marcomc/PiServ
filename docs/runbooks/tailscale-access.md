@@ -18,7 +18,7 @@
 ## Purpose
 
 Install Tailscale on PiServ, join it to the tailnet, and validate remote access
-before finalizing firewall rules.
+for standard OpenSSH, firewall integration, and optional subnet routing.
 
 ## Preconditions
 
@@ -305,7 +305,7 @@ console and run first login again.
 | `tailscaled` state | `enabled`, `active` |
 | Tailscale IPv4 | `100.64.0.10` |
 | Tailscale backend state | `Running` |
-| Advertised routes | None |
+| Advertised routes | LAN route configured; forwarding disabled |
 | Login method | Manual browser login |
 
 Live installation validation:
@@ -318,13 +318,15 @@ second run: changed=0
 tailscale status backend: NeedsLogin
 ```
 
-Latest connection verification on 2026-07-10:
+Latest connection and firewall verification on 2026-07-13:
 
 ```text
 tailscale IPv4: 100.64.0.10
 tailscale backend: Running
 IPv4 forwarding: disabled
-advertised routes: none
+advertised LAN route: configured but non-operational
+UFW tailscale0 ingress: allowed
+new OpenSSH and VNC connections: passed
 ```
 
 ## Automation Follow-Up
@@ -334,4 +336,5 @@ advertised routes: none
 - Keep subnet routing separate from the installation playbook. If enabled,
   codify forwarding and `tailscale set --advertise-routes` in a dedicated
   PiServ-owned routing role or playbook.
-- Finalize firewall policy after LAN and Tailscale access are both verified.
+- Keep `ansible/playbooks/firewall.yml` as the host firewall reproduction path.
+- Decide whether to complete or remove the currently advertised LAN route.

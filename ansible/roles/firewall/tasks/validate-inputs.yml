@@ -1,0 +1,10 @@
+---
+- name: Assert target OS is supported by firewall role
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts | default({})).get('os_family', '')
+        in firewall_supported_os_families
+    fail_msg: >-
+      The firewall role currently supports only these OS families:
+      {{ firewall_supported_os_families | join(', ') }}.

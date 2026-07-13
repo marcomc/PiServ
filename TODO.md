@@ -3,8 +3,8 @@
 ## Current
 
 - Decide final user-account policy.
-- Complete Tailscale browser login and record the PiServ Tailscale IP.
-- Decide firewall policy after Tailscale login is verified.
+- Decide whether to complete or remove the advertised Tailscale subnet route;
+  kernel forwarding remains disabled.
 - Investigate VNC mirroring of the physical touchscreen session.
 - Verify Freenove FNK0100K first-boot behavior.
 - Fix or replace the small OLED module/cable path that pulls SDA low.

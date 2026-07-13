@@ -1,0 +1,8 @@
+---
+- name: Install UFW package
+  ansible.builtin.apt:
+    name: "{{ firewall_package_name }}"
+    state: present
+    update_cache: "{{ firewall_apt_update_cache | bool }}"
+    cache_valid_time: "{{ firewall_apt_cache_valid_time }}"
+  become: true

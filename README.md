@@ -201,6 +201,17 @@ role to install `tailscale` and enable `tailscaled`. Tailnet login remains a
 manual runbook step unless a private runtime auth key is supplied. PiServ uses
 standard OpenSSH; Tailscale SSH is not enabled.
 
+Configure and enable the PiServ firewall:
+
+```sh
+ansible-playbook ansible/playbooks/firewall.yml
+```
+
+The firewall playbook uses the reusable `firewall` role to deny unsolicited
+incoming and routed traffic while allowing outgoing traffic. PiServ permits
+SSH, VNC, and mDNS from its current local LAN, all ingress through
+`tailscale0`, and UDP port `41641` for direct Tailscale peer connections.
+
 Install and manage the RaiPlaySound daily podcast sync:
 
 ```sh

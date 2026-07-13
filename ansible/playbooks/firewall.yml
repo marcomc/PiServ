@@ -1,0 +1,35 @@
+---
+- name: Configure PiServ firewall policy
+  hosts: piserv
+  gather_facts: true
+  vars:
+    piserv_firewall_lan_cidr: >-
+      {{ ansible_facts.default_ipv4.network }}/{{ ansible_facts.default_ipv4.prefix }}
+  roles:
+    - role: firewall
+      vars:
+        firewall_rules:
+          - rule: allow
+            from_ip: "{{ piserv_firewall_lan_cidr }}"
+            to_port: "22"
+            proto: tcp
+            comment: PiServ LAN SSH
+          - rule: allow
+            from_ip: "{{ piserv_firewall_lan_cidr }}"
+            to_port: "5900"
+            proto: tcp
+            comment: PiServ LAN VNC
+          - rule: allow
+            from_ip: "{{ piserv_firewall_lan_cidr }}"
+            to_ip: 224.0.0.251
+            to_port: "5353"
+            proto: udp
+            comment: PiServ LAN mDNS
+          - rule: allow
+            direction: in
+            interface: tailscale0
+            comment: PiServ Tailscale ingress
+          - rule: allow
+            to_port: "41641"
+            proto: udp
+            comment: Tailscale direct UDP

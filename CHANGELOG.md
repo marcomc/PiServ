@@ -12,9 +12,21 @@ All notable project changes are documented here.
 - Added a PiServ Tailscale playbook with the stable machine name `piserv`.
 - Added a Tailscale access runbook covering manual browser login, verification,
   diagnostics, recovery, optional subnet-router configuration, key-expiry
-  trade-offs, and firewall follow-up.
+  trade-offs, and firewall integration.
 - Documented that PiServ keeps standard OpenSSH as the administration path and
   does not enable Tailscale SSH for now.
+
+### Firewall Policy
+
+- Added a reusable, Galaxy-ready `firewall` role using UFW and the pinned
+  `community.general` collection.
+- Added a PiServ firewall playbook with default-deny incoming and routed
+  policies, default-allow outgoing policy, low-volume logging, and runtime
+  validation.
+- Allowed LAN SSH, VNC, and mDNS; Tailscale interface ingress; and direct
+  Tailscale UDP while blocking other unsolicited LAN traffic.
+- Added the firewall decision record and operator runbook, including Tailscale
+  netfilter ownership, additive UFW rule behavior, validation, and recovery.
 
 ## 0.1.0 - 2026-07-09
 

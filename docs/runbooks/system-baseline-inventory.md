@@ -18,7 +18,8 @@
 
 Capture the 2026-07-08 live operating baseline taken before the base hardening
 pass. For the current hardened SSH, service, cloud-init, and unattended-upgrades
-state, see [Base security hardening](base-security-hardening.md).
+state, see [Base security hardening](base-security-hardening.md). For the
+current ingress policy, see [UFW firewall policy](ufw-firewall-policy.md).
 
 ## Snapshot
 
@@ -184,6 +185,10 @@ policy.
 | Remote-access exposure | SSH and VNC listen on all interfaces |
 | RPC exposure | `rpcbind` listens on all interfaces |
 
+These values are historical. UFW was enabled on 2026-07-13 with default-deny
+incoming and routed policies, explicit LAN SSH/VNC/mDNS rules, Tailscale
+interface ingress, and direct Tailscale UDP.
+
 ## Refresh Commands
 
 Use these commands to refresh the baseline without writing secrets to docs:
@@ -213,8 +218,6 @@ ssh operator@piserv.example.com 'sudo awk "{ if (\$1 == \"password:\") print \" 
 
 ## Follow-Up
 
-- Refresh the inventory after major baseline changes or before enabling a
-  firewall.
-- Install Tailscale before designing restrictive firewall rules for LAN and
-  Tailscale clients.
+- Refresh the inventory after major baseline changes.
+- Keep the current ingress allowlist synchronized with new listening services.
 - Validate whether VNC mirrors the physical touchscreen session.
