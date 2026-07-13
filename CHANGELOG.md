@@ -14,6 +14,8 @@ All notable project changes are documented here.
   local-LAN clients through its physical network interface.
 - Configured PiServ as a high-availability subnet router for its local IPv4 LAN
   with forwarding, default Tailscale SNAT, and an exact route advertisement.
+- Ensured manual and auth-key first login apply the complete HA subnet-router
+  policy.
 - Added a Tailscale access runbook covering manual browser login, verification,
   diagnostics, recovery, route-approval and failover follow-up, key-expiry
   trade-offs, and firewall integration.

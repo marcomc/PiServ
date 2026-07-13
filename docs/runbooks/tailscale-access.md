@@ -53,7 +53,9 @@ supplied at runtime:
 
 ```sh
 ssh operator@piserv.example.com
-sudo tailscale up --hostname=piserv
+sudo tailscale up --hostname=piserv \
+  --advertise-routes=LAN_IPV4_CIDR --accept-routes=false \
+  --snat-subnet-routes=true
 ```
 
 Open the printed login URL, approve PiServ, and wait for the command to finish.

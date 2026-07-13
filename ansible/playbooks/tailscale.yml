@@ -13,13 +13,18 @@
       - "{{ piserv_tailscale_lan_ipv4_cidr }}"
     piserv_tailscale_advertised_routes_argument: >-
       {{ piserv_tailscale_advertised_routes | join(',') }}
+    piserv_tailscale_up_args: >-
+      --hostname=piserv
+      --advertise-routes={{ piserv_tailscale_advertised_routes_argument }}
+      --accept-routes=false
+      --snat-subnet-routes=true
   roles:
     - role: artis3n.tailscale.machine
       vars:
         state: present
         release_stability: stable
         tailscale_up_skip: true
-        tailscale_args: --hostname=piserv
+        tailscale_args: "{{ piserv_tailscale_up_args }}"
 
   tasks:
     - name: Enable IPv4 forwarding for the PiServ subnet router
