@@ -64,18 +64,33 @@ For a recovery build where browser login is inconvenient, use a private one-off
 auth key from the Tailscale operator console:
 
 ```sh
-printf 'Tailscale auth key: ' >&2
-IFS= read -r -s TAILSCALE_AUTHKEY
-printf '\n' >&2
-export TAILSCALE_AUTHKEY
+(
+  set -eu
+  tailscale_vars=$(mktemp)
+  trap 'rm -f "$tailscale_vars"' EXIT HUP INT TERM
+  chmod 600 "$tailscale_vars"
 
-ansible-playbook ansible/playbooks/tailscale.yml \
-  -e tailscale_up_skip=false \
-  -e tailscale_authkey="$TAILSCALE_AUTHKEY"
-unset TAILSCALE_AUTHKEY
+  python3 - "$tailscale_vars" <<'PY'
+import getpass
+import json
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).write_text(
+    json.dumps({"tailscale_authkey": getpass.getpass("Tailscale auth key: ")}),
+    encoding="utf-8",
+)
+PY
+
+  ansible-playbook ansible/playbooks/tailscale.yml \
+    -e tailscale_up_skip=false \
+    -e "@$tailscale_vars"
+)
 ```
 
-Do not store auth keys in Git, shell history, runbooks, or project variables.
+The subshell removes the protected temporary variables file on exit. Do not
+store auth keys in Git, shell history, persistent files, runbooks, or project
+variables.
 
 ## Client Access
 
