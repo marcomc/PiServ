@@ -233,7 +233,7 @@ Expected result:
 | --- | --- |
 | Show status | `tailscale status` |
 | Show IPs | `tailscale ip` |
-| Re-authenticate | `sudo tailscale up --force-reauth --hostname=piserv` |
+| Re-authenticate | Follow [Recovery](#recovery) and preserve every non-default `tailscale up` flag |
 | Disconnect temporarily | `sudo tailscale down` |
 | Remove tailnet login | `sudo tailscale logout` |
 | Review key expiry | Tailscale operator console, Machines page |
@@ -270,11 +270,26 @@ Reinstall package state:
 ansible-playbook ansible/playbooks/tailscale.yml
 ```
 
-Force a fresh login:
+The [official `tailscale up` reference](https://tailscale.com/docs/reference/tailscale-cli/up)
+states that flags are not persisted between runs. Force a fresh login while
+repeating every current non-default flag.
+
+When subnet routing is not enabled:
 
 ```sh
 sudo tailscale up --force-reauth --hostname=piserv
 ```
+
+When PiServ advertises the subnet configured in this runbook:
+
+```sh
+sudo tailscale up --force-reauth --hostname=piserv \
+  --advertise-routes=192.0.2.0/24
+```
+
+Include any other non-default `tailscale up` flags that PiServ uses. If the CLI
+reports omitted settings, use its copyable command and add `--force-reauth`.
+Do not use `--reset` unless the intent is to clear routes and other settings.
 
 If the tailnet record is wrong or stale, remove PiServ from the Tailscale operator
 console and run first login again.
