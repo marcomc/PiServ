@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+# Raspberry Pi OS supplies this file on the target host.
+# shellcheck disable=SC1091
+. /etc/default/keyboard
+
+export XDG_RUNTIME_DIR="{{ base_vnc_wayland_runtime_dir }}"
+/usr/bin/mkdir -p "${XDG_RUNTIME_DIR}"
+
+export XKB_DEFAULT_MODEL="${XKBMODEL-}"
+export XKB_DEFAULT_LAYOUT="${XKBLAYOUT-}"
+
+self_pid=$$
+{
+  while ! /usr/bin/wayvncctl --socket="{{ base_vnc_control_socket_path }}" version >/dev/null 2>&1; do
+    /usr/bin/sleep 0.1
+  done
+  /usr/bin/systemd-notify --ready --pid="${self_pid}"
+} &
+
+if ! /usr/bin/raspi-config nonint is_pifive; then
+  export WAYVNC_CMA=/dev/dma_heap/linux,cma
+fi
+
+exec /usr/bin/wayvnc \
+  --detached \
+  --gpu \
+  --config "{{ base_vnc_config_path }}" \
+  --socket "{{ base_vnc_control_socket_path }}" \
+  --output "{{ base_vnc_output }}"

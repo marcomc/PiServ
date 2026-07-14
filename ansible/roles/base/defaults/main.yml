@@ -10,6 +10,15 @@ base_ssh_password_authentication: "no"
 base_ssh_kbd_interactive_authentication: "no"
 base_ssh_pubkey_authentication: "yes"
 
+base_manage_vnc: true
+base_vnc_service_name: wayvnc.service
+base_vnc_output: DSI-1
+base_vnc_run_wrapper_path: /usr/local/libexec/piserv-wayvnc-run
+base_vnc_dropin_path: /etc/systemd/system/wayvnc.service.d/10-piserv-output.conf
+base_vnc_wayland_runtime_dir: /tmp/wayvnc
+base_vnc_control_socket_path: /tmp/wayvnc/wayvncctl.sock
+base_vnc_config_path: /etc/wayvnc/config
+
 base_manage_disabled_services: true
 base_disabled_systemd_units:
   - cups.service

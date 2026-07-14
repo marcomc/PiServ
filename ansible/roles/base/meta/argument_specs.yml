@@ -30,6 +30,38 @@ argument_specs:
         type: str
         default: "yes"
         description: Effective PubkeyAuthentication value.
+      base_manage_vnc:
+        type: bool
+        default: true
+        description: Whether to manage the VNC service output selection.
+      base_vnc_service_name:
+        type: str
+        default: wayvnc.service
+        description: VNC systemd service name.
+      base_vnc_output:
+        type: str
+        default: DSI-1
+        description: Wayland output captured by VNC.
+      base_vnc_run_wrapper_path:
+        type: path
+        default: /usr/local/libexec/piserv-wayvnc-run
+        description: Project-owned VNC startup wrapper path.
+      base_vnc_dropin_path:
+        type: path
+        default: /etc/systemd/system/wayvnc.service.d/10-piserv-output.conf
+        description: Systemd drop-in that selects the project VNC wrapper.
+      base_vnc_wayland_runtime_dir:
+        type: path
+        default: /tmp/wayvnc
+        description: Runtime directory used by the system VNC service.
+      base_vnc_control_socket_path:
+        type: path
+        default: /tmp/wayvnc/wayvncctl.sock
+        description: wayvnc control socket path.
+      base_vnc_config_path:
+        type: path
+        default: /etc/wayvnc/config
+        description: VNC configuration file path.
       base_manage_disabled_services:
         type: bool
         default: true

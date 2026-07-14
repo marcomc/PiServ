@@ -3,6 +3,10 @@
   when: base_manage_ssh | bool
   ansible.builtin.include_tasks: ssh.yml
 
+- name: Configure base VNC display policy
+  when: base_manage_vnc | bool
+  ansible.builtin.include_tasks: vnc.yml
+
 - name: Configure base disabled services
   when: base_manage_disabled_services | bool
   ansible.builtin.include_tasks: services.yml

@@ -26,6 +26,7 @@ Decision records explain why PiServ setup choices were made.
 | [0010: UFW firewall policy](0010-ufw-firewall-policy.md) | Accepted and applied |
 | [0011: High-availability Tailscale subnet router](0011-ha-tailscale-subnet-router.md) | Accepted; tailnet approval pending |
 | [0012: PiServ user-account policy](0012-user-account-policy.md) | Accepted and implemented |
+| [0013: VNC touchscreen output](0013-vnc-touchscreen-output.md) | Accepted and implemented |
 
 ## Template
 

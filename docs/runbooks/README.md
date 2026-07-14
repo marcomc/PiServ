@@ -25,6 +25,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Tailscale access](tailscale-access.md) | Install, login, route, verify, and debug Tailscale access |
 | [Tailscale HA subnet routing](tailscale-ha-subnet-routing.md) | Approve, verify, and recover PiServ subnet-router participation |
 | [UFW firewall policy](ufw-firewall-policy.md) | Apply, verify, modify, and recover the host firewall |
+| [VNC touchscreen output](vnc-touchscreen-output.md) | Keep VNC aligned with the physical touchscreen |
 
 ## Template
 
