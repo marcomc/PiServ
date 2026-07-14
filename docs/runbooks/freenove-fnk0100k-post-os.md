@@ -246,6 +246,24 @@ To disable Gen3, remove that line and reboot.
 3. Confirm LED, fan, and OLED behavior while `my_app_running.service` is active.
 4. Decide whether PiServ should ever opt in to PCIe Gen3.
 
+## Cleanup Validation
+
+The 2026-07-14 cleanup pass confirmed that software state is reproducible:
+
+| Check | Result |
+| --- | --- |
+| Runtime checkout | Single managed copy under `/opt/freenove/` |
+| Runtime user | `admin` |
+| I2C controller | FNK0100 at `0x21` |
+| OLED | Present at `0x3c` |
+| Hardware reconciliation | `changed: false` with LED off and fan thresholds `[40, 65]` |
+| Background service | Active with OLED task running |
+| Touchscreen idle service | Active for `/sys/class/backlight/10-0045` |
+| Blue fan LEDs | Still on; accepted as physical hardware behavior outside API control |
+
+The remaining visual smoke test must be performed at the physical case. Do not
+disconnect the OLED or fan wiring while PiServ is powered.
+
 ## Validation Log
 
 | Date | Command | Result |
@@ -287,5 +305,8 @@ To disable Gen3, remove that line and reboot.
 | 2026-07-08 | 20-second Freenove fan-off hardware test | Fan mode `0` and duty `[0,0]` were applied, but the physical blue fan LEDs remained on; fan mode was restored to automatic mode `2` afterward |
 | 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=PiServ.local` | Installed touchscreen idle user service with a 120-second timeout; first run changed 4 tasks |
 | 2026-07-08 | `ansible-playbook ansible/playbooks/freenove-post-os.yml -e ansible_host=PiServ.local` | Passed touchscreen idle repeat idempotence with `ok=47 changed=0` |
+| 2026-07-14 | `ansible-playbook -i ansible/inventory.ini ansible/playbooks/freenove-post-os.yml --start-at-task 'Wait before validating Freenove background service stability'` | Background service stability check passed with `ok=3 changed=0` under `admin` |
+| 2026-07-14 | Freenove hardware helper with `--no-save-flash` | Readback matched the managed LED-off and fan-threshold state with `changed=false` |
+| 2026-07-14 | `i2cdetect -y 1` | FNK0100 controller `0x21` and OLED `0x3c` both present |
 | 2026-07-08 | Live touchscreen idle timeout test | Restarted the idle service, waited 125 seconds, observed backlight brightness `0`, restored brightness to `255`, and confirmed the service remained active |
 | 2026-07-08 | Freenove OLED source readback | Confirmed the OLED uses `ssd1306` and a 1-bit image buffer, so amber is not software-configurable |

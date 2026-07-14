@@ -27,6 +27,7 @@ Decision records explain why PiServ setup choices were made.
 | [0011: High-availability Tailscale subnet router](0011-ha-tailscale-subnet-router.md) | Accepted; tailnet approval pending |
 | [0012: PiServ user-account policy](0012-user-account-policy.md) | Accepted and implemented |
 | [0013: VNC touchscreen output](0013-vnc-touchscreen-output.md) | Accepted and implemented |
+| [0014: Freenove hardware cleanup state](0014-freenove-hardware-cleanup.md) | Accepted and software-validated |
 
 ## Template
 
