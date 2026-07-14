@@ -66,7 +66,7 @@ Validated installation:
 ```sh
 ansible-playbook ansible/playbooks/tailscale.yml
 ansible-playbook ansible/playbooks/tailscale.yml
-ssh operator@piserv.example.com 'tailscale version; systemctl is-active tailscaled'
+ssh admin@PiServ.local 'tailscale version; systemctl is-active tailscaled'
 ```
 
 Observed result:
@@ -81,7 +81,7 @@ second Ansible run changed=0
 Tailnet login validation:
 
 ```sh
-ssh operator@piserv.example.com 'tailscale status && tailscale ip -4'
+ssh admin@PiServ.local 'tailscale status && tailscale ip -4'
 ```
 
 Observed result: PiServ is connected with an assigned Tailscale IPv4 address.

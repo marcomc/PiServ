@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Verify that this host can reach PiServ through SSH and that the `operator` user
+Verify that this host can reach PiServ through SSH and that the `admin` user
 can perform sudo operations.
 
 ## Preconditions
@@ -10,33 +10,34 @@ can perform sudo operations.
 - PiServ is powered on.
 - The server is connected to Wi-Fi.
 - SSH key access from this host has been exchanged.
-- The `operator` account exists on PiServ.
+- The `admin` account exists on PiServ.
 
 ## Commands
 
 Verify mDNS access:
 
 ```sh
-ssh operator@piserv.example.com 'hostname && id && sudo -n true && echo sudo-ok'
+ssh admin@PiServ.local 'hostname && id && sudo -n true && echo sudo-ok'
 ```
 
 Verify direct IP access:
 
 ```sh
-ssh operator@192.0.2.181 'hostname && id && sudo -n true && echo sudo-ok'
+PISERV_IP=$(getent ahostsv4 PiServ.local | awk 'NR == 1 { print $1 }')
+ssh "admin@${PISERV_IP}" 'hostname && id && sudo -n true && echo sudo-ok'
 ```
 
 ## Expected Result
 
 - `hostname` returns the PiServ hostname.
-- `id` returns the `operator` user identity.
+- `id` returns the `admin` user identity.
 - `sudo-ok` prints without an interactive password prompt.
 
 ## Observed Results
 
 | Date | Target | Result |
 | --- | --- | --- |
-| 2026-07-02 | `operator@piserv.example.com` | Returned `PiServ`, `operator`, and `sudo-ok` |
+| 2026-07-02 | `admin@PiServ.local` | Returned `PiServ`, `admin`, and `sudo-ok` |
 
 ## Follow-Up
 

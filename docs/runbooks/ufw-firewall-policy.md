@@ -40,8 +40,8 @@ identity-level access control for traffic arriving through `tailscale0`.
 Verify both administration paths before applying changes:
 
 ```sh
-ssh operator@piserv.example.com 'sudo -n true'
-ssh operator@PISERV_TAILSCALE_IP 'sudo -n true'
+ssh admin@PiServ.local 'sudo -n true'
+ssh admin@PISERV_TAILSCALE_IP 'sudo -n true'
 ```
 
 Confirm the current LAN and Tailscale interfaces:
@@ -122,8 +122,8 @@ mountpoint /mnt/pcloud
 Run from a LAN client:
 
 ```sh
-nc -vz piserv.example.com 22
-nc -vz piserv.example.com 5900
+nc -vz PiServ.local 22
+nc -vz PiServ.local 5900
 ```
 
 Run from a Tailscale client:
@@ -132,7 +132,7 @@ Run from a Tailscale client:
 tailscale ping piserv
 nc -vz PISERV_TAILSCALE_IP 22
 nc -vz PISERV_TAILSCALE_IP 5900
-ssh operator@PISERV_TAILSCALE_IP true
+ssh admin@PISERV_TAILSCALE_IP true
 ```
 
 Run from a remote Tailscale client against a non-Tailscale LAN device:

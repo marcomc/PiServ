@@ -52,5 +52,5 @@ Validate with:
 ```sh
 ansible-playbook ansible/playbooks/freenove-post-os.yml
 ansible-playbook ansible/playbooks/freenove-post-os.yml
-ssh operator@piserv.example.com 'systemctl is-active my_app_running.service'
+ssh admin@PiServ.local 'systemctl is-active my_app_running.service'
 ```

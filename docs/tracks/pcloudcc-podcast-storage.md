@@ -43,7 +43,7 @@ workload is installed, health-check gated, and validated with direct writes.
 | Credential bootstrap | Done | TOTP login succeeded and reached `READY` |
 | pCloud mount validation | Done | `/mnt/pcloud` is mounted from `pCloud.fs` |
 | Podcast target write test | Done | `.piserv-write-test` write/read/delete passed |
-| Credential storage audit | Done | `~operator/.pcloud` hardened to `0700`; DB files hardened to `0600`; no `pass` key present |
+| Credential storage audit | Done | `~admin/.pcloud` hardened to `0700`; DB files hardened to `0600`; no `pass` key present |
 | User service startup | Done | `pcloudcc.service` starts with `/usr/local/bin/pcloudcc -m /mnt/pcloud` |
 | Service restart | Done | Stop/start remounted `/mnt/pcloud` without email, password, or TOTP |
 | Reboot recovery | Done | Reboot changed boot ID and `/mnt/pcloud` remounted automatically |
@@ -64,8 +64,8 @@ workload is installed, health-check gated, and validated with direct writes.
 
 | Item | Value |
 | --- | --- |
-| Server | `operator@piserv.example.com` / `192.0.2.181` |
-| Runtime user | `operator` |
+| Server | `admin@PiServ.local` |
+| Runtime user | `admin` |
 | Hardware | Raspberry Pi 5, 4 GB RAM, 128 GB NVMe |
 | OS target | Raspberry Pi OS / Debian `arm64` |
 | pCloud account email | Operator-provided; do not store in docs |
@@ -125,7 +125,7 @@ workload is installed, health-check gated, and validated with direct writes.
 | Round trip | Write, read, and delete `.piserv-write-test` | Contents match and cleanup succeeds |
 | External visibility | Check from Mac pCloud client or web UI | Test file appears in pCloud-backed storage |
 | Secret hygiene | Inspect unit files, Ansible vars, shell scripts, and docs | Password is absent |
-| Credential file mode | `find /home/operator/.pcloud -maxdepth 2 -printf ...` | Directories `0700`, files `0600` |
+| Credential file mode | `find /home/admin/.pcloud -maxdepth 2 -printf ...` | Directories `0700`, files `0600` |
 | Saved password absence | Inspect `setting` keys in `data.db` without values | `auth` and `saveauth` present; `pass` absent |
 | Reboot | Reboot PiServ and rerun mount/write checks | Mount recovers without manual shell state |
 | Health script | `scripts/check-pcloudcc-health.sh` | `pcloudcc_health=ok` |
@@ -178,8 +178,8 @@ them only when deliberately deauthorizing PiServ from pCloud; see the
 | 2026-07-08 | CLI TOTP patch | Passed | Rebuilt `pcloudcc`; `pcloudcc -h` exposes `--trustdevice` and `--recoverycode` |
 | 2026-07-08 | TOTP login and mount | Passed | `pcloudcc` reached `READY`; `/mnt/pcloud` mounted as `pCloud.fs` |
 | 2026-07-08 | Podcast target write test | Passed | `.piserv-write-test` write/read/delete passed under `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` |
-| 2026-07-08 | User service install | Passed | `pcloudcc.service` enabled and active for `operator`; `Linger=yes` |
-| 2026-07-08 | Credential storage audit | Passed | `~operator/.pcloud` mode `0700`; DB files mode `0600`; `auth` present; `pass` absent |
+| 2026-07-08 | User service install | Passed | `pcloudcc.service` enabled and active for `admin`; `Linger=yes` |
+| 2026-07-08 | Credential storage audit | Passed | `~admin/.pcloud` mode `0700`; DB files mode `0600`; `auth` present; `pass` absent |
 | 2026-07-08 | Saved-auth service restart | Passed | Stop/start remounted `/mnt/pcloud` without interactive login |
 | 2026-07-08 | Reboot recovery | Passed | Boot ID changed; `pcloudcc.service` active; `/mnt/pcloud` remounted as `pCloud.fs` |
 | 2026-07-08 | External visibility | Passed | `.piserv-cloud-visibility-20260708-121151.txt` appeared in the Mac pCloud Drive path |

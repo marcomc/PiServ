@@ -25,9 +25,9 @@ OpenSSH, firewall integration, and high-availability subnet routing.
 
 | Check | Command |
 | --- | --- |
-| SSH works | `ssh operator@piserv.example.com true` |
-| Sudo works | `ssh operator@piserv.example.com 'sudo -n true'` |
-| OS codename | `ssh operator@piserv.example.com '. /etc/os-release; echo "$VERSION_CODENAME"'` |
+| SSH works | `ssh admin@PiServ.local true` |
+| Sudo works | `ssh admin@PiServ.local 'sudo -n true'` |
+| OS codename | `ssh admin@PiServ.local '. /etc/os-release; echo "$VERSION_CODENAME"'` |
 
 Expected PiServ OS codename: `trixie`.
 
@@ -52,7 +52,7 @@ Use manual login for PiServ unless a private one-off auth key is intentionally
 supplied at runtime:
 
 ```sh
-ssh operator@piserv.example.com
+ssh admin@PiServ.local
 sudo tailscale up --hostname=piserv \
   --advertise-routes=LAN_IPV4_CIDR --accept-routes=false \
   --snat-subnet-routes=true
@@ -107,7 +107,7 @@ There are two separate access steps:
 After PiServ first login is approved, get the PiServ Tailscale address:
 
 ```sh
-ssh operator@piserv.example.com 'tailscale ip -4'
+ssh admin@PiServ.local 'tailscale ip -4'
 ```
 
 For an existing trusted tailnet user:
@@ -118,14 +118,14 @@ For an existing trusted tailnet user:
 4. Connect to PiServ with standard OpenSSH:
 
    ```sh
-   ssh operator@PISERV_TAILSCALE_IP
+   ssh admin@PISERV_TAILSCALE_IP
    ```
 
 If MagicDNS is enabled in the Tailscale operator console, the client can use the
 machine name instead of the `100.x.y.z` address:
 
 ```sh
-ssh operator@piserv
+ssh admin@piserv
 ```
 
 For a new user, do not share account credentials. Use one of these Tailscale
@@ -166,7 +166,7 @@ sudo tailscale debug prefs
 Run from a Tailscale-connected client:
 
 ```sh
-ssh operator@PISERV_TAILSCALE_IP
+ssh admin@PISERV_TAILSCALE_IP
 ```
 
 Expected result:

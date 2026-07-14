@@ -27,7 +27,7 @@ current ingress policy, see [UFW firewall policy](ufw-firewall-policy.md).
 | --- | --- |
 | Captured | 2026-07-08 15:03 CEST |
 | Hostname | `PiServ` |
-| Access path | `operator@piserv.example.com` |
+| Access path | `admin@PiServ.local` |
 | Hardware | Raspberry Pi 5 Model B Rev 1.0 |
 | Architecture | `arm64` |
 | Operating system | Debian GNU/Linux 13.5 `trixie` |
@@ -68,7 +68,7 @@ Detected block devices:
 
 | Interface | State | Addressing | Notes |
 | --- | --- | --- | --- |
-| `wlan0` | Up | `192.0.2.181/24` plus IPv6 | Active path |
+| `wlan0` | Up | DHCP-assigned IPv4/24 plus IPv6 | Active path |
 | `eth0` | Down/unavailable | None | Future wired path |
 | `lo` | Up | `127.0.0.1/8`, `::1/128` | Loopback |
 
@@ -133,7 +133,7 @@ Enabled system services at the pre-hardening capture:
 | `rpi-eeprom-update.service` | EEPROM update service |
 | `cloud-init*.service` | Cloud-init services enabled |
 
-Enabled user services for `operator`:
+Enabled user services for `admin`:
 
 | Service | Notes |
 | --- | --- |
@@ -194,26 +194,26 @@ interface ingress, and direct Tailscale UDP.
 Use these commands to refresh the baseline without writing secrets to docs:
 
 ```sh
-ssh operator@piserv.example.com 'hostnamectl; uname -a; uptime -p'
-ssh operator@piserv.example.com 'cat /etc/os-release; vcgencmd version'
-ssh operator@piserv.example.com 'vcgencmd get_throttled; vcgencmd measure_temp'
-ssh operator@piserv.example.com 'lsblk -e7 -o NAME,MODEL,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS'
-ssh operator@piserv.example.com 'df -hT -x tmpfs -x devtmpfs; findmnt /'
-ssh operator@piserv.example.com 'ip -brief addr; ip route'
-ssh operator@piserv.example.com 'nmcli -f GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS device show wlan0'
-ssh operator@piserv.example.com 'dpkg-query -f "${binary:Package}\n" -W | wc -l'
-ssh operator@piserv.example.com 'apt-mark showmanual | wc -l'
-ssh operator@piserv.example.com 'systemctl list-unit-files --type=service --state=enabled,enabled-runtime --no-pager'
-ssh operator@piserv.example.com 'systemctl --user list-unit-files --type=service --state=enabled,enabled-runtime --no-pager'
-ssh operator@piserv.example.com 'sudo ss -tulpen'
-ssh operator@piserv.example.com 'sudo sshd -T'
-ssh operator@piserv.example.com 'sudo nft list ruleset'
+ssh admin@PiServ.local 'hostnamectl; uname -a; uptime -p'
+ssh admin@PiServ.local 'cat /etc/os-release; vcgencmd version'
+ssh admin@PiServ.local 'vcgencmd get_throttled; vcgencmd measure_temp'
+ssh admin@PiServ.local 'lsblk -e7 -o NAME,MODEL,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS'
+ssh admin@PiServ.local 'df -hT -x tmpfs -x devtmpfs; findmnt /'
+ssh admin@PiServ.local 'ip -brief addr; ip route'
+ssh admin@PiServ.local 'nmcli -f GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS device show wlan0'
+ssh admin@PiServ.local 'dpkg-query -f "${binary:Package}\n" -W | wc -l'
+ssh admin@PiServ.local 'apt-mark showmanual | wc -l'
+ssh admin@PiServ.local 'systemctl list-unit-files --type=service --state=enabled,enabled-runtime --no-pager'
+ssh admin@PiServ.local 'systemctl --user list-unit-files --type=service --state=enabled,enabled-runtime --no-pager'
+ssh admin@PiServ.local 'sudo ss -tulpen'
+ssh admin@PiServ.local 'sudo sshd -T'
+ssh admin@PiServ.local 'sudo nft list ruleset'
 ```
 
 For netplan files, redact PSKs before storing output:
 
 ```sh
-ssh operator@piserv.example.com 'sudo awk "{ if (\$1 == \"password:\") print \"            password: REDACTED\"; else print }" /etc/netplan/*.yaml'
+ssh admin@PiServ.local 'sudo awk "{ if (\$1 == \"password:\") print \"            password: REDACTED\"; else print }" /etc/netplan/*.yaml'
 ```
 
 ## Follow-Up

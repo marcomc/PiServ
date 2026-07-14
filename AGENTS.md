@@ -7,18 +7,18 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Canonical repository path: `$HOME/Development/RaspberryPi/PiServ`.
 - Purpose: configure and reproduce the PiServ Raspberry Pi server.
 - Status: work in progress; backward compatibility is not required yet.
-- Target host: `piserv.example.com`.
-- Target IP: `192.0.2.181`.
+- Target host: `PiServ.local`.
+- Target IP: DHCP-assigned; resolve `PiServ.local` before direct-IP diagnostics.
 - Hardware: Raspberry Pi 5, 4 GB RAM, 128 GB NVMe SSD.
 - Current network: Wi-Fi only.
 - Future network: Ethernet may be added.
-- Sudo user: `operator`.
+- Sudo user: `admin`.
 - Access model: SSH key-based access from this host is allowed.
 
 ## Operating Rules
 
 - Treat the Raspberry Pi as the production test target.
-- Test setup changes directly on `piserv.example.com` before marking them done.
+- Test setup changes directly on `PiServ.local` before marking them done.
 - Prefer the simplest live command that proves the intended state.
 - After a live setup step is correct, codify it in Ansible and, where useful,
   supporting shell scripts.

@@ -1,7 +1,7 @@
 # PiServ
 
 PiServ is the setup and recovery project for a Raspberry Pi 5 server at
-`piserv.example.com` / `192.0.2.181`.
+`PiServ.local`.
 
 ## Table of Contents
 
@@ -35,14 +35,14 @@ $HOME/Development/RaspberryPi/PiServ
 
 | Item | Value |
 | --- | --- |
-| Hostname | `piserv.example.com` |
-| IP address | `192.0.2.181` |
+| Hostname | `PiServ.local` |
+| IP address | DHCP-assigned; resolve the hostname before direct-IP diagnostics |
 | Hardware | Raspberry Pi 5 |
 | RAM | 4 GB |
 | Storage | 128 GB NVMe SSD |
 | Current network | Wi-Fi |
 | Future network | Ethernet may be added |
-| Sudo user | `operator` |
+| Sudo user | `admin` |
 | Access | SSH key-based access from this host |
 
 ## Access
@@ -50,11 +50,10 @@ $HOME/Development/RaspberryPi/PiServ
 Primary SSH targets:
 
 ```sh
-ssh operator@piserv.example.com
-ssh operator@192.0.2.181
+ssh admin@PiServ.local
 ```
 
-Use `piserv.example.com` when mDNS resolution is healthy. Use the IP address when
+Use `PiServ.local` when mDNS resolution is healthy. Resolve the current IP before
 validating network or name-resolution issues.
 
 ## Operating Model
@@ -150,8 +149,9 @@ ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
 The base playbook applies the dedicated `msmtp` role first, then manages SSH
-root-login and password-auth policy, disables unneeded CUPS, `rpcbind`, and NFS
-helper units, enables unattended upgrades, and disables cloud-init. PiServ uses
+root-login and password-auth policy, keeps VNC aligned with touchscreen output
+`DSI-1`, disables unneeded CUPS, `rpcbind`, and NFS helper units, enables
+unattended upgrades, and disables cloud-init. PiServ uses
 `msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
 they contain SMTP credentials and local delivery policy. Boot notifications are
 skipped until `/etc/msmtprc` exists and is non-empty.
@@ -179,7 +179,7 @@ The pCloud playbook installs the source-built `pcloudcc` binary, applies the
 Debian 13 `arm64` build patch and CLI TOTP prompt patch, prepares
 `/mnt/pcloud`, and validates the installed client against the role's
 `pcloudcc_version` default. After manual `pcloudcc -p -s -t` login, it also
-hardens `~operator/.pcloud` and manages a credential-free user service for the
+hardens `~admin/.pcloud` and manages a credential-free user service for the
 mount. It does not perform pCloud credential login.
 
 Validate the pCloud mount before scheduled podcast work:
@@ -230,11 +230,12 @@ Install and manage the RaiPlaySound daily podcast sync:
 ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
-The RaiPlaySound playbook installs the pinned CLI source revision for `operator`,
+The RaiPlaySound playbook installs the pinned CLI source revision for `admin`,
 creates the PiServ config when missing, installs a user-scoped daily systemd
 timer, and gates the direct-write sync on the pCloud health check. New configs
 send summary mail to local recipient `root` through the system `msmtp` config
-wrapper; existing create-only configs must be edited manually.
+wrapper; existing create-only configs must be edited manually. Current
+user-scoped workloads run under the single human sudo account `admin`.
 
 Migrate a microSD-booted PiServ system to NVMe:
 

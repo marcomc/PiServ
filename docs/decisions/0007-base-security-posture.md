@@ -19,7 +19,7 @@ capability.
 | Area | Decision |
 | --- | --- |
 | SSH root login | Disable root login as long as a sudo-enabled user can still SSH |
-| SSH user access | Keep key-based SSH for the sudo-enabled `operator` user |
+| SSH user access | Keep key-based SSH for the sudo-enabled `admin` user |
 | Firewall reachability | Allow selected LAN services and Tailscale interface ingress |
 | Tailscale | Install before enabling the restrictive firewall |
 | VNC | Keep VNC active |
@@ -30,11 +30,10 @@ capability.
 | Updates | Enable unattended security updates and automatic reboots |
 | Cloud-init | Disable because PiServ will be configured by Ansible after SSH is reachable |
 
-## Open Decisions
+## Related Decisions
 
-| Area | Recommendation |
-| --- | --- |
-| Users | Keep `operator` as the only human sudo operator for now; add service-specific users only when a daemon needs file ownership or privilege isolation |
+- [PiServ user-account policy](0012-user-account-policy.md) records the accepted
+  account model.
 
 ## Cloud-Init Assessment
 
@@ -84,9 +83,9 @@ Live validation on PiServ:
 | UFW firewall | Active with incoming and routed traffic denied by default |
 | Firewall automation | Applied on 2026-07-13; repeat run completed with `changed=0` |
 
-Still pending:
+| User policy | `admin` exists in `sudo`; no `operator` account exists |
 
-- Validate VNC behavior against the physical touchscreen session.
+Keep `ansible/playbooks/piserv-base.yml` as the reproduction path for the
 - Decide the final human and service user-account policy.
 - Keep `ansible/playbooks/piserv-base.yml` as the reproduction path for the
   implemented baseline hardening.

@@ -57,15 +57,15 @@ PubkeyAuthentication yes
 Service exposure was reduced with:
 
 ```sh
-ssh operator@piserv.example.com 'sudo systemctl disable --now cups.service cups.socket'
-ssh operator@piserv.example.com 'sudo systemctl disable --now rpcbind.service rpcbind.socket nfs-blkmap.service'
+ssh admin@PiServ.local 'sudo systemctl disable --now cups.service cups.socket'
+ssh admin@PiServ.local 'sudo systemctl disable --now rpcbind.service rpcbind.socket nfs-blkmap.service'
 ```
 
 Unattended upgrades were installed and configured with:
 
 ```sh
-ssh operator@piserv.example.com 'sudo apt-get update'
-ssh operator@piserv.example.com 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades'
+ssh admin@PiServ.local 'sudo apt-get update'
+ssh admin@PiServ.local 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades'
 ```
 
 The active PiServ unattended-upgrades override is:
@@ -87,8 +87,8 @@ Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
 Cloud-init was disabled without uninstalling the package:
 
 ```sh
-ssh operator@piserv.example.com 'sudo install -o root -g root -m 0644 /tmp/cloud-init.disabled /etc/cloud/cloud-init.disabled'
-ssh operator@piserv.example.com 'sudo systemctl disable --now cloud-init-local.service cloud-init-network.service cloud-init-main.service cloud-config.service cloud-final.service'
+ssh admin@PiServ.local 'sudo install -o root -g root -m 0644 /tmp/cloud-init.disabled /etc/cloud/cloud-init.disabled'
+ssh admin@PiServ.local 'sudo systemctl disable --now cloud-init-local.service cloud-init-network.service cloud-init-main.service cloud-config.service cloud-final.service'
 ```
 
 ## Validation

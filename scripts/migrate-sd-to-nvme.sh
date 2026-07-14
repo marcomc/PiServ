@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_TARGET=operator@piserv.example.com
+SSH_TARGET=admin@PiServ.local
 TARGET_DISK=/dev/nvme0n1
 BOOT_ORDER=0xf16
 CONFIRM=0
@@ -16,7 +16,7 @@ Destructively clone the currently booted microSD system to the Raspberry Pi
 NVMe drive, then schedule EEPROM boot order for NVMe first and SD fallback.
 
 Options:
-  --host TARGET        SSH target. Default: operator@piserv.example.com
+  --host TARGET        SSH target. Default: admin@PiServ.local
   --target-disk DISK  Disk to repartition and format. Default: /dev/nvme0n1
   --boot-order ORDER  EEPROM BOOT_ORDER value. Default: 0xf16
   --reboot            Reboot after preparing the NVMe and verify the result

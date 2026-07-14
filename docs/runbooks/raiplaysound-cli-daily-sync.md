@@ -28,13 +28,13 @@ summary dry-run path has been validated without sending.
 
 | Item | Value |
 | --- | --- |
-| Runtime user | `operator` |
+| Runtime user | `admin` |
 | CLI version | `2.5.0` |
 | Source revision | `55dfb29c0c15cc30c603338072261fabf5e52fe4` |
 | Source path | `/opt/raiplaysound-cli` |
-| Command | `/home/operator/.local/bin/raiplaysound-cli-daily-sync` |
-| Config | `/home/operator/.config/raiplaysound-cli/piserv-daily-sync.conf` |
-| Log | `/home/operator/.local/state/raiplaysound-cli/daily-sync.log` |
+| Command | `/home/admin/.local/bin/raiplaysound-cli-daily-sync` |
+| Config | `/home/admin/.config/raiplaysound-cli/piserv-daily-sync.conf` |
+| Log | `/home/admin/.local/state/raiplaysound-cli/daily-sync.log` |
 | Service | `raiplaysound-cli-daily-sync.service` |
 | Timer | `raiplaysound-cli-daily-sync.timer` |
 | Schedule | Daily at 08:00 local time, randomized up to five minutes |
@@ -58,7 +58,7 @@ ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
 The playbook installs Debian dependencies, checks out the pinned CLI source,
-runs the upstream `make install` path for `operator`, creates the PiServ config
+runs the upstream `make install` path for `admin`, creates the PiServ config
 when missing, installs the pCloud health helper, and manages the user
 service/timer.
 
@@ -73,14 +73,14 @@ PiServ uses create-only config management:
 Edit the active config directly on PiServ:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'nano ~/.config/raiplaysound-cli/piserv-daily-sync.conf'
 ```
 
 After editing, validate the next run manually:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'systemctl --user start raiplaysound-cli-daily-sync.service'
 ```
 
@@ -107,28 +107,28 @@ MSMTP_BIN="/usr/local/bin/msmtp-system"
 Check the timer:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'systemctl --user list-timers --all | grep raiplaysound || true'
 ```
 
 Run the service manually:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'systemctl --user start raiplaysound-cli-daily-sync.service'
 ```
 
 Inspect service status:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'systemctl --user status raiplaysound-cli-daily-sync.service --no-pager'
 ```
 
 Follow the sync log:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'tail -f ~/.local/state/raiplaysound-cli/daily-sync.log'
 ```
 
@@ -167,16 +167,16 @@ download and does not send email.
 Stop and disable the timer:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'systemctl --user disable --now raiplaysound-cli-daily-sync.timer'
 ```
 
 Remove the user units if deliberately decommissioning the workload:
 
 ```sh
-ssh operator@piserv.example.com \
+ssh admin@PiServ.local \
   'rm -f ~/.config/systemd/user/raiplaysound-cli-daily-sync.{service,timer}'
-ssh operator@piserv.example.com 'systemctl --user daemon-reload'
+ssh admin@PiServ.local 'systemctl --user daemon-reload'
 ```
 
 Rollback does not delete downloaded podcast files.
