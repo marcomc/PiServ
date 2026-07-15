@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_TARGET=operator@piserv.example.com
+SSH_TARGET=admin@PiServ.local
 MOUNT_ROOT=/mnt/pcloud
 TARGET_SUBPATH="My Music/Podcasts/raiplaypodcast"
 SERVICE_NAME=pcloudcc.service
@@ -16,7 +16,7 @@ Usage: scripts/check-pcloudcc-health.sh [options]
 Upload and run the PiServ pcloudcc health check over SSH.
 
 Options:
-  --host TARGET          SSH target. Default: operator@piserv.example.com
+  --host TARGET          SSH target. Default: admin@PiServ.local
   --mount-root PATH      pCloud mount root. Default: /mnt/pcloud
   --target-subpath PATH  Path below mount root to write-test
   --service-name NAME    User systemd service name. Default: pcloudcc.service

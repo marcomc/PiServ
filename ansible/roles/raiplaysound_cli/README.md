@@ -35,7 +35,7 @@ This role automates the validated RaiPlaySound CLI install path:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `raiplaysound_cli_runtime_user` | Remote user fact | User that owns the install |
+| `raiplaysound_cli_runtime_user` | `ansible_user`, with a remote fact or `root` fallback | User that owns the install |
 | `raiplaysound_cli_source_dir` | `/opt/raiplaysound-cli` | Source checkout path |
 | `raiplaysound_cli_repo_url` | GitHub repository URL | Source repository |
 | `raiplaysound_cli_repo_version` | `main` | Git ref to check out |

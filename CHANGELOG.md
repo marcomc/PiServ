@@ -4,6 +4,29 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Host Baseline Follow-Ups
+
+- Accepted `admin` as the only human sudo account for now and made it the
+  inventory connection user for current user-scoped workloads;
+- Added project-owned `wayvnc` startup automation that captures the physical
+  Freenove touchscreen output `DSI-1`, including a control-socket assertion
+  that the touchscreen is actively captured rather than merely detected.
+- Recorded the Freenove cleanup state: the managed checkout is under `/opt`,
+  I2C devices are healthy, managed hardware readback is idempotent, and the
+  always-on blue fan LEDs are a documented physical limitation.
+- Added decision records and runbooks for the account, VNC, and Freenove
+  follow-up work.
+- Replaced the indefinite WayVNC `SIGSEGV` monitor with a version-triggered
+  three-restart acceptance test and explicit resolution criteria.
+- Corrected pCloud and RaiPlaySound read-only validation probes so role check
+  mode evaluates their live state before assertions run.
+- Hardened VNC selector path validation, aligned its wait budget with the role
+  timeout, and re-ran it after either vendor VNC service starts without
+  restarting the current WayVNC process during deployment. Selector unit
+  changes and missing installation links now reconcile both systemd links.
+- Recorded the installed TigerVNC client and added its direct and Tailscale
+  connection acceptance test to the current backlog.
+
 ### Tailscale Remote Access
 
 - Added the pinned `artis3n.tailscale` Galaxy collection dependency and switched
@@ -44,7 +67,7 @@ All notable project changes are documented here.
 ## 0.1.0 - 2026-07-09
 
 Initial PiServ release for reproducing and operating the Raspberry Pi 5 server
-at `piserv.example.com`.
+at `PiServ.local`.
 
 ### Documentation and Operating Model
 
@@ -73,7 +96,7 @@ at `piserv.example.com`.
   disablement, and reboot notifications.
 - Tightened the `base` role orchestration to use dynamic task includes for
   conditional stateful phases.
-- Configured the baseline to preserve `operator` SSH/sudo access, disable SSH root
+- Configured the baseline to preserve `admin` SSH/sudo access, disable SSH root
   login, disable unneeded CUPS, `rpcbind`, and NFS helper exposure, and keep
   Bluetooth available.
 - Changed the mail bootstrap path to harden operator-created mail config files
@@ -133,7 +156,7 @@ at `piserv.example.com`.
 
 - Added a reusable `raiplaysound_cli` Ansible role and PiServ playbook for
   scheduled podcast synchronization.
-- Installed RaiPlaySound CLI for the `operator` user with a user-scoped systemd
+- Installed RaiPlaySound CLI for the `admin` user with a user-scoped systemd
   service and daily timer.
 - Configured scheduled syncs to write directly to the pCloud-backed podcast
   target after the pCloud health check passes.

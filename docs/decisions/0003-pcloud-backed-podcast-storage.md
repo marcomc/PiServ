@@ -94,7 +94,7 @@ staging area and sync completed outputs to pCloud after a successful run.
   writeability, and sync/mount health.
 - The fallback path preserves job reliability even if pCloud is temporarily
   unavailable.
-- Bootstrap pCloud authentication manually with `pcloudcc -p -s -t` as `operator`
+- Bootstrap pCloud authentication manually with `pcloudcc -p -s -t` as `admin`
   for the current TOTP-enabled account. Automate only non-secret service
   settings.
 - The European Union account-region login path has been validated with the

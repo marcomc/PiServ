@@ -49,7 +49,7 @@ and hardens operator-created files when present.
 | SMTP config metadata | Harden existing config to `0640 root:msmtp` |
 | SMTP binary metadata | Persist `2755 root:msmtp` with `dpkg-statoverride` |
 | Gmail auth | Dedicated app password |
-| Envelope settings | Explicit `from`, `domain piserv.example.com`, `auto_from off`, `set_from_header on` |
+| Envelope settings | Explicit `from`, `domain PiServ.local`, `auto_from off`, `set_from_header on` |
 | Local recipient | Send to `root` |
 | External recipient | Operator-managed aliases in `/etc/aliases` |
 | unattended-upgrades | Mail `root`, report `on-change` |
@@ -68,7 +68,7 @@ standalone role.
   `/etc/msmtprc`.
 - Re-running Ansible will not create or overwrite `/etc/msmtprc` or
   `/etc/aliases`; it only hardens existing files.
-- Commands run as `operator` should not pass `--file /etc/msmtprc` directly; use
+- Commands run as `admin` should not pass `--file /etc/msmtprc` directly; use
   the default system config path or `/usr/local/bin/msmtp-system`.
 - If the Google account password changes, the Gmail app password must be
   regenerated and updated on PiServ.

@@ -7,8 +7,8 @@ Raspberry Pi bootloader to try NVMe before falling back to microSD.
 
 ## Preconditions
 
-- SSH works as `operator@piserv.example.com`.
-- `operator` can run non-interactive sudo.
+- SSH works as `admin@PiServ.local`.
+- `admin` can run non-interactive sudo.
 - The system is currently booted from microSD.
 - The target NVMe disk is `/dev/nvme0n1`.
 - Any existing content on `/dev/nvme0n1` can be destroyed.
@@ -68,10 +68,10 @@ unmounted after post-boot verification.
 ## Verification Commands
 
 ```sh
-ssh operator@piserv.example.com 'findmnt -n -o SOURCE /; findmnt -n -o SOURCE /boot/firmware'
-ssh operator@piserv.example.com 'df -h / /boot/firmware'
-ssh operator@piserv.example.com 'sudo rpi-eeprom-config | grep ^BOOT_ORDER='
-ssh operator@piserv.example.com 'systemctl --failed --no-pager'
+ssh admin@PiServ.local 'findmnt -n -o SOURCE /; findmnt -n -o SOURCE /boot/firmware'
+ssh admin@PiServ.local 'df -h / /boot/firmware'
+ssh admin@PiServ.local 'sudo rpi-eeprom-config | grep ^BOOT_ORDER='
+ssh admin@PiServ.local 'systemctl --failed --no-pager'
 ```
 
 Expected current values:

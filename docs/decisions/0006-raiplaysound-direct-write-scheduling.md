@@ -17,7 +17,7 @@ writes were unreliable.
 ## Decision
 
 Run `raiplaysound-cli-daily-sync` as a user-scoped systemd oneshot service for
-`operator`, triggered by a user-scoped systemd timer.
+`admin`, triggered by a user-scoped systemd timer.
 
 Use direct writes to:
 

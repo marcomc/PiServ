@@ -44,6 +44,7 @@
           - Linger
       register: pcloudcc_linger_state
       changed_when: false
+      check_mode: false
 
     - name: Enable pcloudcc runtime user linger
       when:
@@ -84,6 +85,7 @@
         XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path={{ pcloudcc_runtime_dir }}/bus"
       changed_when: false
+      check_mode: false
 
     - name: Validate pcloudcc mount is active
       when: pcloudcc_user_service_state == "started"
@@ -93,3 +95,4 @@
           - --mountpoint
           - "{{ pcloudcc_mount_root }}"
       changed_when: false
+      check_mode: false

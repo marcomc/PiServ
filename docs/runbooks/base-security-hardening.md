@@ -15,7 +15,7 @@ inventory.
 
 ## Applied State
 
-Applied on 2026-07-08.
+Applied on 2026-07-08; VNC touchscreen output policy added on 2026-07-14.
 
 | Area | State |
 | --- | --- |
@@ -29,7 +29,7 @@ Applied on 2026-07-08.
 | Unattended upgrades | Installed, enabled, and active |
 | Automatic reboot | Enabled at `06:30` |
 | Firewall | Managed separately by the UFW firewall playbook |
-| VNC | Left enabled |
+| VNC | Enabled and managed to capture `DSI-1`, the physical touchscreen |
 | Bluetooth | Left enabled |
 | Cloud-init | Disabled by marker file; package left installed |
 
@@ -41,8 +41,8 @@ Debian security, and Raspberry Pi Foundation package origins.
 SSH hardening was applied with:
 
 ```sh
-ssh operator@piserv.example.com 'sudo install -o root -g root -m 0644 /tmp/99-piserv-hardening.conf /etc/ssh/sshd_config.d/99-piserv-hardening.conf'
-ssh operator@piserv.example.com 'sudo sshd -t && sudo systemctl reload ssh.service'
+ssh admin@PiServ.local 'sudo install -o root -g root -m 0644 /tmp/99-piserv-hardening.conf /etc/ssh/sshd_config.d/99-piserv-hardening.conf'
+ssh admin@PiServ.local 'sudo sshd -t && sudo systemctl reload ssh.service'
 ```
 
 The installed SSH drop-in is:
@@ -57,15 +57,15 @@ PubkeyAuthentication yes
 Service exposure was reduced with:
 
 ```sh
-ssh operator@piserv.example.com 'sudo systemctl disable --now cups.service cups.socket'
-ssh operator@piserv.example.com 'sudo systemctl disable --now rpcbind.service rpcbind.socket nfs-blkmap.service'
+ssh admin@PiServ.local 'sudo systemctl disable --now cups.service cups.socket'
+ssh admin@PiServ.local 'sudo systemctl disable --now rpcbind.service rpcbind.socket nfs-blkmap.service'
 ```
 
 Unattended upgrades were installed and configured with:
 
 ```sh
-ssh operator@piserv.example.com 'sudo apt-get update'
-ssh operator@piserv.example.com 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades'
+ssh admin@PiServ.local 'sudo apt-get update'
+ssh admin@PiServ.local 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades'
 ```
 
 The active PiServ unattended-upgrades override is:
@@ -87,8 +87,8 @@ Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
 Cloud-init was disabled without uninstalling the package:
 
 ```sh
-ssh operator@piserv.example.com 'sudo install -o root -g root -m 0644 /tmp/cloud-init.disabled /etc/cloud/cloud-init.disabled'
-ssh operator@piserv.example.com 'sudo systemctl disable --now cloud-init-local.service cloud-init-network.service cloud-init-main.service cloud-config.service cloud-final.service'
+ssh admin@PiServ.local 'sudo install -o root -g root -m 0644 /tmp/cloud-init.disabled /etc/cloud/cloud-init.disabled'
+ssh admin@PiServ.local 'sudo systemctl disable --now cloud-init-local.service cloud-init-network.service cloud-init-main.service cloud-config.service cloud-final.service'
 ```
 
 ## Validation
@@ -99,7 +99,7 @@ ssh operator@piserv.example.com 'sudo systemctl disable --now cloud-init-local.s
 | Effective SSH root login | `permitrootlogin no` |
 | Effective SSH password auth | `passwordauthentication no` |
 | Effective SSH pubkey auth | `pubkeyauthentication yes` |
-| Admin SSH path | `operator@piserv.example.com` remained reachable |
+| Admin SSH path | `admin@PiServ.local` remained reachable |
 | Admin sudo | `sudo -n true` passed |
 | CUPS units | `disabled`, `inactive` |
 | `rpcbind` units | `disabled`, `inactive` |
@@ -112,6 +112,7 @@ ssh operator@piserv.example.com 'sudo systemctl disable --now cloud-init-local.s
 | Cloud-init units | `disabled`, `inactive` |
 | Ansible reproduction | `piserv-base.yml` completed with `changed=0` |
 | UFW firewall | Active; see the dedicated firewall runbook |
+| VNC output selection | Control socket reports `DSI-1` as the active captured output |
 
 Current remaining listening sockets after this pass:
 
@@ -123,13 +124,13 @@ Current remaining listening sockets after this pass:
 | `0.0.0.0:42420/udp` | `pcloudcc` | pCloud client |
 | `*:5353/udp` plus dynamic UDP ports | `avahi-daemon` | mDNS |
 
-An attempted `operator@localhost` SSH test failed because localhost is not in the
+An attempted `admin@localhost` SSH test failed because localhost is not in the
 known-hosts file; it was not a service failure.
 
 ## Follow-Up
 
 - Operate UFW through `ansible/playbooks/firewall.yml` and
   [UFW firewall policy](ufw-firewall-policy.md).
-- Investigate VNC mirroring of the physical touchscreen display.
+- Verify VNC output selection with [the VNC touchscreen output runbook](vnc-touchscreen-output.md).
 - Reapply this baseline with
   `ansible-playbook ansible/playbooks/piserv-base.yml`.

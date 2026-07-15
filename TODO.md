@@ -2,19 +2,19 @@
 
 ## Current
 
-- Decide final user-account policy.
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
 - Approve PiServ's advertised subnet route in the Tailscale admin console and
   validate failover through the existing primary subnet router.
 - Decide whether PiServ needs IPv6 LAN management access and, if so, add an
   explicitly scoped dual-stack UFW policy with live validation.
-- Investigate VNC mirroring of the physical touchscreen session.
-- Verify Freenove FNK0100K first-boot behavior.
-- Fix or replace the small OLED module/cable path that pulls SDA low.
-- Verify physical LED, fan, and OLED behavior under the managed Freenove service.
-- Decide whether to accept, physically disconnect, or replace the always-on
-  blue fan LEDs.
+- When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
+  three-restart acceptance test in the VNC runbook. Remove this item only if
+  all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
+- Validate TigerVNC 1.16.2 from this Mac to both direct PiServ LAN endpoints
+  and the Tailscale `piserv` name. Confirm its certificate prompt, `admin` PAM
+  authentication, and the `DSI-1` desktop, then record the outcome in the VNC
+  runbook.
 - Create an umbrella bootstrap playbook that orchestrates the existing base,
   Freenove, pCloud, mail, and workload playbooks after their ordering is final.
 
@@ -25,7 +25,7 @@
     visibility, but it should be installed with explicit service exposure and
     firewall expectations instead of leaving another unaudited listener.
   - Actions:
-    - Validate package availability and runtime behavior on `piserv.example.com`.
+    - Validate package availability and runtime behavior on `PiServ.local`.
     - Decide whether Glances should run CLI-only, web UI, API mode, or a
       systemd-managed service.
     - Document listening address, port, authentication model, and firewall
@@ -38,7 +38,7 @@
     than assuming generic webcam streaming is enough.
   - Actions:
     - Identify the Pi camera hardware, driver stack, and supported capture
-      pipeline on `piserv.example.com`.
+      pipeline on `PiServ.local`.
     - Prototype a Python streaming endpoint with predictable startup, health
       checks, and systemd logging.
     - Decide the Apple Home integration path: direct HomeKit camera support if

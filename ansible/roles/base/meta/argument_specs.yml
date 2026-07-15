@@ -30,6 +30,46 @@ argument_specs:
         type: str
         default: "yes"
         description: Effective PubkeyAuthentication value.
+      base_manage_vnc:
+        type: bool
+        default: true
+        description: Whether to manage the VNC service output selection.
+      base_vnc_service_name:
+        type: str
+        default: wayvnc.service
+        description: VNC systemd service name.
+      base_vnc_control_service_name:
+        type: str
+        default: wayvnc-control.service
+        description: Raspberry Pi OS service that attaches WayVNC to the desktop.
+      base_vnc_output:
+        type: str
+        default: DSI-1
+        description: Wayland output captured by VNC.
+      base_vnc_control_socket_path:
+        type: path
+        default: /tmp/wayvnc/wayvncctl.sock
+        description: wayvnc control socket path.
+      base_vnc_output_selector_path:
+        type: path
+        default: /usr/local/libexec/piserv-wayvnc-select-output
+        description: Project-owned VNC command in a root-owned non-writable parent directory.
+      base_vnc_output_selector_service_name:
+        type: str
+        default: piserv-wayvnc-output.service
+        description: Systemd oneshot service that selects the configured VNC output.
+      base_vnc_output_selector_service_path:
+        type: path
+        default: /etc/systemd/system/piserv-wayvnc-output.service
+        description: Systemd unit path for the VNC output selector.
+      base_vnc_output_selector_delay_seconds:
+        type: int
+        default: 2
+        description: Delay before reading WayVNC outputs after service startup.
+      base_vnc_output_selector_timeout_seconds:
+        type: int
+        default: 30
+        description: Maximum time to wait for the configured WayVNC output.
       base_manage_disabled_services:
         type: bool
         default: true

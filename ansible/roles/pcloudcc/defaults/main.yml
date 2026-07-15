@@ -1,5 +1,5 @@
 ---
-pcloudcc_runtime_user: "{{ ansible_facts['user_id'] | default(ansible_user | default('root')) }}"
+pcloudcc_runtime_user: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
 pcloudcc_install_root: /opt/pcloudcc
 pcloudcc_source_dir: "{{ pcloudcc_install_root }}/console-client"
 pcloudcc_repo_url: "https://github.com/pcloudcom/console-client.git"

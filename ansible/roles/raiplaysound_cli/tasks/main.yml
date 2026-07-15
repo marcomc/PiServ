@@ -159,6 +159,7 @@
     HOME: "{{ raiplaysound_cli_runtime_user_home }}"
     PATH: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
   changed_when: false
+  check_mode: false
 
 - name: Assert expected raiplaysound-cli version
   when: raiplaysound_cli_expected_version | length > 0
@@ -177,6 +178,7 @@
     HOME: "{{ raiplaysound_cli_runtime_user_home }}"
     PATH: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
   changed_when: false
+  check_mode: false
 
 - name: Configure raiplaysound-cli user timer
   when: raiplaysound_cli_manage_user_timer | bool
@@ -218,6 +220,7 @@
           - Linger
       register: raiplaysound_cli_linger_state
       changed_when: false
+      check_mode: false
 
     - name: Enable raiplaysound-cli runtime user linger
       when:
@@ -258,3 +261,4 @@
         XDG_RUNTIME_DIR: "{{ raiplaysound_cli_runtime_dir }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path={{ raiplaysound_cli_runtime_dir }}/bus"
       changed_when: false
+      check_mode: false
