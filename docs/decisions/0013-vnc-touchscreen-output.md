@@ -27,6 +27,7 @@ captured output.
 - VNC clients see the same desktop output shown on the physical touchscreen.
 - VNC remains a system service and keeps the existing authentication and
   firewall policy.
+- The selector runs after either vendor VNC service starts or restarts.
 - The selector unit must be reapplied if Raspberry Pi OS changes its VNC
   control-service integration.
 - The output name is hardware-specific and must be revalidated if the display

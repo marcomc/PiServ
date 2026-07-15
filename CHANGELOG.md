@@ -11,7 +11,6 @@ All notable project changes are documented here.
 - Added project-owned `wayvnc` startup automation that captures the physical
   Freenove touchscreen output `DSI-1`, including a control-socket assertion
   that the touchscreen is actively captured rather than merely detected.
-  Freenove touchscreen output `DSI-1`.
 - Recorded the Freenove cleanup state: the managed checkout is under `/opt`,
   I2C devices are healthy, managed hardware readback is idempotent, and the
   always-on blue fan LEDs are a documented physical limitation.
@@ -19,6 +18,14 @@ All notable project changes are documented here.
   follow-up work.
 - Replaced the indefinite WayVNC `SIGSEGV` monitor with a version-triggered
   three-restart acceptance test and explicit resolution criteria.
+- Corrected pCloud and RaiPlaySound read-only validation probes so role check
+  mode evaluates their live state before assertions run.
+- Hardened VNC selector path validation, aligned its wait budget with the role
+  timeout, and re-ran it after either vendor VNC service starts without
+  restarting the current WayVNC process during deployment. Selector unit
+  changes and missing installation links now reconcile both systemd links.
+- Recorded the installed TigerVNC client and added its direct and Tailscale
+  connection acceptance test to the current backlog.
 
 ### Tailscale Remote Access
 

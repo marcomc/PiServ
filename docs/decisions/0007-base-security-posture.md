@@ -85,7 +85,7 @@ Live validation on PiServ:
 | Tailscale access | Connected; new OpenSSH connection passed |
 | UFW firewall | Active with incoming and routed traffic denied by default |
 | Firewall automation | Applied on 2026-07-13; repeat run completed with `changed=0` |
-| VNC output | Running `wayvnc` command line contains `--output DSI-1` |
+| VNC output | Control socket reports `DSI-1` as the active captured output |
 | User policy | `admin` exists in `sudo`; no `operator` account exists |
 
 Keep `ansible/playbooks/piserv-base.yml` as the reproduction path for the

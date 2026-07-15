@@ -112,7 +112,7 @@ ssh admin@PiServ.local 'sudo systemctl disable --now cloud-init-local.service cl
 | Cloud-init units | `disabled`, `inactive` |
 | Ansible reproduction | `piserv-base.yml` completed with `changed=0` |
 | UFW firewall | Active; see the dedicated firewall runbook |
-| VNC output selection | Running process contains `--output DSI-1` |
+| VNC output selection | Control socket reports `DSI-1` as the active captured output |
 
 Current remaining listening sockets after this pass:
 

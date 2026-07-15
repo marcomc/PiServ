@@ -9,7 +9,8 @@ touchscreen.
 
 PiServ keeps the Raspberry Pi OS `wayvnc.service` startup path. The PiServ
 oneshot `piserv-wayvnc-output.service` runs after the vendor control service
-and selects Wayland output `DSI-1` through the control socket.
+and selects Wayland output `DSI-1` through the control socket. It is tied to
+both vendor VNC services so it runs again after either one restarts.
 
 ## Verify
 
@@ -18,11 +19,14 @@ Run:
 ```sh
 ssh admin@PiServ.local 'sudo systemctl is-active wayvnc.service'
 ssh admin@PiServ.local 'sudo wayvncctl -S /tmp/wayvnc/wayvncctl.sock output-list'
-ssh admin@PiServ.local 'sudo systemctl status piserv-wayvnc-output.service --no-pager'
+ssh admin@PiServ.local \
+  'sudo systemctl show piserv-wayvnc-output.service -p Result --value'
 ```
 
 Expected results are an active service, an output list whose `DSI-1` line starts
-with `*`, and a successful one-shot output-selector service.
+with `*`, and `success` from the one-shot output-selector service. The selector
+is expected to be inactive after it completes because it does not use
+`RemainAfterExit`.
 
 ## Apply
 
@@ -41,29 +45,24 @@ ssh admin@PiServ.local \
 
 ## Operator Access
 
-No macOS VNC client is currently provisioned for PiServ. The selected candidate
-is TigerVNC, an open-source client to validate against PiServ before adoption.
+TigerVNC 1.16.2 is installed on the operator Mac. Its PiServ connection
+acceptance test remains pending.
 
 On the operator Mac, `piserv` resolves to PiServ's Tailscale hostname and
-address. The direct LAN endpoints are `PiServ.local` and `192.168.1.181`.
+address. The direct LAN endpoints are `PiServ.local` and `<piserv-lan-ip>`,
+where the placeholder means PiServ's current DHCP address.
 
 ## Direct TigerVNC Validation
 
-Install TigerVNC on the operator Mac, then validate the direct LAN client
-connection.
+Validate the direct LAN client connection with the installed TigerVNC client.
 
-1. Install the cask:
-
-   ```sh
-   brew install --cask tigervnc
-   ```
-
-2. Connect TigerVNC to `192.168.1.181:5900`, then repeat with
+1. Connect TigerVNC to `<piserv-lan-ip>:5900`, then repeat with
    `PiServ.local:5900`.
-3. Confirm the first-use certificate prompt matches PiServ, then authenticate
+2. Confirm the first-use certificate prompt matches PiServ, then authenticate
    as `admin` with the local PiServ password.
-4. Confirm the displayed desktop matches the touchscreen for both direct LAN
-   endpoints, then update this runbook with the validation result.
+3. Repeat against the Tailscale `piserv:5900` endpoint.
+4. Confirm the displayed desktop matches the touchscreen for every endpoint,
+   then update this runbook and remove the matching TODO item.
 
 ## 2026-07-14 Incident Note
 
@@ -77,7 +76,7 @@ The PiServ service passed direct TCP and RFB banner checks from the operator
 Mac:
 
 ```sh
-nc -vz -w 3 192.168.1.181 5900
+nc -vz -w 3 <piserv-lan-ip> 5900
 ```
 
 The TCP check succeeded. A separate raw RFB read returned `RFB 003.008` with

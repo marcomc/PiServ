@@ -27,6 +27,7 @@
     chdir: "{{ pcloudcc_source_dir }}"
   register: pcloudcc_source_revision
   changed_when: false
+  check_mode: false
 
 - name: Assert pcloudcc source revision matches pinned commit
   when: pcloudcc_repo_version is match('^[0-9a-fA-F]{40}$')
@@ -63,6 +64,7 @@
   register: pcloudcc_patch_reverse_check
   changed_when: false
   failed_when: false
+  check_mode: false
   loop: "{{ pcloudcc_patch_files }}"
   loop_control:
     loop_var: pcloudcc_patch_file_item
@@ -78,6 +80,7 @@
   args:
     chdir: "{{ pcloudcc_source_dir }}"
   changed_when: false
+  check_mode: false
   loop: "{{ pcloudcc_patch_reverse_check.results }}"
   loop_control:
     loop_var: pcloudcc_patch_reverse_check_item
@@ -108,6 +111,7 @@
   register: pcloudcc_source_mount_root_mount
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Ensure pCloud mount root exists
   when: pcloudcc_source_mount_root_mount.rc != 0

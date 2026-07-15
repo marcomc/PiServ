@@ -4,6 +4,7 @@
   register: pcloudcc_binary_check
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Build and install pcloudcc
   when: >-

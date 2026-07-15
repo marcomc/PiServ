@@ -11,6 +11,10 @@
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
+- Validate TigerVNC 1.16.2 from this Mac to both direct PiServ LAN endpoints
+  and the Tailscale `piserv` name. Confirm its certificate prompt, `admin` PAM
+  authentication, and the `DSI-1` desktop, then record the outcome in the VNC
+  runbook.
 - Create an umbrella bootstrap playbook that orchestrates the existing base,
   Freenove, pCloud, mail, and workload playbooks after their ordering is final.
 

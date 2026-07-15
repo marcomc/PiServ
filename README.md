@@ -64,6 +64,10 @@ then converted into repeatable automation once the desired state is confirmed.
 The current project is work in progress. Backward compatibility is not a
 constraint until the project is prepared for public reuse.
 
+This private working repository intentionally records PiServ's live host
+identifiers for direct operations. Before any public release, sanitize the
+inventory, documentation, and retained Git history.
+
 ## Repository Layout
 
 | Path | Purpose |
