@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted and software-validated on 2026-07-14.
+Accepted and physically validated on 2026-07-14.
 
 ## Context
 
@@ -40,3 +40,6 @@ Live PiServ checks confirmed:
 
 Physical blue fan LED illumination remains expected and is outside software
 control.
+
+The operator physically accepted the current state: blue fan LEDs remain on,
+the other case LEDs are off, and the VNC image matches the touchscreen.

@@ -9,12 +9,16 @@ All notable project changes are documented here.
 - Accepted `admin` as the only human sudo account for now and made it the
   inventory connection user for current user-scoped workloads;
 - Added project-owned `wayvnc` startup automation that captures the physical
+  Freenove touchscreen output `DSI-1`, including a control-socket assertion
+  that the touchscreen is actively captured rather than merely detected.
   Freenove touchscreen output `DSI-1`.
 - Recorded the Freenove cleanup state: the managed checkout is under `/opt`,
   I2C devices are healthy, managed hardware readback is idempotent, and the
   always-on blue fan LEDs are a documented physical limitation.
 - Added decision records and runbooks for the account, VNC, and Freenove
   follow-up work.
+- Replaced the indefinite WayVNC `SIGSEGV` monitor with a version-triggered
+  three-restart acceptance test and explicit resolution criteria.
 
 ### Tailscale Remote Access
 

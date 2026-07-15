@@ -33,7 +33,8 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_ssh_pubkey_authentication` | `yes` | Effective public-key auth value |
 | `base_manage_vnc` | `true` | Manage the VNC service output selection |
 | `base_vnc_output` | `DSI-1` | Wayland output captured by VNC |
-| `base_vnc_run_wrapper_path` | `/usr/local/libexec/piserv-wayvnc-run` | Project-owned VNC startup wrapper |
+| `base_vnc_output_selector_path` | `/usr/local/libexec/piserv-wayvnc-select-output` | Output-selection command |
+| `base_vnc_output_selector_delay_seconds` | `2` | Delay before reading outputs after VNC starts |
 | `base_manage_disabled_services` | `true` | Disable selected systemd units |
 | `base_disabled_systemd_units` | CUPS, `rpcbind`, NFS block mapper | Units disabled when present |
 | `base_manage_unattended_upgrades` | `true` | Manage unattended upgrades |
@@ -79,9 +80,10 @@ with a separate role before expecting delivery.
 Cloud-init is disabled with `/etc/cloud/cloud-init.disabled`; the package is not
 removed.
 
-The VNC service is kept enabled and is started with the configured Wayland
-output. PiServ selects `DSI-1`, the attached 4.3-inch touchscreen, instead of
-the first output selected by the Raspberry Pi OS wrapper.
+The Raspberry Pi OS VNC startup path is left unchanged. A PiServ oneshot runs
+after `wayvnc-control.service` starts and selects `DSI-1`, the attached
+4.3-inch touchscreen, instead of the first output selected by the vendor
+control service.
 
 ## Validation
 

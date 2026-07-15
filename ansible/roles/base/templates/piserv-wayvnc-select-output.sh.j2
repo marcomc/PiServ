@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+/usr/bin/sleep "{{ base_vnc_output_selector_delay_seconds }}"
+
+attempt=1
+while [ "${attempt}" -le "{{ base_vnc_output_selector_timeout_seconds }}" ]; do
+  if output_list=$(/usr/bin/wayvncctl --socket="{{ base_vnc_control_socket_path }}" output-list 2>/dev/null); then
+    case "${output_list}" in
+      *" {{ base_vnc_output }}:"*)
+        exec /usr/bin/wayvncctl \
+          --socket="{{ base_vnc_control_socket_path }}" \
+          output-set \
+          "{{ base_vnc_output }}"
+        ;;
+      *)
+        :
+        ;;
+    esac
+  fi
+
+  attempt=$((attempt + 1))
+  /usr/bin/sleep 1
+done
+
+printf 'Configured WayVNC output %s was not detected within %s seconds.\n' \
+  "{{ base_vnc_output }}" \
+  "{{ base_vnc_output_selector_timeout_seconds }}" >&2
+exit 1

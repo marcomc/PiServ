@@ -21,6 +21,7 @@
   register: base_cloud_init_unit_files
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Disable cloud-init systemd units
   when:
@@ -47,6 +48,7 @@
   register: base_cloud_init_status
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Assert cloud-init is disabled
   when: base_cloud_init_disable | bool

@@ -6,47 +6,47 @@
   ansible.builtin.assert:
     that:
       - base_vnc_service_name in ansible_facts.services
+      - base_vnc_control_service_name in ansible_facts.services
     fail_msg: >-
-      The configured VNC service {{ base_vnc_service_name }} is not installed;
-      install Raspberry Pi OS VNC support before applying the PiServ VNC policy.
+      The configured VNC services {{ base_vnc_service_name }} and
+      {{ base_vnc_control_service_name }} must be installed before applying the
+      PiServ VNC policy.
 
-- name: Ensure PiServ VNC wrapper directory exists
+- name: Ensure PiServ VNC selector directory exists
   ansible.builtin.file:
-    path: "{{ base_vnc_run_wrapper_path | dirname }}"
+    path: "{{ base_vnc_output_selector_path | dirname }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
 
-- name: Install PiServ VNC wrapper
+- name: Install PiServ VNC output selector
   ansible.builtin.template:
-    src: piserv-wayvnc-run.sh.j2
-    dest: "{{ base_vnc_run_wrapper_path }}"
+    src: piserv-wayvnc-select-output.sh.j2
+    dest: "{{ base_vnc_output_selector_path }}"
     owner: root
     group: root
     mode: "0755"
   become: true
   notify: Restart base VNC service
 
-- name: Ensure PiServ VNC systemd drop-in directory exists
-  ansible.builtin.file:
-    path: "{{ base_vnc_dropin_path | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Install PiServ VNC output systemd drop-in
+- name: Install PiServ VNC output selector service
   ansible.builtin.template:
-    src: wayvnc-output.conf.j2
-    dest: "{{ base_vnc_dropin_path }}"
+    src: piserv-wayvnc-output.service.j2
+    dest: "{{ base_vnc_output_selector_service_path }}"
     owner: root
     group: root
     mode: "0644"
   become: true
   notify: Restart base VNC service
+
+- name: Enable PiServ VNC output selector service
+  ansible.builtin.systemd_service:
+    name: "{{ base_vnc_output_selector_service_name }}"
+    enabled: true
+    daemon_reload: true
+  become: true
 
 - name: Flush VNC service changes before validation
   ansible.builtin.meta: flush_handlers
@@ -58,7 +58,7 @@
     state: started
   become: true
 
-- name: Wait for the VNC control socket and DSI output
+- name: Wait for VNC control socket and configured output
   ansible.builtin.command:
     argv:
       - /usr/bin/wayvncctl
@@ -71,23 +71,37 @@
     - base_vnc_output in base_vnc_output_list.stdout
   retries: 30
   delay: 1
+  check_mode: false
   become: true
 
-- name: Read the running VNC command line
+- name: Select configured VNC output
+  when: >-
+    ('* ' ~ base_vnc_output ~ ':') not in base_vnc_output_list.stdout
   ansible.builtin.command:
     argv:
-      - /usr/bin/pgrep
-      - -a
-      - -f
-      - "[w]ayvnc .*--output {{ base_vnc_output }}"
-  register: base_vnc_process
-  changed_when: false
+      - /usr/bin/wayvncctl
+      - "--socket={{ base_vnc_control_socket_path }}"
+      - output-set
+      - "{{ base_vnc_output }}"
+  changed_when: true
   become: true
 
-- name: Assert VNC captures the configured touchscreen output
+- name: Read active VNC captured output
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/wayvncctl
+      - "--socket={{ base_vnc_control_socket_path }}"
+      - output-list
+  register: base_vnc_active_output
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Assert VNC actively captures the configured output
   ansible.builtin.assert:
     that:
-      - base_vnc_process.rc == 0
-      - "('--output ' ~ base_vnc_output) in base_vnc_process.stdout"
+      - base_vnc_active_output.rc == 0
+      - "('* ' ~ base_vnc_output ~ ':') in base_vnc_active_output.stdout"
     fail_msg: >-
-      wayvnc is not running with the configured output {{ base_vnc_output }}.
+      wayvnc is not actively capturing the configured output
+      {{ base_vnc_output }}.
