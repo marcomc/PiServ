@@ -20,6 +20,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Freenove FNK0100K post-OS](freenove-fnk0100k-post-os.md) | Configure the case after OS boot |
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |
 | [RaiPlaySound CLI daily sync](raiplaysound-cli-daily-sync.md) | Operate the scheduled podcast sync |
+| [Home Assistant MQTT Agent](ha-mqtt-agent.md) | Install and validate MQTT discovery telemetry |
 | [System baseline and inventory](system-baseline-inventory.md) | Capture live OS, storage, network, service, and socket state |
 | [System mail notifications](system-mail-notifications.md) | Configure host mail delivery and notification checks |
 | [Tailscale access](tailscale-access.md) | Install, login, route, verify, and debug Tailscale access |
