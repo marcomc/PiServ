@@ -16,7 +16,8 @@
   authentication, and the `DSI-1` desktop, then record the outcome in the VNC
   runbook.
 - Create an umbrella bootstrap playbook that orchestrates the existing base,
-  Freenove, pCloud, mail, and workload playbooks after their ordering is final.
+  Freenove, pCloud, mail, Home Assistant MQTT Agent, and other workload
+  playbooks after their ordering is final.
 
 ## Propositions
 
