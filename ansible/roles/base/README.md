@@ -16,6 +16,7 @@ This project-local role codifies live PiServ baseline hardening:
 
 - SSH root-login and password-auth policy
 - VNC capture selection for the physical touchscreen output
+- Glances API-only system observability on loopback
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
 - boot notification service
@@ -36,6 +37,12 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_path` | `/usr/local/libexec/piserv-wayvnc-select-output` | Output-selection command |
 | `base_vnc_output_selector_delay_seconds` | `2` | Delay before reading outputs after VNC starts |
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
+| `base_manage_glances` | `true` | Install and manage the local Glances API service |
+| `base_glances_packages` | `glances`, `lm-sensors` | Glances and hardware-sensor packages |
+| `base_glances_bind_address` | `127.0.0.1` | Loopback address for the API |
+| `base_glances_port` | `61208` | Local Glances API port |
+| `base_glances_state_directory` | `glances` | Dynamic-user state directory name |
+| `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |
 | `base_manage_disabled_services` | `true` | Disable selected systemd units |
 | `base_disabled_systemd_units` | CUPS, `rpcbind`, NFS block mapper | Units disabled when present |
 | `base_manage_unattended_upgrades` | `true` | Manage unattended upgrades |
@@ -84,6 +91,13 @@ recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
 with a separate role before expecting delivery.
+
+Glances uses the Debian package service with a PiServ-managed drop-in. It runs
+the JSON API at `127.0.0.1:61208` with the web UI disabled, a dynamic systemd
+user, and service sandboxing. HTTP has no separate credentials because the
+listener is unreachable from the LAN and is accessed through the existing SSH
+public-key policy and port forwarding. The role validates the API response and
+asserts that the service has no wildcard listener on its API port.
 
 Cloud-init is disabled with `/etc/cloud/cloud-init.disabled`; the package is not
 removed.

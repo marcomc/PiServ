@@ -1,0 +1,84 @@
+---
+- name: Install Glances observability packages
+  ansible.builtin.apt:
+    name: "{{ base_glances_packages }}"
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Ensure Glances systemd drop-in directory exists
+  ansible.builtin.file:
+    path: "{{ base_glances_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install PiServ Glances API systemd override
+  ansible.builtin.template:
+    src: glances.service.d-piserv-api.conf.j2
+    dest: "{{ base_glances_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Glances service
+  become: true
+
+- name: Ensure Glances API service is enabled and started
+  ansible.builtin.systemd_service:
+    name: "{{ base_glances_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Apply pending Glances service changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Validate Glances local API status
+  ansible.builtin.uri:
+    url: >-
+      http://{{ base_glances_bind_address }}:{{ base_glances_port }}/api/4/status
+    return_content: true
+    status_code: 200
+  register: base_glances_api_status
+  changed_when: false
+  failed_when: false
+  until: base_glances_api_status.status | int == 200
+  retries: 10
+  delay: 1
+  check_mode: false
+
+- name: Assert Glances local API returns its version
+  ansible.builtin.assert:
+    that:
+      - base_glances_api_status.status | int == 200
+      - base_glances_api_status.json.version is defined
+    fail_msg: Glances did not return a valid local API status response.
+
+- name: Read TCP listening sockets for Glances validation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ss
+      - -ltn
+  register: base_glances_listening_sockets
+  changed_when: false
+  check_mode: false
+
+- name: Assert Glances listens only on the configured loopback address
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_glances_listening_sockets.stdout is
+        search(base_glances_bind_address ~ ':' ~ (base_glances_port | string))
+      - >-
+        base_glances_listening_sockets.stdout is not
+        search('0\\.0\\.0\\.0:' ~ (base_glances_port | string))
+      - >-
+        base_glances_listening_sockets.stdout is not
+        search('\\[::\\]:' ~ (base_glances_port | string))
+    fail_msg: >-
+      Glances must listen only on {{ base_glances_bind_address }}:{{ base_glances_port }}.

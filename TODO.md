@@ -21,18 +21,6 @@
 
 ## Propositions
 
-- [ ] **Install Glances for system observability**
-  - Assessment: Glances is a low-effort monitoring layer for live PiServ
-    visibility, but it should be installed with explicit service exposure and
-    firewall expectations instead of leaving another unaudited listener.
-  - Actions:
-    - Validate package availability and runtime behavior on `PiServ.local`.
-    - Decide whether Glances should run CLI-only, web UI, API mode, or a
-      systemd-managed service.
-    - Document listening address, port, authentication model, and firewall
-      implications.
-    - Codify the final install and service configuration in Ansible.
-
 - [ ] **Build Apple Home-compatible Python camera streaming service**
   - Assessment: A small Python stream service can expose the camera as MJPEG,
     HTTP, or RTSP, but Apple Home support needs a HomeKit-compatible path rather

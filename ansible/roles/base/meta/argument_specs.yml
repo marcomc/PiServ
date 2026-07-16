@@ -70,6 +70,38 @@ argument_specs:
         type: int
         default: 30
         description: Maximum time to wait for the configured WayVNC output.
+      base_manage_glances:
+        type: bool
+        default: true
+        description: Whether to install and manage the local Glances API service.
+      base_glances_packages:
+        type: list
+        elements: str
+        description: Debian packages required for Glances system observability.
+      base_glances_service_name:
+        type: str
+        default: glances.service
+        description: Systemd service name provided by the Glances Debian package.
+      base_glances_dropin_path:
+        type: path
+        default: /etc/systemd/system/glances.service.d/piserv-api.conf
+        description: PiServ-managed systemd override for Glances API mode.
+      base_glances_bind_address:
+        type: str
+        default: 127.0.0.1
+        description: Loopback address on which the Glances API listens.
+      base_glances_port:
+        type: int
+        default: 61208
+        description: TCP port used by the local Glances API.
+      base_glances_state_directory:
+        type: str
+        default: glances
+        description: StateDirectory name used by the dynamic Glances service user.
+      base_glances_runtime_directory:
+        type: str
+        default: glances
+        description: RuntimeDirectory name used by the dynamic Glances service user.
       base_manage_disabled_services:
         type: bool
         default: true

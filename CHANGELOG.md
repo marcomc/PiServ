@@ -4,6 +4,15 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Glances Observability
+
+- Added a PiServ-managed Glances API service with hardware sensor support.
+- Bound the API to `127.0.0.1:61208`, disabled the broken Debian 13 web UI,
+  and documented SSH port-forwarded JSON API access with no UFW change.
+- Hardened the service with a dynamic user, private state and runtime
+  directories, and systemd filesystem and privilege restrictions.
+- Added API response and listener-scope assertions to the base playbook.
+
 ### Home Assistant MQTT Agent
 
 - Replaced the project-local role with the published and version-pinned Galaxy
