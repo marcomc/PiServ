@@ -16,6 +16,9 @@ All notable project changes are documented here.
 
 ### Host Baseline Follow-Ups
 
+- Replaced routine raw unattended-upgrades transcripts with a mobile-readable
+  multipart digest that shows status, reboot state, and `previous -> installed`
+  package versions while retaining full logs on PiServ and native error alerts.
 - Accepted `admin` as the only human sudo account for now and made it the
   inventory connection user for current user-scoped workloads;
 - Added project-owned `wayvnc` startup automation that captures the physical
