@@ -4,6 +4,16 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Home Assistant MQTT Agent
+
+- Replaced the project-local role with the published and version-pinned Galaxy
+  role `marcomc.ha_mqtt_agent`.
+- Updated the role pin to `v0.1.1` so read-only validation probes run during
+  Ansible check mode.
+- Added a PiServ playbook that preserves the host MQTT configuration and
+  validates the `0.3.0` agent, broker connectivity, service state, and
+  Raspberry Pi 5 firmware telemetry.
+
 ### Host Baseline Follow-Ups
 
 - Accepted `admin` as the only human sudo account for now and made it the

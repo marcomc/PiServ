@@ -241,6 +241,17 @@ send summary mail to local recipient `root` through the system `msmtp` config
 wrapper; existing create-only configs must be edited manually. Current
 user-scoped workloads run under the single human sudo account `admin`.
 
+Install and validate the Home Assistant MQTT Agent:
+
+```sh
+ansible-playbook ansible/playbooks/ha-mqtt-agent.yml
+```
+
+The playbook installs Galaxy role `marcomc.ha_mqtt_agent` version `v0.1.1`,
+pins the upstream agent to version `0.3.0`, preserves the operator-managed MQTT
+configuration, and validates the active service, broker connectivity, and
+Raspberry Pi 5 firmware telemetry in the service security context.
+
 Migrate a microSD-booted PiServ system to NVMe:
 
 ```sh

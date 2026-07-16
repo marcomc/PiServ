@@ -1,0 +1,14 @@
+---
+- name: Install and validate Home Assistant MQTT Agent
+  hosts: piserv
+  gather_facts: true
+  become: true
+  roles:
+    - role: marcomc.ha_mqtt_agent
+      vars:
+        ha_mqtt_agent_repo_version: 57b8bfb907d3a7192ba6ba4fdf1337a28569cc25
+        ha_mqtt_agent_expected_version: "0.3.0"
+        ha_mqtt_agent_config_management: unmanaged
+        ha_mqtt_agent_enable_raspberry_pi_firmware: true
+        ha_mqtt_agent_enable_raspberry_pi_pmic_voltage: true
+        ha_mqtt_agent_validate_mqtt: true
