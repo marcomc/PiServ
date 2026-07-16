@@ -89,7 +89,11 @@ argument_specs:
       base_glances_bind_address:
         type: str
         default: 127.0.0.1
-        description: Loopback address on which the Glances API listens.
+        description: IPv4 address on which the Glances API listens.
+      base_glances_validation_address:
+        type: str
+        default: 127.0.0.1
+        description: Local IPv4 address used to validate the Glances API.
       base_glances_port:
         type: int
         default: 61208
@@ -102,6 +106,22 @@ argument_specs:
         type: str
         default: glances
         description: RuntimeDirectory name used by the dynamic Glances service user.
+      base_manage_cockpit:
+        type: bool
+        default: true
+        description: Whether to install and manage the Cockpit web console.
+      base_cockpit_packages:
+        type: list
+        elements: str
+        description: Debian packages required for the Cockpit web console.
+      base_cockpit_socket_name:
+        type: str
+        default: cockpit.socket
+        description: Cockpit systemd socket unit name.
+      base_cockpit_port:
+        type: int
+        default: 9090
+        description: HTTPS port used by Cockpit.
       base_manage_disabled_services:
         type: bool
         default: true

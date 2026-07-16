@@ -41,7 +41,7 @@
 - name: Validate Glances local API status
   ansible.builtin.uri:
     url: >-
-      http://{{ base_glances_bind_address }}:{{ base_glances_port }}/api/4/status
+      http://{{ base_glances_validation_address }}:{{ base_glances_port }}/api/4/status
     return_content: true
     status_code: 200
   register: base_glances_api_status
@@ -68,17 +68,15 @@
   changed_when: false
   check_mode: false
 
-- name: Assert Glances listens only on the configured loopback address
+- name: Assert Glances listens on the configured IPv4 address
   ansible.builtin.assert:
     that:
       - >-
-        base_glances_listening_sockets.stdout is
-        search(base_glances_bind_address ~ ':' ~ (base_glances_port | string))
+        (base_glances_bind_address ~ ':' ~ (base_glances_port | string)) in
+        base_glances_listening_sockets.stdout
       - >-
-        base_glances_listening_sockets.stdout is not
-        search('0\\.0\\.0\\.0:' ~ (base_glances_port | string))
-      - >-
-        base_glances_listening_sockets.stdout is not
-        search('\\[::\\]:' ~ (base_glances_port | string))
+        ('[::]:' ~ (base_glances_port | string)) not in
+        base_glances_listening_sockets.stdout
     fail_msg: >-
-      Glances must listen only on {{ base_glances_bind_address }}:{{ base_glances_port }}.
+      Glances must listen on {{ base_glances_bind_address }}:{{ base_glances_port }}
+      without an IPv6 wildcard listener.

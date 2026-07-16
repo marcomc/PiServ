@@ -17,6 +17,7 @@ This project-local role codifies live PiServ baseline hardening:
 - SSH root-login and password-auth policy
 - VNC capture selection for the physical touchscreen output
 - Glances API-only system observability on loopback
+- Cockpit HTTPS web console for system administration
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
 - boot notification service
@@ -39,10 +40,15 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
 | `base_manage_glances` | `true` | Install and manage the local Glances API service |
 | `base_glances_packages` | `glances`, `lm-sensors` | Glances and hardware-sensor packages |
-| `base_glances_bind_address` | `127.0.0.1` | Loopback address for the API |
+| `base_glances_bind_address` | `127.0.0.1` | IPv4 address for the API listener |
+| `base_glances_validation_address` | `127.0.0.1` | Local IPv4 address used for API validation |
 | `base_glances_port` | `61208` | Local Glances API port |
 | `base_glances_state_directory` | `glances` | Dynamic-user state directory name |
 | `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |
+| `base_manage_cockpit` | `true` | Install and manage the Cockpit web console |
+| `base_cockpit_packages` | `cockpit` | Cockpit package set installed without recommendations |
+| `base_cockpit_socket_name` | `cockpit.socket` | Socket-activated Cockpit HTTPS unit |
+| `base_cockpit_port` | `9090` | Cockpit HTTPS port |
 | `base_manage_disabled_services` | `true` | Disable selected systemd units |
 | `base_disabled_systemd_units` | CUPS, `rpcbind`, NFS block mapper | Units disabled when present |
 | `base_manage_unattended_upgrades` | `true` | Manage unattended upgrades |
@@ -92,12 +98,19 @@ The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
 with a separate role before expecting delivery.
 
-Glances uses the Debian package service with a PiServ-managed drop-in. It runs
-the JSON API at `127.0.0.1:61208` with the web UI disabled, a dynamic systemd
-user, and service sandboxing. HTTP has no separate credentials because the
-listener is unreachable from the LAN and is accessed through the existing SSH
-public-key policy and port forwarding. The role validates the API response and
-asserts that the service has no wildcard listener on its API port.
+Glances uses the Debian package service with a PiServ-managed drop-in. The role
+keeps its safe loopback default, while the PiServ playbook binds the JSON API to
+IPv4 for LAN observability and Home Assistant. The web UI stays disabled, and
+the dynamic systemd user and service sandboxing remain in effect. The firewall
+permits the current IPv4 LAN, while the existing Tailscale interface policy and
+tailnet ACLs govern tailnet access. The role validates a local API response and
+asserts the configured IPv4 listener without an IPv6 wildcard.
+
+Cockpit is installed without its optional storage, NetworkManager, and package
+management modules. Its socket-activated HTTPS console listens on port `9090`,
+uses the host PAM policy, and is reachable only after the project firewall
+allows the required network path. The role verifies its local HTTPS login page
+but does not manage browser credentials or certificates.
 
 Cloud-init is disabled with `/etc/cloud/cloud-init.disabled`; the package is not
 removed.

@@ -16,7 +16,8 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | --- | --- |
 | [Server access](server-access.md) | Verify SSH and sudo access |
 | [Base security hardening](base-security-hardening.md) | Track applied SSH, service, and unattended-upgrades hardening |
-| [Glances observability](glances-observability.md) | Operate the loopback-only Glances JSON API |
+| [Cockpit web console](cockpit-web-console.md) | Operate the Cockpit HTTPS administration console |
+| [Glances observability](glances-observability.md) | Operate the LAN-accessible Glances JSON API |
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |
 | [Freenove FNK0100K post-OS](freenove-fnk0100k-post-os.md) | Configure the case after OS boot |
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |

@@ -48,7 +48,7 @@ check-mode run and two live runs. All three completed with
 config metadata: root:ha-mqtt-agent, mode 0640
 ha-mqtt-agent.service: enabled and active
 ha-mqtt-agent --version: 0.3.0
-ha-mqtt-agent doctor --mqtt: mqtt: ok
+ha-mqtt-agent --config /etc/ha-mqtt-agent/config.toml doctor --mqtt: mqtt: ok
 vcgencmd get_throttled: throttled=0x0
 vcgencmd pmic_read_adc EXT5V_V: passed in the service security context
 ```
@@ -65,6 +65,7 @@ contents:
 ```sh
 ssh admin@PiServ.local 'sudo systemctl status ha-mqtt-agent.service --no-pager'
 ssh admin@PiServ.local 'sudo journalctl -u ha-mqtt-agent.service -n 100 --no-pager'
+ssh admin@PiServ.local 'sudo -u ha-mqtt-agent /usr/local/bin/ha-mqtt-agent --config /etc/ha-mqtt-agent/config.toml doctor --mqtt'
 ```
 
 Restore a known-good operator-managed config from the secure backup, then rerun

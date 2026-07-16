@@ -4,7 +4,8 @@
   connection: local
   gather_facts: false
   vars:
-    base_glances_bind_address: 127.0.0.1
+    base_glances_bind_address: 0.0.0.0
+    base_glances_validation_address: 127.0.0.1
     base_glances_port: 61208
     base_glances_state_directory: glances
     base_glances_runtime_directory: glances
@@ -34,7 +35,7 @@
             that:
               - >-
                 'ExecStart=/usr/bin/glances --webserver --disable-webui --bind
-                127.0.0.1 --port 61208' in
+                0.0.0.0 --port 61208' in
                 (base_glances_rendered_override.content | b64decode)
               - >-
                 'Environment=HOME=/var/lib/glances' in

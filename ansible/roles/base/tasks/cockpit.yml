@@ -1,0 +1,38 @@
+---
+- name: Install Cockpit web console packages
+  ansible.builtin.apt:
+    name: "{{ base_cockpit_packages }}"
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Ensure Cockpit socket is enabled and started
+  ansible.builtin.systemd_service:
+    name: "{{ base_cockpit_socket_name }}"
+    enabled: true
+    state: started
+  become: true
+
+- name: Validate Cockpit local HTTPS login page
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ base_cockpit_port }}/"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+    validate_certs: false
+  register: base_cockpit_https
+  changed_when: false
+  failed_when: false
+  until: base_cockpit_https.status | int == 200
+  retries: 10
+  delay: 1
+  check_mode: false
+
+- name: Assert Cockpit returns its login page
+  ansible.builtin.assert:
+    that:
+      - base_cockpit_https.status | int == 200
+      - "'cockpit/static/login.js' in base_cockpit_https.content"
+    fail_msg: Cockpit did not return its HTTPS login page.

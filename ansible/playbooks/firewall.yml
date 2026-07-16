@@ -30,6 +30,16 @@
         comment: PiServ LAN VNC
       - rule: allow
         from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_port: "9090"
+        protocol: tcp
+        comment: PiServ LAN Cockpit HTTPS
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_port: "61208"
+        protocol: tcp
+        comment: PiServ LAN Glances API
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
         to_ip: 224.0.0.251
         to_port: "5353"
         protocol: udp

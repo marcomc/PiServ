@@ -14,6 +14,8 @@
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."
         base_vnc_output: DSI-1
+        base_glances_bind_address: 0.0.0.0
+        base_glances_validation_address: 127.0.0.1
         base_cloud_init_disabled_marker_content: |
           Disabled by PiServ hardening on 2026-07-08.
           Configuration is managed by Ansible after SSH is reachable.

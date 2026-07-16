@@ -4,11 +4,23 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Cockpit Web Console
+
+- Added the Cockpit HTTPS web console, socket activation, and a local login-page
+  assertion to the PiServ base role.
+- Kept the package install minimal by excluding optional storage, NetworkManager,
+  and package-management modules.
+- Allowed Cockpit TCP port `9090` only from the current IPv4 LAN while retaining
+  the existing Tailnet interface policy and PAM-backed `admin` authentication.
+- Added the Cockpit runbook and architecture decision, including the expected
+  self-signed certificate bootstrap behavior.
+
 ### Glances Observability
 
 - Added a PiServ-managed Glances API service with hardware sensor support.
-- Bound the API to `127.0.0.1:61208`, disabled the broken Debian 13 web UI,
-  and documented SSH port-forwarded JSON API access with no UFW change.
+- Bound the API to IPv4 for LAN observability and Home Assistant, disabled the
+  broken Debian 13 web UI, and allowed TCP `61208` from the current LAN in UFW
+  under the existing Tailnet ingress policy.
 - Hardened the service with a dynamic user, private state and runtime
   directories, and systemd filesystem and privilege restrictions.
 - Added API response and listener-scope assertions to the base playbook.
@@ -22,6 +34,8 @@ All notable project changes are documented here.
 - Added a PiServ playbook that preserves the host MQTT configuration and
   validates the `0.3.0` agent, broker connectivity, service state, and
   Raspberry Pi 5 firmware telemetry.
+- Documented the service-configured MQTT doctor command rather than the
+  misleading root-user default-config invocation.
 
 ### Host Baseline Follow-Ups
 

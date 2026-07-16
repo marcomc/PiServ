@@ -25,6 +25,8 @@ Tailscale administration access.
 | Routed traffic | Denied except Tailscale to the local IPv4 LAN |
 | IPv4 LAN TCP `22` | Allowed for SSH |
 | IPv4 LAN TCP `5900` | Allowed for VNC |
+| IPv4 LAN TCP `9090` | Allowed for Cockpit HTTPS |
+| IPv4 LAN TCP `61208` | Allowed for Glances API |
 | IPv4 LAN UDP `5353` to `224.0.0.251` | Allowed for mDNS |
 | IPv6 LAN ingress | Denied by default |
 | Ingress on `tailscale0` | Allowed |
@@ -97,6 +99,8 @@ sudo ufw default allow outgoing
 sudo ufw default deny routed
 sudo ufw allow from LAN_IPV4_CIDR to any port 22 proto tcp
 sudo ufw allow from LAN_IPV4_CIDR to any port 5900 proto tcp
+sudo ufw allow from LAN_IPV4_CIDR to any port 9090 proto tcp
+sudo ufw allow from LAN_IPV4_CIDR to any port 61208 proto tcp
 sudo ufw allow from LAN_IPV4_CIDR to 224.0.0.251 port 5353 proto udp
 sudo ufw allow in on tailscale0
 sudo ufw route allow in on tailscale0 from 100.64.0.0/10 to LAN_IPV4_CIDR
@@ -124,6 +128,8 @@ Run from a LAN client:
 ```sh
 nc -vz PiServ.local 22
 nc -vz PiServ.local 5900
+curl -kfsS -o /dev/null -w '%{http_code}\n' https://PiServ.local:9090/
+curl -fsS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
 ```
 
 Run from a Tailscale client:
@@ -132,6 +138,7 @@ Run from a Tailscale client:
 tailscale ping piserv
 nc -vz PISERV_TAILSCALE_IP 22
 nc -vz PISERV_TAILSCALE_IP 5900
+curl -kfsS -o /dev/null -w '%{http_code}\n' https://PISERV_TAILSCALE_IP:9090/
 ssh admin@PISERV_TAILSCALE_IP true
 ```
 
@@ -192,13 +199,15 @@ Validated on 2026-07-13:
 | UFW runtime | Active |
 | UFW service | Enabled, active |
 | Default policies | Incoming deny, outgoing allow, routed deny |
-| LAN allowlist | IPv4 SSH, VNC, mDNS |
+| LAN allowlist | IPv4 SSH, VNC, Cockpit HTTPS, mDNS |
+| LAN Glances API | TCP `61208` from the IPv4 LAN |
 | IPv6 LAN ingress | Denied by default |
 | Tailscale allowlist | `tailscale0`, UDP `41641` |
 | Tailscale routed allowlist | `tailscale0` to local IPv4 LAN |
 | Tailscale after enable | Connected, direct peer path |
 | New Tailscale SSH connection | Passed |
 | New Tailscale VNC TCP connection | Passed |
+| Cockpit LAN HTTPS connection | Passed on 2026-07-16 |
 | pCloud mount | Remained mounted |
 
 The same validation found that PiServ accepted an overlapping Tailscale LAN
