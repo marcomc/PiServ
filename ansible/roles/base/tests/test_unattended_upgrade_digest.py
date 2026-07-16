@@ -8,7 +8,7 @@ import pathlib
 import unittest
 from email import policy
 from email.parser import BytesParser
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 
 PLUGIN_PATH = pathlib.Path(__file__).parents[1] / "files" / "UnattendedUpgradesPluginPiServMail.py"
@@ -44,6 +44,9 @@ class UnattendedUpgradeDigestTests(unittest.TestCase):
         with patch.object(module.subprocess, "run") as sendmail:
             module.UnattendedUpgradesPluginPiServMail().postrun(result)
 
+        sendmail.assert_called_once_with(
+            [module.SENDMAIL_BINARY, "-t"], input=ANY, check=True
+        )
         sent = sendmail.call_args.kwargs["input"]
         message = BytesParser(policy=policy.default).parsebytes(sent)
         plain_part = message.get_body(preferencelist=("plain",))
@@ -58,6 +61,63 @@ class UnattendedUpgradeDigestTests(unittest.TestCase):
         self.assertNotIn("Processing triggers", plain_part.get_content())
         self.assertIn("<h1>PiServ upgrade complete</h1>", html_part.get_content())
         self.assertIn("<ul>", html_part.get_content())
+
+    def test_postrun_uses_configured_unattended_upgrades_recipient(self) -> None:
+        module = load_plugin_module()
+
+        class AptConfig:
+            @staticmethod
+            def find(name: str, default: str) -> str:
+                self.assertEqual(name, "Unattended-Upgrade::Mail")
+                self.assertEqual(default, "")
+                return "alerts@example.com"
+
+        class AptPkg:
+            config = AptConfig()
+
+        result = {
+            "hostname": "PiServ",
+            "success": True,
+            "reboot_required": False,
+            "log_dpkg": "Unpacking helper:arm64 (2.0.0) ...",
+        }
+
+        with (
+            patch.object(module, "apt_pkg", AptPkg()),
+            patch.object(module.subprocess, "run") as sendmail,
+        ):
+            module.UnattendedUpgradesPluginPiServMail().postrun(result)
+
+        message = BytesParser(policy=policy.default).parsebytes(sendmail.call_args.kwargs["input"])
+        self.assertEqual(message["To"], "alerts@example.com")
+
+    def test_postrun_skips_when_the_mail_recipient_is_empty(self) -> None:
+        module = load_plugin_module()
+
+        class AptConfig:
+            @staticmethod
+            def find(name: str, default: str) -> str:
+                self.assertEqual(name, "Unattended-Upgrade::Mail")
+                self.assertEqual(default, "")
+                return ""
+
+        class AptPkg:
+            config = AptConfig()
+
+        result = {
+            "hostname": "PiServ",
+            "success": True,
+            "reboot_required": False,
+            "log_dpkg": "Unpacking helper:arm64 (2.0.0) ...",
+        }
+
+        with (
+            patch.object(module, "apt_pkg", AptPkg()),
+            patch.object(module.subprocess, "run") as sendmail,
+        ):
+            module.UnattendedUpgradesPluginPiServMail().postrun(result)
+
+        sendmail.assert_not_called()
 
     def test_postrun_skips_no_change_successes(self) -> None:
         module = load_plugin_module()
@@ -92,6 +152,9 @@ class UnattendedUpgradeDigestTests(unittest.TestCase):
         with patch.object(module.subprocess, "run") as sendmail:
             module.UnattendedUpgradesPluginPiServMail().postrun(result)
 
+        sendmail.assert_called_once_with(
+            [module.SENDMAIL_BINARY, "-t"], input=ANY, check=True
+        )
         sent = sendmail.call_args.kwargs["input"]
         message = BytesParser(policy=policy.default).parsebytes(sent)
         plain_part = message.get_body(preferencelist=("plain",))

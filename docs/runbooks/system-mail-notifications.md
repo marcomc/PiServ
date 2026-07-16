@@ -51,7 +51,7 @@ The `base` role configures mail consumers:
 
 | Area | Value |
 | --- | --- |
-| unattended-upgrades recipient | `root` through the project plugin |
+| unattended-upgrades recipient | `base_unattended_mail_to` (default: `root`) for the plugin and native fallback |
 | unattended-upgrades content | Mobile digest with package version transitions and plain-text fallback |
 | unattended-upgrades full log | Retained at `/var/log/unattended-upgrades/` |
 | unattended-upgrades failure | Native error-only mail fallback |

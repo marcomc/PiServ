@@ -52,7 +52,7 @@ and hardens operator-created files when present.
 | Envelope settings | Explicit `from`, `domain PiServ.local`, `auto_from off`, `set_from_header on` |
 | Local recipient | Send to `root` |
 | External recipient | Operator-managed aliases in `/etc/aliases` |
-| unattended-upgrades | Plugin mails routine digest to `root`; native mail remains error-only fallback |
+| unattended-upgrades | `base_unattended_mail_to` receives the routine digest and native error-only fallback |
 | Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists and is non-empty |
 | RaiPlaySound | Uses `/usr/local/bin/msmtp-system` for system-config compatibility |
 

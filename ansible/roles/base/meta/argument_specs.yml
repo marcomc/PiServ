@@ -101,7 +101,7 @@ argument_specs:
       base_unattended_mail_to:
         type: str
         default: root
-        description: Recipient used by the native error fallback.
+        description: Recipient used by the digest and native error fallback.
       base_unattended_mail_report:
         type: str
         default: on-change

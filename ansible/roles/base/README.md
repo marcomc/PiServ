@@ -42,7 +42,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_unattended_automatic_reboot_time` | `06:30` | Reboot window used only when upgrades require reboot |
 | `base_unattended_origins_patterns` | Debian and Raspberry Pi origins | Allowed unattended-upgrades origins |
 | `base_manage_unattended_upgrade_digest` | `true` | Send the PiServ mobile digest instead of native raw mail |
-| `base_unattended_mail_to` | `root` | Recipient for the native error fallback |
+| `base_unattended_mail_to` | `root` | Recipient for both the digest and native error fallback |
 | `base_unattended_mail_report` | `on-change` | Native-mail report mode when the digest is disabled |
 | `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
 | `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
@@ -78,7 +78,8 @@ old and installed package versions, reboot state, and no raw log transcript.
 The full logs remain on PiServ under `/var/log/unattended-upgrades/`. Set
 `base_manage_unattended_upgrade_digest: false` to restore the native report.
 Native mail remains enabled for errors only, including unexpected failures that
-cannot reach the plugin.
+cannot reach the plugin. Set `base_unattended_mail_to` to the required local
+recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
@@ -101,6 +102,7 @@ It also repairs a missing selector installation link on later runs.
 
 ```sh
 python3 tests/test_unattended_upgrade_digest.py
+ansible-playbook tests/test-unattended-upgrades.yml
 ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check tests/test.yml
 ansible-lint ansible/playbooks/piserv-base.yml ansible/roles/base
 ```

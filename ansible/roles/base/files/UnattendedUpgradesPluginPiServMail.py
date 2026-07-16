@@ -11,8 +11,13 @@ from datetime import datetime
 from email.message import EmailMessage
 from typing import Any
 
+try:
+    import apt_pkg
+except ImportError:  # pragma: no cover - available on unattended-upgrades hosts
+    apt_pkg = None
 
-RECIPIENT = "root"
+
+DEFAULT_RECIPIENT = "root"
 SENDMAIL_BINARY = "/usr/sbin/sendmail"
 LOG_DIRECTORY = "/var/log/unattended-upgrades/"
 
@@ -74,15 +79,22 @@ def attention_items(result: dict[str, Any]) -> list[str]:
     return items
 
 
-def should_send_digest(result: dict[str, Any]) -> bool:
+def mail_recipient() -> str:
+    """Read the configured unattended-upgrades recipient."""
+    if apt_pkg is None:
+        return DEFAULT_RECIPIENT
+    return str(apt_pkg.config.find("Unattended-Upgrade::Mail", ""))
+
+
+def should_send_digest(result: dict[str, Any], recipient: str) -> bool:
     """Send only successful changes or successful runs needing attention."""
-    if not bool(result.get("success")):
+    if not recipient or not bool(result.get("success")):
         return False
     changes = package_changes(str(result.get("log_dpkg") or ""))
     return bool(changes or attention_items(result))
 
 
-def build_message(result: dict[str, Any]) -> EmailMessage:
+def build_message(result: dict[str, Any], recipient: str) -> EmailMessage:
     """Build an accessible multipart message from the plugin result."""
     success = bool(result.get("success"))
     hostname = str(result.get("hostname") or socket.getfqdn() or socket.gethostname())
@@ -159,7 +171,7 @@ def build_message(result: dict[str, Any]) -> EmailMessage:
 """
 
     message = EmailMessage()
-    message["To"] = RECIPIENT
+    message["To"] = recipient
     message["Subject"] = subject
     message.set_content(plain_text)
     message.add_alternative(html_body, subtype="html")
@@ -170,7 +182,8 @@ class UnattendedUpgradesPluginPiServMail:
     """Deliver concise post-run mail without changing upgrade behavior."""
 
     def postrun(self, result: dict[str, Any]) -> None:
-        if not should_send_digest(result):
+        recipient = mail_recipient()
+        if not should_send_digest(result, recipient):
             return
-        message = build_message(result)
+        message = build_message(result, recipient)
         subprocess.run([SENDMAIL_BINARY, "-t"], input=message.as_bytes(), check=True)
