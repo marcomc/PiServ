@@ -16,6 +16,8 @@ the operator-managed MQTT credentials in `/etc/ha-mqtt-agent/config.toml`.
 ## Prerequisites
 
 - `PiServ.local` resolves and accepts SSH connections as `admin`.
+- `admin` can use non-interactive sudo. Verify with
+  `ssh admin@PiServ.local 'sudo -n true'`.
 - The non-empty config file is already present. Its credentials must never be
   committed or passed as Ansible extra variables.
 - Galaxy dependencies are installed into `.ansible/roles`.
@@ -27,24 +29,33 @@ ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/ro
 ansible-playbook ansible/playbooks/ha-mqtt-agent.yml
 ```
 
-The playbook pins Galaxy role `marcomc.ha_mqtt_agent` to `0.1.0` and its
+If mDNS does not provide a usable SSH address, resolve the current IPv4 address
+first, then run the same playbook with
+`-e ansible_host=<resolved-ipv4>`. Do not store the DHCP address in inventory.
+
+The playbook pins Galaxy role `marcomc.ha_mqtt_agent` to `v0.1.1` and its
 upstream agent checkout to commit `57b8bfb907d3a7192ba6ba4fdf1337a28569cc25`
 (`v0.3.0`). It preserves config content but enforces `root:ha-mqtt-agent` and
 mode `0640`.
 
 ## Observed Result
 
-On 2026-07-15, before the role integration, the host reported:
+On 2026-07-16, a clean Galaxy installation of role `v0.1.1` was followed by one
+check-mode run and two live runs. All three completed with
+`ok=30 changed=0 failed=0`; the second live run confirmed idempotence.
 
 ```text
-ha-mqtt-agent.service: active (running), enabled
+config metadata: root:ha-mqtt-agent, mode 0640
+ha-mqtt-agent.service: enabled and active
 ha-mqtt-agent --version: 0.3.0
 ha-mqtt-agent doctor --mqtt: mqtt: ok
-vcgencmd pmic_read_adc EXT5V_V: 5.01428000V
+vcgencmd get_throttled: throttled=0x0
+vcgencmd pmic_read_adc EXT5V_V: passed in the service security context
 ```
 
-The Ansible run must complete with the service active and the MQTT doctor check
-passing in the `ha-mqtt-agent` service context.
+Role `v0.1.1` also runs its read-only source and runtime probes during Ansible
+check mode, so `ansible-playbook --check` validates the converged host without
+reinstalling the agent or rewriting its configuration.
 
 ## Recovery
 

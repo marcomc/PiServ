@@ -247,7 +247,7 @@ Install and validate the Home Assistant MQTT Agent:
 ansible-playbook ansible/playbooks/ha-mqtt-agent.yml
 ```
 
-The playbook installs Galaxy role `marcomc.ha_mqtt_agent` version `0.1.0`,
+The playbook installs Galaxy role `marcomc.ha_mqtt_agent` version `v0.1.1`,
 pins the upstream agent to version `0.3.0`, preserves the operator-managed MQTT
 configuration, and validates the active service, broker connectivity, and
 Raspberry Pi 5 firmware telemetry in the service security context.

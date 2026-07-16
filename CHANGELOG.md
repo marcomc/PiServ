@@ -8,6 +8,8 @@ All notable project changes are documented here.
 
 - Replaced the project-local role with the published and version-pinned Galaxy
   role `marcomc.ha_mqtt_agent`.
+- Updated the role pin to `v0.1.1` so read-only validation probes run during
+  Ansible check mode.
 - Added a PiServ playbook that preserves the host MQTT configuration and
   validates the `0.3.0` agent, broker connectivity, service state, and
   Raspberry Pi 5 firmware telemetry.
