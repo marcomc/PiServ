@@ -46,6 +46,7 @@ base_unattended_automatic_reboot_time: "06:30"
 base_unattended_remove_unused_dependencies: true
 base_unattended_remove_new_unused_dependencies: true
 base_unattended_validate_dry_run: true
+base_manage_unattended_upgrade_digest: true
 base_unattended_mail_to: root
 base_unattended_mail_report: on-change
 

@@ -94,10 +94,14 @@ argument_specs:
         type: bool
         default: true
         description: Whether to run unattended-upgrade dry-run validation.
+      base_manage_unattended_upgrade_digest:
+        type: bool
+        default: true
+        description: Whether to replace the native raw mail with the PiServ mobile digest plugin.
       base_unattended_mail_to:
         type: str
         default: root
-        description: Recipient used by unattended-upgrades reports.
+        description: Recipient used by the native error fallback.
       base_unattended_mail_report:
         type: str
         default: on-change

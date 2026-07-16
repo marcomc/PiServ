@@ -158,7 +158,9 @@ root-login and password-auth policy, keeps VNC aligned with touchscreen output
 unattended upgrades, and disables cloud-init. PiServ uses
 `msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
 they contain SMTP credentials and local delivery policy. Boot notifications are
-skipped until `/etc/msmtprc` exists and is non-empty.
+skipped until `/etc/msmtprc` exists and is non-empty. Unattended upgrades send
+a mobile-readable routine digest with package version transitions; full logs
+remain on PiServ and native error alerts remain enabled as a fallback.
 
 Configure the Freenove FNK0100K post-OS setup:
 

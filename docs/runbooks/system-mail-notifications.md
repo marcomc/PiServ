@@ -51,8 +51,10 @@ The `base` role configures mail consumers:
 
 | Area | Value |
 | --- | --- |
-| unattended-upgrades recipient | `root` |
-| unattended-upgrades report mode | `on-change` |
+| unattended-upgrades recipient | `root` through the project plugin |
+| unattended-upgrades content | Mobile digest with package version transitions and plain-text fallback |
+| unattended-upgrades full log | Retained at `/var/log/unattended-upgrades/` |
+| unattended-upgrades failure | Native error-only mail fallback |
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
@@ -177,8 +179,16 @@ Verify:
 
 ```sh
 ssh admin@PiServ.local 'systemctl status piserv-reboot-notify.service --no-pager'
-ssh admin@PiServ.local 'grep -R "Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
+ssh admin@PiServ.local 'sudo test -f /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py'
+ssh admin@PiServ.local 'sudo grep -R "^Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
 ```
+
+When the digest plugin is enabled, the third command shows `MailReport
+"only-on-error"`: the plugin sends routine messages and native mail preserves
+an unexpected-failure fallback. Routine messages show status, reboot state,
+held packages, and each package's `previous -> installed` version. Full
+package-manager logs remain on PiServ. Error fallback messages use the native
+raw format so an unexpected failure cannot be silent.
 
 ## RaiPlaySound
 
@@ -218,3 +228,4 @@ Remove email keys from the RaiPlaySound config to make it skip summaries again.
 | 2026-07-08 | Delivery validation | `mail -s ... root` delivered through the root alias |
 | 2026-07-08 | Role split | Mail transport moved to the dedicated local `msmtp` role |
 | 2026-07-08 | Final base playbook apply | Create-only `msmtp` role and `base` role completed with `changed=0` |
+| 2026-07-16 | Mobile upgrade digest | Plugin installed, routine raw mail removed, dry run passed, and test digest delivered through the root alias |
