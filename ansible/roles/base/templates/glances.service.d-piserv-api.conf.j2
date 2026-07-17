@@ -5,6 +5,8 @@ After=network-online.target
 
 [Service]
 ExecStart=
+# -u loads the existing salted hash for this username without an interactive prompt.
+# Do not use --password here: it prompts when the managed password file is absent.
 ExecStart=/usr/bin/glances --webserver --disable-webui --bind {{ base_glances_bind_address }} --port {{ base_glances_port }} -u {{ base_glances_auth_username }}
 Restart=on-failure
 RestartSec=5s
