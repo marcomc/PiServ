@@ -18,7 +18,8 @@ All notable project changes are documented here.
 ### Glances Observability
 
 - Added a PiServ-managed Glances API service with hardware sensor support and
-  its required Uvicorn webserver runtime and HTTP Basic authentication.
+  its required Uvicorn and Jinja2 webserver runtimes and HTTP Basic
+  authentication.
 - Bound the API to IPv4 for LAN observability and Home Assistant, disabled the
   broken Debian 13 web UI, and allowed TCP `61208` from the current LAN in UFW
   under the existing Tailnet ingress policy.

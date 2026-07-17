@@ -23,13 +23,13 @@ ansible-playbook ansible/playbooks/piserv-base.yml
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
-The base role installs `glances`, `lm-sensors`, and `python3-uvicorn`. Uvicorn
-is required because the Debian package lists it as a recommendation while the
-role deliberately disables optional package recommendations. The role then
-starts `glances.service` in API-only mode on IPv4 port `61208`. UFW permits the
-port from PiServ's current IPv4 LAN CIDR. The existing `tailscale0` policy also
-permits tailnet clients according to tailnet ACLs. Both network paths require
-Glances HTTP Basic authentication.
+The base role installs `glances`, `lm-sensors`, `python3-uvicorn`, and
+`python3-jinja2`. Uvicorn and Jinja2 are required because the Debian package
+lists them as recommendations while the role deliberately disables optional
+package recommendations. The role then starts `glances.service` in API-only
+mode on IPv4 port `61208`. UFW permits the port from PiServ's current IPv4 LAN
+CIDR. The existing `tailscale0` policy also permits tailnet clients according to
+tailnet ACLs. Both network paths require Glances HTTP Basic authentication.
 
 ## Authentication Bootstrap
 

@@ -22,7 +22,7 @@
         that:
           - >-
             base_glances_role_defaults['base_glances_packages']
-            == ['glances', 'lm-sensors', 'python3-uvicorn']
+            == ['glances', 'lm-sensors', 'python3-uvicorn', 'python3-jinja2']
           - base_glances_role_defaults['base_glances_auth_username'] == 'glances'
           - base_glances_role_defaults['base_glances_config_path'] == '/etc/glances/glances.conf'
           - base_glances_role_defaults['base_glances_password_directory'] == '/etc/glances'
