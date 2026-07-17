@@ -29,7 +29,7 @@ UFW to accept TCP `61208` from the current IPv4 LAN CIDR.
 | Authentication | No HTTP credentials; trusted LAN and tailnet ACLs are access boundaries |
 | Firewall | Allow TCP `61208` from the current IPv4 LAN CIDR; existing Tailscale ingress applies |
 | Privilege model | systemd `DynamicUser=yes` with private state and runtime directories |
-| Package scope | `glances` and `lm-sensors`; no optional Docker, InfluxDB, SNMP, or Matplotlib integrations |
+| Package scope | `glances`, `lm-sensors`, and required `python3-uvicorn`; no optional Docker, InfluxDB, SNMP, or Matplotlib integrations |
 
 The Glances terminal UI remains available through SSH. The browser web UI is
 intentionally out of scope until a package version includes its required static

@@ -39,7 +39,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_delay_seconds` | `2` | Delay before reading outputs after VNC starts |
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
 | `base_manage_glances` | `true` | Install and manage the local Glances API service |
-| `base_glances_packages` | `glances`, `lm-sensors` | Glances and hardware-sensor packages |
+| `base_glances_packages` | `glances`, `lm-sensors`, `python3-uvicorn` | API, sensor, and webserver runtime packages |
 | `base_glances_bind_address` | `127.0.0.1` | Loopback or wildcard IPv4 API listener |
 | `base_glances_validation_address` | `127.0.0.1` | Loopback address used for API validation |
 | `base_glances_port` | `61208` | Local Glances API port |

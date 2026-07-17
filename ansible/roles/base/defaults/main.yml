@@ -25,6 +25,7 @@ base_manage_glances: true
 base_glances_packages:
   - glances
   - lm-sensors
+  - python3-uvicorn
 base_glances_service_name: glances.service
 base_glances_dropin_dir: "/etc/systemd/system/{{ base_glances_service_name }}.d"
 base_glances_dropin_path: "{{ base_glances_dropin_dir }}/piserv-api.conf"
