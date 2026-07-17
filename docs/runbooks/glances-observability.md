@@ -100,7 +100,7 @@ sudo ufw status numbered | grep -F 'PiServ LAN Glances API'
 Run from a LAN or permitted tailnet client:
 
 ```sh
-curl -fsS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
+curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
 ```
 
 The expected unauthenticated HTTP status is `401`; authenticated API requests

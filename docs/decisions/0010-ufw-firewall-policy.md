@@ -73,9 +73,9 @@ playbook. See decision 0011 for the high-availability router policy.
 ## Consequences
 
 - SSH, VNC, and Cockpit remain available from the IPv4 LAN and tailnet.
-- The unauthenticated Glances API is available to the current IPv4 LAN and to
-  authenticated tailnet identities allowed by Tailnet ACLs; IPv6 LAN ingress
-  remains denied.
+- The HTTP Basic-authenticated Glances API is available to the current IPv4 LAN
+  and to tailnet identities allowed by Tailnet ACLs; IPv6 LAN ingress remains
+  denied.
 - IPv4 mDNS remains available on the current LAN.
 - IPv6 LAN ingress remains denied by default.
 - pCloud and other incidental listeners are blocked from unsolicited LAN

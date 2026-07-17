@@ -115,7 +115,9 @@
   register: base_glances_bootstrap_credentials
   changed_when: false
   no_log: true
-  when: not base_glances_password_file_stat.stat.exists
+  when:
+    - not base_glances_password_file_stat.stat.exists
+    - not ansible_check_mode
   become: true
 
 - name: Store Glances API password hash
@@ -127,7 +129,9 @@
     mode: "0640"
   no_log: true
   notify: Restart Glances service
-  when: not base_glances_password_file_stat.stat.exists
+  when:
+    - not base_glances_password_file_stat.stat.exists
+    - not ansible_check_mode
   become: true
 
 - name: Store root-only Glances API bootstrap password
@@ -138,7 +142,9 @@
     group: root
     mode: "0600"
   no_log: true
-  when: not base_glances_password_file_stat.stat.exists
+  when:
+    - not base_glances_password_file_stat.stat.exists
+    - not ansible_check_mode
   become: true
 
 - name: Ensure Glances systemd drop-in directory exists
