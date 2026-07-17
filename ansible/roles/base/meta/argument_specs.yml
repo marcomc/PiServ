@@ -89,11 +89,11 @@ argument_specs:
       base_glances_bind_address:
         type: str
         default: 127.0.0.1
-        description: IPv4 address on which the Glances API listens.
+        description: IPv4 loopback or wildcard address on which the Glances API listens.
       base_glances_validation_address:
         type: str
         default: 127.0.0.1
-        description: Local IPv4 address used to validate the Glances API.
+        description: Loopback address used to validate the Glances API.
       base_glances_port:
         type: int
         default: 61208

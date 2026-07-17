@@ -62,6 +62,8 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   `/etc` unless the role explicitly owns that directory.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
+- Before describing a wildcard listener as LAN-only, account for interface-wide
+  firewall rules and validate every permitted ingress path, including Tailnet.
 - Treat `vendor/` as upstream reference material. Do not rewrite vendored files
   solely to satisfy project lint rules unless PiServ intentionally forks or
   patches that upstream code.

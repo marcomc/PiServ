@@ -63,10 +63,9 @@ glances
 
 ## Validation
 
-The 2026-07-16 deployment confirmed Glances `4.3.1+dfsg-1` as active, the
-local API as responsive, and Home Assistant at `192.168.1.253:8123`. PiGuard
-uses the same API-only IPv4-wildcard pattern for its primary and secondary
-servers.
+The 2026-07-16 deployment confirmed Glances `4.3.1+dfsg-1` as active and the
+local API as responsive. PiGuard uses the same API-only IPv4-wildcard pattern
+for its primary and secondary servers.
 
 Run on PiServ:
 

@@ -45,9 +45,7 @@ IPv4 listener, and no IPv6 wildcard listener.
 ## Validation
 
 On 2026-07-16, Debian `glances` version `4.3.1+dfsg-1` returned API version
-information from `/api/4/status` and CPU metrics from `/api/4/cpu`. Home
-Assistant was confirmed at `192.168.1.253:8123`; its MQTT broker connection
-from PiServ was established to `192.168.1.253:1883`.
+information from `/api/4/status` and CPU metrics from `/api/4/cpu`.
 
 Starting the web UI without `--disable-webui` was also tested and failed with
 `RuntimeError: Directory .../glances/outputs/static/public does not exist`.

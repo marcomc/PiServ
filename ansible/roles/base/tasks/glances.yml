@@ -1,4 +1,16 @@
 ---
+- name: Validate Glances API configuration
+  ansible.builtin.assert:
+    that:
+      - base_glances_bind_address in ['127.0.0.1', '0.0.0.0']
+      - base_glances_validation_address == '127.0.0.1'
+      - base_glances_port is integer
+      - base_glances_port >= 1
+      - base_glances_port <= 65535
+    fail_msg: >-
+      Glances requires a loopback or IPv4-wildcard listener, loopback API
+      validation, and a TCP port between 1 and 65535.
+
 - name: Install Glances observability packages
   ansible.builtin.apt:
     name: "{{ base_glances_packages }}"

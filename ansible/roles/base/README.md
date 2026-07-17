@@ -16,7 +16,7 @@ This project-local role codifies live PiServ baseline hardening:
 
 - SSH root-login and password-auth policy
 - VNC capture selection for the physical touchscreen output
-- Glances API-only system observability on loopback
+- Glances API-only system observability with loopback-safe defaults
 - Cockpit HTTPS web console for system administration
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
@@ -40,8 +40,8 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
 | `base_manage_glances` | `true` | Install and manage the local Glances API service |
 | `base_glances_packages` | `glances`, `lm-sensors` | Glances and hardware-sensor packages |
-| `base_glances_bind_address` | `127.0.0.1` | IPv4 address for the API listener |
-| `base_glances_validation_address` | `127.0.0.1` | Local IPv4 address used for API validation |
+| `base_glances_bind_address` | `127.0.0.1` | Loopback or wildcard IPv4 API listener |
+| `base_glances_validation_address` | `127.0.0.1` | Loopback address used for API validation |
 | `base_glances_port` | `61208` | Local Glances API port |
 | `base_glances_state_directory` | `glances` | Dynamic-user state directory name |
 | `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |

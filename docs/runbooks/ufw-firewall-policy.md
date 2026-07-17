@@ -139,6 +139,7 @@ tailscale ping piserv
 nc -vz PISERV_TAILSCALE_IP 22
 nc -vz PISERV_TAILSCALE_IP 5900
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://PISERV_TAILSCALE_IP:9090/
+curl -fsS -o /dev/null -w '%{http_code}\n' http://PISERV_TAILSCALE_IP:61208/api/4/status
 ssh admin@PISERV_TAILSCALE_IP true
 ```
 

@@ -35,7 +35,7 @@
         comment: PiServ LAN Cockpit HTTPS
       - rule: allow
         from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
-        to_port: "61208"
+        to_port: "{{ piserv_glances_port | string }}"
         protocol: tcp
         comment: PiServ LAN Glances API
       - rule: allow

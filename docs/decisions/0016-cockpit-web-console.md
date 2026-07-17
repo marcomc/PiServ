@@ -7,9 +7,9 @@ Accepted and implemented on 2026-07-16.
 ## Context
 
 PiServ needs a browser-accessible view of host resources and a constrained
-administration interface. Glances provides metrics through a loopback-only JSON
-API, but its Debian 13 web UI is unavailable because the package omits required
-static assets.
+administration interface. Glances provides metrics through its JSON API, but
+its Debian 13 web UI is unavailable because the package omits required static
+assets.
 
 ## Decision
 

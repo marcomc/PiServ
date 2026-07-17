@@ -114,7 +114,7 @@ pCloud remained mounted
 Automation validation on 2026-07-13 applied
 `ansible/playbooks/firewall.yml`; a repeat run completed with `changed=0` while
 new LAN and Tailscale SSH connections remained available. Cockpit port `9090`
-was added and LAN-validated on 2026-07-16.
+and Glances API port `61208` were added and LAN-validated on 2026-07-16.
 
 ## References
 
