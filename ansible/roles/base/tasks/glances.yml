@@ -6,13 +6,19 @@
       - base_glances_validation_address == '127.0.0.1'
       - "'glances' in base_glances_packages"
       - "'python3-uvicorn' in base_glances_packages"
+      - base_glances_auth_username is match('^[A-Za-z0-9_-]+$')
+      - base_glances_config_path is match('^/')
+      - base_glances_password_directory is match('^/')
+      - base_glances_password_file is match('^/')
+      - base_glances_bootstrap_password_file is match('^/')
+      - base_glances_password_file != base_glances_bootstrap_password_file
       - base_glances_port is integer
       - base_glances_port >= 1
       - base_glances_port <= 65535
     fail_msg: >-
-      Glances requires its package and Uvicorn runtime, a loopback or
-      IPv4-wildcard listener, loopback API validation, and a TCP port between
-      1 and 65535.
+      Glances requires its package and Uvicorn runtime, valid authentication
+      paths and username, a loopback or IPv4-wildcard listener, loopback API
+      validation, and a TCP port between 1 and 65535.
 
 - name: Install Glances observability packages
   ansible.builtin.apt:
@@ -21,6 +27,117 @@
     install_recommends: false
     update_cache: true
     cache_valid_time: 3600
+  become: true
+
+- name: Read Glances configuration parent directory
+  ansible.builtin.stat:
+    path: "{{ base_glances_config_path | dirname }}"
+  register: base_glances_config_parent_directory
+  changed_when: false
+  become: true
+
+- name: Assert Glances configuration parent directory exists
+  ansible.builtin.assert:
+    that:
+      - base_glances_config_parent_directory.stat.exists
+      - base_glances_config_parent_directory.stat.isdir
+    fail_msg: >-
+      The parent directory of {{ base_glances_config_path }} must exist after
+      the Glances package installation.
+
+- name: Read Glances password directory
+  ansible.builtin.stat:
+    path: "{{ base_glances_password_directory }}"
+  register: base_glances_password_directory_stat
+  changed_when: false
+  become: true
+
+- name: Create missing Glances private password directory
+  ansible.builtin.file:
+    path: "{{ base_glances_password_directory }}"
+    state: directory
+    owner: root
+    group: glances
+    mode: "0750"
+  when: not base_glances_password_directory_stat.stat.exists
+  become: true
+
+- name: Assert Glances password path is a directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_glances_password_directory_stat.stat.isdir
+        or not base_glances_password_directory_stat.stat.exists
+    fail_msg: >-
+      Glances password path {{ base_glances_password_directory }} must be a
+      directory.
+
+- name: Configure Glances password storage path
+  community.general.ini_file:
+    path: "{{ base_glances_config_path }}"
+    section: passwords
+    option: local_password_path
+    value: "{{ base_glances_password_directory }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Glances service
+  become: true
+
+- name: Read Glances API password hash state
+  ansible.builtin.stat:
+    path: "{{ base_glances_password_file }}"
+  register: base_glances_password_file_stat
+  changed_when: false
+  no_log: true
+  become: true
+
+- name: Generate Glances API bootstrap credentials
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import hashlib
+        import json
+        import secrets
+
+        password = secrets.token_urlsafe(32)
+        password_digest = hashlib.pbkdf2_hmac(
+            'sha256', password.encode(), b'', 100000, dklen=128
+        ).hex()
+        salt = secrets.token_hex(16)
+        password_hash = hashlib.pbkdf2_hmac(
+            'sha256', password_digest.encode(), salt.encode(), 100000, dklen=128
+        ).hex()
+        print(json.dumps({'password': password, 'hash': f'{salt}${password_hash}'}))
+  register: base_glances_bootstrap_credentials
+  changed_when: false
+  no_log: true
+  when: not base_glances_password_file_stat.stat.exists
+  become: true
+
+- name: Store Glances API password hash
+  ansible.builtin.copy:
+    content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).hash }}"
+    dest: "{{ base_glances_password_file }}"
+    owner: root
+    group: glances
+    mode: "0640"
+  no_log: true
+  notify: Restart Glances service
+  when: not base_glances_password_file_stat.stat.exists
+  become: true
+
+- name: Store root-only Glances API bootstrap password
+  ansible.builtin.copy:
+    content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).password }}"
+    dest: "{{ base_glances_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: not base_glances_password_file_stat.stat.exists
   become: true
 
 - name: Ensure Glances systemd drop-in directory exists
@@ -57,22 +174,59 @@
   ansible.builtin.uri:
     url: >-
       http://{{ base_glances_validation_address }}:{{ base_glances_port }}/api/4/status
-    return_content: true
-    status_code: 200
-  register: base_glances_api_status
+    status_code: 401
+  register: base_glances_unauthenticated_api_status
   changed_when: false
   failed_when: false
-  until: base_glances_api_status.status | int == 200
+  until: base_glances_unauthenticated_api_status.status | int == 401
   retries: 10
   delay: 1
   check_mode: false
 
-- name: Assert Glances local API returns its version
+- name: Assert Glances local API requires authentication
   ansible.builtin.assert:
     that:
-      - base_glances_api_status.status | int == 200
-      - base_glances_api_status.json.version is defined
-    fail_msg: Glances did not return a valid local API status response.
+      - base_glances_unauthenticated_api_status.status | int == 401
+    fail_msg: Glances local API accepted an unauthenticated request.
+
+- name: Read Glances API bootstrap password state
+  ansible.builtin.stat:
+    path: "{{ base_glances_bootstrap_password_file }}"
+  register: base_glances_bootstrap_password_file_stat
+  changed_when: false
+  no_log: true
+  become: true
+
+- name: Read Glances API bootstrap password
+  ansible.builtin.slurp:
+    src: "{{ base_glances_bootstrap_password_file }}"
+  register: base_glances_bootstrap_password
+  no_log: true
+  when: base_glances_bootstrap_password_file_stat.stat.exists
+  become: true
+
+- name: Validate Glances local API with bootstrap credentials
+  ansible.builtin.uri:
+    url: >-
+      http://{{ base_glances_validation_address }}:{{ base_glances_port }}/api/4/status
+    url_username: "{{ base_glances_auth_username }}"
+    url_password: "{{ base_glances_bootstrap_password.content | b64decode }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: base_glances_authenticated_api_status
+  changed_when: false
+  no_log: true
+  when: base_glances_bootstrap_password_file_stat.stat.exists
+  check_mode: false
+
+- name: Assert Glances local API returns its version with bootstrap credentials
+  ansible.builtin.assert:
+    that:
+      - base_glances_authenticated_api_status.status | int == 200
+      - base_glances_authenticated_api_status.json.version is defined
+    fail_msg: Glances did not return a valid authenticated local API response.
+  when: base_glances_bootstrap_password_file_stat.stat.exists
 
 - name: Read TCP listening sockets for Glances validation
   ansible.builtin.command:

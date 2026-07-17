@@ -18,13 +18,15 @@ All notable project changes are documented here.
 ### Glances Observability
 
 - Added a PiServ-managed Glances API service with hardware sensor support and
-  its required Uvicorn webserver runtime.
+  its required Uvicorn webserver runtime and HTTP Basic authentication.
 - Bound the API to IPv4 for LAN observability and Home Assistant, disabled the
   broken Debian 13 web UI, and allowed TCP `61208` from the current LAN in UFW
   under the existing Tailnet ingress policy.
 - Hardened the service with a dynamic user, private state and runtime
-  directories, and systemd filesystem and privilege restrictions.
-- Added API response and listener-scope assertions to the base playbook.
+  directories, systemd filesystem and privilege restrictions, a salted password
+  hash, and a root-only credential bootstrap for Home Assistant.
+- Added authenticated and unauthenticated API-response assertions plus
+  listener-scope validation to the base playbook.
 
 ### Home Assistant MQTT Agent
 

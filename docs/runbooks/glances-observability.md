@@ -4,6 +4,7 @@
 
 - [Purpose](#purpose)
 - [Apply](#apply)
+- [Authentication Bootstrap](#authentication-bootstrap)
 - [LAN and Home Assistant Access](#lan-and-home-assistant-access)
 - [Local Access](#local-access)
 - [Validation](#validation)
@@ -27,33 +28,52 @@ is required because the Debian package lists it as a recommendation while the
 role deliberately disables optional package recommendations. The role then
 starts `glances.service` in API-only mode on IPv4 port `61208`. UFW permits the
 port from PiServ's current IPv4 LAN CIDR. The existing `tailscale0` policy also
-permits authenticated tailnet clients according to tailnet ACLs.
+permits tailnet clients according to tailnet ACLs. Both network paths require
+Glances HTTP Basic authentication.
+
+## Authentication Bootstrap
+
+The first base-role apply generates a random password on PiServ and writes only
+its salted hash to `/etc/glances/glances.pwd` as `root:glances` with mode
+`0640`. The clear bootstrap password is stored separately as
+`/etc/glances/piserv-glances-bootstrap-password`, readable only by `root` with
+mode `0600`; it is not stored in Ansible variables, systemd, or this repository.
+
+Retrieve it once, configure Home Assistant, then remove the clear bootstrap
+file. Removing it does not change the active Glances password.
+
+```sh
+ssh admin@PiServ.local 'sudo cat /etc/glances/piserv-glances-bootstrap-password'
+ssh admin@PiServ.local 'sudo rm /etc/glances/piserv-glances-bootstrap-password'
+```
 
 ## LAN and Home Assistant Access
 
-Query the API from any IPv4 LAN client:
+Query the API from any IPv4 LAN client after entering the bootstrap password:
 
 ```sh
-curl -fsS http://PiServ.local:61208/api/4/status
-curl -fsS http://PiServ.local:61208/api/4/cpu
+read -rs GLANCES_PASSWORD
+curl --fail --silent --show-error --user "glances:${GLANCES_PASSWORD}" http://PiServ.local:61208/api/4/status
+unset GLANCES_PASSWORD
 ```
 
 In Home Assistant, add the **Glances** integration from **Settings > Devices &
-services**. Use `PiServ.local` as the host and `61208` as the port. If the host
-resolver attempts IPv6 first, use PiServ's current IPv4 address instead because
-the API intentionally has no IPv6 listener.
+services**. Use `PiServ.local` as the host, `61208` as the port, the username
+`glances`, and the retrieved bootstrap password. If the host resolver attempts
+IPv6 first, use PiServ's current IPv4 address instead because the API
+intentionally has no IPv6 listener.
 
-The API is unauthenticated HTTP. The current IPv4 LAN and tailnet ACLs are its
-access boundaries. Do not expose TCP `61208` to other networks without a
-separate authentication and firewall decision.
+The current IPv4 LAN and authenticated tailnet clients allowed by tailnet ACLs
+can reach TCP `61208`, so both paths use the same HTTP Basic credentials. Do
+not expose TCP `61208` to other networks without TLS, authentication, and a
+firewall decision.
 
 ## Local Access
 
 Query the local API on PiServ:
 
 ```sh
-curl -fsS http://127.0.0.1:61208/api/4/status
-curl -fsS http://127.0.0.1:61208/api/4/cpu
+curl --fail --silent --show-error --user glances http://127.0.0.1:61208/api/4/status
 ```
 
 For an interactive terminal view, connect through SSH and run:
@@ -72,7 +92,7 @@ Run on PiServ:
 
 ```sh
 sudo systemctl is-active glances.service
-curl -fsS http://127.0.0.1:61208/api/4/status
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:61208/api/4/status
 sudo ss -ltn | grep 0.0.0.0:61208
 sudo ufw status numbered | grep -F 'PiServ LAN Glances API'
 ```
@@ -83,9 +103,9 @@ Run from a LAN or permitted tailnet client:
 curl -fsS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
 ```
 
-The expected HTTP status is `200`. In Home Assistant, confirm that the Glances
-device exposes CPU, memory, disk, network, uptime, and available temperature
-entities.
+The expected unauthenticated HTTP status is `401`; authenticated API requests
+return `200`. In Home Assistant, confirm that the Glances device exposes CPU,
+memory, disk, network, uptime, and available temperature entities.
 
 ## Recovery
 
@@ -96,6 +116,8 @@ ssh admin@PiServ.local 'sudo systemctl status glances.service --no-pager'
 ssh admin@PiServ.local 'sudo journalctl -u glances.service -n 100 --no-pager'
 ```
 
-Reapply the base and firewall playbooks to restore the managed API listener and
-IPv4 LAN policy. Do not expose the API to IPv6 or other networks without an
-authentication and firewall review.
+Reapply the base and firewall playbooks to restore the managed API listener,
+authentication, and IPv4 LAN policy. If the bootstrap password was lost before
+it was configured in Home Assistant, remove both password files and reapply the
+base playbook to generate a new one. Do not expose the API to IPv6 or other
+networks without TLS, authentication, and firewall review.

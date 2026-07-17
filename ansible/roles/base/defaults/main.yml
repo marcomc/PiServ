@@ -32,6 +32,11 @@ base_glances_dropin_path: "{{ base_glances_dropin_dir }}/piserv-api.conf"
 base_glances_bind_address: 127.0.0.1
 base_glances_validation_address: 127.0.0.1
 base_glances_port: 61208
+base_glances_auth_username: glances
+base_glances_config_path: /etc/glances/glances.conf
+base_glances_password_directory: /etc/glances
+base_glances_password_file: "{{ base_glances_password_directory }}/{{ base_glances_auth_username }}.pwd"
+base_glances_bootstrap_password_file: "{{ base_glances_password_directory }}/piserv-{{ base_glances_auth_username }}-bootstrap-password"
 base_glances_state_directory: glances
 base_glances_runtime_directory: glances
 

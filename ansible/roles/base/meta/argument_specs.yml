@@ -98,6 +98,24 @@ argument_specs:
         type: int
         default: 61208
         description: TCP port used by the local Glances API.
+      base_glances_auth_username:
+        type: str
+        default: glances
+        description: Username for Glances HTTP Basic authentication.
+      base_glances_config_path:
+        type: path
+        default: /etc/glances/glances.conf
+        description: Glances configuration file that declares the password-hash directory.
+      base_glances_password_directory:
+        type: path
+        default: /etc/glances
+        description: Directory containing the Glances HTTP Basic password hash.
+      base_glances_password_file:
+        type: path
+        description: Salted Glances HTTP Basic password hash file.
+      base_glances_bootstrap_password_file:
+        type: path
+        description: Root-only one-time bootstrap password file for Home Assistant setup.
       base_glances_state_directory:
         type: str
         default: glances

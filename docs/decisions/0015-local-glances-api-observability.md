@@ -26,7 +26,7 @@ UFW to accept TCP `61208` from the current IPv4 LAN CIDR.
 | Mode | Glances REST API with `--webserver --disable-webui` |
 | Bind | IPv4 wildcard on TCP `61208`; no IPv6 listener |
 | Consumers | IPv4 LAN clients, including Home Assistant |
-| Authentication | No HTTP credentials; trusted LAN and tailnet ACLs are access boundaries |
+| Authentication | HTTP Basic authentication using a salted host-local password hash |
 | Firewall | Allow TCP `61208` from the current IPv4 LAN CIDR; existing Tailscale ingress applies |
 | Privilege model | systemd `DynamicUser=yes` with private state and runtime directories |
 | Package scope | `glances`, `lm-sensors`, and required `python3-uvicorn`; no optional Docker, InfluxDB, SNMP, or Matplotlib integrations |
@@ -37,10 +37,14 @@ assets.
 
 ## Consequences
 
-The API is unauthenticated HTTP and is visible to all clients on the trusted
-IPv4 LAN and authenticated tailnet identities allowed by Tailnet ACLs. IPv6 LAN
-ingress stays blocked. The role asserts a local API response, the configured
-IPv4 listener, and no IPv6 wildcard listener.
+The API is reachable from the IPv4 LAN and, because UFW allows all ingress on
+`tailscale0`, from tailnet identities permitted by the tailnet ACLs. Both paths
+require the same HTTP Basic credentials. IPv6 LAN ingress stays blocked. The
+role creates a random bootstrap password only when no password hash exists; the
+plaintext is root-readable at first deployment and can be removed after Home
+Assistant is configured, while the salted hash remains service-readable. The
+role asserts anonymous `401`, authenticated local access while the bootstrap
+exists, the configured IPv4 listener, and no IPv6 wildcard listener.
 
 ## Validation
 

@@ -43,6 +43,10 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_glances_bind_address` | `127.0.0.1` | Loopback or wildcard IPv4 API listener |
 | `base_glances_validation_address` | `127.0.0.1` | Loopback address used for API validation |
 | `base_glances_port` | `61208` | Local Glances API port |
+| `base_glances_auth_username` | `glances` | HTTP Basic username for the API |
+| `base_glances_config_path` | `/etc/glances/glances.conf` | Configuration file that declares password-hash storage |
+| `base_glances_password_directory` | `/etc/glances` | Directory containing the salted API password hash |
+| `base_glances_bootstrap_password_file` | `/etc/glances/piserv-glances-bootstrap-password` | Root-only initial password for Home Assistant setup |
 | `base_glances_state_directory` | `glances` | Dynamic-user state directory name |
 | `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |
 | `base_manage_cockpit` | `true` | Install and manage the Cockpit web console |
@@ -100,11 +104,14 @@ with a separate role before expecting delivery.
 
 Glances uses the Debian package service with a PiServ-managed drop-in. The role
 keeps its safe loopback default, while the PiServ playbook binds the JSON API to
-IPv4 for LAN observability and Home Assistant. The web UI stays disabled, and
-the dynamic systemd user and service sandboxing remain in effect. The firewall
-permits the current IPv4 LAN, while the existing Tailscale interface policy and
-tailnet ACLs govern tailnet access. The role validates a local API response and
-asserts the configured IPv4 listener without an IPv6 wildcard.
+IPv4 for LAN observability and Home Assistant. It enables HTTP Basic
+authentication with a salted password hash and creates a root-only bootstrap
+password only when no hash exists. The web UI stays disabled, and the dynamic
+systemd user and service sandboxing remain in effect. The firewall permits the
+current IPv4 LAN, while the existing Tailscale interface policy and tailnet ACLs
+govern tailnet access. The role verifies that anonymous requests receive `401`,
+tests bootstrap credentials while present, and asserts the configured IPv4
+listener without an IPv6 wildcard.
 
 Cockpit is installed without its optional storage, NetworkManager, and package
 management modules. Its socket-activated HTTPS console listens on port `9090`,
