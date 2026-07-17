@@ -68,6 +68,11 @@ can reach TCP `61208`, so both paths use the same HTTP Basic credentials. Do
 not expose TCP `61208` to other networks without TLS, authentication, and a
 firewall decision.
 
+Direct exposure is an explicitly accepted residual risk only for this trusted
+LAN and ACL-controlled Tailnet boundary. Unattended upgrades install Debian
+security fixes when they are available; they do not replace a network-boundary
+review before expanding access.
+
 ## Local Access
 
 Query the local API on PiServ:

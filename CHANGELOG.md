@@ -28,6 +28,9 @@ All notable project changes are documented here.
   hash, and a root-only credential bootstrap for Home Assistant.
 - Added authenticated and unauthenticated API-response assertions plus
   listener-scope validation to the base playbook.
+- Recorded acceptance of the direct, HTTP Basic-authenticated API exposure only
+  to the trusted LAN and ACL-controlled Tailnet boundary while Debian security
+  updates are applied.
 
 ### Home Assistant MQTT Agent
 

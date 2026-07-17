@@ -4,6 +4,8 @@
 
 Accepted and implemented on 2026-07-16.
 
+The direct API exposure residual risk was explicitly accepted on 2026-07-17.
+
 ## Context
 
 PiServ needs system metrics available to LAN operators and Home Assistant. The
@@ -14,6 +16,18 @@ PiGuard uses Glances with the same IPv4-wildcard, API-only pattern for its
 primary and secondary servers. The Debian 13 `glances` package includes a
 systemd service, but its default server mode runs as root. Its web UI also fails
 because the package omits the static asset directory required by Glances 4.3.1.
+
+## Risk Acceptance
+
+PiServ deliberately publishes the HTTP Basic-authenticated Glances API directly
+to the current trusted IPv4 LAN and to Tailnet identities permitted by ACLs. The
+host relies on UFW for LAN scope, Tailnet ACLs for Tailnet scope, and unattended
+security upgrades when Debian publishes the relevant package fixes. It does not
+publish the API to untrusted networks or IPv6 LAN clients.
+
+This is an accepted residual risk for local observability. Reassess the decision
+if PiServ is exposed to a less-trusted network, if the API needs internet access,
+or if an upstream security fix remains unavailable for an extended period.
 
 ## Decision
 
