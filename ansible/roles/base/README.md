@@ -16,6 +16,8 @@ This project-local role codifies live PiServ baseline hardening:
 
 - SSH root-login and password-auth policy
 - VNC capture selection for the physical touchscreen output
+- Glances API-only system observability with loopback-safe defaults
+- Cockpit HTTPS web console for system administration
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
 - boot notification service
@@ -36,6 +38,21 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_path` | `/usr/local/libexec/piserv-wayvnc-select-output` | Output-selection command |
 | `base_vnc_output_selector_delay_seconds` | `2` | Delay before reading outputs after VNC starts |
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
+| `base_manage_glances` | `true` | Install and manage the local Glances API service |
+| `base_glances_packages` | `glances`, `lm-sensors`, `python3-uvicorn`, `python3-jinja2` | API, sensor, and webserver runtime packages |
+| `base_glances_bind_address` | `127.0.0.1` | Loopback or wildcard IPv4 API listener |
+| `base_glances_validation_address` | `127.0.0.1` | Loopback address used for API validation |
+| `base_glances_port` | `61208` | Local Glances API port |
+| `base_glances_auth_username` | `glances` | HTTP Basic username for the API |
+| `base_glances_config_path` | `/etc/glances/glances.conf` | Configuration file that declares password-hash storage |
+| `base_glances_password_directory` | `/etc/glances` | Directory containing the salted API password hash |
+| `base_glances_bootstrap_password_file` | `/etc/glances/piserv-glances-bootstrap-password` | Root-only initial password for Home Assistant setup |
+| `base_glances_state_directory` | `glances` | Dynamic-user state directory name |
+| `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |
+| `base_manage_cockpit` | `true` | Install and manage the Cockpit web console |
+| `base_cockpit_packages` | `cockpit` | Cockpit package set installed without recommendations |
+| `base_cockpit_socket_name` | `cockpit.socket` | Socket-activated Cockpit HTTPS unit |
+| `base_cockpit_port` | `9090` | Cockpit HTTPS port |
 | `base_manage_disabled_services` | `true` | Disable selected systemd units |
 | `base_disabled_systemd_units` | CUPS, `rpcbind`, NFS block mapper | Units disabled when present |
 | `base_manage_unattended_upgrades` | `true` | Manage unattended upgrades |
@@ -84,6 +101,23 @@ recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
 with a separate role before expecting delivery.
+
+Glances uses the Debian package service with a PiServ-managed drop-in. The role
+keeps its safe loopback default, while the PiServ playbook binds the JSON API to
+IPv4 for LAN observability and Home Assistant. It enables HTTP Basic
+authentication with a salted password hash and creates a root-only bootstrap
+password only when no hash exists. The web UI stays disabled, and the dynamic
+systemd user and service sandboxing remain in effect. The firewall permits the
+current IPv4 LAN, while the existing Tailscale interface policy and tailnet ACLs
+govern tailnet access. The role verifies that anonymous requests receive `401`,
+tests bootstrap credentials while present, and asserts the configured IPv4
+listener without an IPv6 wildcard.
+
+Cockpit is installed without its optional storage, NetworkManager, and package
+management modules. Its socket-activated HTTPS console listens on port `9090`,
+uses the host PAM policy, and is reachable only after the project firewall
+allows the required network path. The role verifies its local HTTPS login page
+but does not manage browser credentials or certificates.
 
 Cloud-init is disabled with `/etc/cloud/cloud-init.disabled`; the package is not
 removed.

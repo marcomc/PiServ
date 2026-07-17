@@ -1,0 +1,7 @@
+---
+# PiServ service endpoints shared by the base and firewall playbooks.
+# Risk accepted in decision 0015: publish Glances directly only to the trusted
+# LAN and Tailnet identities allowed by ACLs while Debian security updates apply.
+piserv_glances_bind_address: 0.0.0.0
+piserv_glances_validation_address: 127.0.0.1
+piserv_glances_port: 61208

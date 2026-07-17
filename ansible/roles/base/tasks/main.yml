@@ -7,6 +7,14 @@
   when: base_manage_vnc | bool
   ansible.builtin.include_tasks: vnc.yml
 
+- name: Configure local Glances API observability
+  when: base_manage_glances | bool
+  ansible.builtin.include_tasks: glances.yml
+
+- name: Configure Cockpit web console
+  when: base_manage_cockpit | bool
+  ansible.builtin.include_tasks: cockpit.yml
+
 - name: Configure base disabled services
   when: base_manage_disabled_services | bool
   ansible.builtin.include_tasks: services.yml

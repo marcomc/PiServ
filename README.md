@@ -154,13 +154,15 @@ ansible-playbook ansible/playbooks/piserv-base.yml
 
 The base playbook applies the dedicated `msmtp` role first, then manages SSH
 root-login and password-auth policy, keeps VNC aligned with touchscreen output
-`DSI-1`, disables unneeded CUPS, `rpcbind`, and NFS helper units, enables
-unattended upgrades, and disables cloud-init. PiServ uses
-`msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
-they contain SMTP credentials and local delivery policy. Boot notifications are
-skipped until `/etc/msmtprc` exists and is non-empty. Unattended upgrades send
-a mobile-readable routine digest with package version transitions; full logs
-remain on PiServ and native error alerts remain enabled as a fallback.
+`DSI-1`, exposes the Cockpit HTTPS console on port `9090`, provides an
+authenticated Glances API to the LAN and Home Assistant, disables unneeded
+CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades, and disables
+cloud-init. PiServ uses `msmtp` with operator-managed `/etc/msmtprc` and
+`/etc/aliases` files because they contain SMTP credentials and local delivery
+policy. Boot notifications are skipped until `/etc/msmtprc` exists and is
+non-empty. Unattended upgrades send a mobile-readable routine digest with
+package version transitions; full logs remain on PiServ and native error alerts
+remain enabled as a fallback.
 
 Configure the Freenove FNK0100K post-OS setup:
 
@@ -225,10 +227,11 @@ The firewall playbook uses a commit-pinned PiServ fork of `oefenweb.ufw` for
 generic UFW configuration. PiServ-owned imported tasks verify prerequisites,
 enforce the UFW service state, and assert the applied runtime policy. The role
 remains the source of truth for its managed UFW configuration, policies, and
-rules. PiServ permits SSH, VNC, and mDNS from its current IPv4 LAN; all ingress
-through `tailscale0`; and UDP port `41641` for direct Tailscale peer connections.
-It permits routed tailnet traffic only to its local IPv4 LAN. Other LAN IPv6
-ingress remains denied by default.
+rules. PiServ permits SSH, VNC, Cockpit HTTPS, and mDNS from its current IPv4
+LAN; the Glances API from the same LAN; all ingress through `tailscale0`; and
+UDP port `41641` for direct Tailscale peer connections. It permits routed
+tailnet traffic only to its local IPv4 LAN. Other LAN IPv6 ingress remains
+denied by default.
 
 Install and manage the RaiPlaySound daily podcast sync:
 

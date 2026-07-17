@@ -4,6 +4,34 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Cockpit Web Console
+
+- Added the Cockpit HTTPS web console, socket activation, and a local login-page
+  assertion to the PiServ base role.
+- Kept the package install minimal by excluding optional storage, NetworkManager,
+  and package-management modules.
+- Allowed Cockpit TCP port `9090` only from the current IPv4 LAN while retaining
+  the existing Tailnet interface policy and PAM-backed `admin` authentication.
+- Added the Cockpit runbook and architecture decision, including the expected
+  self-signed certificate bootstrap behavior.
+
+### Glances Observability
+
+- Added a PiServ-managed Glances API service with hardware sensor support and
+  its required Uvicorn and Jinja2 webserver runtimes and HTTP Basic
+  authentication.
+- Bound the API to IPv4 for LAN observability and Home Assistant, disabled the
+  broken Debian 13 web UI, and allowed TCP `61208` from the current LAN in UFW
+  under the existing Tailnet ingress policy.
+- Hardened the service with a dynamic user, private state and runtime
+  directories, systemd filesystem and privilege restrictions, a salted password
+  hash, and a root-only credential bootstrap for Home Assistant.
+- Added authenticated and unauthenticated API-response assertions plus
+  listener-scope validation to the base playbook.
+- Recorded acceptance of the direct, HTTP Basic-authenticated API exposure only
+  to the trusted LAN and ACL-controlled Tailnet boundary while Debian security
+  updates are applied.
+
 ### Home Assistant MQTT Agent
 
 - Replaced the project-local role with the published and version-pinned Galaxy
@@ -13,6 +41,8 @@ All notable project changes are documented here.
 - Added a PiServ playbook that preserves the host MQTT configuration and
   validates the `0.3.0` agent, broker connectivity, service state, and
   Raspberry Pi 5 firmware telemetry.
+- Documented the service-configured MQTT doctor command rather than the
+  misleading root-user default-config invocation.
 
 ### Host Baseline Follow-Ups
 

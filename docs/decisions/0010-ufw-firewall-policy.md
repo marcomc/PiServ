@@ -28,6 +28,8 @@ default netfilter mode.
 | Logging | Low |
 | LAN IPv4 SSH | Allow TCP `22` from the current IPv4 LAN CIDR |
 | LAN IPv4 VNC | Allow TCP `5900` from the current IPv4 LAN CIDR |
+| LAN IPv4 Cockpit | Allow TCP `9090` from the current IPv4 LAN CIDR |
+| LAN IPv4 Glances | Allow TCP `61208` from the current IPv4 LAN CIDR |
 | LAN IPv4 mDNS | Allow UDP `5353` to `224.0.0.251` from the current IPv4 LAN CIDR |
 | LAN IPv6 ingress | Deny by default |
 | Tailnet ingress | Allow traffic arriving on `tailscale0` |
@@ -70,7 +72,10 @@ playbook. See decision 0011 for the high-availability router policy.
 
 ## Consequences
 
-- SSH and VNC remain available from the IPv4 LAN and tailnet.
+- SSH, VNC, and Cockpit remain available from the IPv4 LAN and tailnet.
+- The HTTP Basic-authenticated Glances API is available to the current IPv4 LAN
+  and to tailnet identities allowed by Tailnet ACLs; IPv6 LAN ingress remains
+  denied.
 - IPv4 mDNS remains available on the current LAN.
 - IPv6 LAN ingress remains denied by default.
 - pCloud and other incidental listeners are blocked from unsolicited LAN
@@ -108,7 +113,8 @@ pCloud remained mounted
 
 Automation validation on 2026-07-13 applied
 `ansible/playbooks/firewall.yml`; a repeat run completed with `changed=0` while
-new LAN and Tailscale SSH connections remained available.
+new LAN and Tailscale SSH connections remained available. Cockpit port `9090`
+and Glances API port `61208` were added and LAN-validated on 2026-07-16.
 
 ## References
 

@@ -21,6 +21,32 @@ base_vnc_output_selector_service_path: /etc/systemd/system/piserv-wayvnc-output.
 base_vnc_output_selector_delay_seconds: 2
 base_vnc_output_selector_timeout_seconds: 30
 
+base_manage_glances: true
+base_glances_packages:
+  - glances
+  - lm-sensors
+  - python3-uvicorn
+  - python3-jinja2
+base_glances_service_name: glances.service
+base_glances_dropin_dir: "/etc/systemd/system/{{ base_glances_service_name }}.d"
+base_glances_dropin_path: "{{ base_glances_dropin_dir }}/piserv-api.conf"
+base_glances_bind_address: 127.0.0.1
+base_glances_validation_address: 127.0.0.1
+base_glances_port: 61208
+base_glances_auth_username: glances
+base_glances_config_path: /etc/glances/glances.conf
+base_glances_password_directory: /etc/glances
+base_glances_password_file: "{{ base_glances_password_directory }}/{{ base_glances_auth_username }}.pwd"
+base_glances_bootstrap_password_file: "{{ base_glances_password_directory }}/piserv-{{ base_glances_auth_username }}-bootstrap-password"
+base_glances_state_directory: glances
+base_glances_runtime_directory: glances
+
+base_manage_cockpit: true
+base_cockpit_packages:
+  - cockpit
+base_cockpit_socket_name: cockpit.socket
+base_cockpit_port: 9090
+
 base_manage_disabled_services: true
 base_disabled_systemd_units:
   - cups.service
