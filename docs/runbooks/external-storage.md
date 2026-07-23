@@ -39,8 +39,9 @@ disk identity, and keep the generated local file out of version control.
 ## Preparation
 
 The preparation playbook is destructive. It verifies the enclosure model,
-serial, and unmounted state, then removes all existing partitions, creates one
-GPT partition, formats it as ext4, and applies the steady-state policy.
+serial, and unmounted state, installs its partitioning and ext4 tooling, then
+replaces the existing partition layout with one GPT partition, formats it as
+ext4, and applies the steady-state policy.
 
 Run only after confirming that the disk contents may be erased:
 

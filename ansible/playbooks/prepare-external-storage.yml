@@ -73,6 +73,15 @@
           The external storage disk has a mounted filesystem. Stop and unmount
           it before running this destructive playbook.
 
+    - name: Install external storage preparation tooling
+      ansible.builtin.apt:
+        name:
+          - e2fsprogs
+          - parted
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
     - name: Remove existing external disk partition entries
       community.general.parted:
         device: "{{ piserv_external_storage_device }}"
