@@ -1,0 +1,7 @@
+---
+# Copy to external-storage.yml and replace every placeholder with the verified
+# local disk identity. This file stays ignored because device serials and
+# persistent hardware paths are host-specific.
+piserv_external_storage_device: /dev/disk/by-id/usb-<vendor>_<model>_<serial>-0:0
+piserv_external_storage_expected_model: <model>
+piserv_external_storage_expected_serial: <serial>

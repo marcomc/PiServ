@@ -30,6 +30,7 @@ Decision records explain why PiServ setup choices were made.
 | [0014: Freenove hardware cleanup state](0014-freenove-hardware-cleanup.md) | Accepted and physically validated |
 | [0015: LAN Glances API observability](0015-local-glances-api-observability.md) | Accepted and implemented |
 | [0016: Cockpit web console](0016-cockpit-web-console.md) | Accepted and implemented |
+| [0017: External SSD storage](0017-external-ssd-storage.md) | Accepted and implemented |
 
 ## Template
 

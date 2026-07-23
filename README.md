@@ -39,7 +39,7 @@ $HOME/Development/RaspberryPi/PiServ
 | IP address | DHCP-assigned; resolve the hostname before direct-IP diagnostics |
 | Hardware | Raspberry Pi 5 |
 | RAM | 4 GB |
-| Storage | 128 GB NVMe SSD |
+| Storage | 128 GB NVMe SSD + 4 TB USB 3 external SSD |
 | Current network | Wi-Fi |
 | Future network | Ethernet may be added |
 | Sudo user | `admin` |
@@ -136,6 +136,12 @@ the current setup.
 
 Do not plan around pCloud rsync until pCloud releases official rsync support.
 
+PiServ also has a PiServ-owned external data volume at `/mnt/external-data`.
+It uses one journaled ext4 partition labeled `external-data`, with a shared
+`shared/` directory and a restricted `backups/` directory. See the [external
+SSD runbook](docs/runbooks/external-storage.md) for permissions, service
+access, and recovery.
+
 ## Implementation Tracks
 
 Active implementation tracks:
@@ -143,6 +149,7 @@ Active implementation tracks:
 | Track | Purpose |
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
+| [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
 
 ## Automation
 

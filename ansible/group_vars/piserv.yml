@@ -5,3 +5,21 @@
 piserv_glances_bind_address: 0.0.0.0
 piserv_glances_validation_address: 127.0.0.1
 piserv_glances_port: 61208
+
+# PiServ-owned external storage. The machine-specific disk identity is stored
+# in the ignored ansible/vars/external-storage.yml file; the stable by-id path
+# there protects the layout from /dev/sdX reassignment.
+piserv_external_storage_partition_device: "{{ piserv_external_storage_device }}-part1"
+piserv_external_storage_volume_label: external-data
+piserv_external_storage_mountpoint: /mnt/external-data
+piserv_external_storage_group: external-data
+piserv_external_storage_service_users: []
+piserv_external_storage_mount_options: >-
+  defaults,nofail,nodev,nosuid,x-systemd.device-timeout=15s
+piserv_external_storage_directories:
+  - name: shared
+    mode: "2775"
+    other_permissions: r-x
+  - name: backups
+    mode: "2770"
+    other_permissions: "---"

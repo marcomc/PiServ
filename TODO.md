@@ -82,20 +82,19 @@
       procedures in Ansible and runbooks.
 
 - [ ] **Attach and prepare the 4 TB external SSD**
-  - Assessment: ext4 is the preferred PiServ-owned filesystem; exFAT is the
-    removable-media fallback for direct macOS/Linux access. APFS is not a
-    suitable Linux service volume.
+  - Assessment: Completed the PiServ-owned ext4 path. exFAT remains the
+    removable-media fallback for a future disk that must be connected directly
+    to macOS and Linux. APFS is not a suitable Linux service volume.
   - Proposal: [Google Drive and external storage](docs/tracks/google-drive-and-external-storage.md)
   - Actions:
-    - Identify the enclosure, USB power behavior, device identity, and SMART
-      support without formatting the disk before explicit approval.
-    - Select ext4 for server ownership or exFAT for physical cross-platform use.
-    - Configure a UUID-based mount, ownership, permissions, health checks, and
-      recovery documentation.
+    - Done: verified the ASM246X enclosure, USB 3 link, device identity, and
+      unmounted APFS layout before formatting.
+    - Done: created the UUID-backed journaled ext4 mount at
+      `/mnt/external-data` with group/ACL permissions and recovery docs.
     - Decide whether the volume needs encryption and Mac access through SMB or
       SFTP.
     - Validate reboot, disconnect, reconnect, filesystem checks, and sustained
-      backup writes before using it for services.
+      backup writes before placing production backups on it.
 
 - [ ] **Build a complete daily GitHub account disaster backup**
   - Assessment: per-repository bare mirrors provide complete Git branches and
