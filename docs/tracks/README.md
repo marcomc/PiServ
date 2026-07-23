@@ -16,6 +16,7 @@ checklists. Use them for active work that is not yet fully automated.
 | Track | Status |
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
+| [Google Drive and external storage](google-drive-and-external-storage.md) | Proposal |
 
 ## Template
 
