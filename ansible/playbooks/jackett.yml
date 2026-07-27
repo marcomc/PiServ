@@ -66,6 +66,7 @@
         - "{{ piserv_jackett_root }}"
         - "{{ piserv_jackett_config_dir }}"
         - "{{ piserv_jackett_downloads_dir }}"
+      register: piserv_jackett_directories
 
     - name: Install the PiServ Jackett Compose definition
       ansible.builtin.template:
@@ -75,6 +76,7 @@
         group: root
         mode: "0644"
       register: piserv_jackett_compose
+      when: not ansible_check_mode or not piserv_jackett_directories.changed
 
     - name: Install the PiServ Docker ingress policy helper
       ansible.builtin.template:
@@ -84,6 +86,7 @@
         group: root
         mode: "0750"
       register: piserv_jackett_firewall_script_state
+      when: not ansible_check_mode or not piserv_jackett_directories.changed
 
     - name: Ensure the Docker systemd drop-in directory exists
       ansible.builtin.file:
@@ -92,6 +95,7 @@
         owner: root
         group: root
         mode: "0755"
+      register: piserv_jackett_docker_dropin_dir_state
 
     - name: Run the PiServ Docker ingress policy after Docker starts
       ansible.builtin.copy:
@@ -104,6 +108,8 @@
         mode: "0644"
       register: piserv_jackett_docker_dropin
       notify: Reload systemd after adding the Docker ingress policy
+      when: >-
+        not ansible_check_mode or not piserv_jackett_docker_dropin_dir_state.changed
 
     - name: Activate the Docker ingress policy drop-in
       ansible.builtin.meta: flush_handlers
