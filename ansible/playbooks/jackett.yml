@@ -38,12 +38,14 @@
           - docker-compose
         state: present
         update_cache: true
+      register: piserv_jackett_docker_packages
 
     - name: Ensure Docker is enabled and active
       ansible.builtin.systemd_service:
         name: docker.service
         enabled: true
         state: started
+      register: piserv_jackett_docker_service
 
     - name: Allow the PiServ administrator to operate Docker
       ansible.builtin.user:
@@ -79,6 +81,7 @@
         owner: root
         group: root
         mode: "0750"
+      register: piserv_jackett_firewall_script_state
 
     - name: Ensure the Docker systemd drop-in directory exists
       ansible.builtin.file:
@@ -124,6 +127,44 @@
         or piserv_jackett_compose.changed
       register: piserv_jackett_stack
 
+    - name: Read the converged Jackett stack in check mode
+      ansible.builtin.command:
+        argv:
+          - docker-compose
+          - -f
+          - "{{ piserv_jackett_compose_file }}"
+          - ps
+          - --services
+          - --filter
+          - status=running
+      register: piserv_jackett_running_services
+      changed_when: false
+      check_mode: false
+      when:
+        - ansible_check_mode
+        - not piserv_jackett_docker_packages.changed
+        - not piserv_jackett_docker_service.changed
+        - not piserv_jackett_compose.changed
+        - not piserv_jackett_firewall_script_state.changed
+        - not piserv_jackett_docker_dropin.changed
+
+    - name: Decide whether the current Jackett deployment can be live validated
+      ansible.builtin.set_fact:
+        piserv_jackett_live_validation_safe: >-
+          {{
+            not ansible_check_mode
+            or (
+              not piserv_jackett_docker_packages.changed
+              and not piserv_jackett_docker_service.changed
+              and not piserv_jackett_compose.changed
+              and not piserv_jackett_firewall_script_state.changed
+              and not piserv_jackett_docker_dropin.changed
+              and piserv_jackett_running_services.rc | default(1) == 0
+              and 'jackett' in (piserv_jackett_running_services.stdout_lines | default([]))
+              and 'flaresolverr' in (piserv_jackett_running_services.stdout_lines | default([]))
+            )
+          }}
+
     - name: Wait for the Jackett web interface
       ansible.builtin.uri:
         url: >-
@@ -137,6 +178,7 @@
       delay: 2
       until: piserv_jackett_health.status in [200, 301]
       check_mode: false
+      when: piserv_jackett_live_validation_safe
 
     - name: Read the managed Docker ingress policy
       ansible.builtin.command:
@@ -147,6 +189,7 @@
       register: piserv_jackett_docker_firewall
       changed_when: false
       check_mode: false
+      when: piserv_jackett_live_validation_safe
 
     - name: Read the managed Jackett Docker ingress chain
       ansible.builtin.command:
@@ -157,6 +200,7 @@
       register: piserv_jackett_docker_firewall_chain_state
       changed_when: false
       check_mode: false
+      when: piserv_jackett_live_validation_safe
 
     - name: Assert Jackett Docker ingress is limited to the LAN and Tailnet
       ansible.builtin.assert:
@@ -187,3 +231,4 @@
           The managed Jackett chain must return established traffic, allow new
           connections only from PiServ's IPv4 LAN and the Tailnet, and drop all
           other published-port traffic.
+      when: piserv_jackett_live_validation_safe
