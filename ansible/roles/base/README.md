@@ -51,6 +51,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_glances_runtime_directory` | `glances` | Dynamic-user runtime directory name |
 | `base_manage_cockpit` | `true` | Install and manage the Cockpit web console |
 | `base_cockpit_packages` | `cockpit` | Cockpit package set installed without recommendations |
+| `base_cockpit_expected_modules` | `[]` | Cockpit bridge package IDs asserted during live validation |
 | `base_cockpit_socket_name` | `cockpit.socket` | Socket-activated Cockpit HTTPS unit |
 | `base_cockpit_port` | `9090` | Cockpit HTTPS port |
 | `base_manage_disabled_services` | `true` | Disable selected systemd units |
@@ -114,7 +115,9 @@ tests bootstrap credentials while present, and asserts the configured IPv4
 listener without an IPv6 wildcard.
 
 Cockpit is installed without its optional storage, NetworkManager, and package
-management modules. Its socket-activated HTTPS console listens on port `9090`,
+management modules by default. The PiServ base playbook overrides
+`base_cockpit_packages` to add `cockpit-storaged`, `cockpit-sosreport`, and
+`cockpit-packagekit`. Its socket-activated HTTPS console listens on port `9090`,
 uses the host PAM policy, and is reachable only after the project firewall
 allows the required network path. The role verifies its local HTTPS login page
 but does not manage browser credentials or certificates.

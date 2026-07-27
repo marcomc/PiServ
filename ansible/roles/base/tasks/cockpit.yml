@@ -8,12 +8,27 @@
     cache_valid_time: 3600
   become: true
 
+- name: Read Cockpit socket state for check-mode validation
+  ansible.builtin.systemd_service:
+    name: "{{ base_cockpit_socket_name }}"
+  register: base_cockpit_socket_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
 - name: Ensure Cockpit socket is enabled and started
   ansible.builtin.systemd_service:
     name: "{{ base_cockpit_socket_name }}"
     enabled: true
     state: started
   become: true
+
+- name: Determine whether Cockpit live validation can run
+  ansible.builtin.set_fact:
+    base_cockpit_live_validation_enabled: >-
+      {{ (not ansible_check_mode) or
+         (base_cockpit_socket_state.status.ActiveState | default('') == 'active') }}
 
 - name: Validate Cockpit local HTTPS login page
   ansible.builtin.uri:
@@ -29,6 +44,7 @@
   retries: 10
   delay: 1
   check_mode: false
+  when: base_cockpit_live_validation_enabled | bool
 
 - name: Assert Cockpit returns its login page
   ansible.builtin.assert:
@@ -36,3 +52,28 @@
       - base_cockpit_https.status | int == 200
       - "'cockpit/static/login.js' in base_cockpit_https.content"
     fail_msg: Cockpit did not return its HTTPS login page.
+  when: base_cockpit_live_validation_enabled | bool
+
+- name: Read registered Cockpit modules
+  ansible.builtin.command:
+    cmd: cockpit-bridge --packages
+  register: base_cockpit_registered_modules
+  changed_when: false
+  check_mode: false
+  when:
+    - base_cockpit_expected_modules | length > 0
+    - base_cockpit_live_validation_enabled | bool
+
+- name: Assert expected Cockpit modules are registered
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_cockpit_registered_modules.stdout_lines
+        | select('match', '^' ~ item ~ '\\s')
+        | list
+        | length > 0
+    fail_msg: "Cockpit module '{{ item }}' is not registered by cockpit-bridge."
+  loop: "{{ base_cockpit_expected_modules }}"
+  when:
+    - base_cockpit_expected_modules | length > 0
+    - base_cockpit_live_validation_enabled | bool

@@ -22,9 +22,18 @@ ansible-playbook ansible/playbooks/piserv-base.yml
 ansible-playbook ansible/playbooks/firewall.yml
 ```
 
-The base role installs Debian's `cockpit` package without optional storage,
-NetworkManager, or package-management modules. It enables `cockpit.socket`,
-which activates the HTTPS service on demand.
+The base role installs Debian's `cockpit`, `cockpit-storaged`,
+`cockpit-sosreport`, and `cockpit-packagekit` packages. It enables
+`cockpit.socket`, which activates the HTTPS service on demand.
+
+Cockpit Storage is an operator inspection and emergency-management surface;
+Ansible remains the source of truth for PiServ partitions, mounts, and ACLs.
+For the managed external SSD, reapply
+[`external-storage.yml`](../../ansible/playbooks/external-storage.yml) after
+any inspection or emergency action, and do not repartition or reformat that
+disk through Cockpit.
+PackageKit is available for interactive package inspection, but normal updates
+remain Ansible- and unattended-upgrades-controlled.
 
 ## Access
 
@@ -45,8 +54,9 @@ tailnet grants and ACLs. IPv6 LAN ingress remains denied.
 
 ## Validation
 
-The 2026-07-16 deployment confirmed Debian Cockpit `337-1+deb13u1`, an enabled
-and active `cockpit.socket`, and an HTTPS login page on port `9090`.
+The 2026-07-27 deployment confirmed Debian Cockpit `337-1+deb13u1`, the three
+selected extension packages, an enabled and active `cockpit.socket`, and an
+HTTPS login page on port `9090`.
 
 Run on PiServ:
 
@@ -55,6 +65,8 @@ sudo systemctl is-enabled cockpit.socket
 sudo systemctl is-active cockpit.socket
 curl -kfsS https://127.0.0.1:9090/ | grep -F cockpit/static/login.js
 sudo ss -ltnp '( sport = :9090 )'
+dpkg -l cockpit cockpit-storaged cockpit-sosreport cockpit-packagekit
+cockpit-bridge --packages | grep -E 'storage|sosreport|packagekit'
 ```
 
 Run from a LAN client:

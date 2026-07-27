@@ -15,12 +15,20 @@ All notable project changes are documented here.
   backup directory, and non-destructive convergence playbook.
 - Added the external SSD storage decision record and operator runbook.
 
+### Cockpit Extensions
+
+- Added `cockpit-storaged` for external-disk inspection and emergency storage
+  operations.
+- Added `cockpit-sosreport` for operator diagnostic-report collection.
+- Added `cockpit-packagekit` for interactive package inspection and emergency
+  package actions while retaining Ansible as the normal source of truth.
+
 ### Cockpit Web Console
 
 - Added the Cockpit HTTPS web console, socket activation, and a local login-page
   assertion to the PiServ base role.
-- Kept the package install minimal by excluding optional storage, NetworkManager,
-  and package-management modules.
+- Kept the reusable base-role default minimal while the PiServ playbook adds
+  Storage, SOSReport, and PackageKit extensions.
 - Allowed Cockpit TCP port `9090` only from the current IPv4 LAN while retaining
   the existing Tailnet interface policy and PAM-backed `admin` authentication.
 - Added the Cockpit runbook and architecture decision, including the expected

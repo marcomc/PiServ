@@ -44,6 +44,7 @@ base_glances_runtime_directory: glances
 base_manage_cockpit: true
 base_cockpit_packages:
   - cockpit
+base_cockpit_expected_modules: []
 base_cockpit_socket_name: cockpit.socket
 base_cockpit_port: 9090
 

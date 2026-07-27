@@ -1,8 +1,8 @@
-# 0016: Cockpit Web Console
+# 0016: Cockpit Web Console and Extensions
 
 ## Status
 
-Accepted and implemented on 2026-07-16.
+Accepted and implemented on 2026-07-27.
 
 ## Context
 
@@ -13,7 +13,7 @@ assets.
 
 ## Decision
 
-Install Debian's Cockpit package through the project-local `base` role and
+Install Debian's Cockpit packages through the project-local `base` role and
 enable `cockpit.socket`.
 
 | Area | Decision |
@@ -23,7 +23,7 @@ enable `cockpit.socket`.
 | Tailnet | Existing `tailscale0` ingress policy; Tailnet ACLs control access |
 | Authentication | Host PAM policy; use local `admin`, while root remains disallowed |
 | Certificate | Debian-generated self-signed certificate until a managed certificate is required |
-| Package scope | `cockpit` only; omit optional storage, NetworkManager, and package-management modules |
+| Package scope | `cockpit`, `cockpit-storaged`, `cockpit-sosreport`, and `cockpit-packagekit` |
 
 The base role asserts that Cockpit's local HTTPS login page responds with HTTP
 `200`. It does not create users, manage passwords, or automate browser login.
@@ -36,15 +36,17 @@ The base role asserts that Cockpit's local HTTPS login page responds with HTTP
 - Cockpit uses PAM independently of SSH's password-authentication setting.
 - The console has an intentional network exposure, limited by UFW to the LAN
   and by existing Tailnet ACLs for Tailnet access.
-- A future trusted certificate or additional Cockpit modules requires separate
-  design and live validation.
+- Storage changes remain Ansible-controlled even though Cockpit Storage can
+  perform interactive disk operations.
+- PackageKit provides an emergency/operator package view; Ansible and
+  unattended-upgrades remain the normal package-management authority.
 
 ## Validation
 
-On 2026-07-16, Debian Cockpit `337-1+deb13u1` installed without recommended
-modules. `cockpit.socket` was enabled and active; a local HTTPS request returned
-the Cockpit login page, and a new LAN request to port `9090` returned HTTP `200`
-after the UFW rule was applied.
+On 2026-07-27, Debian Cockpit `337-1+deb13u1` and the three selected extension
+packages installed successfully. `cockpit.socket` remained enabled and active;
+`cockpit-bridge --packages` reported `storage`, `sosreport`, and `updates`, and
+a local HTTPS request returned the Cockpit login page.
 
 The installed package attempted to use `sscg` for a self-signed certificate,
 then successfully used its OpenSSL fallback because `sscg` was not installed.
