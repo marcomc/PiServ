@@ -1,0 +1,24 @@
+name: piserv-jackett
+
+services:
+  jackett:
+    image: {{ piserv_jackett_image }}
+    environment:
+      PUID: "{{ piserv_jackett_uid }}"
+      PGID: "{{ piserv_jackett_gid }}"
+      TZ: "{{ piserv_jackett_timezone }}"
+      AUTO_UPDATE: "false"
+    volumes:
+      - {{ piserv_jackett_config_dir }}:/config
+      - {{ piserv_jackett_downloads_dir }}:/downloads
+    ports:
+      - "{{ piserv_jackett_lan_bind_address }}:{{ piserv_jackett_port }}:9117"
+    depends_on:
+      - flaresolverr
+    restart: unless-stopped
+
+  flaresolverr:
+    image: {{ piserv_flaresolverr_image }}
+    environment:
+      LOG_LEVEL: info
+    restart: unless-stopped

@@ -1,0 +1,84 @@
+---
+- name: Deploy Jackett and FlareSolverr on PiServ
+  hosts: piserv
+  gather_facts: true
+  become: true
+  vars:
+    piserv_jackett_user: admin
+    piserv_jackett_uid: "{{ ansible_facts.getent_passwd[piserv_jackett_user][1] }}"
+    piserv_jackett_gid: "{{ ansible_facts.getent_passwd[piserv_jackett_user][2] }}"
+    piserv_jackett_timezone: Europe/Rome
+    piserv_jackett_root: /opt/jackett
+    piserv_jackett_config_dir: "{{ piserv_jackett_root }}/config"
+    piserv_jackett_downloads_dir: "{{ piserv_jackett_root }}/downloads"
+    piserv_jackett_compose_file: "{{ piserv_jackett_root }}/compose.yml"
+    piserv_jackett_lan_bind_address: "{{ ansible_facts.default_ipv4.address }}"
+    piserv_jackett_port: 9117
+    piserv_jackett_image: lscr.io/linuxserver/jackett:v0.24.1968-ls414
+    piserv_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+  pre_tasks:
+    - name: Read PiServ administrator account facts
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ piserv_jackett_user }}"
+
+    - name: Install Docker and Docker Compose
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is enabled and active
+      ansible.builtin.systemd_service:
+        name: docker.service
+        enabled: true
+        state: started
+
+    - name: Allow the PiServ administrator to operate Docker
+      ansible.builtin.user:
+        name: "{{ piserv_jackett_user }}"
+        groups: docker
+        append: true
+
+    - name: Create persistent Jackett directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ piserv_jackett_user }}"
+        group: "{{ piserv_jackett_user }}"
+        mode: "0750"
+      loop:
+        - "{{ piserv_jackett_root }}"
+        - "{{ piserv_jackett_config_dir }}"
+        - "{{ piserv_jackett_downloads_dir }}"
+
+    - name: Install the PiServ Jackett Compose definition
+      ansible.builtin.template:
+        src: ../templates/jackett/compose.yml.j2
+        dest: "{{ piserv_jackett_compose_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: piserv_jackett_compose
+
+    - name: Start the PiServ Jackett stack
+      ansible.builtin.command:
+        cmd: docker-compose -f {{ piserv_jackett_compose_file }} up -d
+      changed_when: >-
+        'Started' in piserv_jackett_stack.stdout
+        or 'Recreated' in piserv_jackett_stack.stdout
+        or piserv_jackett_compose.changed
+      register: piserv_jackett_stack
+
+    - name: Wait for the Jackett web interface
+      ansible.builtin.uri:
+        url: "http://{{ piserv_jackett_lan_bind_address }}:{{ piserv_jackett_port }}"
+        status_code:
+          - 200
+          - 301
+      register: piserv_jackett_health
+      retries: 30
+      delay: 2
+      until: piserv_jackett_health.status in [200, 301]
