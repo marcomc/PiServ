@@ -40,13 +40,28 @@
           The configured external storage identity does not match the expected
           ASM246X disk. Refusing to erase the wrong device.
 
-    - name: Check for a mounted external storage partition
+    - name: List the external storage disk and every child block device
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --noheadings
+          - --raw
+          - --paths
+          - --output
+          - PATH
+          - "{{ piserv_external_storage_device }}"
+      register: piserv_external_storage_block_devices
+      changed_when: false
+      check_mode: false
+
+    - name: Check every external storage block device for mounts
       ansible.builtin.command:
         argv:
           - findmnt
           - --source
-          - "{{ piserv_external_storage_partition_device }}"
-      register: piserv_external_storage_partition_mounts
+          - "{{ item }}"
+      loop: "{{ piserv_external_storage_block_devices.stdout_lines }}"
+      register: piserv_external_storage_block_device_mounts
       changed_when: false
       failed_when: false
       check_mode: false
@@ -62,16 +77,20 @@
       failed_when: false
       check_mode: false
 
-    - name: Refuse to repartition mounted external storage
+    - name: Refuse to repartition mounted external storage devices
       ansible.builtin.assert:
         that:
-          - piserv_external_storage_partition_mounts.rc != 0
-          - piserv_external_storage_partition_mounts.stdout | trim == ''
+          - piserv_external_storage_block_devices.stdout_lines | length > 0
+          - >-
+            (piserv_external_storage_block_device_mounts.results
+            | selectattr('rc', 'ne', 0) | list | length) ==
+            (piserv_external_storage_block_device_mounts.results | length)
           - piserv_external_storage_mountpoint_state.rc != 0
           - piserv_external_storage_mountpoint_state.stdout | trim == ''
         fail_msg: >-
-          The external storage disk has a mounted filesystem. Stop and unmount
-          it before running this destructive playbook.
+          The external storage disk, one of its child devices, or its configured
+          mountpoint is active. Stop and unmount it before running this
+          destructive playbook.
 
     - name: Install external storage preparation tooling
       ansible.builtin.apt:
