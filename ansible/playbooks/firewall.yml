@@ -77,6 +77,9 @@
           {{ piserv_firewall_default_forward_policy }}
         ufw_rules: "{{ piserv_firewall_rules }}"
   post_tasks:
+    - name: Remove UFW default mDNS exceptions
+      ansible.builtin.import_tasks: ../tasks/firewall/remove-default-mdns.yml
+
     - name: Enforce PiServ UFW service state
       ansible.builtin.import_tasks: ../tasks/firewall/enforce-service.yml
 

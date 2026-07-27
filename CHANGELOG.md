@@ -114,8 +114,8 @@ All notable project changes are documented here.
 - Allowed IPv4 LAN SSH, VNC, and mDNS; Tailscale interface ingress; and direct
   Tailscale UDP while keeping unsolicited LAN, including IPv6, traffic blocked.
 - Corrected the LAN mDNS rule to allow unicast UDP `5353` queries as well as
-  multicast traffic; macOS can send valid mDNS queries directly to PiServ's
-  UDP `5353` address.
+  multicast traffic, while removing UFW's unrestricted default mDNS pre-rules;
+  macOS can send valid mDNS queries directly to PiServ's UDP `5353` address.
 - Allowed routed Tailscale IPv4 traffic only to the local IPv4 LAN for subnet
   router operation.
 - Added the firewall decision record and operator runbook, including Tailscale

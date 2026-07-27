@@ -50,6 +50,9 @@ The fork integration of `oefenweb.ufw` owns generic UFW package, policy, rule,
 and logging behavior. PiServ-specific ranges, ports, interfaces, and comments
 remain in `ansible/playbooks/firewall.yml`. Project task files own the
 preflight assertion, explicit UFW service state, and post-apply validation.
+PiServ also removes UFW's package-default mDNS pre-rules from `before.rules`
+and `before6.rules`; otherwise multicast UDP `5353` bypasses the declared LAN
+source restriction.
 
 The dependency is pinned to the reviewed fork commit while its mutation support
 is under upstream review. The external role remains the source of truth for its

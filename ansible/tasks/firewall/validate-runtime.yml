@@ -58,6 +58,43 @@
         in (piserv_firewall_ufw_config.content | b64decode)
     fail_msg: Persisted UFW logging does not match PiServ policy.
 
+- name: Read UFW pre-rule configuration
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/ufw/before.rules
+    - /etc/ufw/before6.rules
+  register: piserv_firewall_ufw_pre_rules
+  become: true
+
+- name: Assert unrestricted UFW mDNS pre-rules are absent
+  vars:
+    piserv_firewall_ufw_before_rules: >-
+      {{
+        piserv_firewall_ufw_pre_rules.results
+        | selectattr('item', 'equalto', '/etc/ufw/before.rules')
+        | map(attribute='content')
+        | first
+        | b64decode
+      }}
+    piserv_firewall_ufw_before6_rules: >-
+      {{
+        piserv_firewall_ufw_pre_rules.results
+        | selectattr('item', 'equalto', '/etc/ufw/before6.rules')
+        | map(attribute='content')
+        | first
+        | b64decode
+      }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        '-A ufw-before-input -p udp -d 224.0.0.251 --dport 5353 -j ACCEPT'
+        not in piserv_firewall_ufw_before_rules
+      - >-
+        '-A ufw6-before-input -p udp -d ff02::fb --dport 5353 -j ACCEPT'
+        not in piserv_firewall_ufw_before6_rules
+    fail_msg: UFW default mDNS pre-rules bypass the PiServ firewall policy.
+
 - name: Check PiServ UFW rule convergence
   community.general.ufw:
     rule: "{{ item.rule }}"
