@@ -2,6 +2,7 @@
 set -eu
 
 iptables=/usr/sbin/iptables
+iptables_restore=/usr/sbin/iptables-restore
 port={{ piserv_jackett_port }}
 lan_ipv4_cidr={{ piserv_jackett_lan_ipv4_cidr }}
 chain={{ piserv_jackett_docker_firewall_chain }}
@@ -84,14 +85,17 @@ delete_managed_destination_hooks() {
 # an isolated chain, so reruns replace a changed LAN CIDR without touching
 # unrelated DOCKER-USER policy.
 ensure_chain
-"${iptables}" -F "${chain}"
-"${iptables}" -A "${chain}" \
-  -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-"${iptables}" -A "${chain}" \
-  -i tailscale0 -m conntrack --ctstate NEW -j ACCEPT
-"${iptables}" -A "${chain}" \
-  -s "${lan_ipv4_cidr}" -m conntrack --ctstate NEW -j ACCEPT
-"${iptables}" -A "${chain}" -j DROP
+# Rebuild the chain in one filter-table transaction while the existing hook
+# remains active, avoiding an empty-chain ingress window during updates.
+"${iptables_restore}" --noflush <<EOF
+*filter
+-F ${chain}
+-A ${chain} -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+-A ${chain} -i tailscale0 -m conntrack --ctstate NEW -j ACCEPT
+-A ${chain} -s ${lan_ipv4_cidr} -m conntrack --ctstate NEW -j ACCEPT
+-A ${chain} -j DROP
+COMMIT
+EOF
 
 # Keep the managed hook ahead of Docker's accept rules. `--ctstate DNAT` limits
 # it to traffic Docker published to the container, so container egress to a
