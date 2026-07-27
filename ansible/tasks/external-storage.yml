@@ -138,8 +138,8 @@
       - piserv_external_storage_label.stdout | trim == piserv_external_storage_volume_label
     fail_msg: >-
       External storage is not the expected ext4 filesystem labeled
-      {{ piserv_external_storage_volume_label }}. Run the guarded preparation
-      playbook before applying the steady-state mount configuration.
+      {{ piserv_external_storage_volume_label }}. Do not reformat it; follow
+      the diagnostic and recovery procedure in docs/runbooks/external-storage.md.
 
 - name: Read the external storage partition layout
   ansible.builtin.command:
