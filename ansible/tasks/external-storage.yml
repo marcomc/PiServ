@@ -199,6 +199,22 @@
       {{ piserv_external_storage_mountpoint }} is mounted from a filesystem
       other than the configured external storage UUID. Refusing to change it.
 
+- name: Inspect the external storage mountpoint parent
+  ansible.builtin.stat:
+    path: "{{ piserv_external_storage_mountpoint | dirname }}"
+  register: piserv_external_storage_mountpoint_parent
+
+- name: Create a missing external storage mountpoint parent
+  ansible.builtin.file:
+    path: "{{ piserv_external_storage_mountpoint | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - piserv_external_storage_mountpoint_before_mount.rc != 0
+    - not piserv_external_storage_mountpoint_parent.stat.exists
+
 - name: Ensure the external storage mountpoint exists before mounting
   ansible.builtin.file:
     path: "{{ piserv_external_storage_mountpoint }}"
