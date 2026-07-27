@@ -28,8 +28,9 @@ ansible-playbook ansible/playbooks/jackett.yml
 The playbook installs Docker Compose, creates `/opt/jackett/{config,downloads}`
 with `admin` ownership, and starts pinned Jackett and FlareSolverr containers.
 It also installs a Docker `DOCKER-USER` policy after every Docker start. That
-policy permits TCP `9117` only from the current IPv4 LAN or traffic arriving on
-`tailscale0`; Docker port publishing does not use UFW's normal input chain.
+policy permits new TCP `9117` connections addressed to PiServ's current IPv4
+LAN or Tailnet addresses; Docker port publishing does not use UFW's normal input
+chain.
 
 ## Configure Trackers
 
@@ -49,11 +50,14 @@ Run on PiServ after every deployment or Docker restart:
 ```sh
 sudo docker-compose -f /opt/jackett/compose.yml ps
 sudo iptables -S DOCKER-USER
+sudo iptables -S PISERV-JACKETT
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9117/
 ```
 
-The Docker policy must contain two accepts for TCP `9117` (the current IPv4 LAN
-and `tailscale0`) before the matching drop rule. From a LAN client, verify:
+`DOCKER-USER` must contain tagged original-destination TCP `9117` jumps for
+PiServ's current IPv4 LAN and Tailnet addresses. The `PISERV-JACKETT` chain
+must accept new connections from the IPv4 LAN or `tailscale0` before the
+matching drop rule. From a LAN client, verify:
 
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:9117/
@@ -83,10 +87,9 @@ ansible-playbook ansible/playbooks/jackett.yml \
 
 The playbook completed successfully; its repeat run returned `changed=0`. Both
 the local loopback request and the request from the LAN returned HTTP `301`.
-The managed `PISERV-JACKETT` chain contained the current IPv4-LAN and
-`tailscale0` accepts for new TCP `9117` connections, then the matching drop
-rule; `DOCKER-USER` contained tagged ingress jumps to that chain for the LAN
-and `tailscale0` interfaces.
+The managed `PISERV-JACKETT` chain contained current IPv4-LAN and `tailscale0`
+accepts for new TCP `9117` connections, then the matching drop rule;
+`DOCKER-USER` contained tagged original-destination address jumps to that chain.
 
 A separate Tailnet client (the controller Mac) reached Jackett through PiServ's
 Tailnet IP, MagicDNS hostname, and fully qualified Tailnet domain. Each endpoint
@@ -103,6 +106,7 @@ For failures, inspect the containers and Docker policy:
 sudo docker-compose -f /opt/jackett/compose.yml logs --tail=100
 sudo systemctl status docker.service --no-pager
 sudo iptables -S DOCKER-USER
+sudo iptables -S PISERV-JACKETT
 ```
 
 Do not delete `/opt/jackett/config` unless intentionally resetting all Jackett
