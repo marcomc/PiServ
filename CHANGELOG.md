@@ -4,6 +4,16 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### Jackett Search
+
+- Added a pinned Docker Compose deployment for Jackett and FlareSolverr with
+  persistent state under `/opt/jackett`.
+- Restricted Docker-published TCP `9117` to the current IPv4 LAN and Tailnet
+  through a persistent `DOCKER-USER` policy, because published Docker ports do
+  not traverse UFW's normal input chain.
+- Added the Jackett runbook with tracker-credential, update, validation, and
+  recovery procedures.
+
 ### External SSD Storage
 
 - Repartitioned the verified ASM246X external disk as one GPT partition spanning

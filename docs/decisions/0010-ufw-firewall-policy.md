@@ -30,6 +30,7 @@ default netfilter mode.
 | LAN IPv4 VNC | Allow TCP `5900` from the current IPv4 LAN CIDR |
 | LAN IPv4 Cockpit | Allow TCP `9090` from the current IPv4 LAN CIDR |
 | LAN IPv4 Glances | Allow TCP `61208` from the current IPv4 LAN CIDR |
+| Jackett Docker ingress | Allow TCP `9117` from the current IPv4 LAN and `tailscale0` only |
 | LAN IPv4 mDNS | Allow UDP `5353` from the current IPv4 LAN CIDR, including multicast and unicast mDNS queries |
 | LAN IPv6 ingress | Deny by default |
 | Tailnet ingress | Allow traffic arriving on `tailscale0` |
@@ -60,6 +61,13 @@ managed UFW configuration. When those files change, the role retains its
 standard behavior of resetting UFW before rebuilding the declared policies and
 rules in the same run.
 
+Docker publishes bridge-network ports through NAT before UFW's normal input
+chain. The Jackett playbook therefore owns an explicit `DOCKER-USER` policy:
+it allows TCP `9117` from the current IPv4 LAN and traffic arriving on
+`tailscale0`, then drops other sources before Docker's bridge accept rule. This
+is separate from the UFW allowlist and must be validated with `iptables -S
+DOCKER-USER` after every Docker restart.
+
 ## Tailscale Boundary
 
 Tailscale remains in netfilter mode `on`. In this mode, Tailscale evaluates its
@@ -76,6 +84,8 @@ playbook. See decision 0011 for the high-availability router policy.
 ## Consequences
 
 - SSH, VNC, and Cockpit remain available from the IPv4 LAN and tailnet.
+- Jackett remains available from the IPv4 LAN and Tailnet through its Tailscale
+  hostname/domain, but not from other Docker-published ingress sources.
 - The HTTP Basic-authenticated Glances API is available to the current IPv4 LAN
   and to tailnet identities allowed by Tailnet ACLs; IPv6 LAN ingress remains
   denied.
@@ -128,4 +138,5 @@ and Glances API port `61208` were added and LAN-validated on 2026-07-16.
 - [Tailscale netfilter modes](https://tailscale.com/docs/reference/netfilter-modes)
 - [Tailscale firewall ports](https://tailscale.com/docs/reference/faq/firewall-ports)
 - [Ansible `community.general.ufw`](https://docs.ansible.com/projects/ansible/latest/collections/community/general/ufw_module.html)
+- [Docker packet filtering and UFW](https://docs.docker.com/engine/network/packet-filtering-firewalls/)
 - [Upstream `ansible-ufw` PR #54](https://github.com/Oefenweb/ansible-ufw/pull/54)

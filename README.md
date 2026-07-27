@@ -153,7 +153,8 @@ Active implementation tracks:
 
 ## Automation
 
-Configure the PiServ base host policy:
+After Tailscale and the firewall policy are active, configure the PiServ base
+host policy:
 
 ```sh
 ansible-playbook ansible/playbooks/piserv-base.yml
@@ -238,7 +239,22 @@ rules. PiServ permits SSH, VNC, Cockpit HTTPS, and mDNS from its current IPv4
 LAN; the Glances API from the same LAN; all ingress through `tailscale0`; and
 UDP port `41641` for direct Tailscale peer connections. It permits routed
 tailnet traffic only to its local IPv4 LAN. Other LAN IPv6 ingress remains
-denied by default.
+denied by default. Docker-published services use separate `DOCKER-USER` rules
+because Docker port forwarding bypasses UFW's normal input chain.
+
+Deploy Jackett and FlareSolverr:
+
+```sh
+ansible-playbook ansible/playbooks/jackett.yml
+```
+
+The Jackett playbook installs Docker Compose, deploys pinned ARM64-compatible
+Jackett and FlareSolverr images with persistent state under `/opt/jackett`, and
+publishes TCP `9117`. Its Docker-aware policy permits the API only from the
+current IPv4 LAN and through `tailscale0`, so use PiServ's LAN hostname or its
+Tailscale hostname/domain; do not publish a public DNS record for the service.
+See the [Jackett runbook](docs/runbooks/jackett.md) for tracker configuration,
+validation, updates, and recovery.
 
 Install and manage the RaiPlaySound daily podcast sync:
 

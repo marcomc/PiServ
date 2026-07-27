@@ -19,11 +19,12 @@ assets are unavailable.
 ## Apply
 
 ```sh
-ansible-playbook ansible/playbooks/piserv-base.yml
 ansible-playbook ansible/playbooks/firewall.yml
+ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
-The base role installs `glances`, `lm-sensors`, `python3-uvicorn`, and
+Apply the firewall first. The base playbook refuses to bind Glances to the LAN
+until UFW is active. The base role then installs `glances`, `lm-sensors`, `python3-uvicorn`, and
 `python3-jinja2`. Uvicorn and Jinja2 are required because the Debian package
 lists them as recommendations while the role deliberately disables optional
 package recommendations. The role then starts `glances.service` in API-only

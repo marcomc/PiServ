@@ -59,6 +59,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   current child device, and refuse the operation if any is mounted. Install
   every target-side package required by storage modules only after these safety
   checks and before the first dependent module task.
+- For stateful storage, validate concrete device identity, filesystem layout,
+  and mount conflicts before package, group-membership, ACL, or service
+  mutations. A placeholder fallback configuration must fail without changing
+  host state.
 - Keep one-off migration cleanup out of steady-state playbooks after the live
   host reaches the new source of truth. Use a bounded migration command or
   temporary playbook for teardown, then remove it and update diagnostics to

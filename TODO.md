@@ -114,14 +114,12 @@
   - Assessment: Jackett documents ARM64 Linux support and a Docker deployment;
     the existing Jackett Search project should remain the operator-facing CLI.
   - Actions:
-    - Locate and validate the existing Jackett Search project and its expected
-      Docker image, volumes, ports, and configuration.
-    - Install Docker prerequisites and deploy the pinned ARM64-compatible
-      Jackett image with persistent state.
-    - Configure tracker credentials outside Git, firewall the API, and validate
-      search results and restart recovery.
-    - Codify the deployment, update policy, health checks, and runbook in
-      Ansible.
+    - Done: deploy pinned Jackett and FlareSolverr images with persistent state
+      through `ansible/playbooks/jackett.yml`.
+    - Done: enforce TCP `9117` access in Docker's `DOCKER-USER` chain for the
+      current IPv4 LAN and Tailnet.
+    - Configure tracker credentials outside Git, then validate search results
+      and restart recovery.
 
 - [ ] **Deploy a torrent client behind VPN Unlimited**
   - Assessment: A separate torrent container behind Gluetun provides a clear
