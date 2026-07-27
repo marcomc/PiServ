@@ -48,6 +48,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- When a PiServ playbook overrides a generic role's package or plugin set,
+  declare expected runtime registrations explicitly and guard live probes in
+  check mode when the service is absent; validate both fresh and converged
+  check-mode paths.
 - Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
   persistent device paths, and other host-specific identities from ignored
   local variables or a secure external source; use tracked placeholders only.

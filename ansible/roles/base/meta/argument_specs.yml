@@ -132,6 +132,10 @@ argument_specs:
         type: list
         elements: str
         description: Debian packages required for the Cockpit web console.
+      base_cockpit_expected_modules:
+        type: list
+        elements: str
+        description: Cockpit bridge package IDs expected during live validation.
       base_cockpit_socket_name:
         type: str
         default: cockpit.socket

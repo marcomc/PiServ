@@ -14,6 +14,15 @@
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."
         base_vnc_output: DSI-1
+        base_cockpit_packages:
+          - cockpit
+          - cockpit-storaged
+          - cockpit-sosreport
+          - cockpit-packagekit
+        base_cockpit_expected_modules:
+          - storage
+          - sosreport
+          - updates
         base_glances_bind_address: "{{ piserv_glances_bind_address }}"
         base_glances_validation_address: "{{ piserv_glances_validation_address }}"
         base_glances_port: "{{ piserv_glances_port }}"
