@@ -105,15 +105,14 @@
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Remove existing external disk partition entries
-      community.general.parted:
-        device: "{{ piserv_external_storage_device }}"
-        number: "{{ item }}"
-        state: absent
-      loop:
-        - 3
-        - 2
-        - 1
+    - name: Clear all external storage filesystem and partition signatures
+      ansible.builtin.command:
+        argv:
+          - wipefs
+          - --all
+          - --force
+          - "{{ piserv_external_storage_device }}"
+      changed_when: true
 
     - name: Create one aligned ext4 partition on a GPT disk
       community.general.parted:

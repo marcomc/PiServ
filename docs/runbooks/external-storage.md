@@ -41,8 +41,9 @@ disk identity, and keep the generated local file out of version control.
 The preparation playbook is destructive. It verifies the enclosure model,
 serial, and that neither the disk nor any child block device is mounted,
 installs its partitioning and ext4 tooling, then replaces the existing
-partition layout with one GPT partition, formats it as ext4, and applies the
-steady-state policy.
+partition table and filesystem signatures with one GPT partition, formats it as
+ext4, and applies the steady-state policy. This reset is intentionally
+non-idempotent and permanently destroys all data on the verified disk.
 
 Run only after confirming that the disk contents may be erased:
 
