@@ -15,11 +15,12 @@ inspection and supported host administration.
 
 ## Apply
 
-Apply the base role and firewall policy:
+Apply the firewall policy first, after Tailscale is configured, then the base
+role:
 
 ```sh
-ansible-playbook ansible/playbooks/piserv-base.yml
 ansible-playbook ansible/playbooks/firewall.yml
+ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
 The base role installs Debian's `cockpit`, `cockpit-storaged`,
