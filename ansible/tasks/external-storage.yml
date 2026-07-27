@@ -1,16 +1,17 @@
 ---
-- name: Install ACL tooling for shared external-storage permissions
-  ansible.builtin.apt:
-    name: acl
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-
-- name: Ensure the external-storage group exists
-  ansible.builtin.group:
-    name: "{{ piserv_external_storage_group }}"
-    state: present
-    system: true
+- name: Assert external storage identity inputs are concrete
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_device is match('^/dev/disk/by-id/.+')
+      - piserv_external_storage_expected_model | trim | length > 0
+      - piserv_external_storage_expected_serial | trim | length > 0
+      - piserv_external_storage_device is not search('<|>')
+      - piserv_external_storage_expected_model is not search('<|>')
+      - piserv_external_storage_expected_serial is not search('<|>')
+    fail_msg: >-
+      External storage requires a concrete stable by-id device path, model, and
+      serial. Copy ansible/vars/external-storage.yml.example to the ignored
+      external-storage.yml file and replace every placeholder before applying.
 
 - name: Verify configured external storage access users exist
   ansible.builtin.command:
@@ -35,59 +36,6 @@
       The configured external storage access users do not all exist:
       {{ piserv_external_storage_access_users.results
          | rejectattr('rc', 'equalto', 0) | map(attribute='item') | join(', ') }}.
-
-- name: Read current external-storage group membership
-  ansible.builtin.command:
-    argv:
-      - getent
-      - group
-      - "{{ piserv_external_storage_group }}"
-  register: piserv_external_storage_group_entry
-  changed_when: false
-  check_mode: false
-
-- name: Remove stale external-storage group members
-  ansible.builtin.command:
-    argv:
-      - gpasswd
-      - --delete
-      - "{{ item }}"
-      - "{{ piserv_external_storage_group }}"
-  loop: >-
-    {{ (piserv_external_storage_group_entry.stdout.split(':') | last | split(','))
-       | reject('equalto', '')
-       | difference(['admin'] + piserv_external_storage_service_users) }}
-  register: piserv_external_storage_stale_users
-  changed_when: true
-
-- name: Check revoked writing service states after storage access revocation
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - is-active
-      - --quiet
-      - "{{ item }}"
-  loop: "{{ piserv_external_storage_revoked_service_units | unique }}"
-  register: piserv_external_storage_revoked_service_states
-  changed_when: false
-  failed_when: false
-  when:
-    - piserv_external_storage_revoked_service_units | length > 0
-    - >-
-      piserv_external_storage_stale_users.results
-      | selectattr('changed') | list | length > 0
-
-- name: Restart active revoked writing services after storage access revocation
-  ansible.builtin.systemd_service:
-    name: "{{ item }}"
-    state: restarted
-  loop: >-
-    {{ piserv_external_storage_revoked_service_states.results | default([])
-       | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
-  when:
-    - >-
-      piserv_external_storage_revoked_service_states.results | default([])
-      | selectattr('rc', 'equalto', 0) | list | length > 0
 
 - name: Verify the configured external storage device identity
   ansible.builtin.command:
@@ -231,6 +179,72 @@
     fail_msg: >-
       {{ piserv_external_storage_mountpoint }} is mounted from a filesystem
       other than the configured external storage UUID. Refusing to change it.
+
+- name: Install ACL tooling for shared external-storage permissions
+  ansible.builtin.apt:
+    name: acl
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure the external-storage group exists
+  ansible.builtin.group:
+    name: "{{ piserv_external_storage_group }}"
+    state: present
+    system: true
+
+- name: Read current external-storage group membership
+  ansible.builtin.command:
+    argv:
+      - getent
+      - group
+      - "{{ piserv_external_storage_group }}"
+  register: piserv_external_storage_group_entry
+  changed_when: false
+  check_mode: false
+
+- name: Remove stale external-storage group members
+  ansible.builtin.command:
+    argv:
+      - gpasswd
+      - --delete
+      - "{{ item }}"
+      - "{{ piserv_external_storage_group }}"
+  loop: >-
+    {{ (piserv_external_storage_group_entry.stdout.split(':') | last | split(','))
+       | reject('equalto', '')
+       | difference(['admin'] + piserv_external_storage_service_users) }}
+  register: piserv_external_storage_stale_users
+  changed_when: true
+
+- name: Check revoked writing service states after storage access revocation
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - --quiet
+      - "{{ item }}"
+  loop: "{{ piserv_external_storage_revoked_service_units | unique }}"
+  register: piserv_external_storage_revoked_service_states
+  changed_when: false
+  failed_when: false
+  when:
+    - piserv_external_storage_revoked_service_units | length > 0
+    - >-
+      piserv_external_storage_stale_users.results
+      | selectattr('changed') | list | length > 0
+
+- name: Restart active revoked writing services after storage access revocation
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: restarted
+  loop: >-
+    {{ piserv_external_storage_revoked_service_states.results | default([])
+       | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+  when:
+    - >-
+      piserv_external_storage_revoked_service_states.results | default([])
+      | selectattr('rc', 'equalto', 0) | list | length > 0
 
 - name: Inspect the external storage mountpoint parent
   ansible.builtin.stat:

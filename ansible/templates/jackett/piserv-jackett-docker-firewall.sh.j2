@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+iptables=/usr/sbin/iptables
+port={{ piserv_jackett_port }}
+lan_ipv4_cidr={{ piserv_jackett_lan_ipv4_cidr }}
+
+ensure_rule() {
+  if ! "${iptables}" -C DOCKER-USER "$@"; then
+    "${iptables}" -I DOCKER-USER 1 "$@"
+  fi
+}
+
+# Docker DNAT runs before UFW INPUT rules. Keep this deny rule after the two
+# trusted-source rules by inserting it first and the allows afterwards.
+ensure_rule -p tcp -m conntrack --ctorigdstport "${port}" -j DROP
+ensure_rule -i tailscale0 -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT
+ensure_rule -s "${lan_ipv4_cidr}" -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT

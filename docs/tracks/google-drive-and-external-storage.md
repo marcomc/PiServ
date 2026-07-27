@@ -121,10 +121,11 @@ privilege token, per-repository failure reporting, and a daily systemd timer.
 ## Jackett and torrent workload
 
 Jackett has documented Linux ARM64 releases and recommends Docker, with the
-LinuxServer.io image as the supported container path. The PiServ task should
-install the existing Jackett Search CLI and its container, then validate the
-API, persistent configuration, tracker setup, firewall exposure, and update
-policy.
+LinuxServer.io image as the supported container path. PiServ now deploys pinned
+Jackett and FlareSolverr images through `ansible/playbooks/jackett.yml` with
+persistent configuration. The managed Docker ingress policy permits the API
+from the IPv4 LAN and Tailnet only. Tracker setup, search validation, and the
+update policy remain operator tasks in the Jackett runbook.
 
 The torrent client should run as a separate container joined to a Gluetun VPN
 container. Gluetun supports ARM64, has a firewall kill switch, and documents

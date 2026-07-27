@@ -27,6 +27,7 @@ Tailscale administration access.
 | IPv4 LAN TCP `5900` | Allowed for VNC |
 | IPv4 LAN TCP `9090` | Allowed for Cockpit HTTPS |
 | IPv4 LAN TCP `61208` | Allowed for Glances API |
+| Jackett TCP `9117` | Allowed by Docker only from the IPv4 LAN and `tailscale0` |
 | IPv4 LAN UDP `5353` | Allowed for multicast and unicast mDNS queries |
 | IPv6 LAN ingress | Denied by default |
 | Ingress on `tailscale0` | Allowed |
@@ -36,6 +37,11 @@ Tailscale administration access.
 
 Tailscale stays in netfilter mode `on`; tailnet grants and ACLs remain the
 identity-level access control for traffic arriving through `tailscale0`.
+
+Docker-published ports bypass UFW's normal input chain. The Jackett playbook
+therefore manages a persistent `DOCKER-USER` rule set that allows TCP `9117`
+from the current IPv4 LAN and `tailscale0`, then drops other sources before
+Docker accepts bridge traffic. Do not add a UFW port `9117` rule as a substitute.
 
 ## Preconditions
 
@@ -119,6 +125,7 @@ sudo ufw status verbose
 systemctl is-enabled ufw.service
 systemctl is-active ufw.service
 sudo nft list ruleset
+sudo iptables -S DOCKER-USER
 tailscale status
 mountpoint /mnt/pcloud
 ```
@@ -133,6 +140,7 @@ curl -kfsS -o /dev/null -w '%{http_code}\n' https://PiServ.local:9090/
 curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
 dns-sd -Q PiServ.local A
 dig @"${PISERV_IP}" -p 5353 PiServ.local A +norecurse +short
+curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:9117/
 ```
 
 Run from a Tailscale client:
@@ -143,6 +151,7 @@ nc -vz PISERV_TAILSCALE_IP 22
 nc -vz PISERV_TAILSCALE_IP 5900
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://PISERV_TAILSCALE_IP:9090/
 curl -sS -o /dev/null -w '%{http_code}\n' http://PISERV_TAILSCALE_IP:61208/api/4/status
+curl -sS -o /dev/null -w '%{http_code}\n' http://PISERV_TAILSCALE_DOMAIN:9117/
 ssh admin@PISERV_TAILSCALE_IP true
 ```
 
