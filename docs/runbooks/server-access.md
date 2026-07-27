@@ -22,10 +22,11 @@ dns-sd -Q PiServ.local A
 ssh admin@PiServ.local 'hostname && id && sudo -n true && echo sudo-ok'
 ```
 
-Verify direct IP access:
+Verify direct IP access with the current DHCP lease (from the router or local
+console):
 
 ```sh
-PISERV_IP=$(getent ahostsv4 PiServ.local | awk 'NR == 1 { print $1 }')
+PISERV_IP=<current-DHCP-lease>
 ssh "admin@${PISERV_IP}" 'hostname && id && sudo -n true && echo sudo-ok'
 ```
 
@@ -48,8 +49,8 @@ ssh "admin@${PISERV_IP}" 'hostname && id && sudo -n true && echo sudo-ok'
   unicast UDP/5353 query from the client and verify that the managed UFW policy
   allows UDP `5353` from the LAN CIDR without restricting the destination to
   `224.0.0.251`.
-- Use the direct IPv4 address as the Ansible fallback while repairing mDNS:
-  `ansible-playbook ... -e ansible_host=192.168.1.181`.
+- Use the current direct IPv4 address as the Ansible fallback while repairing
+  mDNS: `ansible-playbook ... -e "ansible_host=${PISERV_IP}"`.
 - If sudo requires a password, document that behavior before deciding whether
   automation should use passwordless sudo or explicit become prompting.
 - Add these checks to automation once the baseline Ansible layout exists.
