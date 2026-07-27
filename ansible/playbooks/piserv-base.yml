@@ -2,12 +2,20 @@
 - name: Configure PiServ base host policy
   hosts: piserv
   gather_facts: true
+  vars:
+    piserv_base_lan_ipv4_cidr: >-
+      {{
+        ansible_facts.default_ipv4.network
+        ~ '/'
+        ~ ansible_facts.default_ipv4.prefix
+      }}
   pre_tasks:
-    - name: Read UFW state before enabling the LAN Glances listener
+    - name: Read UFW policy before enabling the LAN Glances listener
       ansible.builtin.command:
         argv:
           - /usr/sbin/ufw
           - status
+          - verbose
       register: piserv_base_ufw_status
       changed_when: false
       failed_when: false
@@ -15,13 +23,29 @@
       become: true
       when: piserv_glances_bind_address == '0.0.0.0'
 
-    - name: Require an active firewall before enabling the LAN Glances listener
+    - name: Require the PiServ firewall policy before enabling the LAN Glances listener
       ansible.builtin.assert:
         that:
           - "'Status: active' in piserv_base_ufw_status.stdout"
+          - "'Default: deny (incoming)' in piserv_base_ufw_status.stdout"
+          - >-
+            piserv_base_ufw_status.stdout is regex(
+              '(?m)^'
+              ~ (piserv_glances_port | string)
+              ~ '/tcp\\s+ALLOW IN\\s+'
+              ~ (piserv_base_lan_ipv4_cidr | regex_escape)
+              ~ '\\s+# PiServ LAN Glances API$'
+            )
+          - >-
+            piserv_base_ufw_status.stdout is regex(
+              '(?m)^Anywhere\\s+on\\s+tailscale0\\s+ALLOW IN\\s+Anywhere'
+              ~ '\\s+# PiServ Tailscale ingress$'
+            )
         fail_msg: >-
           Apply ansible/playbooks/firewall.yml before binding the Glances API
-          to the LAN.
+          to the LAN. UFW must be active with default incoming deny, the
+          source-scoped PiServ LAN Glances API rule, and PiServ Tailscale
+          ingress policy.
       when: piserv_glances_bind_address == '0.0.0.0'
   roles:
     - role: msmtp

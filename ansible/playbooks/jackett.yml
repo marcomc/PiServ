@@ -19,7 +19,6 @@
     piserv_jackett_docker_dropin_path: >-
       {{ piserv_jackett_docker_dropin_dir }}/piserv-jackett-firewall.conf
     piserv_jackett_docker_firewall_chain: PISERV-JACKETT
-    piserv_jackett_lan_interface: "{{ ansible_facts.default_ipv4.interface }}"
     piserv_jackett_lan_ipv4_cidr: >-
       {{ ansible_facts.default_ipv4.network }}/{{ ansible_facts.default_ipv4.prefix }}
     piserv_jackett_validation_address: 127.0.0.1
@@ -209,18 +208,19 @@
       ansible.builtin.assert:
         that:
           - >-
-            ('-A DOCKER-USER -i ' ~ piserv_jackett_lan_interface
-            ~ ' -p tcp -m conntrack --ctorigdstport '
+            ('-A DOCKER-USER -p tcp -m conntrack --ctorigdstport '
             ~ (piserv_jackett_port | string)
             ~ ' -m comment --comment "PiServ Jackett Docker ingress" -j '
             ~ piserv_jackett_docker_firewall_chain)
             in piserv_jackett_docker_firewall.stdout
           - >-
-            ('-A DOCKER-USER -i tailscale0 -p tcp -m conntrack --ctorigdstport '
-            ~ (piserv_jackett_port | string)
-            ~ ' -m comment --comment "PiServ Jackett Docker ingress" -j '
-            ~ piserv_jackett_docker_firewall_chain)
-            in piserv_jackett_docker_firewall.stdout
+            ('-A ' ~ piserv_jackett_docker_firewall_chain
+            ~ ' -i docker0 -j RETURN')
+            in piserv_jackett_docker_firewall_chain_state.stdout
+          - >-
+            ('-A ' ~ piserv_jackett_docker_firewall_chain
+            ~ ' -i br-+ -j RETURN')
+            in piserv_jackett_docker_firewall_chain_state.stdout
           - >-
             ('-A ' ~ piserv_jackett_docker_firewall_chain
             ~ ' -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN')
@@ -238,7 +238,7 @@
             ('-A ' ~ piserv_jackett_docker_firewall_chain ~ ' -j DROP')
             in piserv_jackett_docker_firewall_chain_state.stdout
         fail_msg: >-
-          The managed Jackett chain must return established traffic, allow new
-          connections only from PiServ's IPv4 LAN and the Tailnet, and drop all
-          other published-port traffic.
+          The managed Jackett chain must return Docker bridge and established
+          traffic, allow new connections only from PiServ's IPv4 LAN and the
+          Tailnet, and drop all other published-port traffic.
       when: piserv_jackett_live_validation_safe
