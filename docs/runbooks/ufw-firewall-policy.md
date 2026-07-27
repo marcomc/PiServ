@@ -132,7 +132,7 @@ nc -vz PiServ.local 5900
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://PiServ.local:9090/
 curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
 dns-sd -Q PiServ.local A
-dig @PISERV_IP -p 5353 PiServ.local A +norecurse +short
+dig @"${PISERV_IP}" -p 5353 PiServ.local A +norecurse +short
 ```
 
 Run from a Tailscale client:
