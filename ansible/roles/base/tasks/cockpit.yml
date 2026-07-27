@@ -6,6 +6,7 @@
     install_recommends: false
     update_cache: true
     cache_valid_time: 3600
+  register: base_cockpit_packages_install
   become: true
 
 - name: Read Cockpit socket state for check-mode validation
@@ -29,6 +30,13 @@
     base_cockpit_live_validation_enabled: >-
       {{ (not ansible_check_mode) or
          (base_cockpit_socket_state.status.ActiveState | default('') == 'active') }}
+
+- name: Determine whether Cockpit module validation can run
+  ansible.builtin.set_fact:
+    base_cockpit_module_validation_enabled: >-
+      {{ base_cockpit_live_validation_enabled | bool and
+         (not ansible_check_mode or
+          not (base_cockpit_packages_install.changed | default(false) | bool)) }}
 
 - name: Validate Cockpit local HTTPS login page
   ansible.builtin.uri:
@@ -62,7 +70,7 @@
   check_mode: false
   when:
     - base_cockpit_expected_modules | length > 0
-    - base_cockpit_live_validation_enabled | bool
+    - base_cockpit_module_validation_enabled | bool
 
 - name: Assert expected Cockpit modules are registered
   ansible.builtin.assert:
@@ -76,4 +84,4 @@
   loop: "{{ base_cockpit_expected_modules }}"
   when:
     - base_cockpit_expected_modules | length > 0
-    - base_cockpit_live_validation_enabled | bool
+    - base_cockpit_module_validation_enabled | bool
