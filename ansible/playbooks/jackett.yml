@@ -172,6 +172,29 @@
             )
           }}
 
+    - name: Read the deployed Jackett services
+      ansible.builtin.command:
+        argv:
+          - docker-compose
+          - -f
+          - "{{ piserv_jackett_compose_file }}"
+          - ps
+          - --services
+          - --filter
+          - status=running
+      register: piserv_jackett_deployed_services
+      changed_when: false
+      check_mode: false
+      when: piserv_jackett_live_validation_safe
+
+    - name: Assert the Jackett and FlareSolverr services are running
+      ansible.builtin.assert:
+        that:
+          - "'jackett' in piserv_jackett_deployed_services.stdout_lines"
+          - "'flaresolverr' in piserv_jackett_deployed_services.stdout_lines"
+        fail_msg: Jackett and FlareSolverr must both be running after deployment.
+      when: piserv_jackett_live_validation_safe
+
     - name: Wait for the Jackett web interface
       ansible.builtin.uri:
         url: >-
