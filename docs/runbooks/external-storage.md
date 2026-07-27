@@ -63,6 +63,10 @@ ssh admin@PiServ.local \
   'getfacl -p /mnt/external-data/shared /mnt/external-data/backups'
 ```
 
+Before changing ACLs or services, the convergence playbook refuses a configured
+filesystem UUID that `findmnt` reports at any target other than
+`/mnt/external-data`.
+
 Expected results are one ext4 partition labeled `external-data`, an active
 `/mnt/external-data` mount with `nodev,nosuid`, and the ACLs recorded in
 [Decision 0017](../decisions/0017-external-ssd-storage.md).

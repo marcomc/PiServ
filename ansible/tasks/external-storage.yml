@@ -180,6 +180,34 @@
       {{ piserv_external_storage_mountpoint }} is mounted from a filesystem
       other than the configured external storage UUID. Refusing to change it.
 
+- name: Check whether the external storage volume is mounted elsewhere
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --source
+      - "UUID={{ piserv_external_storage_uuid.stdout | trim }}"
+      - --output
+      - TARGET
+      - --noheadings
+  register: piserv_external_storage_existing_mounts
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse external storage mounted outside the configured mountpoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_existing_mounts.rc != 0 or
+        (
+          piserv_external_storage_existing_mounts.stdout_lines
+          | map('trim') | reject('equalto', '') | list
+          | difference([piserv_external_storage_mountpoint]) | length == 0
+        )
+    fail_msg: >-
+      The configured external storage UUID is already mounted outside
+      {{ piserv_external_storage_mountpoint }}. Refusing to manage it twice.
+
 - name: Install ACL tooling for shared external-storage permissions
   ansible.builtin.apt:
     name: acl
