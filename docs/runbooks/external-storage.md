@@ -84,9 +84,10 @@ piserv_external_storage_revoked_service_units: []
 
 Removing a service user from this list removes its membership from
 `external-data` on the next convergence without changing its other groups. The
-listed writing service units restart when membership changes so they receive or
-lose storage access immediately. Human administrators must start a new login
-session after their group membership changes.
+listed active writing service units restart when membership changes so they
+receive or lose storage access immediately; stopped units remain stopped. Human
+administrators must start a new login session after their group membership
+changes.
 
 To remove a user and unit in the same convergence, put the departing unit in
 `piserv_external_storage_revoked_service_units` for that run. This restarts the
