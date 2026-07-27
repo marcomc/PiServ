@@ -66,7 +66,11 @@ sudo systemctl is-active cockpit.socket
 curl -kfsS https://127.0.0.1:9090/ | grep -F cockpit/static/login.js
 sudo ss -ltnp '( sport = :9090 )'
 dpkg -l cockpit cockpit-storaged cockpit-sosreport cockpit-packagekit
-cockpit-bridge --packages | grep -E 'storage|sosreport|packagekit'
+cockpit_modules="$(cockpit-bridge --packages)"
+for module in storage sosreport updates; do
+  printf '%s\n' "$cockpit_modules" |
+    awk -v module="$module" '$1 == module { found = 1 } END { exit !found }'
+done
 ```
 
 Run from a LAN client:
