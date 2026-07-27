@@ -72,7 +72,8 @@ readable by ordinary users.
 
 Add only services that need write access to the dedicated service group through
 `piserv_external_storage_service_users` in
-`ansible/group_vars/piserv.yml`, then converge:
+`ansible/group_vars/piserv.yml`. Every listed account must already exist; the
+playbook rejects unknown users rather than creating them. Then converge:
 
 ```yaml
 piserv_external_storage_service_users:

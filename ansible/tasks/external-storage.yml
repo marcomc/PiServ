@@ -360,6 +360,30 @@
       The external storage mount is not active with the expected ext4,
       nodev, and nosuid state.
 
+- name: Verify configured external storage access users exist
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ item }}"
+  loop: "{{ ['admin'] + piserv_external_storage_service_users }}"
+  register: piserv_external_storage_access_users
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Assert configured external storage access users exist
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_access_users.results
+        | selectattr('rc', 'equalto', 0) | list | length ==
+        (piserv_external_storage_access_users.results | length)
+    fail_msg: >-
+      The configured external storage access users do not all exist:
+      {{ piserv_external_storage_access_users.results
+         | rejectattr('rc', 'equalto', 0) | map(attribute='item') | join(', ') }}.
+
 - name: Add the human administrator and configured services to storage access
   ansible.builtin.user:
     name: "{{ item }}"
