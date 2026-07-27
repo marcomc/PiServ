@@ -85,10 +85,15 @@ Add only services that need write access to the dedicated service group through
 ```yaml
 piserv_external_storage_service_users:
   - SERVICE_USER
+piserv_external_storage_service_units:
+  - SERVICE.service
 ```
 
 Removing a service user from this list removes its membership from
-`external-data` on the next convergence without changing its other groups.
+`external-data` on the next convergence without changing its other groups. The
+listed writing service units restart when membership changes so they receive or
+lose storage access immediately. Human administrators must start a new login
+session after their group membership changes.
 
 Service units that use this path should include:
 
