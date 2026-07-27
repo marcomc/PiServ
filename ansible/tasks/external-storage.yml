@@ -49,9 +49,13 @@
   ansible.builtin.systemd_service:
     name: "{{ item }}"
     state: restarted
-  loop: "{{ piserv_external_storage_service_units }}"
+  loop: >-
+    {{ (piserv_external_storage_service_units +
+        piserv_external_storage_revoked_service_units) | unique }}
   when:
-    - piserv_external_storage_service_units | length > 0
+    - >-
+      (piserv_external_storage_service_units +
+      piserv_external_storage_revoked_service_units) | length > 0
     - >-
       (piserv_external_storage_authorized_users.results
       | selectattr('changed') | list | length > 0) or

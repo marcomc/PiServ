@@ -88,6 +88,7 @@ piserv_external_storage_service_users:
   - SERVICE_USER
 piserv_external_storage_service_units:
   - SERVICE.service
+piserv_external_storage_revoked_service_units: []
 ```
 
 Removing a service user from this list removes its membership from
@@ -95,6 +96,11 @@ Removing a service user from this list removes its membership from
 listed writing service units restart when membership changes so they receive or
 lose storage access immediately. Human administrators must start a new login
 session after their group membership changes.
+
+To remove a user and unit in the same convergence, put the departing unit in
+`piserv_external_storage_revoked_service_units` for that run. This restarts the
+still-running service after its group access is revoked; remove the unit from
+the temporary list after the successful convergence.
 
 Service units that use this path should include:
 
