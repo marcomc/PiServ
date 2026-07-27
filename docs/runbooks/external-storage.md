@@ -34,7 +34,10 @@ The disk is attached through a USB 3 port and currently negotiates at 5 Gbps.
 The disk identity is deliberately local rather than committed. Copy
 `ansible/vars/external-storage.yml.example` to
 `ansible/vars/external-storage.yml`, replace the placeholders with the verified
-disk identity, and keep the generated local file out of version control.
+disk identity, and keep the generated local file out of version control. The
+playbook falls back to the committed example only for a clean-checkout syntax
+check; its placeholders fail the disk identity assertion and are not a usable
+live configuration.
 
 ## Provisioning History
 
