@@ -47,12 +47,14 @@
         enabled: true
         state: started
       register: piserv_jackett_docker_service
+      when: not ansible_check_mode or not piserv_jackett_docker_packages.changed
 
     - name: Allow the PiServ administrator to operate Docker
       ansible.builtin.user:
         name: "{{ piserv_jackett_user }}"
         groups: docker
         append: true
+      when: not ansible_check_mode or not piserv_jackett_docker_packages.changed
 
     - name: Create persistent Jackett directories
       ansible.builtin.file:
