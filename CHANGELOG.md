@@ -12,7 +12,7 @@ All notable project changes are documented here.
   and optional-device boot behavior, while destructive actions verify a local
   stable by-id device identity.
 - Added the dedicated `external-data` group, shared ACL policy, restricted
-  backup directory, and guarded preparation and convergence playbooks.
+  backup directory, and non-destructive convergence playbook.
 - Added the external SSD storage decision record and operator runbook.
 
 ### Cockpit Web Console

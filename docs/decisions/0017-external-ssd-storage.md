@@ -89,6 +89,6 @@ confirmed:
 - temporary read/write validation files were removed after testing.
 
 The steady-state source of truth is
-`ansible/playbooks/external-storage.yml`. The destructive preparation path is
-guarded by an explicit confirmation variable in
-`ansible/playbooks/prepare-external-storage.yml`.
+`ansible/playbooks/external-storage.yml`. The completed one-off destructive
+migration playbook was removed so normal automation cannot reformat the live
+volume.

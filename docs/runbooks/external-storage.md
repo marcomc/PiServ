@@ -4,15 +4,15 @@
 
 - [Purpose](#purpose)
 - [Current State](#current-state)
-- [Preparation](#preparation)
+- [Provisioning History](#provisioning-history)
 - [Verification](#verification)
 - [Service Access](#service-access)
 - [Recovery](#recovery)
 
 ## Purpose
 
-Prepare and operate the PiServ-owned external SSD as a journaled ext4 data
-volume with shared service access and restricted backup storage.
+Operate the PiServ-owned external SSD as a journaled ext4 data volume with
+shared service access and restricted backup storage.
 
 ## Current State
 
@@ -36,23 +36,14 @@ The disk identity is deliberately local rather than committed. Copy
 `ansible/vars/external-storage.yml`, replace the placeholders with the verified
 disk identity, and keep the generated local file out of version control.
 
-## Preparation
+## Provisioning History
 
-The preparation playbook is destructive. It verifies the enclosure model,
-serial, and that neither the disk nor any child block device is mounted,
-installs its partitioning and ext4 tooling, then replaces the existing
-partition table and filesystem signatures with one GPT partition, formats it as
-ext4, and applies the steady-state policy. This reset is intentionally
-non-idempotent and permanently destroys all data on the verified disk.
+The original APFS disk was destructively converted to this ext4 layout during
+the 2026-07-23 provisioning. That one-off migration is complete; no destructive
+playbook is retained. The steady-state playbook refuses an unexpected
+filesystem instead of reformatting a mounted or existing volume.
 
-Run only after confirming that the disk contents may be erased:
-
-```sh
-ansible-playbook ansible/playbooks/prepare-external-storage.yml \
-  -e piserv_external_storage_format_confirmed=true
-```
-
-The normal, non-destructive convergence command is:
+Use the non-destructive convergence command for normal operation:
 
 ```sh
 ansible-playbook ansible/playbooks/external-storage.yml
@@ -60,7 +51,7 @@ ansible-playbook ansible/playbooks/external-storage.yml
 
 ## Verification
 
-Run these checks after preparation, reconnect, or reboot:
+Run these checks after reconnecting the disk or rebooting:
 
 ```sh
 ssh admin@PiServ.local \
@@ -99,8 +90,9 @@ session after their group membership changes.
 
 To remove a user and unit in the same convergence, put the departing unit in
 `piserv_external_storage_revoked_service_units` for that run. This restarts the
-still-running service after its group access is revoked; remove the unit from
-the temporary list after the successful convergence.
+still-running service immediately after its group access is revoked, before
+the remaining storage validation; remove the unit from the temporary list after
+the successful convergence.
 
 Service units that use this path should include:
 
