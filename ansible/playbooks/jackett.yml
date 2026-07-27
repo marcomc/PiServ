@@ -19,7 +19,6 @@
     piserv_jackett_docker_dropin_path: >-
       {{ piserv_jackett_docker_dropin_dir }}/piserv-jackett-firewall.conf
     piserv_jackett_docker_firewall_chain: PISERV-JACKETT
-    piserv_jackett_lan_ipv4_address: "{{ ansible_facts.default_ipv4.address }}"
     piserv_jackett_lan_ipv4_cidr: >-
       {{ ansible_facts.default_ipv4.network }}/{{ ansible_facts.default_ipv4.prefix }}
     piserv_jackett_validation_address: 127.0.0.1
@@ -31,32 +30,6 @@
       ansible.builtin.getent:
         database: passwd
         key: "{{ piserv_jackett_user }}"
-
-    - name: Read the PiServ Tailscale IPv4 address
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/tailscale
-          - ip
-          - -4
-      register: piserv_jackett_tailscale_ipv4
-      changed_when: false
-      check_mode: false
-
-    - name: Assert a single PiServ Tailscale IPv4 address
-      ansible.builtin.assert:
-        that:
-          - piserv_jackett_tailscale_ipv4.stdout_lines | length == 1
-          - >-
-            (piserv_jackett_tailscale_ipv4.stdout | trim)
-            is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
-        fail_msg: >-
-          PiServ must have exactly one IPv4 Tailscale address before deploying
-          the Docker ingress policy.
-
-    - name: Store the PiServ Tailscale IPv4 address
-      ansible.builtin.set_fact:
-        piserv_jackett_tailscale_ipv4_address: >-
-          {{ piserv_jackett_tailscale_ipv4.stdout | trim }}
 
     - name: Install Docker and Docker Compose
       ansible.builtin.apt:
@@ -233,17 +206,8 @@
       ansible.builtin.assert:
         that:
           - >-
-            ('-A DOCKER-USER -p tcp -m conntrack --ctorigdst '
-            ~ piserv_jackett_lan_ipv4_address
-            ~ ' --ctorigdstport '
-            ~ (piserv_jackett_port | string)
-            ~ ' -m comment --comment "PiServ Jackett Docker ingress" -j '
-            ~ piserv_jackett_docker_firewall_chain)
-            in piserv_jackett_docker_firewall.stdout
-          - >-
-            ('-A DOCKER-USER -p tcp -m conntrack --ctorigdst '
-            ~ piserv_jackett_tailscale_ipv4_address
-            ~ ' --ctorigdstport '
+            ('-A DOCKER-USER -p tcp -m conntrack --ctstate DNAT '
+            ~ '--ctorigdstport '
             ~ (piserv_jackett_port | string)
             ~ ' -m comment --comment "PiServ Jackett Docker ingress" -j '
             ~ piserv_jackett_docker_firewall_chain)

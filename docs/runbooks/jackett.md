@@ -28,9 +28,9 @@ ansible-playbook ansible/playbooks/jackett.yml
 The playbook installs Docker Compose, creates `/opt/jackett/{config,downloads}`
 with `admin` ownership, and starts pinned Jackett and FlareSolverr containers.
 It also installs a Docker `DOCKER-USER` policy after every Docker start. That
-policy permits new TCP `9117` connections addressed to PiServ's current IPv4
-LAN or Tailnet addresses; Docker port publishing does not use UFW's normal input
-chain.
+policy permits new Docker-published TCP `9117` connections only from the
+current IPv4 LAN or `tailscale0`; Docker port publishing does not use UFW's
+normal input chain.
 
 ## Configure Trackers
 
@@ -54,10 +54,10 @@ sudo iptables -S PISERV-JACKETT
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9117/
 ```
 
-`DOCKER-USER` must contain tagged original-destination TCP `9117` jumps for
-PiServ's current IPv4 LAN and Tailnet addresses. The `PISERV-JACKETT` chain
-must accept new connections from the IPv4 LAN or `tailscale0` before the
-matching drop rule. From a LAN client, verify:
+`DOCKER-USER` must contain its tagged DNAT TCP `9117` jump to
+`PISERV-JACKETT`. The `PISERV-JACKETT` chain must accept new connections from
+the IPv4 LAN or `tailscale0` before the matching drop rule. From a LAN client,
+verify:
 
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:9117/
@@ -89,7 +89,8 @@ The playbook completed successfully; its repeat run returned `changed=0`. Both
 the local loopback request and the request from the LAN returned HTTP `301`.
 The managed `PISERV-JACKETT` chain contained current IPv4-LAN and `tailscale0`
 accepts for new TCP `9117` connections, then the matching drop rule;
-`DOCKER-USER` contained tagged original-destination address jumps to that chain.
+`DOCKER-USER` contained its tagged DNAT original-destination port jump to that
+chain.
 
 A separate Tailnet client (the controller Mac) reached Jackett through PiServ's
 Tailnet IP, MagicDNS hostname, and fully qualified Tailnet domain. Each endpoint
