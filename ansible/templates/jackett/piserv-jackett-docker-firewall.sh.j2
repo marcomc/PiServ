@@ -4,15 +4,61 @@ set -eu
 iptables=/usr/sbin/iptables
 port={{ piserv_jackett_port }}
 lan_ipv4_cidr={{ piserv_jackett_lan_ipv4_cidr }}
+chain={{ piserv_jackett_docker_firewall_chain }}
+comment='PiServ Jackett Docker ingress'
 
-ensure_rule() {
-  if ! "${iptables}" -C DOCKER-USER "$@"; then
-    "${iptables}" -I DOCKER-USER 1 "$@"
+ensure_chain() {
+  if ! "${iptables}" -n -L "${chain}" >/dev/null 2>&1; then
+    "${iptables}" -N "${chain}"
   fi
 }
 
-# Docker DNAT runs before UFW INPUT rules. Keep this deny rule after the two
-# trusted-source rules by inserting it first and the allows afterwards.
-ensure_rule -p tcp -m conntrack --ctorigdstport "${port}" -j DROP
-ensure_rule -i tailscale0 -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT
-ensure_rule -s "${lan_ipv4_cidr}" -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT
+delete_docker_user_rule() {
+  while "${iptables}" -C DOCKER-USER "$@" >/dev/null 2>&1; do
+    "${iptables}" -D DOCKER-USER "$@"
+  done
+}
+
+# Docker DNAT runs before UFW INPUT rules. Keep all Jackett-specific rules in
+# an isolated chain, so reruns replace a changed LAN CIDR without touching
+# unrelated DOCKER-USER policy.
+ensure_chain
+"${iptables}" -F "${chain}"
+"${iptables}" -A "${chain}" \
+  -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+"${iptables}" -A "${chain}" \
+  -i tailscale0 -m conntrack --ctstate NEW -j ACCEPT
+"${iptables}" -A "${chain}" \
+  -s "${lan_ipv4_cidr}" -m conntrack --ctstate NEW -j ACCEPT
+"${iptables}" -A "${chain}" -j DROP
+
+# Keep the stable managed jump ahead of Docker's accept rules. Removing every
+# matching jump first reconciles duplicate hooks from interrupted earlier runs.
+delete_docker_user_rule \
+  -p tcp -m conntrack --ctorigdstport "${port}" \
+  -m comment --comment "${comment}" -j "${chain}"
+"${iptables}" -I DOCKER-USER 1 \
+  -p tcp -m conntrack --ctorigdstport "${port}" \
+  -m comment --comment "${comment}" -j "${chain}"
+
+# Migrate the untagged direct rules managed by the initial implementation. The
+# source-specific accepts are matched structurally, so a previous LAN CIDR is
+# removed while unrelated DOCKER-USER rules remain untouched.
+delete_docker_user_rule \
+  -i tailscale0 -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT
+delete_docker_user_rule \
+  -p tcp -m conntrack --ctorigdstport "${port}" -j DROP
+"${iptables}" -S DOCKER-USER \
+  | awk -v port="${port}" '
+      $1 == "-A" && $2 == "DOCKER-USER" && $3 == "-s" &&
+      $5 == "-p" && $6 == "tcp" && $7 == "-m" && $8 == "conntrack" &&
+      $9 == "--ctorigdstport" && $10 == port && $11 == "-j" &&
+      $12 == "ACCEPT" && NF == 12 {
+        print $4
+      }
+    ' \
+  | while IFS= read -r legacy_lan_ipv4_cidr; do
+      delete_docker_user_rule \
+        -s "${legacy_lan_ipv4_cidr}" -p tcp -m conntrack \
+        --ctorigdstport "${port}" -j ACCEPT
+    done
