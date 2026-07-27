@@ -32,10 +32,14 @@
       ansible.builtin.assert:
         that:
           - "'ID_TYPE=disk' in piserv_external_storage_udev.stdout_lines"
-          - piserv_external_storage_udev.stdout is search(
-              'ID_MODEL=' ~ piserv_external_storage_expected_model)
-          - piserv_external_storage_udev.stdout is search(
-              'ID_SERIAL_SHORT=' ~ piserv_external_storage_expected_serial)
+          - piserv_external_storage_expected_model | trim | length > 0
+          - piserv_external_storage_expected_serial | trim | length > 0
+          - >-
+            ('ID_MODEL=' ~ (piserv_external_storage_expected_model | trim))
+            in piserv_external_storage_udev.stdout_lines
+          - >-
+            ('ID_SERIAL_SHORT=' ~ (piserv_external_storage_expected_serial | trim))
+            in piserv_external_storage_udev.stdout_lines
         fail_msg: >-
           The configured external storage identity does not match the expected
           ASM246X disk. Refusing to erase the wrong device.

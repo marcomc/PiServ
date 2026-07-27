@@ -87,6 +87,9 @@ piserv_external_storage_service_users:
   - SERVICE_USER
 ```
 
+Removing a service user from this list removes its membership from
+`external-data` on the next convergence without changing its other groups.
+
 Service units that use this path should include:
 
 ```ini
