@@ -48,6 +48,13 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
+  persistent device paths, and other host-specific identities from ignored
+  local variables or a secure external source; use tracked placeholders only.
+- Before destructive disk changes, enumerate the configured disk and every
+  current child device, and refuse the operation if any is mounted. Install
+  every target-side package required by storage modules only after these safety
+  checks and before the first dependent module task.
 - Keep one-off migration cleanup out of steady-state playbooks after the live
   host reaches the new source of truth. Use a bounded migration command or
   temporary playbook for teardown, then remove it and update diagnostics to

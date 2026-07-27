@@ -17,6 +17,8 @@ can perform sudo operations.
 Verify mDNS access:
 
 ```sh
+dscacheutil -q host -a name PiServ.local
+dns-sd -Q PiServ.local A
 ssh admin@PiServ.local 'hostname && id && sudo -n true && echo sudo-ok'
 ```
 
@@ -42,7 +44,12 @@ ssh "admin@${PISERV_IP}" 'hostname && id && sudo -n true && echo sudo-ok'
 ## Follow-Up
 
 - If mDNS fails but the IP works, document name-resolution state before changing
-  host or network configuration.
+  host or network configuration. Check PiServ's kernel log for a blocked
+  unicast UDP/5353 query from the client and verify that the managed UFW policy
+  allows UDP `5353` from the LAN CIDR without restricting the destination to
+  `224.0.0.251`.
+- Use the direct IPv4 address as the Ansible fallback while repairing mDNS:
+  `ansible-playbook ... -e ansible_host=192.168.1.181`.
 - If sudo requires a password, document that behavior before deciding whether
   automation should use passwordless sudo or explicit become prompting.
 - Add these checks to automation once the baseline Ansible layout exists.
