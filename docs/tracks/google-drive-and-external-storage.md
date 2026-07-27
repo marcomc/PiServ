@@ -90,6 +90,20 @@ requirements, and recovery documentation. A single local SSD is not itself a
 disaster-recovery solution; the Google Drive copy and the GitHub mirror need
 independent restore validation.
 
+### External SSD implementation status
+
+The external SSD portion was applied on 2026-07-23 after live validation:
+
+| Item | Status | Observed result |
+| --- | --- | --- |
+| USB enclosure and link | Done | ASMedia ASM246X at 5 Gbps over USB 3 |
+| Partition layout | Done | One GPT partition spanning 3.64 TiB |
+| Filesystem | Done | Journaled ext4 labeled `external-data` |
+| Mount | Done | UUID-backed `/mnt/external-data` with `nodev,nosuid` |
+| Permissions | Done | `external-data` group, shared ACLs, restricted backups |
+| Reboot/disconnect recovery | Pending | Validate before production backup jobs |
+| Sustained backup write test | Pending | Validate with the first backup workload |
+
 ## GitHub disaster backup
 
 The planned backup should enumerate MarcoMC-owned repositories and repositories

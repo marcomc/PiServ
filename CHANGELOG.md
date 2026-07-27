@@ -4,6 +4,17 @@ All notable project changes are documented here.
 
 ## 0.2.0 - Unreleased
 
+### External SSD Storage
+
+- Repartitioned the verified ASM246X external disk as one GPT partition spanning
+  3.64 TiB and formatted it as journaled ext4 labeled `external-data`.
+- Added UUID-based mounting at `/mnt/external-data` with `nodev`, `nosuid`,
+  and optional-device boot behavior, while destructive actions verify a local
+  stable by-id device identity.
+- Added the dedicated `external-data` group, shared ACL policy, restricted
+  backup directory, and non-destructive convergence playbook.
+- Added the external SSD storage decision record and operator runbook.
+
 ### Cockpit Web Console
 
 - Added the Cockpit HTTPS web console, socket activation, and a local login-page

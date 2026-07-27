@@ -1,0 +1,12 @@
+---
+- name: Configure PiServ external storage
+  hosts: piserv
+  gather_facts: true
+  become: true
+  vars_files:
+    -
+      - ../vars/external-storage.yml
+      - ../vars/external-storage.yml.example
+  tasks:
+    - name: Apply external storage policy
+      ansible.builtin.include_tasks: ../tasks/external-storage.yml
