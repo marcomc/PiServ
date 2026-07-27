@@ -27,7 +27,7 @@ Tailscale administration access.
 | IPv4 LAN TCP `5900` | Allowed for VNC |
 | IPv4 LAN TCP `9090` | Allowed for Cockpit HTTPS |
 | IPv4 LAN TCP `61208` | Allowed for Glances API |
-| IPv4 LAN UDP `5353` to `224.0.0.251` | Allowed for mDNS |
+| IPv4 LAN UDP `5353` | Allowed for multicast and unicast mDNS queries |
 | IPv6 LAN ingress | Denied by default |
 | Ingress on `tailscale0` | Allowed |
 | Routed from `tailscale0` | Allowed only to the local IPv4 LAN |
@@ -101,7 +101,7 @@ sudo ufw allow from LAN_IPV4_CIDR to any port 22 proto tcp
 sudo ufw allow from LAN_IPV4_CIDR to any port 5900 proto tcp
 sudo ufw allow from LAN_IPV4_CIDR to any port 9090 proto tcp
 sudo ufw allow from LAN_IPV4_CIDR to any port 61208 proto tcp
-sudo ufw allow from LAN_IPV4_CIDR to 224.0.0.251 port 5353 proto udp
+sudo ufw allow from LAN_IPV4_CIDR to any port 5353 proto udp
 sudo ufw allow in on tailscale0
 sudo ufw route allow in on tailscale0 from 100.64.0.0/10 to LAN_IPV4_CIDR
 sudo ufw allow 41641/udp
@@ -126,10 +126,13 @@ mountpoint /mnt/pcloud
 Run from a LAN client:
 
 ```sh
+PISERV_IP=<current-DHCP-lease>
 nc -vz PiServ.local 22
 nc -vz PiServ.local 5900
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://PiServ.local:9090/
 curl -sS -o /dev/null -w '%{http_code}\n' http://PiServ.local:61208/api/4/status
+dns-sd -Q PiServ.local A
+dig @"${PISERV_IP}" -p 5353 PiServ.local A +norecurse +short
 ```
 
 Run from a Tailscale client:
@@ -210,6 +213,18 @@ Validated on 2026-07-13:
 | New Tailscale VNC TCP connection | Passed |
 | Cockpit LAN HTTPS connection | Passed on 2026-07-16 |
 | pCloud mount | Remained mounted |
+
+On 2026-07-27, a fresh macOS mDNS query was observed as unicast UDP from
+`192.168.1.148:5353` to `192.168.1.181:5353`. The former destination-specific
+multicast rule dropped that query. The steady-state rule now allows UDP `5353`
+from the LAN CIDR to any destination so both multicast discovery and valid
+unicast mDNS queries work. The applied
+`ansible/playbooks/firewall.yml` configured the generic LAN rule and removed
+UFW's default mDNS pre-rules;
+`dns-sd -Q PiServ.local A` and
+`dig @192.168.1.181 -p 5353 PiServ.local A +norecurse +short` both returned
+`192.168.1.181`. The playbook also removes UFW's unrestricted IPv4 and IPv6
+default mDNS pre-rules, making the declared LAN-scoped rule authoritative.
 
 The same validation found that PiServ accepted an overlapping Tailscale LAN
 route. That sent replies to local clients through `tailscale0`, so direct LAN

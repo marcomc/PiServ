@@ -1,0 +1,26 @@
+---
+- name: Remove unrestricted UFW mDNS pre-rules
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: "{{ item.regexp }}"
+    replace: ""
+  loop:
+    - path: /etc/ufw/before.rules
+      regexp: >-
+        (?m)^-A ufw-before-input(?=[^\n]*\s-p\s+udp\b)(?=[^\n]*\s-d\s+224\.0\.0\.251\b)(?=[^\n]*\s--dport\s+5353\b)(?=[^\n]*\s-j\s+ACCEPT\b)[^\n]*$
+    - path: /etc/ufw/before6.rules
+      regexp: >-
+        (?m)^-A ufw6-before-input(?=[^\n]*\s-p\s+udp\b)(?=[^\n]*\s-d\s+ff02::fb\b)(?=[^\n]*\s--dport\s+5353\b)(?=[^\n]*\s-j\s+ACCEPT\b)[^\n]*$
+  register: piserv_firewall_default_mdns_rule_removal
+  become: true
+
+- name: Reload UFW after removing unrestricted mDNS pre-rules
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/ufw
+      - reload
+  changed_when: false
+  when:
+    - piserv_firewall_default_mdns_rule_removal.changed
+    - not ansible_check_mode
+  become: true

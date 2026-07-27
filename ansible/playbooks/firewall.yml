@@ -40,10 +40,9 @@
         comment: PiServ LAN Glances API
       - rule: allow
         from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
-        to_ip: 224.0.0.251
         to_port: "5353"
         protocol: udp
-        comment: PiServ LAN mDNS
+        comment: PiServ LAN mDNS multicast and unicast queries
       - rule: allow
         direction: in
         interface: tailscale0
@@ -78,6 +77,9 @@
           {{ piserv_firewall_default_forward_policy }}
         ufw_rules: "{{ piserv_firewall_rules }}"
   post_tasks:
+    - name: Remove UFW default mDNS exceptions
+      ansible.builtin.import_tasks: ../tasks/firewall/remove-default-mdns.yml
+
     - name: Enforce PiServ UFW service state
       ansible.builtin.import_tasks: ../tasks/firewall/enforce-service.yml
 

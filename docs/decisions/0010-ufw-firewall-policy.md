@@ -30,7 +30,7 @@ default netfilter mode.
 | LAN IPv4 VNC | Allow TCP `5900` from the current IPv4 LAN CIDR |
 | LAN IPv4 Cockpit | Allow TCP `9090` from the current IPv4 LAN CIDR |
 | LAN IPv4 Glances | Allow TCP `61208` from the current IPv4 LAN CIDR |
-| LAN IPv4 mDNS | Allow UDP `5353` to `224.0.0.251` from the current IPv4 LAN CIDR |
+| LAN IPv4 mDNS | Allow UDP `5353` from the current IPv4 LAN CIDR, including multicast and unicast mDNS queries |
 | LAN IPv6 ingress | Deny by default |
 | Tailnet ingress | Allow traffic arriving on `tailscale0` |
 | Tailscale subnet routing | Allow forwarded tailnet IPv4 traffic only to the local IPv4 LAN |
@@ -50,6 +50,9 @@ The fork integration of `oefenweb.ufw` owns generic UFW package, policy, rule,
 and logging behavior. PiServ-specific ranges, ports, interfaces, and comments
 remain in `ansible/playbooks/firewall.yml`. Project task files own the
 preflight assertion, explicit UFW service state, and post-apply validation.
+PiServ also removes UFW's package-default mDNS pre-rules from `before.rules`
+and `before6.rules`; otherwise multicast UDP `5353` bypasses the declared LAN
+source restriction.
 
 The dependency is pinned to the reviewed fork commit while its mutation support
 is under upstream review. The external role remains the source of truth for its
@@ -76,7 +79,10 @@ playbook. See decision 0011 for the high-availability router policy.
 - The HTTP Basic-authenticated Glances API is available to the current IPv4 LAN
   and to tailnet identities allowed by Tailnet ACLs; IPv6 LAN ingress remains
   denied.
-- IPv4 mDNS remains available on the current LAN.
+- IPv4 mDNS remains available on the current LAN. The rule intentionally does
+  not restrict the destination to `224.0.0.251`: Apple mDNS clients may send
+  cache-refresh or question-response queries directly to the host's UDP `5353`
+  address.
 - IPv6 LAN ingress remains denied by default.
 - pCloud and other incidental listeners are blocked from unsolicited LAN
   access but remain reachable to permitted tailnet identities.
