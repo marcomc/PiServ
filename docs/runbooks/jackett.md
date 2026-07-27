@@ -85,13 +85,12 @@ The playbook completed successfully; its repeat run returned `changed=0`. Both
 the local loopback request and the request from the LAN returned HTTP `301`.
 The managed `PISERV-JACKETT` chain contained the current IPv4-LAN and
 `tailscale0` accepts for new TCP `9117` connections, then the matching drop
-rule; `DOCKER-USER` contained only its tagged jump to that chain.
+rule; `DOCKER-USER` contained tagged ingress jumps to that chain for the LAN
+and `tailscale0` interfaces.
 
-A remote Tailnet-peer validation remains pending: the SSH connection used to
-run it stopped at an existing host-key mismatch, not at the Jackett service or
-Docker policy. Resolve that host-key state through the normal SSH verification
-procedure, then rerun the Tailnet HTTP check in [Access and
-Validation](#access-and-validation).
+A separate Tailnet client (the controller Mac) reached Jackett through PiServ's
+Tailnet IP, MagicDNS hostname, and fully qualified Tailnet domain. Each endpoint
+returned HTTP `301`.
 
 ## Updates and Recovery
 

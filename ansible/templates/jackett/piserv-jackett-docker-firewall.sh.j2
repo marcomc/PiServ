@@ -4,6 +4,7 @@ set -eu
 iptables=/usr/sbin/iptables
 port={{ piserv_jackett_port }}
 lan_ipv4_cidr={{ piserv_jackett_lan_ipv4_cidr }}
+lan_interface={{ piserv_jackett_lan_interface }}
 chain={{ piserv_jackett_docker_firewall_chain }}
 comment='PiServ Jackett Docker ingress'
 
@@ -19,6 +20,36 @@ delete_docker_user_rule() {
   done
 }
 
+delete_managed_ingress_hooks() {
+  "${iptables}" -S DOCKER-USER \
+    | awk -v port="${port}" -v chain="${chain}" '
+        $1 == "-A" && $2 == "DOCKER-USER" {
+          interface = ""
+          port_matches = 0
+          chain_matches = 0
+          for (position = 3; position <= NF; position++) {
+            if ($position == "-i" && position < NF) {
+              interface = $(position + 1)
+            }
+            if ($position == "--ctorigdstport" && position < NF && $(position + 1) == port) {
+              port_matches = 1
+            }
+            if ($position == "-j" && position < NF && $(position + 1) == chain) {
+              chain_matches = 1
+            }
+          }
+          if (interface != "" && port_matches && chain_matches) {
+            print interface
+          }
+        }
+      ' \
+    | while IFS= read -r interface; do
+        delete_docker_user_rule \
+          -i "${interface}" -p tcp -m conntrack --ctorigdstport "${port}" \
+          -m comment --comment "${comment}" -j "${chain}"
+      done
+}
+
 # Docker DNAT runs before UFW INPUT rules. Keep all Jackett-specific rules in
 # an isolated chain, so reruns replace a changed LAN CIDR without touching
 # unrelated DOCKER-USER policy.
@@ -32,13 +63,22 @@ ensure_chain
   -s "${lan_ipv4_cidr}" -m conntrack --ctstate NEW -j ACCEPT
 "${iptables}" -A "${chain}" -j DROP
 
-# Keep the stable managed jump ahead of Docker's accept rules. Removing every
-# matching jump first reconciles duplicate hooks from interrupted earlier runs.
+# Keep managed ingress hooks ahead of Docker's accept rules. Restrict them to
+# the physical LAN and tailscale0 ingress interfaces so a container's outbound
+# connection to a remote TCP 9117 cannot enter this policy chain.
+#
+# Remove the prior unscoped hook and every current managed ingress hook before
+# installing the ingress-only policy, so reruns and interface changes do not
+# accumulate stale rules.
 delete_docker_user_rule \
   -p tcp -m conntrack --ctorigdstport "${port}" \
   -m comment --comment "${comment}" -j "${chain}"
+delete_managed_ingress_hooks
 "${iptables}" -I DOCKER-USER 1 \
-  -p tcp -m conntrack --ctorigdstport "${port}" \
+  -i "${lan_interface}" -p tcp -m conntrack --ctorigdstport "${port}" \
+  -m comment --comment "${comment}" -j "${chain}"
+"${iptables}" -I DOCKER-USER 1 \
+  -i tailscale0 -p tcp -m conntrack --ctorigdstport "${port}" \
   -m comment --comment "${comment}" -j "${chain}"
 
 # Migrate the untagged direct rules managed by the initial implementation. The
