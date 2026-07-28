@@ -106,6 +106,32 @@ Observed results:
 - no new USB reset, I/O, buffer-I/O, or ext4 kernel messages appeared after the
   test start marker.
 
+### SMART Baseline
+
+A read-only full SMART capture was completed on 2026-07-29 at 01:47 CEST after
+the write test. The parent devices were discovered at runtime; the serial
+numbers are intentionally not repeated in tracked documentation.
+
+```sh
+ROOT_SOURCE=$(findmnt --mountpoint / --output SOURCE --noheadings | xargs)
+ROOT_DISK=/dev/$(lsblk --noheadings --output PKNAME "$ROOT_SOURCE" | xargs)
+EXT_PART=$(sudo /usr/sbin/blkid --match-token LABEL=external-data --output device)
+EXT_DISK=/dev/$(lsblk --noheadings --output PKNAME "$EXT_PART" | xargs)
+sudo smartctl -x "$ROOT_DISK"
+sudo smartctl -x -d sntasmedia "$EXT_DISK"
+```
+
+| Device | Model | Firmware | Health | Temperature | Used | Power-on | Unsafe shutdowns | Media/data errors | Error log |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Root NVMe | `SSD 128GB` | `W0830D` | `PASSED` | 37 C | 0% | 580 h | 20 | 0 | 0 |
+| External NVMe via ASMedia bridge | `CT4000P3SSD8` | `P9CR30A` | `PASSED` | 52 C; sensor 2: 62 C | 2% | 12,097 h | 165 | 0 | 0 |
+
+The root query returned exit code 4 because the device rejected the optional
+NVMe self-test-log request with `Invalid Field in Command`; its health status,
+critical warning, media/data integrity, and error-log fields were clean. The
+external query returned exit code 0. No SMART self-test was started, and the
+`smartd` daemon remains disabled.
+
 ## Previous-Boot Diagnostics
 
 PiServ retains compressed systemd journals on the root NVMe filesystem. This

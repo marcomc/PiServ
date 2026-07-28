@@ -28,6 +28,9 @@ All notable project changes are documented here.
 - Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
   cleanup, and fresh kernel-log validation with no new transport or filesystem
   errors.
+- Captured the full read-only SMART baseline for the root NVMe and dynamically
+  discovered external NVMe, including health, wear, temperature, power, and
+  error-log fields.
 
 ## 0.2.0 - 2026-07-28
 
