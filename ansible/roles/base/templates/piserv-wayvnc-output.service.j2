@@ -1,0 +1,13 @@
+# Managed by PiServ base role. Do not edit on the host.
+[Unit]
+Description=Select PiServ WayVNC output
+After={{ base_vnc_service_name }} {{ base_vnc_control_service_name }}
+BindsTo={{ base_vnc_service_name }}
+PartOf={{ base_vnc_service_name }} {{ base_vnc_control_service_name }}
+
+[Service]
+Type=oneshot
+ExecStart={{ base_vnc_output_selector_path }}
+
+[Install]
+WantedBy={{ base_vnc_service_name }} {{ base_vnc_control_service_name }}

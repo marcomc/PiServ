@@ -1,7 +1,7 @@
 # PiServ
 
 PiServ is the setup and recovery project for a Raspberry Pi 5 server at
-`piserv.example.com` / `192.0.2.181`.
+`PiServ.local`.
 
 ## Table of Contents
 
@@ -35,14 +35,14 @@ $HOME/Development/RaspberryPi/PiServ
 
 | Item | Value |
 | --- | --- |
-| Hostname | `piserv.example.com` |
-| IP address | `192.0.2.181` |
+| Hostname | `PiServ.local` |
+| IP address | DHCP-assigned; resolve the hostname before direct-IP diagnostics |
 | Hardware | Raspberry Pi 5 |
 | RAM | 4 GB |
-| Storage | 128 GB NVMe SSD |
+| Storage | 128 GB NVMe SSD + 4 TB USB 3 external SSD |
 | Current network | Wi-Fi |
 | Future network | Ethernet may be added |
-| Sudo user | `operator` |
+| Sudo user | `admin` |
 | Access | SSH key-based access from this host |
 
 ## Access
@@ -50,11 +50,10 @@ $HOME/Development/RaspberryPi/PiServ
 Primary SSH targets:
 
 ```sh
-ssh operator@piserv.example.com
-ssh operator@192.0.2.181
+ssh admin@PiServ.local
 ```
 
-Use `piserv.example.com` when mDNS resolution is healthy. Use the IP address when
+Use `PiServ.local` when mDNS resolution is healthy. Resolve the current IP before
 validating network or name-resolution issues.
 
 ## Operating Model
@@ -64,6 +63,10 @@ then converted into repeatable automation once the desired state is confirmed.
 
 The current project is work in progress. Backward compatibility is not a
 constraint until the project is prepared for public reuse.
+
+This private working repository intentionally records PiServ's live host
+identifiers for direct operations. Before any public release, sanitize the
+inventory, documentation, and retained Git history.
 
 ## Repository Layout
 
@@ -133,6 +136,12 @@ the current setup.
 
 Do not plan around pCloud rsync until pCloud releases official rsync support.
 
+PiServ also has a PiServ-owned external data volume at `/mnt/external-data`.
+It uses one journaled ext4 partition labeled `external-data`, with a shared
+`shared/` directory and a restricted `backups/` directory. See the [external
+SSD runbook](docs/runbooks/external-storage.md) for permissions, service
+access, and recovery.
+
 ## Implementation Tracks
 
 Active implementation tracks:
@@ -140,21 +149,28 @@ Active implementation tracks:
 | Track | Purpose |
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
+| [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
 
 ## Automation
 
-Configure the PiServ base host policy:
+After Tailscale and the firewall policy are active, configure the PiServ base
+host policy:
 
 ```sh
 ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
 The base playbook applies the dedicated `msmtp` role first, then manages SSH
-root-login and password-auth policy, disables unneeded CUPS, `rpcbind`, and NFS
-helper units, enables unattended upgrades, and disables cloud-init. PiServ uses
-`msmtp` with operator-managed `/etc/msmtprc` and `/etc/aliases` files because
-they contain SMTP credentials and local delivery policy. Boot notifications are
-skipped until `/etc/msmtprc` exists and is non-empty.
+root-login and password-auth policy, keeps VNC aligned with touchscreen output
+`DSI-1`, exposes the Cockpit HTTPS console on port `9090`, provides an
+authenticated Glances API to the LAN and Home Assistant, disables unneeded
+CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades, and disables
+cloud-init. PiServ uses `msmtp` with operator-managed `/etc/msmtprc` and
+`/etc/aliases` files because they contain SMTP credentials and local delivery
+policy. Boot notifications are skipped until `/etc/msmtprc` exists and is
+non-empty. Unattended upgrades send a mobile-readable routine digest with
+package version transitions; full logs remain on PiServ and native error alerts
+remain enabled as a fallback.
 
 Configure the Freenove FNK0100K post-OS setup:
 
@@ -179,7 +195,7 @@ The pCloud playbook installs the source-built `pcloudcc` binary, applies the
 Debian 13 `arm64` build patch and CLI TOTP prompt patch, prepares
 `/mnt/pcloud`, and validates the installed client against the role's
 `pcloudcc_version` default. After manual `pcloudcc -p -s -t` login, it also
-hardens `~operator/.pcloud` and manages a credential-free user service for the
+hardens `~admin/.pcloud` and manages a credential-free user service for the
 mount. It does not perform pCloud credential login.
 
 Validate the pCloud mount before scheduled podcast work:
@@ -189,17 +205,58 @@ scripts/check-pcloudcc-health.sh
 ansible-playbook ansible/playbooks/pcloudcc-health-check.yml
 ```
 
+Install the pinned external role and collection dependencies:
+
+```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
+ansible-galaxy collection install -r ansible/requirements.yml --force
+```
+
 Install Tailscale and start `tailscaled`:
 
 ```sh
-ansible-galaxy collection install -r ansible/requirements.yml
 ansible-playbook ansible/playbooks/tailscale.yml
 ```
 
 The Tailscale playbook uses the `artis3n.tailscale.machine` Galaxy collection
 role to install `tailscale` and enable `tailscaled`. Tailnet login remains a
 manual runbook step unless a private runtime auth key is supplied. PiServ uses
-standard OpenSSH; Tailscale SSH is not enabled.
+standard OpenSSH; Tailscale SSH is not enabled. PiServ advertises its local IPv4
+LAN as a high-availability subnet router, while rejecting imported subnet routes
+so local replies remain on the physical LAN.
+
+Configure and enable the PiServ firewall:
+
+```sh
+ansible-playbook ansible/playbooks/firewall.yml
+```
+
+The firewall playbook uses a commit-pinned PiServ fork of `oefenweb.ufw` for
+generic UFW configuration. PiServ-owned imported tasks verify prerequisites,
+enforce the UFW service state, and assert the applied runtime policy. The role
+remains the source of truth for its managed UFW configuration, policies, and
+rules. PiServ permits SSH, VNC, Cockpit HTTPS, and mDNS from its current IPv4
+LAN; the Glances API from the same LAN; all ingress through `tailscale0`; and
+UDP port `41641` for direct Tailscale peer connections. It permits routed
+tailnet traffic only to its local IPv4 LAN. Other LAN IPv6 ingress remains
+denied by default. Docker-published services use separate `DOCKER-USER` rules
+because Docker port forwarding bypasses UFW's normal input chain.
+
+Deploy Jackett and FlareSolverr:
+
+```sh
+ansible-playbook ansible/playbooks/jackett.yml
+```
+
+The Jackett playbook applies the local, Galaxy-ready `jackett_search` role.
+The role uses the upstream Makefile to install the CLI plus its Jackett and
+FlareSolverr containers, retaining upstream `latest` image tags. Persistent
+Compose files, Jackett state, and the private CLI config are owned by `admin`
+under `/home/admin/.config/jackett-search`. PiServ adds only the Docker-aware
+TCP `9117` ingress policy: the current IPv4 LAN and `tailscale0` are allowed,
+and other published-port access is dropped. See the
+[Jackett runbook](docs/runbooks/jackett.md) for tracker configuration,
+validation, updates, and recovery.
 
 Install and manage the RaiPlaySound daily podcast sync:
 
@@ -207,11 +264,23 @@ Install and manage the RaiPlaySound daily podcast sync:
 ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
-The RaiPlaySound playbook installs the pinned CLI source revision for `operator`,
+The RaiPlaySound playbook installs the pinned CLI source revision for `admin`,
 creates the PiServ config when missing, installs a user-scoped daily systemd
 timer, and gates the direct-write sync on the pCloud health check. New configs
 send summary mail to local recipient `root` through the system `msmtp` config
-wrapper; existing create-only configs must be edited manually.
+wrapper; existing create-only configs must be edited manually. Current
+user-scoped workloads run under the single human sudo account `admin`.
+
+Install and validate the Home Assistant MQTT Agent:
+
+```sh
+ansible-playbook ansible/playbooks/ha-mqtt-agent.yml
+```
+
+The playbook installs Galaxy role `marcomc.ha_mqtt_agent` version `v0.1.1`,
+pins the upstream agent to version `0.3.0`, preserves the operator-managed MQTT
+configuration, and validates the active service, broker connectivity, and
+Raspberry Pi 5 firmware telemetry in the service security context.
 
 Migrate a microSD-booted PiServ system to NVMe:
 

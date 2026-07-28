@@ -20,9 +20,17 @@ Decision records explain why PiServ setup choices were made.
 | [0004: Local repository path](0004-local-repository-path.md) | Accepted |
 | [0005: Ansible-managed Freenove background control](0005-ansible-managed-freenove-background-control.md) | Accepted |
 | [0006: RaiPlaySound direct-write scheduling](0006-raiplaysound-direct-write-scheduling.md) | Accepted |
-| [0007: Base security posture](0007-base-security-posture.md) | Partially implemented |
+| [0007: Base security posture](0007-base-security-posture.md) | Accepted and implemented |
 | [0008: System mail notifications](0008-system-mail-notifications.md) | Accepted and implemented |
 | [0009: Tailscale remote access](0009-tailscale-remote-access.md) | Accepted and partially implemented |
+| [0010: UFW firewall policy](0010-ufw-firewall-policy.md) | Accepted and applied |
+| [0011: High-availability Tailscale subnet router](0011-ha-tailscale-subnet-router.md) | Accepted; tailnet approval pending |
+| [0012: PiServ user-account policy](0012-user-account-policy.md) | Accepted and implemented |
+| [0013: VNC touchscreen output](0013-vnc-touchscreen-output.md) | Accepted and implemented |
+| [0014: Freenove hardware cleanup state](0014-freenove-hardware-cleanup.md) | Accepted and physically validated |
+| [0015: LAN Glances API observability](0015-local-glances-api-observability.md) | Accepted and implemented |
+| [0016: Cockpit web console and extensions](0016-cockpit-web-console.md) | Accepted and implemented |
+| [0017: External SSD storage](0017-external-ssd-storage.md) | Accepted and implemented |
 
 ## Template
 

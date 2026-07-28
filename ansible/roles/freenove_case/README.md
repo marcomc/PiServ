@@ -70,7 +70,7 @@ ansible-playbook --syntax-check tests/test.yml
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `freenove_case_install_user` | Remote user fact or `pi` fallback | User that owns the checkout and launchers |
+| `freenove_case_install_user` | `ansible_user`, with a remote fact fallback | User that owns the checkout and launchers |
 | `freenove_case_install_dir` | `/opt/freenove-case` | Freenove runtime path |
 | `freenove_case_source_mode` | `git` | Source mode: `git`, `controller_copy`, or `archive_url` |
 | `freenove_case_repo_url` | Freenove GitHub repository | Upstream case software repository |

@@ -1,0 +1,56 @@
+---
+- name: Assert PiServ firewall facts are available
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.default_ipv4 is defined
+      - ansible_facts.default_ipv4.network is defined
+      - ansible_facts.default_ipv4.prefix is defined
+      - "'tailscale0' in ansible_facts.interfaces"
+    fail_msg: >-
+      PiServ firewall policy requires a default IPv4 route and the tailscale0
+      interface. Apply the Tailscale playbook and verify networking before
+      enabling UFW.
+
+- name: Read Tailscale connection state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tailscale
+      - status
+      - --json
+  register: piserv_firewall_tailscale_status
+  changed_when: false
+  check_mode: false
+
+- name: Assert Tailscale is connected
+  vars:
+    piserv_firewall_tailscale_state: >-
+      {{ piserv_firewall_tailscale_status.stdout | from_json }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (piserv_firewall_tailscale_state.BackendState | default(''))
+        == 'Running'
+      - >-
+        (piserv_firewall_tailscale_state.TailscaleIPs | default([]) | length)
+        > 0
+    fail_msg: >-
+      PiServ firewall policy requires a running Tailscale connection with an
+      assigned tailnet address.
+
+- name: Read IPv4 forwarding state
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sysctl
+      - -n
+      - net.ipv4.ip_forward
+  register: piserv_firewall_ipv4_forwarding
+  changed_when: false
+  check_mode: false
+
+- name: Assert IPv4 forwarding is enabled for the subnet router
+  ansible.builtin.assert:
+    that:
+      - piserv_firewall_ipv4_forwarding.stdout == '1'
+    fail_msg: >-
+      PiServ firewall policy requires IPv4 forwarding. Apply the Tailscale
+      playbook before the firewall playbook.

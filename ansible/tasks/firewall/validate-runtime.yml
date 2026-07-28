@@ -1,0 +1,177 @@
+---
+- name: Read UFW runtime status
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/ufw
+      - status
+      - verbose
+  register: piserv_firewall_ufw_status
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Assert UFW is active
+  ansible.builtin.assert:
+    that:
+      - "'Status: active' in piserv_firewall_ufw_status.stdout"
+    fail_msg: UFW is not active after the PiServ firewall playbook.
+
+- name: Read persisted UFW default policies
+  ansible.builtin.slurp:
+    src: /etc/default/ufw
+  register: piserv_firewall_ufw_defaults
+  become: true
+
+- name: Assert persisted UFW default policies
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('DEFAULT_INPUT_POLICY="' ~ piserv_firewall_default_input_policy ~ '"')
+        in (piserv_firewall_ufw_defaults.content | b64decode)
+      - >-
+        (
+          'DEFAULT_OUTPUT_POLICY="'
+          ~ piserv_firewall_default_output_policy
+          ~ '"'
+        )
+        in (piserv_firewall_ufw_defaults.content | b64decode)
+      - >-
+        (
+          'DEFAULT_FORWARD_POLICY="'
+          ~ piserv_firewall_default_forward_policy
+          ~ '"'
+        )
+        in (piserv_firewall_ufw_defaults.content | b64decode)
+    fail_msg: Persisted UFW default policies do not match PiServ policy.
+
+- name: Read persisted UFW logging configuration
+  ansible.builtin.slurp:
+    src: /etc/ufw/ufw.conf
+  register: piserv_firewall_ufw_config
+  become: true
+
+- name: Assert persisted UFW logging configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('LOGLEVEL=' ~ piserv_firewall_logging)
+        in (piserv_firewall_ufw_config.content | b64decode)
+    fail_msg: Persisted UFW logging does not match PiServ policy.
+
+- name: Read UFW pre-rule configuration
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/ufw/before.rules
+    - /etc/ufw/before6.rules
+  register: piserv_firewall_ufw_pre_rules
+  become: true
+
+- name: Assert unrestricted UFW mDNS pre-rules are absent
+  vars:
+    piserv_firewall_ufw_before_rules: >-
+      {{
+        piserv_firewall_ufw_pre_rules.results
+        | selectattr('item', 'equalto', '/etc/ufw/before.rules')
+        | map(attribute='content')
+        | first
+        | b64decode
+      }}
+    piserv_firewall_ufw_before6_rules: >-
+      {{
+        piserv_firewall_ufw_pre_rules.results
+        | selectattr('item', 'equalto', '/etc/ufw/before6.rules')
+        | map(attribute='content')
+        | first
+        | b64decode
+      }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          piserv_firewall_ufw_before_rules
+          | regex_findall(
+            '(?m)^-A ufw-before-input'
+            ~ '(?=[^\\n]*\\s-p\\s+udp\\b)'
+            ~ '(?=[^\\n]*\\s-d\\s+224\\.0\\.0\\.251\\b)'
+            ~ '(?=[^\\n]*\\s--dport\\s+5353\\b)'
+            ~ '(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$'
+          )
+          | length
+        ) == 0
+      - >-
+        (
+          piserv_firewall_ufw_before6_rules
+          | regex_findall(
+            '(?m)^-A ufw6-before-input'
+            ~ '(?=[^\\n]*\\s-p\\s+udp\\b)'
+            ~ '(?=[^\\n]*\\s-d\\s+ff02::fb\\b)'
+            ~ '(?=[^\\n]*\\s--dport\\s+5353\\b)'
+            ~ '(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$'
+          )
+          | length
+        ) == 0
+    fail_msg: UFW default mDNS pre-rules bypass the PiServ firewall policy.
+
+- name: Check PiServ UFW rule convergence
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    delete: "{{ item.delete | default(omit) }}"
+    interface: "{{ item.interface | default('') }}"
+    direction: "{{ item.direction | default('in') }}"
+    from_ip: "{{ item.from_ip | default('any') }}"
+    to_ip: "{{ item.to_ip | default('any') }}"
+    from_port: "{{ item.from_port | default('') }}"
+    to_port: "{{ item.to_port | default('') }}"
+    protocol: "{{ item.protocol | default('any') }}"
+    route: "{{ item.route | default(omit) }}"
+    insert: "{{ item.insert | default(omit) }}"
+    insert_relative_to: "{{ item.insert_relative_to | default(omit) }}"
+    log: "{{ item.log | default(false) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ piserv_firewall_rules }}"
+  loop_control:
+    label: "{{ item.comment }}"
+  register: piserv_firewall_rule_checks
+  check_mode: true
+  become: true
+
+- name: Assert PiServ UFW rules are converged
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_firewall_rule_checks.results
+        | selectattr('changed')
+        | list
+        | length
+        == 0
+    fail_msg: One or more PiServ UFW rules did not converge.
+
+- name: Read UFW systemd enabled state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - ufw.service
+  register: piserv_firewall_service_enabled
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read UFW systemd active state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - ufw.service
+  register: piserv_firewall_service_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Assert UFW systemd service state
+  ansible.builtin.assert:
+    that:
+      - piserv_firewall_service_enabled.stdout == 'enabled'
+      - piserv_firewall_service_active.stdout == 'active'
+    fail_msg: UFW systemd service is not enabled and active.

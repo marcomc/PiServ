@@ -28,6 +28,7 @@
       - -T
   register: base_sshd_effective_config
   changed_when: false
+  check_mode: false
   become: true
 
 - name: Assert effective sshd hardening

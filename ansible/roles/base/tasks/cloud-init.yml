@@ -1,56 +1,56 @@
 ---
-- name: Disable cloud-init by marker file
+- name: Disable and validate cloud-init
   when: base_cloud_init_disable | bool
-  ansible.builtin.copy:
-    content: "{{ base_cloud_init_disabled_marker_content }}"
-    dest: "{{ base_cloud_init_disabled_marker_path }}"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+  block:
+    - name: Disable cloud-init by marker file
+      ansible.builtin.copy:
+        content: "{{ base_cloud_init_disabled_marker_content }}"
+        dest: "{{ base_cloud_init_disabled_marker_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
 
-- name: Discover cloud-init systemd units
-  when: base_cloud_init_disable | bool
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - list-unit-files
-      - "{{ item }}"
-      - --no-legend
-  loop: "{{ base_cloud_init_units }}"
-  register: base_cloud_init_unit_files
-  changed_when: false
-  failed_when: false
+    - name: Discover cloud-init systemd units
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemctl
+          - list-unit-files
+          - "{{ item }}"
+          - --no-legend
+      loop: "{{ base_cloud_init_units }}"
+      register: base_cloud_init_unit_files
+      changed_when: false
+      failed_when: false
+      check_mode: false
 
-- name: Disable cloud-init systemd units
-  when:
-    - base_cloud_init_disable | bool
-    - item.rc == 0
-    - item.stdout | trim | length > 0
-  ansible.builtin.systemd_service:
-    name: "{{ item.item }}"
-    enabled: false
-    state: stopped
-    daemon_reload: true
-  loop: "{{ base_cloud_init_unit_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  become: true
+    - name: Disable cloud-init systemd units
+      when:
+        - item.rc == 0
+        - item.stdout | trim | length > 0
+      ansible.builtin.systemd_service:
+        name: "{{ item.item }}"
+        enabled: false
+        state: stopped
+        daemon_reload: true
+      loop: "{{ base_cloud_init_unit_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      become: true
 
-- name: Read cloud-init status
-  when: base_cloud_init_disable | bool
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/cloud-init
-      - status
-      - --long
-  register: base_cloud_init_status
-  changed_when: false
-  failed_when: false
+    - name: Read cloud-init status
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/cloud-init
+          - status
+          - --long
+      register: base_cloud_init_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
 
-- name: Assert cloud-init is disabled
-  when: base_cloud_init_disable | bool
-  ansible.builtin.assert:
-    that:
-      - "'status: disabled' in base_cloud_init_status.stdout"
-      - "'disabled-by-marker-file' in base_cloud_init_status.stdout"
+    - name: Assert cloud-init is disabled
+      ansible.builtin.assert:
+        that:
+          - "'status: disabled' in base_cloud_init_status.stdout"
+          - "'disabled-by-marker-file' in base_cloud_init_status.stdout"

@@ -7,18 +7,21 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Canonical repository path: `$HOME/Development/RaspberryPi/PiServ`.
 - Purpose: configure and reproduce the PiServ Raspberry Pi server.
 - Status: work in progress; backward compatibility is not required yet.
-- Target host: `piserv.example.com`.
-- Target IP: `192.0.2.181`.
+- Target host: `PiServ.local`.
+- Target IP: DHCP-assigned; resolve `PiServ.local` before direct-IP diagnostics.
+- For mDNS-failure recovery, require an operator-supplied current DHCP lease in
+  `PISERV_IP` and use it directly for both SSH and Ansible fallback commands;
+  never hard-code or resolve the fallback address through mDNS.
 - Hardware: Raspberry Pi 5, 4 GB RAM, 128 GB NVMe SSD.
 - Current network: Wi-Fi only.
 - Future network: Ethernet may be added.
-- Sudo user: `operator`.
+- Sudo user: `admin`.
 - Access model: SSH key-based access from this host is allowed.
 
 ## Operating Rules
 
 - Treat the Raspberry Pi as the production test target.
-- Test setup changes directly on `piserv.example.com` before marking them done.
+- Test setup changes directly on `PiServ.local` before marking them done.
 - Prefer the simplest live command that proves the intended state.
 - After a live setup step is correct, codify it in Ansible and, where useful,
   supporting shell scripts.
@@ -31,6 +34,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 
 - Ansible should become the authoritative reproduction path once the live setup
   is understood.
+- When integrating an external role, declare its required collections and make
+  the privilege-escalation boundary explicit. Validate the integration from a
+  clean dependency installation before live application.
 - Keep reusable Ansible roles under `ansible/roles/` suitable for possible
   Ansible Galaxy publication.
 - Exception: `ansible/roles/base` is the project-local PiServ host baseline role.
@@ -45,6 +51,21 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- When a PiServ playbook overrides a generic role's package or plugin set,
+  declare expected runtime registrations explicitly and guard live probes in
+  check mode when the service is absent; validate both fresh and converged
+  check-mode paths.
+- Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
+  persistent device paths, and other host-specific identities from ignored
+  local variables or a secure external source; use tracked placeholders only.
+- Before destructive disk changes, enumerate the configured disk and every
+  current child device, and refuse the operation if any is mounted. Install
+  every target-side package required by storage modules only after these safety
+  checks and before the first dependent module task.
+- For stateful storage, validate concrete device identity, filesystem layout,
+  and mount conflicts before package, group-membership, ACL, or service
+  mutations. A placeholder fallback configuration must fail without changing
+  host state.
 - Keep one-off migration cleanup out of steady-state playbooks after the live
   host reaches the new source of truth. Use a bounded migration command or
   temporary playbook for teardown, then remove it and update diagnostics to
@@ -59,6 +80,8 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   `/etc` unless the role explicitly owns that directory.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
+- Before describing a wildcard listener as LAN-only, account for interface-wide
+  firewall rules and validate every permitted ingress path, including Tailnet.
 - Treat `vendor/` as upstream reference material. Do not rewrite vendored files
   solely to satisfy project lint rules unless PiServ intentionally forks or
   patches that upstream code.
@@ -92,6 +115,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Run `markdownlint --config "$HOME/.markdownlint.json"` on every
   Markdown file created or changed.
 - Run `shellcheck --enable=all` on every shell script created or changed.
+- Set `check_mode: false` on read-only command tasks whose output is used by
+  assertions, so `ansible-playbook --check` evaluates live state rather than
+  skipped task results.
 - Exclude unmodified upstream files under `vendor/` from first-party lint
   gates. If a vendored file is intentionally patched, document the patch and
   validate that file too.

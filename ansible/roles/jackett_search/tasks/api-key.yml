@@ -1,0 +1,40 @@
+---
+- name: Read the generated Jackett API key file
+  when: jackett_search_api_key | length == 0
+  block:
+    - name: Read generated Jackett API key file metadata
+      ansible.builtin.stat:
+        path: "{{ jackett_search_effective_api_key_file }}"
+      register: jackett_search_api_key_file_stat
+      retries: 30
+      delay: 2
+      until:
+        - jackett_search_api_key_file_stat.stat.exists
+        - jackett_search_api_key_file_stat.stat.isreg
+
+    - name: Assert generated Jackett API key file exists
+      ansible.builtin.assert:
+        that:
+          - jackett_search_api_key_file_stat.stat.exists
+          - jackett_search_api_key_file_stat.stat.isreg
+        fail_msg: >-
+          jackett_search_api_key is empty and no regular Jackett server config
+          exists at {{ jackett_search_effective_api_key_file }}.
+
+    - name: Read generated Jackett API key file
+      ansible.builtin.slurp:
+        src: "{{ jackett_search_effective_api_key_file }}"
+      register: jackett_search_api_key_file_content
+      no_log: true
+
+    - name: Store generated Jackett API key
+      ansible.builtin.set_fact:
+        jackett_search_effective_api_key: >-
+          {{ (jackett_search_api_key_file_content.content | b64decode | from_json).APIKey }}
+      no_log: true
+
+- name: Store supplied Jackett API key
+  ansible.builtin.set_fact:
+    jackett_search_effective_api_key: "{{ jackett_search_api_key }}"
+  when: jackett_search_api_key | length > 0
+  no_log: true

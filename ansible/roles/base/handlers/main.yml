@@ -14,3 +14,10 @@
     state: reloaded
   become: true
   listen: Validate and reload sshd
+
+- name: Restart Glances service
+  ansible.builtin.systemd_service:
+    name: "{{ base_glances_service_name }}"
+    state: restarted
+    daemon_reload: true
+  become: true

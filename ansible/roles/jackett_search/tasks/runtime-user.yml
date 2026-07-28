@@ -1,0 +1,38 @@
+---
+- name: Read jackett-search runtime user account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ jackett_search_runtime_user }}"
+
+- name: Store jackett-search runtime user paths
+  ansible.builtin.set_fact:
+    jackett_search_runtime_user_home: >-
+      {{ ansible_facts.getent_passwd[jackett_search_runtime_user][4] }}
+    jackett_search_runtime_group: >-
+      {{ ansible_facts.getent_passwd[jackett_search_runtime_user][2] }}
+
+- name: Store jackett-search component paths
+  ansible.builtin.set_fact:
+    jackett_search_effective_component_config_dir: >-
+      {{ jackett_search_component_config_dir
+      | default(jackett_search_runtime_user_home ~ '/.config/jackett-search', true) }}
+    jackett_search_effective_config_path: >-
+      {{ jackett_search_config_path
+      | default(jackett_search_runtime_user_home ~ '/.config/jackett-search/config.toml', true) }}
+
+- name: Store jackett-search generated component paths
+  ansible.builtin.set_fact:
+    jackett_search_effective_jackett_compose_path: >-
+      {{ jackett_search_effective_component_config_dir }}/jackett-compose.yml
+    jackett_search_effective_flaresolverr_compose_path: >-
+      {{ jackett_search_effective_component_config_dir }}/flaresolverr-compose.yml
+    jackett_search_effective_jackett_data_dir: >-
+      {{ jackett_search_effective_component_config_dir }}/jackett-config
+    jackett_search_effective_jackett_server_config_path: >-
+      {{ jackett_search_effective_component_config_dir }}/jackett-config/Jackett/ServerConfig.json
+
+- name: Store jackett-search API key source path
+  ansible.builtin.set_fact:
+    jackett_search_effective_api_key_file: >-
+      {{ jackett_search_api_key_file
+      | default(jackett_search_effective_jackett_server_config_path, true) }}

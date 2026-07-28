@@ -30,6 +30,120 @@ argument_specs:
         type: str
         default: "yes"
         description: Effective PubkeyAuthentication value.
+      base_manage_vnc:
+        type: bool
+        default: true
+        description: Whether to manage the VNC service output selection.
+      base_vnc_service_name:
+        type: str
+        default: wayvnc.service
+        description: VNC systemd service name.
+      base_vnc_control_service_name:
+        type: str
+        default: wayvnc-control.service
+        description: Raspberry Pi OS service that attaches WayVNC to the desktop.
+      base_vnc_output:
+        type: str
+        default: DSI-1
+        description: Wayland output captured by VNC.
+      base_vnc_control_socket_path:
+        type: path
+        default: /tmp/wayvnc/wayvncctl.sock
+        description: wayvnc control socket path.
+      base_vnc_output_selector_path:
+        type: path
+        default: /usr/local/libexec/piserv-wayvnc-select-output
+        description: Project-owned VNC command in a root-owned non-writable parent directory.
+      base_vnc_output_selector_service_name:
+        type: str
+        default: piserv-wayvnc-output.service
+        description: Systemd oneshot service that selects the configured VNC output.
+      base_vnc_output_selector_service_path:
+        type: path
+        default: /etc/systemd/system/piserv-wayvnc-output.service
+        description: Systemd unit path for the VNC output selector.
+      base_vnc_output_selector_delay_seconds:
+        type: int
+        default: 2
+        description: Delay before reading WayVNC outputs after service startup.
+      base_vnc_output_selector_timeout_seconds:
+        type: int
+        default: 30
+        description: Maximum time to wait for the configured WayVNC output.
+      base_manage_glances:
+        type: bool
+        default: true
+        description: Whether to install and manage the local Glances API service.
+      base_glances_packages:
+        type: list
+        elements: str
+        description: Debian packages required for Glances system observability.
+      base_glances_service_name:
+        type: str
+        default: glances.service
+        description: Systemd service name provided by the Glances Debian package.
+      base_glances_dropin_path:
+        type: path
+        default: /etc/systemd/system/glances.service.d/piserv-api.conf
+        description: PiServ-managed systemd override for Glances API mode.
+      base_glances_bind_address:
+        type: str
+        default: 127.0.0.1
+        description: IPv4 loopback or wildcard address on which the Glances API listens.
+      base_glances_validation_address:
+        type: str
+        default: 127.0.0.1
+        description: Loopback address used to validate the Glances API.
+      base_glances_port:
+        type: int
+        default: 61208
+        description: TCP port used by the local Glances API.
+      base_glances_auth_username:
+        type: str
+        default: glances
+        description: Username for Glances HTTP Basic authentication.
+      base_glances_config_path:
+        type: path
+        default: /etc/glances/glances.conf
+        description: Glances configuration file that declares the password-hash directory.
+      base_glances_password_directory:
+        type: path
+        default: /etc/glances
+        description: Directory containing the Glances HTTP Basic password hash.
+      base_glances_password_file:
+        type: path
+        description: Salted Glances HTTP Basic password hash file.
+      base_glances_bootstrap_password_file:
+        type: path
+        description: Root-only one-time bootstrap password file for Home Assistant setup.
+      base_glances_state_directory:
+        type: str
+        default: glances
+        description: StateDirectory name used by the dynamic Glances service user.
+      base_glances_runtime_directory:
+        type: str
+        default: glances
+        description: RuntimeDirectory name used by the dynamic Glances service user.
+      base_manage_cockpit:
+        type: bool
+        default: true
+        description: Whether to install and manage the Cockpit web console.
+      base_cockpit_packages:
+        type: list
+        elements: str
+        description: Debian packages required for the Cockpit web console.
+      base_cockpit_expected_modules:
+        type: list
+        elements: str
+        description: Cockpit bridge package IDs expected during live validation.
+      base_cockpit_socket_name:
+        type: str
+        default: cockpit.socket
+        description: Cockpit systemd socket unit name.
+      base_cockpit_port:
+        type: int
+        default: 9090
+        description: HTTPS port used by Cockpit.
       base_manage_disabled_services:
         type: bool
         default: true
@@ -54,10 +168,14 @@ argument_specs:
         type: bool
         default: true
         description: Whether to run unattended-upgrade dry-run validation.
+      base_manage_unattended_upgrade_digest:
+        type: bool
+        default: true
+        description: Whether to replace the native raw mail with the PiServ mobile digest plugin.
       base_unattended_mail_to:
         type: str
         default: root
-        description: Recipient used by unattended-upgrades reports.
+        description: Recipient used by the digest and native error fallback.
       base_unattended_mail_report:
         type: str
         default: on-change

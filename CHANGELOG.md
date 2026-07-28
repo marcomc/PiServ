@@ -2,7 +2,140 @@
 
 All notable project changes are documented here.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-07-28
+
+### Ansible Maintainability
+
+- Grouped adjacent playbook and role tasks behind named blocks when they share
+  execution conditions, making check-mode, configuration-mode, and
+  feature-specific branches visible without repeated task-level predicates.
+- Made Freenove hardware apply reporting explicitly normal-mode-only so check
+  mode does not parse output from its skipped hardware command.
+- Deferred VNC selector enablement, socket probes, and output validation when
+  check mode only predicts their units or service start, while reporting a
+  pending output selection as changed.
+- Deferred pCloud checkout, build, install, and mount-root probes when a fresh
+  check-mode run only predicts their artifacts.
+- Deferred RaiPlaySound command and user-timer probes when a fresh check-mode
+  run only predicts their installed files.
+
+### Jackett Search
+
+- Replaced the project-owned Docker Compose deployment with a Galaxy-ready
+  `jackett_search` role that uses the upstream Makefile for the CLI, Jackett,
+  and FlareSolverr lifecycle.
+- Pinned the PiServ jackett-search source revision for reproducible deployments.
+- Kept the upstream Jackett and FlareSolverr `latest` image choices rather than
+  defining project image pins.
+- Restricted Docker-published TCP `9117` to the current IPv4 LAN and Tailnet
+  through a persistent `DOCKER-USER` policy, because published Docker ports do
+  not traverse UFW's normal input chain.
+- Added the Jackett runbook with tracker-credential, update, validation, and
+  recovery procedures.
+- Stored generated Compose files, Jackett state, and API-backed CLI
+  configuration in `admin`'s private `~/.config/jackett-search` directory.
+- Kept create-only configuration preservation while loading its generated API
+  key whenever live Jackett validation is enabled.
+
+### External SSD Storage
+
+- Repartitioned the verified ASM246X external disk as one GPT partition spanning
+  3.64 TiB and formatted it as journaled ext4 labeled `external-data`.
+- Added UUID-based mounting at `/mnt/external-data` with `nodev`, `nosuid`,
+  and optional-device boot behavior, while destructive actions verify a local
+  stable by-id device identity.
+- Deferred post-mount paths, ACLs, and state probes when check mode only
+  predicts a storage reconnect or mount-option change.
+- Deferred group- and ACL-dependent storage work when a fresh check-mode run
+  only predicts those prerequisites.
+- Added the dedicated `external-data` group, shared ACL policy, restricted
+  backup directory, and non-destructive convergence playbook.
+- Added the external SSD storage decision record and operator runbook.
+
+### Cockpit Extensions
+
+- Added `cockpit-storaged` for external-disk inspection and emergency storage
+  operations.
+- Added `cockpit-sosreport` for operator diagnostic-report collection.
+- Added `cockpit-packagekit` for interactive package inspection and emergency
+  package actions while retaining Ansible as the normal source of truth.
+
+### Cockpit Web Console
+
+- Added the Cockpit HTTPS web console, socket activation, and a local login-page
+  assertion to the PiServ base role.
+- Kept the reusable base-role default minimal while the PiServ playbook adds
+  Storage, SOSReport, and PackageKit extensions.
+- Deferred Cockpit socket management when a fresh check-mode run only predicts
+  package installation.
+- Allowed Cockpit TCP port `9090` only from the current IPv4 LAN while retaining
+  the existing Tailnet interface policy and PAM-backed `admin` authentication.
+- Added the Cockpit runbook and architecture decision, including the expected
+  self-signed certificate bootstrap behavior.
+
+### Glances Observability
+
+- Added a PiServ-managed Glances API service with hardware sensor support and
+  its required Uvicorn and Jinja2 webserver runtimes and HTTP Basic
+  authentication.
+- Bound the API to IPv4 for LAN observability and Home Assistant, disabled the
+  broken Debian 13 web UI, and allowed TCP `61208` from the current LAN in UFW
+  under the existing Tailnet ingress policy.
+- Hardened the service with a dynamic user, private state and runtime
+  directories, systemd filesystem and privilege restrictions, a salted password
+  hash, and a root-only credential bootstrap for Home Assistant.
+- Added authenticated and unauthenticated API-response assertions plus
+  listener-scope validation to the base playbook.
+- Deferred package-dependent Glances configuration and probes on fresh
+  check-mode runs while retaining them for converged hosts.
+- Made Glances credential recovery rotate a missing hash or interrupted
+  reconciliation only after authenticated validation, while preserving the
+  active hash after the one-time bootstrap password is removed.
+- Derived the Glances systemd override parent from its configurable destination,
+  creating it only when absent and preserving existing system-directory
+  metadata.
+- Recorded acceptance of the direct, HTTP Basic-authenticated API exposure only
+  to the trusted LAN and ACL-controlled Tailnet boundary while Debian security
+  updates are applied.
+
+### Home Assistant MQTT Agent
+
+- Replaced the project-local role with the published and version-pinned Galaxy
+  role `marcomc.ha_mqtt_agent`.
+- Updated the role pin to `v0.1.1` so read-only validation probes run during
+  Ansible check mode.
+- Added a PiServ playbook that preserves the host MQTT configuration and
+  validates the `0.3.0` agent, broker connectivity, service state, and
+  Raspberry Pi 5 firmware telemetry.
+- Documented the service-configured MQTT doctor command rather than the
+  misleading root-user default-config invocation.
+
+### Host Baseline Follow-Ups
+
+- Replaced routine raw unattended-upgrades transcripts with a mobile-readable
+  multipart digest that shows status, reboot state, and `previous -> installed`
+  package versions while retaining full logs on PiServ and native error alerts.
+- Accepted `admin` as the only human sudo account for now and made it the
+  inventory connection user for current user-scoped workloads;
+- Added project-owned `wayvnc` startup automation that captures the physical
+  Freenove touchscreen output `DSI-1`, including a control-socket assertion
+  that the touchscreen is actively captured rather than merely detected.
+- Recorded the Freenove cleanup state: the managed checkout is under `/opt`,
+  I2C devices are healthy, managed hardware readback is idempotent, and the
+  always-on blue fan LEDs are a documented physical limitation.
+- Added decision records and runbooks for the account, VNC, and Freenove
+  follow-up work.
+- Replaced the indefinite WayVNC `SIGSEGV` monitor with a version-triggered
+  three-restart acceptance test and explicit resolution criteria.
+- Corrected pCloud and RaiPlaySound read-only validation probes so role check
+  mode evaluates their live state before assertions run.
+- Hardened VNC selector path validation, including rejecting every group- or
+  other-writable parent mode, aligned its wait budget with the role timeout,
+  and re-ran it after either vendor VNC service starts without restarting the
+  current WayVNC process during deployment. Selector unit changes and missing
+  installation links now reconcile both systemd links.
+- Recorded the installed TigerVNC client and added its direct and Tailscale
+  connection acceptance test to the current backlog.
 
 ### Tailscale Remote Access
 
@@ -10,16 +143,48 @@ All notable project changes are documented here.
   PiServ Tailscale installation to the upstream `artis3n.tailscale.machine`
   role.
 - Added a PiServ Tailscale playbook with the stable machine name `piserv`.
+- Disabled acceptance of advertised subnet routes so PiServ always replies to
+  local-LAN clients through its physical network interface.
+- Configured PiServ as a high-availability subnet router for its local IPv4 LAN
+  with forwarding, default Tailscale SNAT, and an exact route advertisement.
+- Deferred post-apply Tailscale preference assertions when check mode reports
+  policy drift that it cannot apply.
+- Deferred PiServ preference management when a fresh check-mode run only
+  predicts the Tailscale runtime installation.
+- Ensured manual and auth-key first login apply the complete HA subnet-router
+  policy.
 - Added a Tailscale access runbook covering manual browser login, verification,
-  diagnostics, recovery, optional subnet-router configuration, key-expiry
-  trade-offs, and firewall follow-up.
+  diagnostics, recovery, route-approval and failover follow-up, key-expiry
+  trade-offs, and firewall integration.
 - Documented that PiServ keeps standard OpenSSH as the administration path and
   does not enable Tailscale SSH for now.
+
+### Firewall Policy
+
+- Added a commit-pinned `marcomc/ansible-ufw` fork integration.
+- Declared its pinned `ansible.posix` dependency and configured the firewall
+  playbook to use the inventory user's sudo privileges.
+- Added UFW rule mutation pass-through for bounded deletion and ordered
+  insertion, with Debian 13 and Trixie validation in the fork.
+- Moved PiServ-only preflight, service enforcement, and runtime validation to
+  imported project task files alongside the firewall playbook.
+- Added a PiServ firewall playbook with default-deny incoming and routed
+  policies, default-allow outgoing policy, low-volume logging, and runtime
+  validation.
+- Allowed IPv4 LAN SSH, VNC, and mDNS; Tailscale interface ingress; and direct
+  Tailscale UDP while keeping unsolicited LAN, including IPv6, traffic blocked.
+- Corrected the LAN mDNS rule to allow unicast UDP `5353` queries as well as
+  multicast traffic, while removing UFW's unrestricted default mDNS pre-rules;
+  macOS can send valid mDNS queries directly to PiServ's UDP `5353` address.
+- Allowed routed Tailscale IPv4 traffic only to the local IPv4 LAN for subnet
+  router operation.
+- Added the firewall decision record and operator runbook, including Tailscale
+  netfilter ownership, additive UFW rule behavior, validation, and recovery.
 
 ## 0.1.0 - 2026-07-09
 
 Initial PiServ release for reproducing and operating the Raspberry Pi 5 server
-at `piserv.example.com`.
+at `PiServ.local`.
 
 ### Documentation and Operating Model
 
@@ -48,7 +213,7 @@ at `piserv.example.com`.
   disablement, and reboot notifications.
 - Tightened the `base` role orchestration to use dynamic task includes for
   conditional stateful phases.
-- Configured the baseline to preserve `operator` SSH/sudo access, disable SSH root
+- Configured the baseline to preserve `admin` SSH/sudo access, disable SSH root
   login, disable unneeded CUPS, `rpcbind`, and NFS helper exposure, and keep
   Bluetooth available.
 - Changed the mail bootstrap path to harden operator-created mail config files
@@ -108,7 +273,7 @@ at `piserv.example.com`.
 
 - Added a reusable `raiplaysound_cli` Ansible role and PiServ playbook for
   scheduled podcast synchronization.
-- Installed RaiPlaySound CLI for the `operator` user with a user-scoped systemd
+- Installed RaiPlaySound CLI for the `admin` user with a user-scoped systemd
   service and daily timer.
 - Configured scheduled syncs to write directly to the pCloud-backed podcast
   target after the pCloud health check passes.

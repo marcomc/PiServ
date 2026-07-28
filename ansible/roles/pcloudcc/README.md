@@ -71,7 +71,7 @@ ansible-playbook --syntax-check tests/test.yml
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `pcloudcc_runtime_user` | Remote user fact or `root` fallback | User that owns the checkout and mount root |
+| `pcloudcc_runtime_user` | `ansible_user`, with a remote fact or `root` fallback | User that owns the checkout and mount root |
 | `pcloudcc_install_root` | `/opt/pcloudcc` | Parent directory for pcloudcc source |
 | `pcloudcc_source_dir` | `/opt/pcloudcc/console-client` | Official source checkout path |
 | `pcloudcc_repo_url` | pCloud console-client GitHub repository | Upstream source repository |

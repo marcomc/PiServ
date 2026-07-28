@@ -3,15 +3,15 @@
   hosts: piserv
   gather_facts: true
   vars:
-    raiplaysound_cli_piserv_runtime_user: operator
-    raiplaysound_cli_piserv_health_script: /home/operator/.local/lib/piserv/check-pcloudcc-health-remote.sh
+    raiplaysound_cli_runtime_user: "{{ ansible_user }}"
+    raiplaysound_cli_piserv_health_script: "/home/{{ raiplaysound_cli_runtime_user }}/.local/lib/piserv/check-pcloudcc-health-remote.sh"
   pre_tasks:
     - name: Ensure PiServ helper directory exists
       ansible.builtin.file:
         path: "{{ raiplaysound_cli_piserv_health_script | dirname }}"
         state: directory
-        owner: "{{ raiplaysound_cli_piserv_runtime_user }}"
-        group: "{{ raiplaysound_cli_piserv_runtime_user }}"
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
         mode: "0755"
       become: true
 
@@ -19,18 +19,17 @@
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../scripts/remote/check-pcloudcc-health-remote.sh"
         dest: "{{ raiplaysound_cli_piserv_health_script }}"
-        owner: "{{ raiplaysound_cli_piserv_runtime_user }}"
-        group: "{{ raiplaysound_cli_piserv_runtime_user }}"
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
         mode: "0755"
       become: true
 
   roles:
     - role: raiplaysound_cli
       vars:
-        raiplaysound_cli_runtime_user: "{{ raiplaysound_cli_piserv_runtime_user }}"
         raiplaysound_cli_repo_version: 55dfb29c0c15cc30c603338072261fabf5e52fe4
         raiplaysound_cli_expected_version: "2.5.0"
-        raiplaysound_cli_config_path: /home/operator/.config/raiplaysound-cli/piserv-daily-sync.conf
+        raiplaysound_cli_config_path: "/home/{{ raiplaysound_cli_runtime_user }}/.config/raiplaysound-cli/piserv-daily-sync.conf"
         raiplaysound_cli_config_mode: create
         raiplaysound_cli_manage_user_timer: true
         raiplaysound_cli_service_wants:
@@ -43,7 +42,7 @@
           - /mnt/pcloud
         raiplaysound_cli_service_exec_start_pre:
           - >-
-            %h/.local/lib/piserv/check-pcloudcc-health-remote.sh
+            {{ raiplaysound_cli_piserv_health_script }}
             --mount-root /mnt/pcloud
             --target-subpath "My Music/Podcasts/raiplaypodcast"
             --service-name pcloudcc.service

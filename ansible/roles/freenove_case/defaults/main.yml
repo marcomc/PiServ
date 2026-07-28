@@ -1,5 +1,5 @@
 ---
-freenove_case_install_user: "{{ ansible_facts['user_id'] | default(ansible_user | default('pi')) }}"
+freenove_case_install_user: "{{ ansible_user | default(ansible_facts['user_id'] | default('pi')) }}"
 freenove_case_install_dir: /opt/freenove-case
 freenove_case_source_mode: git
 

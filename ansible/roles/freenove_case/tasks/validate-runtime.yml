@@ -51,46 +51,46 @@
       - "{{ freenove_case_install_dir }}/Code/app_config.json"
   changed_when: false
 
-- name: Validate touchscreen backlight helper syntax
+- name: Validate touchscreen idle runtime
   when: freenove_case_manage_touchscreen_idle | bool
-  ansible.builtin.command:
-    argv:
-      - /bin/sh
-      - -n
-      - "{{ freenove_case_touchscreen_idle_helper_path }}"
-  changed_when: false
+  block:
+    - name: Validate touchscreen backlight helper syntax
+      ansible.builtin.command:
+        argv:
+          - /bin/sh
+          - -n
+          - "{{ freenove_case_touchscreen_idle_helper_path }}"
+      changed_when: false
 
-- name: Validate touchscreen idle user service is active
-  when:
-    - freenove_case_manage_touchscreen_idle | bool
-    - freenove_case_touchscreen_idle_service_state != "stopped"
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - --user
-      - is-active
-      - "{{ freenove_case_touchscreen_idle_service_name }}"
-  become: true
-  become_user: "{{ freenove_case_install_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "{{ freenove_case_touchscreen_idle_runtime_dir }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ freenove_case_touchscreen_idle_runtime_dir }}/bus"
-  changed_when: false
+    - name: Validate touchscreen idle user service is active
+      when: freenove_case_touchscreen_idle_service_state != "stopped"
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - --user
+          - is-active
+          - "{{ freenove_case_touchscreen_idle_service_name }}"
+      become: true
+      become_user: "{{ freenove_case_install_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "{{ freenove_case_touchscreen_idle_runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: >-
+          unix:path={{ freenove_case_touchscreen_idle_runtime_dir }}/bus
+      changed_when: false
 
-- name: Wait before validating Freenove background service stability
-  when:
-    - freenove_case_manage_background_service | bool
-    - freenove_case_service_state != "stopped"
-  ansible.builtin.pause:
-    seconds: 8
-
-- name: Validate Freenove background service is active
+- name: Validate Freenove background service stability
   when:
     - freenove_case_manage_background_service | bool
     - freenove_case_service_state != "stopped"
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - is-active
-      - "{{ freenove_case_service_name }}"
-  changed_when: false
+  block:
+    - name: Wait before validating Freenove background service stability
+      ansible.builtin.pause:
+        seconds: 8
+
+    - name: Validate Freenove background service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ freenove_case_service_name }}"
+      changed_when: false

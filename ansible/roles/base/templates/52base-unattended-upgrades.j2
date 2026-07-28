@@ -7,7 +7,10 @@ Unattended-Upgrade::Automatic-Reboot "{{ base_unattended_automatic_reboot | tern
 Unattended-Upgrade::Automatic-Reboot-Time "{{ base_unattended_automatic_reboot_time }}";
 Unattended-Upgrade::Remove-Unused-Dependencies "{{ base_unattended_remove_unused_dependencies | ternary('true', 'false') }}";
 Unattended-Upgrade::Remove-New-Unused-Dependencies "{{ base_unattended_remove_new_unused_dependencies | ternary('true', 'false') }}";
-{% if base_unattended_mail_to | length > 0 %}
+{% if base_manage_unattended_upgrade_digest | bool and base_unattended_mail_to | length > 0 %}
+Unattended-Upgrade::Mail "{{ base_unattended_mail_to }}";
+Unattended-Upgrade::MailReport "only-on-error";
+{% elif base_unattended_mail_to | length > 0 %}
 Unattended-Upgrade::Mail "{{ base_unattended_mail_to }}";
 Unattended-Upgrade::MailReport "{{ base_unattended_mail_report }}";
 {% endif %}

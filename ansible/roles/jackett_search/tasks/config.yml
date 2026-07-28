@@ -1,0 +1,92 @@
+---
+- name: Manage a role-owned jackett-search configuration
+  when: jackett_search_config_mode in ['managed', 'create']
+  block:
+    - name: Read jackett-search config parent directory
+      ansible.builtin.stat:
+        path: "{{ jackett_search_effective_config_path | dirname }}"
+      register: jackett_search_config_directory_stat
+
+    - name: Assert existing jackett-search config parent is a directory
+      ansible.builtin.assert:
+        that:
+          - jackett_search_config_directory_stat.stat.isdir
+        fail_msg: >-
+          jackett-search config parent exists but is not a directory:
+          {{ jackett_search_effective_config_path | dirname }}.
+      when: jackett_search_config_directory_stat.stat.exists
+
+    - name: Create missing private jackett-search config parent
+      ansible.builtin.file:
+        path: "{{ jackett_search_effective_config_path | dirname }}"
+        state: directory
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0700"
+      become: true
+      when: not jackett_search_config_directory_stat.stat.exists
+
+    - name: Read existing jackett-search configuration
+      ansible.builtin.stat:
+        path: "{{ jackett_search_effective_config_path }}"
+        follow: false
+      register: jackett_search_config_stat
+
+    - name: Assert existing jackett-search configuration is a regular file
+      ansible.builtin.assert:
+        that:
+          - jackett_search_config_stat.stat.isreg
+        fail_msg: >-
+          jackett-search configuration path exists but is not a regular file:
+          {{ jackett_search_effective_config_path }}.
+      when: jackett_search_config_stat.stat.exists
+
+    - name: Decide whether jackett-search configuration must be written
+      ansible.builtin.set_fact:
+        jackett_search_config_write_required: >-
+          {{
+            jackett_search_config_mode == 'managed'
+            or not jackett_search_config_stat.stat.exists
+          }}
+
+    - name: Read the Jackett API key for configuration and validation
+      ansible.builtin.include_tasks: api-key.yml
+      when:
+        - >-
+          jackett_search_config_write_required
+          or jackett_search_validate_api | bool
+
+    - name: Write private jackett-search configuration
+      ansible.builtin.template:
+        src: config.toml.j2
+        dest: "{{ jackett_search_effective_config_path }}"
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0600"
+      become: true
+      register: jackett_search_config
+      no_log: true
+      when: jackett_search_config_write_required
+
+- name: Manage unmanaged jackett-search configuration
+  when: jackett_search_config_mode == 'unmanaged'
+  block:
+    - name: Store explicitly supplied Jackett API key for unmanaged validation
+      ansible.builtin.set_fact:
+        jackett_search_effective_api_key: "{{ jackett_search_api_key }}"
+      when: jackett_search_api_key | length > 0
+      no_log: true
+
+    - name: Read unmanaged jackett-search configuration
+      ansible.builtin.stat:
+        path: "{{ jackett_search_effective_config_path }}"
+      register: jackett_search_unmanaged_config_stat
+
+    - name: Assert unmanaged jackett-search configuration exists
+      ansible.builtin.assert:
+        that:
+          - jackett_search_unmanaged_config_stat.stat.exists
+          - jackett_search_unmanaged_config_stat.stat.isreg
+        fail_msg: >-
+          jackett_search_config_mode is unmanaged, but no regular configuration
+          file exists at {{ jackett_search_effective_config_path }}.

@@ -1,4 +1,15 @@
 ---
+roles:
+  - name: marcomc.ha_mqtt_agent
+    version: "v0.1.1"
+  - name: oefenweb.ufw
+    src: https://github.com/marcomc/ansible-ufw.git
+    version: c332b4be2d8557ba4a0532d43998c87d5dd90e59
+
 collections:
   - name: artis3n.tailscale
     version: "1.2.1"
+  - name: community.general
+    version: "13.1.0"
+  - name: ansible.posix
+    version: "2.1.0"

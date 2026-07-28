@@ -2,31 +2,24 @@
 
 ## Current
 
-- Decide final user-account policy.
-- Complete Tailscale browser login and record the PiServ Tailscale IP.
-- Decide firewall policy after Tailscale login is verified.
-- Investigate VNC mirroring of the physical touchscreen session.
-- Verify Freenove FNK0100K first-boot behavior.
-- Fix or replace the small OLED module/cable path that pulls SDA low.
-- Verify physical LED, fan, and OLED behavior under the managed Freenove service.
-- Decide whether to accept, physically disconnect, or replace the always-on
-  blue fan LEDs.
+- Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
+  with an upstream release after the change is merged and published.
+- Approve PiServ's advertised subnet route in the Tailscale admin console and
+  validate failover through the existing primary subnet router.
+- Decide whether PiServ needs IPv6 LAN management access and, if so, add an
+  explicitly scoped dual-stack UFW policy with live validation.
+- When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
+  three-restart acceptance test in the VNC runbook. Remove this item only if
+  all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
+- Validate TigerVNC 1.16.2 from this Mac to both direct PiServ LAN endpoints
+  and the Tailscale `piserv` name. Confirm its certificate prompt, `admin` PAM
+  authentication, and the `DSI-1` desktop, then record the outcome in the VNC
+  runbook.
 - Create an umbrella bootstrap playbook that orchestrates the existing base,
-  Freenove, pCloud, mail, and workload playbooks after their ordering is final.
+  Freenove, pCloud, mail, Home Assistant MQTT Agent, and other workload
+  playbooks after their ordering is final.
 
 ## Propositions
-
-- [ ] **Install Glances for system observability**
-  - Assessment: Glances is a low-effort monitoring layer for live PiServ
-    visibility, but it should be installed with explicit service exposure and
-    firewall expectations instead of leaving another unaudited listener.
-  - Actions:
-    - Validate package availability and runtime behavior on `piserv.example.com`.
-    - Decide whether Glances should run CLI-only, web UI, API mode, or a
-      systemd-managed service.
-    - Document listening address, port, authentication model, and firewall
-      implications.
-    - Codify the final install and service configuration in Ansible.
 
 - [ ] **Build Apple Home-compatible Python camera streaming service**
   - Assessment: A small Python stream service can expose the camera as MJPEG,
@@ -34,7 +27,7 @@
     than assuming generic webcam streaming is enough.
   - Actions:
     - Identify the Pi camera hardware, driver stack, and supported capture
-      pipeline on `piserv.example.com`.
+      pipeline on `PiServ.local`.
     - Prototype a Python streaming endpoint with predictable startup, health
       checks, and systemd logging.
     - Decide the Apple Home integration path: direct HomeKit camera support if
@@ -71,6 +64,99 @@
       exposing the service.
     - Codify the final install, configuration, and service health checks in
       Ansible after live validation.
+
+- [ ] **Evaluate and deploy Google Drive access and synchronization**
+  - Assessment: Google Drive for Desktop is unavailable on Linux. `rclone`
+    provides the best current combination of ARM64 CLI access, FUSE mounting,
+    filtered remotes, one-way backup, and controlled bidirectional `bisync`.
+  - Proposal: [Google Drive and external storage](docs/tracks/google-drive-and-external-storage.md)
+  - Actions:
+    - Confirm the live PiServ OS, architecture, FUSE support, and available
+      storage before selecting the deployment path.
+    - Test a restricted Google Drive remote with OAuth scope, root folder, and
+      filter settings appropriate for shared services.
+    - Prototype a read-only/live FUSE mount and a separate Drive-to-SSD backup.
+    - Evaluate `bisync` on a small test folder, including conflict and deletion
+      recovery, before considering broader write access.
+    - Codify credentials, systemd units, health checks, retention, and restore
+      procedures in Ansible and runbooks.
+
+- [ ] **Attach and prepare the 4 TB external SSD**
+  - Assessment: Completed the PiServ-owned ext4 path. exFAT remains the
+    removable-media fallback for a future disk that must be connected directly
+    to macOS and Linux. APFS is not a suitable Linux service volume.
+  - Proposal: [Google Drive and external storage](docs/tracks/google-drive-and-external-storage.md)
+  - Actions:
+    - Done: verified the ASM246X enclosure, USB 3 link, device identity, and
+      unmounted APFS layout before formatting.
+    - Done: created the UUID-backed journaled ext4 mount at
+      `/mnt/external-data` with group/ACL permissions and recovery docs.
+    - Decide whether the volume needs encryption and Mac access through SMB or
+      SFTP.
+    - Validate reboot, disconnect, reconnect, filesystem checks, and sustained
+      backup writes before placing production backups on it.
+
+- [ ] **Build a complete daily GitHub account disaster backup**
+  - Assessment: per-repository bare mirrors provide complete Git branches and
+    tags; Git LFS and non-GitHub metadata require explicit additional handling.
+  - Actions:
+    - Inventory all MarcoMC repositories and accessible organization
+      repositories through paginated GitHub API or `gh` discovery.
+    - Reuse and improve the existing Backup CLI where it fits, with a
+      least-privilege token and no credentials in the repository.
+    - Maintain one mirror per repository with daily `fetch --prune`, tags,
+      branches, and Git LFS object retrieval.
+    - Decide whether to include issues, pull requests, releases, wikis, Actions
+      artifacts, and repository metadata.
+    - Add a systemd timer, failure summary, retention policy, and restore test.
+
+- [ ] **Install Jackett Search and the Jackett service**
+  - Assessment: Jackett documents ARM64 Linux support and a Docker deployment;
+    the existing Jackett Search project should remain the operator-facing CLI.
+  - Actions:
+    - Done: migrate the existing containers and persistent state to the
+      upstream Makefile-managed layout through `ansible/playbooks/jackett.yml`.
+    - Done: enforce TCP `9117` access in Docker's `DOCKER-USER` chain for the
+      current IPv4 LAN and Tailnet.
+    - Done: prepare the reusable `ansible/roles/jackett_search` Makefile-wrapper
+      role, including upstream component lifecycle targets.
+    - Configure tracker credentials outside Git, then validate search results
+      and restart recovery.
+
+- [ ] **Deploy a torrent client behind VPN Unlimited**
+  - Assessment: A separate torrent container behind Gluetun provides a clear
+    network boundary and kill switch. Gluetun documents VPN Unlimited via
+    OpenVPN; WireGuard needs a custom-provider configuration and must be tested
+    against the actual account.
+  - Actions:
+    - Choose and pin an ARM64 torrent client image with persistent downloads and
+      configuration on the external SSD.
+    - Confirm VPN Unlimited credentials, supported protocol, server selection,
+      and whether inbound port forwarding is available.
+    - Deploy the torrent client with Gluetun, LAN-only administration, DNS
+      controls, and a tested kill switch.
+    - Prove that torrent traffic stops when the VPN is unavailable and that the
+      web UI is not exposed through the VPN tunnel.
+    - Add Ansible, secrets handling, health checks, update/rollback policy, and
+      an operational runbook.
+
+- [ ] **Evaluate Pi Node deployment for PiServ or a supported external host**
+  - Assessment: The official Linux package is currently `amd64` only, while
+    PiServ is `arm64`; PiServ also has less than the documented minimum disk
+    space. Native installation is therefore blocked until an ARM64 package is
+    published or a supported external `amd64` host is selected.
+  - Proposal: [Pi Node on PiServ investigation](docs/tracks/pi-node-on-piserv.md)
+  - Actions:
+    - Monitor the official Pi Node APT repository and Linux documentation for
+      ARM64 support.
+    - Do not run multiple nodes with the same Pi account; verify the current
+      account-to-node policy before any migration.
+    - If using an external host, validate Docker, Compose v2, 4 vCPUs, 4 GB RAM,
+      300 GB durable storage, router port forwarding, and headless CLI operation.
+    - Keep node private keys, PostgreSQL credentials, and Docker volumes outside
+      tracked repository files.
+    - Add Ansible and an operational runbook only after a supported target is
+      selected and live installation succeeds.
 
 ## Later
 

@@ -49,10 +49,10 @@ and hardens operator-created files when present.
 | SMTP config metadata | Harden existing config to `0640 root:msmtp` |
 | SMTP binary metadata | Persist `2755 root:msmtp` with `dpkg-statoverride` |
 | Gmail auth | Dedicated app password |
-| Envelope settings | Explicit `from`, `domain piserv.example.com`, `auto_from off`, `set_from_header on` |
+| Envelope settings | Explicit `from`, `domain PiServ.local`, `auto_from off`, `set_from_header on` |
 | Local recipient | Send to `root` |
 | External recipient | Operator-managed aliases in `/etc/aliases` |
-| unattended-upgrades | Mail `root`, report `on-change` |
+| unattended-upgrades | `base_unattended_mail_to` receives the routine digest and native error-only fallback |
 | Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists and is non-empty |
 | RaiPlaySound | Uses `/usr/local/bin/msmtp-system` for system-config compatibility |
 
@@ -68,12 +68,20 @@ standalone role.
   `/etc/msmtprc`.
 - Re-running Ansible will not create or overwrite `/etc/msmtprc` or
   `/etc/aliases`; it only hardens existing files.
-- Commands run as `operator` should not pass `--file /etc/msmtprc` directly; use
+- Commands run as `admin` should not pass `--file /etc/msmtprc` directly; use
   the default system config path or `/usr/local/bin/msmtp-system`.
 - If the Google account password changes, the Gmail app password must be
   regenerated and updated on PiServ.
 - SMTP provider connectivity and one root-alias delivery test have been
   validated.
+- Routine upgrade mail is a multipart digest with plain-text fallback, package
+  version transitions, reboot state, and no raw package-manager transcript.
+- Native unattended-upgrades mail is restricted to errors while the plugin is
+  enabled, preventing duplicate routine notifications and preserving an
+  unexpected-failure fallback.
+- Error fallback mail remains the upstream raw format because an unexpected
+  top-level failure can occur before the plugin callback runs. This prioritizes
+  notification delivery over formatting for that exceptional path.
 
 ## Validation
 
@@ -87,5 +95,5 @@ Current validation:
 | `mail -s ... root` | External notification received through alias |
 | PiServ base playbook | Unmanaged mail config mode validates and remains idempotent |
 | `piserv-reboot-notify.service` | Sends a boot email after reboot when `/etc/msmtprc` is non-empty |
-| unattended-upgrades | Sends reports when upgrades or errors occur |
+| unattended-upgrades plugin | Sends a version-aware multipart digest through the root alias |
 | RaiPlaySound | Email configuration present; dry-run summary validation passed |

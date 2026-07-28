@@ -1,0 +1,42 @@
+---
+- name: Install jackett-search runtime packages
+  ansible.builtin.apt:
+    name: "{{ jackett_search_apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  register: jackett_search_runtime_packages
+
+- name: Install optional Jackett component dependencies
+  when:
+    - jackett_search_manage_components | bool
+    - jackett_search_manage_component_dependencies | bool
+  block:
+    - name: Install optional Jackett component packages
+      ansible.builtin.apt:
+        name: "{{ jackett_search_component_apt_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      register: jackett_search_component_packages
+
+    - name: Configure optional Jackett component runtime
+      when: >-
+        not ansible_check_mode
+        or not jackett_search_component_packages.changed
+      block:
+        - name: Ensure Docker is enabled for optional Jackett components
+          ansible.builtin.systemd_service:
+            name: docker.service
+            enabled: true
+            state: started
+          become: true
+
+        - name: Allow the runtime user to manage optional Jackett components
+          ansible.builtin.user:
+            name: "{{ jackett_search_runtime_user }}"
+            groups: docker
+            append: true
+          become: true

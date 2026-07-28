@@ -2,6 +2,52 @@
 - name: Configure PiServ base host policy
   hosts: piserv
   gather_facts: true
+  vars:
+    piserv_base_lan_ipv4_cidr: >-
+      {{
+        ansible_facts.default_ipv4.network
+        ~ '/'
+        ~ ansible_facts.default_ipv4.prefix
+      }}
+  pre_tasks:
+    - name: Validate firewall policy for the LAN Glances listener
+      when: piserv_glances_bind_address == '0.0.0.0'
+      block:
+        - name: Read UFW policy before enabling the LAN Glances listener
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/ufw
+              - status
+              - verbose
+          register: piserv_base_ufw_status
+          changed_when: false
+          failed_when: false
+          check_mode: false
+          become: true
+
+        - name: Require the PiServ firewall policy before enabling the LAN Glances listener
+          ansible.builtin.assert:
+            that:
+              - "'Status: active' in piserv_base_ufw_status.stdout"
+              - "'Default: deny (incoming)' in piserv_base_ufw_status.stdout"
+              - >-
+                piserv_base_ufw_status.stdout is regex(
+                  '(?m)^'
+                  ~ (piserv_glances_port | string)
+                  ~ '/tcp\\s+ALLOW IN\\s+'
+                  ~ (piserv_base_lan_ipv4_cidr | regex_escape)
+                  ~ '\\s+# PiServ LAN Glances API$'
+                )
+              - >-
+                piserv_base_ufw_status.stdout is regex(
+                  '(?m)^Anywhere\\s+on\\s+tailscale0\\s+ALLOW IN\\s+Anywhere'
+                  ~ '\\s+# PiServ Tailscale ingress$'
+                )
+            fail_msg: >-
+              Apply ansible/playbooks/firewall.yml before binding the Glances API
+              to the LAN. UFW must be active with default incoming deny, the
+              source-scoped PiServ LAN Glances API rule, and PiServ Tailscale
+              ingress policy.
   roles:
     - role: msmtp
       vars:
@@ -13,6 +59,19 @@
     - role: base
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."
+        base_vnc_output: DSI-1
+        base_cockpit_packages:
+          - cockpit
+          - cockpit-storaged
+          - cockpit-sosreport
+          - cockpit-packagekit
+        base_cockpit_expected_modules:
+          - storage
+          - sosreport
+          - updates
+        base_glances_bind_address: "{{ piserv_glances_bind_address }}"
+        base_glances_validation_address: "{{ piserv_glances_validation_address }}"
+        base_glances_port: "{{ piserv_glances_port }}"
         base_cloud_init_disabled_marker_content: |
           Disabled by PiServ hardening on 2026-07-08.
           Configuration is managed by Ansible after SSH is reachable.

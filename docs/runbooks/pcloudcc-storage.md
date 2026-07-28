@@ -31,8 +31,8 @@ passed.
 
 ## Preconditions
 
-- PiServ is reachable as `operator@piserv.example.com`.
-- `operator` has sudo access.
+- PiServ is reachable as `admin@PiServ.local`.
+- `admin` has sudo access.
 - The pCloud account email is supplied by the operator during setup.
 - The pCloud data region is European Union.
 - The pCloud password is provided interactively during first login.
@@ -46,13 +46,13 @@ passed.
 | Backend | Official `pcloudcc` console client |
 | Mount type | FUSE |
 | Service manager | systemd user service |
-| Runtime user | `operator` |
+| Runtime user | `admin` |
 | pCloud account email | Operator-provided; do not store in docs |
 | pCloud data region | European Union |
 | Mount root | `/mnt/pcloud` |
 | Podcast target | `/mnt/pcloud/My Music/Podcasts/raiplaypodcast` |
 | Podcast producer | `raiplaysound-cli-daily-sync` |
-| Credential bootstrap | Manual first login with `pcloudcc -p -s -t` as `operator` |
+| Credential bootstrap | Manual first login with `pcloudcc -p -s -t` as `admin` |
 | Required preflight | Mount present, writable, and round-trip file test passes |
 | Account scope | Existing user pCloud account with full pCloud access |
 
@@ -72,7 +72,7 @@ Observed install facts:
 | Installed library | `/usr/local/lib/libpcloudcc_lib.so` |
 | Help/version line | `pCloud console client v.2.0.1` |
 | TOTP options | `--trustdevice`, `--recoverycode` |
-| Mount directory | `/mnt/pcloud`, owned by `operator` |
+| Mount directory | `/mnt/pcloud`, owned by `admin` |
 
 Use the Ansible reproduction path:
 
@@ -105,10 +105,10 @@ successful saved login stores a reusable `auth` token and `saveauth` flag, then
 removes the saved `pass` entry. It does not document a password config file or
 password environment variable.
 
-Run first login manually on PiServ as `operator`:
+Run first login manually on PiServ as `admin`:
 
 ```sh
-sudo install -d -o operator -g operator -m 0755 /mnt/pcloud
+sudo install -d -o admin -g admin -m 0755 /mnt/pcloud
 pcloudcc -u "PCLOUD_ACCOUNT_EMAIL" -p -s -t -m /mnt/pcloud
 ```
 
@@ -169,7 +169,7 @@ mount point:
 pcloudcc -m /mnt/pcloud
 ```
 
-The PiServ user service runs that command as `operator` with no account email,
+The PiServ user service runs that command as `admin` with no account email,
 password, TOTP, or recovery code in the unit.
 
 EU-region login has been validated live. No explicit region setting was needed
@@ -181,12 +181,12 @@ Observed on PiServ on 2026-07-08 after service hardening:
 
 | Check | Result |
 | --- | --- |
-| State directory | `/home/operator/.pcloud`, mode `0700` |
-| State files | `/home/operator/.pcloud/data.db*`, mode `0600` |
+| State directory | `/home/admin/.pcloud`, mode `0700` |
+| State files | `/home/admin/.pcloud/data.db*`, mode `0600` |
 | Service command | `/usr/local/bin/pcloudcc -m /mnt/pcloud` |
 | Stored DB keys | `auth`, `saveauth`, `username` |
 | Missing DB key | `pass` |
-| Linger | `Linger=yes` for `operator` |
+| Linger | `Linger=yes` for `admin` |
 
 The saved `auth` token is sensitive. It is protected by Unix ownership and
 permissions, not by a desktop keychain or repository-managed encryption.
@@ -235,7 +235,7 @@ revocation, the service must not remount until a fresh manual login is completed
 1. Install build prerequisites on PiServ.
 2. Build `pcloudcc` from the official pCloud console-client source.
 3. Run the patched TOTP bootstrap path for the current account. Done.
-4. Run the manual first login with `-p -s -t` as `operator`. Done.
+4. Run the manual first login with `-p -s -t` as `admin`. Done.
 5. Start `pcloudcc` manually with `/mnt/pcloud` as the mount point. Done.
 6. Confirm the mount appears in `findmnt`. Done.
 7. Confirm `My Music/Podcasts/raiplaypodcast` exists under the mount. Done.

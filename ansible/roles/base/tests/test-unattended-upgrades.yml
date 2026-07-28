@@ -1,0 +1,93 @@
+---
+- name: Test unattended-upgrades digest policy rendering
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    base_unattended_origins_patterns: []
+    base_unattended_automatic_reboot: true
+    base_unattended_automatic_reboot_time: "06:30"
+    base_unattended_remove_unused_dependencies: true
+    base_unattended_remove_new_unused_dependencies: true
+    base_unattended_mail_report: on-change
+    base_test_role_path: "{{ playbook_dir | dirname }}"
+  tasks:
+    - name: Create temporary policy directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: unattended-upgrades-policy
+      register: base_unattended_upgrades_policy_directory
+
+    - name: Test digest and native unattended-upgrades policy rendering
+      block:
+        - name: Render enabled digest policy
+          ansible.builtin.template:
+            src: "{{ base_test_role_path }}/templates/52base-unattended-upgrades.j2"
+            dest: "{{ base_unattended_upgrades_policy_directory.path }}/digest-enabled.conf"
+            mode: "0600"
+          vars:
+            base_manage_unattended_upgrade_digest: true
+            base_unattended_mail_to: alerts@example.com
+
+        - name: Read enabled digest policy
+          ansible.builtin.slurp:
+            src: "{{ base_unattended_upgrades_policy_directory.path }}/digest-enabled.conf"
+          register: base_digest_enabled_policy
+
+        - name: Assert enabled digest policy
+          ansible.builtin.assert:
+            that:
+              - >-
+                'Unattended-Upgrade::Mail "alerts@example.com";' in
+                (base_digest_enabled_policy.content | b64decode)
+              - >-
+                'Unattended-Upgrade::MailReport "only-on-error";' in
+                (base_digest_enabled_policy.content | b64decode)
+
+        - name: Render disabled digest policy
+          ansible.builtin.template:
+            src: "{{ base_test_role_path }}/templates/52base-unattended-upgrades.j2"
+            dest: "{{ base_unattended_upgrades_policy_directory.path }}/digest-disabled.conf"
+            mode: "0600"
+          vars:
+            base_manage_unattended_upgrade_digest: false
+            base_unattended_mail_to: alerts@example.com
+
+        - name: Read disabled digest policy
+          ansible.builtin.slurp:
+            src: "{{ base_unattended_upgrades_policy_directory.path }}/digest-disabled.conf"
+          register: base_digest_disabled_policy
+
+        - name: Assert disabled digest policy
+          ansible.builtin.assert:
+            that:
+              - >-
+                'Unattended-Upgrade::Mail "alerts@example.com";' in
+                (base_digest_disabled_policy.content | b64decode)
+              - >-
+                'Unattended-Upgrade::MailReport "on-change";' in
+                (base_digest_disabled_policy.content | b64decode)
+
+        - name: Render empty-recipient policy
+          ansible.builtin.template:
+            src: "{{ base_test_role_path }}/templates/52base-unattended-upgrades.j2"
+            dest: "{{ base_unattended_upgrades_policy_directory.path }}/no-mail.conf"
+            mode: "0600"
+          vars:
+            base_manage_unattended_upgrade_digest: true
+            base_unattended_mail_to: ""
+
+        - name: Read empty-recipient policy
+          ansible.builtin.slurp:
+            src: "{{ base_unattended_upgrades_policy_directory.path }}/no-mail.conf"
+          register: base_no_mail_policy
+
+        - name: Assert empty recipient disables unattended-upgrades mail
+          ansible.builtin.assert:
+            that:
+              - "'Unattended-Upgrade::Mail ' not in (base_no_mail_policy.content | b64decode)"
+      always:
+        - name: Remove temporary policy directory
+          ansible.builtin.file:
+            path: "{{ base_unattended_upgrades_policy_directory.path }}"
+            state: absent

@@ -1,0 +1,37 @@
+---
+- name: Validate Glances API configuration
+  ansible.builtin.assert:
+    that:
+      - base_glances_bind_address in ['127.0.0.1', '0.0.0.0']
+      - base_glances_validation_address == '127.0.0.1'
+      - "'glances' in base_glances_packages"
+      - "'python3-uvicorn' in base_glances_packages"
+      - "'python3-jinja2' in base_glances_packages"
+      - base_glances_auth_username is match('^[A-Za-z0-9_-]+$')
+      - base_glances_config_path is match('^/')
+      - base_glances_password_directory is match('^/')
+      - base_glances_password_file is match('^/')
+      - base_glances_bootstrap_password_file is match('^/')
+      - base_glances_password_file != base_glances_bootstrap_password_file
+      - base_glances_port is integer
+      - base_glances_port >= 1
+      - base_glances_port <= 65535
+    fail_msg: >-
+      Glances requires its package, Uvicorn and Jinja2 runtimes, valid
+      authentication paths and username, a loopback or IPv4-wildcard listener,
+      loopback API validation, and a TCP port between 1 and 65535.
+
+- name: Install Glances observability packages
+  ansible.builtin.apt:
+    name: "{{ base_glances_packages }}"
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+  register: base_glances_packages_install
+  become: true
+
+- name: Configure and validate the installed Glances runtime
+  ansible.builtin.include_tasks: glances-installed.yml
+  when:
+    - not ansible_check_mode or not base_glances_packages_install.changed

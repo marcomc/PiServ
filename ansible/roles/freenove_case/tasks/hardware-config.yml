@@ -1,13 +1,11 @@
 ---
-- name: Flush Freenove service restarts before hardware apply
-  when:
-    - freenove_case_apply_hardware_config | bool
-    - freenove_case_manage_background_service | bool
-  ansible.builtin.meta: flush_handlers
-
-- name: Apply Freenove hardware configuration
+- name: Apply and report Freenove hardware configuration
   when: freenove_case_apply_hardware_config | bool
   block:
+    - name: Flush Freenove service restarts before hardware apply
+      when: freenove_case_manage_background_service | bool
+      ansible.builtin.meta: flush_handlers
+
     - name: Install Freenove hardware apply helper
       ansible.builtin.copy:
         src: ansible_apply_hardware_config.py
@@ -17,26 +15,29 @@
         mode: "0755"
       become: true
 
-    - name: Apply Freenove app config to expansion board
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/python3
-          - "{{ freenove_case_hardware_apply_script }}"
-          - --config
-          - "{{ freenove_case_install_dir }}/Code/app_config.json"
-          - "{{ '--save-flash' if freenove_case_apply_hardware_save_flash | bool else '--no-save-flash' }}"
-        chdir: "{{ freenove_case_install_dir }}/Code"
-      register: freenove_case_hardware_apply_result
-      changed_when: >
-        freenove_case_hardware_apply_result.rc == 0 and
-        (freenove_case_hardware_apply_result.stdout | from_json).changed | bool
-      become: true
+    - name: Apply and report live Freenove hardware configuration
+      when: not ansible_check_mode
+      block:
+        - name: Apply Freenove app config to expansion board
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - "{{ freenove_case_hardware_apply_script }}"
+              - --config
+              - "{{ freenove_case_install_dir }}/Code/app_config.json"
+              - "{{ '--save-flash' if freenove_case_apply_hardware_save_flash | bool else '--no-save-flash' }}"
+            chdir: "{{ freenove_case_install_dir }}/Code"
+          register: freenove_case_hardware_apply_result
+          changed_when: >
+            freenove_case_hardware_apply_result.rc == 0 and
+            (freenove_case_hardware_apply_result.stdout | from_json).changed | bool
+          become: true
 
-    - name: Store Freenove hardware apply summary
-      ansible.builtin.set_fact:
-        freenove_case_hardware_apply_summary: "{{ freenove_case_hardware_apply_result.stdout | from_json }}"
+        - name: Store Freenove hardware apply summary
+          ansible.builtin.set_fact:
+            freenove_case_hardware_apply_summary: "{{ freenove_case_hardware_apply_result.stdout | from_json }}"
 
-    - name: Report Freenove hardware apply warnings
-      when: freenove_case_hardware_apply_summary.warnings | length > 0
-      ansible.builtin.debug:
-        var: freenove_case_hardware_apply_summary.warnings
+        - name: Report Freenove hardware apply warnings
+          when: freenove_case_hardware_apply_summary.warnings | length > 0
+          ansible.builtin.debug:
+            var: freenove_case_hardware_apply_summary.warnings
