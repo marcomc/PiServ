@@ -308,6 +308,7 @@
     dump: "0"
     passno: "2"
     state: mounted
+  register: piserv_external_storage_mount_result
 
 - name: Set shared mount-root ownership and permissions
   ansible.builtin.file:
@@ -399,6 +400,7 @@
   register: piserv_external_storage_mount
   changed_when: false
   check_mode: false
+  when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
 
 - name: Read the mounted external storage UUID
   ansible.builtin.command:
@@ -412,6 +414,7 @@
   register: piserv_external_storage_mounted_uuid
   changed_when: false
   check_mode: false
+  when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
 
 - name: Assert the external storage mount is active with hardened options
   ansible.builtin.assert:
@@ -425,6 +428,7 @@
     fail_msg: >-
       The external storage mount is not active with the expected ext4,
       nodev, and nosuid state.
+  when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
 
 - name: Add the human administrator and configured services to storage access
   ansible.builtin.user:

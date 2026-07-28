@@ -27,6 +27,8 @@ All notable project changes are documented here.
 - Added UUID-based mounting at `/mnt/external-data` with `nodev`, `nosuid`,
   and optional-device boot behavior, while destructive actions verify a local
   stable by-id device identity.
+- Deferred post-mount state probes when check mode only predicts a storage
+  reconnect or mount-option change.
 - Added the dedicated `external-data` group, shared ACL policy, restricted
   backup directory, and non-destructive convergence playbook.
 - Added the external SSD storage decision record and operator runbook.
