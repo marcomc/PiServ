@@ -7,9 +7,9 @@
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
-- Create an umbrella bootstrap playbook that orchestrates the existing base,
-  Freenove, pCloud, mail, Home Assistant MQTT Agent, and other workload
-  playbooks after their ordering is final.
+- Create the repeatable `ansible/playbooks/piserv-install.yml` entry point that
+  orchestrates the existing base, Freenove, pCloud, mail, Home Assistant MQTT
+  Agent, and other workload playbooks after their ordering is final.
 
 ## Propositions
 

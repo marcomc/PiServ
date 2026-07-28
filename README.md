@@ -153,6 +153,28 @@ Active implementation tracks:
 
 ## Automation
 
+### Full PiServ installation
+
+Use `ansible/playbooks/piserv-install.yml` as the repeatable PiServ
+installation and convergence entry point after installing the pinned role and
+collection dependencies:
+
+```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
+ansible-galaxy collection install -r ansible/requirements.yml --force
+ansible-playbook ansible/playbooks/piserv-install.yml
+```
+
+The entry point imports the steady-state configuration playbooks in dependency
+order: Tailscale, firewall, base host policy, external storage, Freenove,
+pCloud, Home Assistant MQTT Agent, Jackett, and RaiPlaySound. It is designed
+to be rerun; a converged second run should report `changed=0` apart from live
+state that has drifted.
+
+The NVMe migration playbook is intentionally excluded because it is destructive
+and one-time. The pCloud health-check playbook is also separate because it is
+an operator validation step and depends on manual credential bootstrap.
+
 After Tailscale and the firewall policy are active, configure the PiServ base
 host policy:
 

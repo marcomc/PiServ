@@ -2,6 +2,14 @@
 
 All notable project changes are documented here.
 
+## 0.3.0 - Unreleased
+
+### PiServ Installation
+
+- Added the repeatable `ansible/playbooks/piserv-install.yml` entry point for
+  ordered full-host convergence while keeping destructive migration and
+  operator-only health checks separate.
+
 ## 0.2.0 - 2026-07-28
 
 ### Ansible Maintainability

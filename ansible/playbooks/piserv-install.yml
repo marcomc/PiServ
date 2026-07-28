@@ -1,0 +1,14 @@
+---
+# Full PiServ convergence entry point.
+#
+# Keep this file limited to repeatable configuration playbooks. One-time
+# migrations and operator-triggered health checks remain separate entry points.
+- import_playbook: tailscale.yml
+- import_playbook: firewall.yml
+- import_playbook: piserv-base.yml
+- import_playbook: external-storage.yml
+- import_playbook: freenove-post-os.yml
+- import_playbook: pcloudcc-install.yml
+- import_playbook: ha-mqtt-agent.yml
+- import_playbook: jackett.yml
+- import_playbook: raiplaysound-cli-daily-sync.yml
