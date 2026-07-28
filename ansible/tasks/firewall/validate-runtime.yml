@@ -90,13 +90,25 @@
       - >-
         (
           piserv_firewall_ufw_before_rules
-          | regex_findall('(?m)^-A ufw-before-input(?=[^\\n]*\\s-p\\s+udp\\b)(?=[^\\n]*\\s-d\\s+224\\.0\\.0\\.251\\b)(?=[^\\n]*\\s--dport\\s+5353\\b)(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$')
+          | regex_findall(
+            '(?m)^-A ufw-before-input'
+            ~ '(?=[^\\n]*\\s-p\\s+udp\\b)'
+            ~ '(?=[^\\n]*\\s-d\\s+224\\.0\\.0\\.251\\b)'
+            ~ '(?=[^\\n]*\\s--dport\\s+5353\\b)'
+            ~ '(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$'
+          )
           | length
         ) == 0
       - >-
         (
           piserv_firewall_ufw_before6_rules
-          | regex_findall('(?m)^-A ufw6-before-input(?=[^\\n]*\\s-p\\s+udp\\b)(?=[^\\n]*\\s-d\\s+ff02::fb\\b)(?=[^\\n]*\\s--dport\\s+5353\\b)(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$')
+          | regex_findall(
+            '(?m)^-A ufw6-before-input'
+            ~ '(?=[^\\n]*\\s-p\\s+udp\\b)'
+            ~ '(?=[^\\n]*\\s-d\\s+ff02::fb\\b)'
+            ~ '(?=[^\\n]*\\s--dport\\s+5353\\b)'
+            ~ '(?=[^\\n]*\\s-j\\s+ACCEPT\\b)[^\\n]*$'
+          )
           | length
         ) == 0
     fail_msg: UFW default mDNS pre-rules bypass the PiServ firewall policy.
