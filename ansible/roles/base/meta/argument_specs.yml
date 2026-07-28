@@ -240,6 +240,18 @@ argument_specs:
         type: str
         default: 14day
         description: Maximum persistent journal retention period.
+      base_manage_smartmontools:
+        type: bool
+        default: true
+        description: Whether to install SMART health inspection tooling.
+      base_smartmontools_packages:
+        type: list
+        elements: str
+        description: Debian packages required for SMART health inspection.
+      base_validate_root_storage:
+        type: bool
+        default: true
+        description: Whether to validate the dynamically discovered root NVMe health.
       base_manage_cloud_init:
         type: bool
         default: true

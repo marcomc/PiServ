@@ -277,3 +277,6 @@
     - >-
       piserv_external_storage_service_states.results | default([])
       | selectattr('rc', 'equalto', 0) | list | length > 0
+
+- name: Validate external storage SMART health
+  ansible.builtin.include_tasks: external-storage-smart.yml

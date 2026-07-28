@@ -3,10 +3,6 @@
   hosts: piserv
   gather_facts: true
   become: true
-  vars_files:
-    -
-      - ../vars/external-storage.yml
-      - ../vars/external-storage.yml.example
   tasks:
     - name: Validate external storage before host mutation
       ansible.builtin.import_tasks: ../tasks/external-storage-preflight.yml

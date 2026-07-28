@@ -19,7 +19,7 @@ shared service access and restricted backup storage.
 
 | Item | Value |
 | --- | --- |
-| Device identity | Locally configured model, serial, and stable by-id path |
+| Device identity | Runtime discovery from the unique `external-data` filesystem label and udev metadata |
 | Partition layout | One GPT partition spanning 3.64 TiB |
 | Filesystem | Journaled ext4 |
 | Label | `external-data` |
@@ -31,14 +31,11 @@ shared service access and restricted backup storage.
 | Human administrator group | `admin` via named ACL |
 
 The disk is attached through a USB 3 port and currently negotiates at 5 Gbps.
-
-The disk identity is deliberately local rather than committed. Copy
-`ansible/vars/external-storage.yml.example` to
-`ansible/vars/external-storage.yml`, replace the placeholders with the verified
-disk identity, and keep the generated local file out of version control. The
-playbook falls back to the committed example only for a clean-checkout syntax
-check; its placeholders fail the disk identity assertion and are not a usable
-live configuration.
+The external-storage playbook discovers the unique partition labeled
+`external-data`, resolves its parent disk, and reads the current udev model and
+serial for diagnostics. It refuses zero or multiple label matches, non-USB
+parents, unexpected filesystem layouts, and mount conflicts. It never formats
+or automatically adopts a blank disk.
 
 ## Provisioning History
 
@@ -71,6 +68,15 @@ filesystem UUID that `findmnt` reports at any target other than
 Expected results are one ext4 partition labeled `external-data`, an active
 `/mnt/external-data` mount with `nodev,nosuid`, and the ACLs recorded in
 [Decision 0017](../decisions/0017-external-ssd-storage.md).
+
+The base playbook installs `smartmontools` and validates the dynamically
+discovered root NVMe health. The external-storage playbook validates the
+external disk's SMART health after discovery. On the live ASM246X bridge,
+generic SMART autodetection did not work, but the dynamically selected ASMedia
+NVMe pass-through mode returned `PASSED`. This is a health-status check, not the
+deferred full SMART baseline capture. SMART pass-through is optional by default;
+set `piserv_external_storage_smart_required: true` after accepting a bridge
+configuration if external SMART must block convergence.
 
 The live 2026-07-23 validation proved that an ordinary user can read shared
 data but cannot write it, while the restricted backup directory is not
@@ -141,8 +147,8 @@ ansible-playbook ansible/playbooks/external-storage.yml
 ```
 
 If the mount is unhealthy, do not reformat it. Capture `lsblk`, `findmnt`,
-`dmesg -T`, and `smartctl` output if the utility is installed, then investigate
-the USB cable, enclosure power, and filesystem before repair.
+`dmesg -T`, and `smartctl -x` output, then investigate the USB cable, enclosure
+power, and filesystem before repair.
 
 The original APFS contents were intentionally erased during preparation and
 cannot be recovered from PiServ unless an independent copy exists.

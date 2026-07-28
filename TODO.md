@@ -88,13 +88,15 @@
     - Record the observed result in the external-storage runbook.
 
 - [ ] **Collect an external SSD SMART baseline**
-  - Assessment: Deferred; `smartctl` is not currently installed and USB-bridge
-    SMART support must be verified.
+  - Assessment: `smartmontools` is now installed by the base role and both the
+    root NVMe and external storage playbooks validate SMART health status. The
+    detailed baseline capture remains deferred.
   - Actions:
-    - Install/verify `smartmontools` when this check is scheduled.
-    - Capture read-only SMART output through the ASM246X enclosure if
-      supported.
-    - Document any bridge limitation if SMART data is unavailable.
+    - Capture read-only `smartctl -x` output for the root NVMe and discovered
+      external parent disk.
+    - Record model, firmware, temperature, percentage used, power-on hours,
+      media/data integrity errors, and error-log state.
+    - Document any USB-bridge limitation if full SMART data is unavailable.
 
 - [ ] **Build a complete daily GitHub account disaster backup**
   - Assessment: per-repository bare mirrors provide complete Git branches and

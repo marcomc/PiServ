@@ -1,0 +1,67 @@
+---
+- name: Try external storage SMART health autodetection
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/smartctl
+      - -H
+      - "{{ piserv_external_storage_device }}"
+  register: piserv_external_storage_smart_auto
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Try ASMedia NVMe SMART pass-through when autodetection fails
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/smartctl
+      - -H
+      - -d
+      - sntasmedia
+      - "{{ piserv_external_storage_device }}"
+  register: piserv_external_storage_smart_bridge
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - piserv_external_storage_smart_auto.rc != 0
+    - piserv_external_storage_smart_device_type == 'sntasmedia'
+
+- name: Select the successful external storage SMART probe
+  ansible.builtin.set_fact:
+    piserv_external_storage_smart_result: >-
+      {{ piserv_external_storage_smart_bridge
+         if (piserv_external_storage_smart_bridge is defined and
+             piserv_external_storage_smart_bridge.rc == 0)
+         else piserv_external_storage_smart_auto }}
+
+- name: Report unavailable external storage SMART health
+  ansible.builtin.debug:
+    msg: >-
+      External storage SMART health is unavailable through the discovered USB
+      bridge. Autodetection returned {{ piserv_external_storage_smart_auto.rc }}:
+      {{ piserv_external_storage_smart_auto.stdout | trim }}
+      {% if piserv_external_storage_smart_bridge is defined %}
+      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc }}:
+      {{ piserv_external_storage_smart_bridge.stdout | trim }}
+      {% endif %}
+  when: >-
+    piserv_external_storage_smart_result.rc != 0 or
+    'SMART overall-health self-assessment test result: PASSED'
+    not in piserv_external_storage_smart_result.stdout
+
+- name: Require passing external storage SMART health when configured
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_smart_result.rc == 0
+      - >-
+        'SMART overall-health self-assessment test result: PASSED'
+        in piserv_external_storage_smart_result.stdout
+    fail_msg: >-
+      External storage SMART health validation failed. Autodetection returned
+      {{ piserv_external_storage_smart_auto.rc }}:
+      {{ piserv_external_storage_smart_auto.stdout | trim }}
+      {% if piserv_external_storage_smart_bridge is defined %}
+      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc }}:
+      {{ piserv_external_storage_smart_bridge.stdout | trim }}
+      {% endif %}
+  when: piserv_external_storage_smart_required | bool

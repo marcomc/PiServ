@@ -22,6 +22,7 @@ This project-local role codifies live PiServ baseline hardening:
 - unattended upgrades and reboot window
 - boot notification service
 - persistent, bounded systemd journal retention on the root filesystem
+- SMART health inspection tooling for local storage validation
 - cloud-init disabled state
 
 ## Role Variables
@@ -73,6 +74,9 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_journald_system_keep_free` | `5G` | Root-filesystem space reserved outside journald |
 | `base_journald_system_max_file_size` | `128M` | Maximum individual journal file size |
 | `base_journald_max_retention_sec` | `14day` | Maximum journal retention period |
+| `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
+| `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
+| `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
 | `base_manage_cloud_init` | `true` | Manage cloud-init state |
 | `base_cloud_init_disable` | `true` | Disable cloud-init with marker file and units |
 
@@ -115,6 +119,11 @@ Journald is configured to keep compressed logs on the root NVMe filesystem,
 with a 1 GiB cap, 5 GiB free-space reserve, 128 MiB per-file cap, and 14-day
 retention. The role flushes the runtime journal after changing this policy so
 the current boot is available through `/var/log/journal` immediately.
+
+The role installs `smartmontools` and derives the physical parent disk from the
+root filesystem. It validates that PiServ is booted from NVMe and that the root
+device reports a passing SMART health status. It does not run a self-test or
+enable the `smartd` daemon.
 
 Glances uses the Debian package service with a PiServ-managed drop-in. The role
 keeps its safe loopback default, while the PiServ playbook binds the JSON API to

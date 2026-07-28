@@ -1,17 +1,63 @@
 ---
-- name: Assert external storage identity inputs are concrete
+- name: Discover external storage partitions by filesystem label
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - --match-token
+      - "LABEL={{ piserv_external_storage_volume_label }}"
+      - --output
+      - device
+  register: piserv_external_storage_label_candidates
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Normalize external storage partition candidates
+  ansible.builtin.set_fact:
+    piserv_external_storage_partition_candidates: >-
+      {{ piserv_external_storage_label_candidates.stdout_lines
+         | map('trim') | reject('equalto', '') | list }}
+
+- name: Require exactly one external storage partition candidate
   ansible.builtin.assert:
     that:
-      - piserv_external_storage_device is match('^/dev/disk/by-id/.+')
-      - piserv_external_storage_expected_model | trim | length > 0
-      - piserv_external_storage_expected_serial | trim | length > 0
-      - piserv_external_storage_device is not search('<|>')
-      - piserv_external_storage_expected_model is not search('<|>')
-      - piserv_external_storage_expected_serial is not search('<|>')
+      - piserv_external_storage_partition_candidates | length == 1
     fail_msg: >-
-      External storage requires a concrete stable by-id device path, model, and
-      serial. Copy ansible/vars/external-storage.yml.example to the ignored
-      external-storage.yml file and replace every placeholder before applying.
+      Expected exactly one filesystem labeled
+      {{ piserv_external_storage_volume_label }}, found
+      {{ piserv_external_storage_partition_candidates | length }}. Refusing
+      to adopt, format, or mount an ambiguous external disk.
+
+- name: Set the discovered external storage partition
+  ansible.builtin.set_fact:
+    piserv_external_storage_partition_device: >-
+      {{ piserv_external_storage_partition_candidates | first }}
+
+- name: Resolve the parent disk for the discovered external storage partition
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - PKNAME
+      - "{{ piserv_external_storage_partition_device }}"
+  register: piserv_external_storage_parent_name
+  changed_when: false
+  check_mode: false
+
+- name: Assert the discovered external storage has a parent disk
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_parent_name.stdout | trim | length > 0
+    fail_msg: >-
+      Could not resolve the parent disk for
+      {{ piserv_external_storage_partition_device }}. Refusing to manage the
+      external storage.
+
+- name: Set the discovered external storage parent disk
+  ansible.builtin.set_fact:
+    piserv_external_storage_device: >-
+      /dev/{{ piserv_external_storage_parent_name.stdout | trim }}
 
 - name: Verify configured external storage access users exist
   ansible.builtin.command:
@@ -37,7 +83,7 @@
       {{ piserv_external_storage_access_users.results
          | rejectattr('rc', 'equalto', 0) | map(attribute='item') | join(', ') }}.
 
-- name: Verify the configured external storage device identity
+- name: Verify the discovered external storage device identity
   ansible.builtin.command:
     argv:
       - udevadm
@@ -48,21 +94,20 @@
   changed_when: false
   check_mode: false
 
-- name: Assert the configured external storage device is the expected disk
+- name: Assert the discovered external storage device is a USB disk
   ansible.builtin.assert:
     that:
       - "'ID_TYPE=disk' in piserv_external_storage_udev.stdout_lines"
-      - piserv_external_storage_expected_model | trim | length > 0
-      - piserv_external_storage_expected_serial | trim | length > 0
-      - >-
-        ('ID_MODEL=' ~ (piserv_external_storage_expected_model | trim))
-        in piserv_external_storage_udev.stdout_lines
-      - >-
-        ('ID_SERIAL_SHORT=' ~ (piserv_external_storage_expected_serial | trim))
-        in piserv_external_storage_udev.stdout_lines
+      - "'ID_BUS=usb' in piserv_external_storage_udev.stdout_lines"
     fail_msg: >-
-      The configured external storage identity does not match the expected
-      ASM246X disk. Refusing to manage the wrong device.
+      The discovered external storage is not a USB disk. Refusing to manage
+      an unexpected storage device.
+
+- name: Select the discovered external USB bridge SMART mode
+  ansible.builtin.set_fact:
+    piserv_external_storage_smart_device_type: >-
+      {{ 'sntasmedia' if 'ID_VENDOR_ID=174c' in
+         piserv_external_storage_udev.stdout_lines else 'auto' }}
 
 - name: Read the external storage filesystem type
   ansible.builtin.command:

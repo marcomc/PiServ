@@ -31,6 +31,16 @@
   when: base_manage_journald | bool
   ansible.builtin.include_tasks: journald.yml
 
+- name: Install storage health tooling
+  when: base_manage_smartmontools | bool
+  ansible.builtin.include_tasks: smartmontools.yml
+
+- name: Validate root storage health
+  when:
+    - base_manage_smartmontools | bool
+    - base_validate_root_storage | bool
+  ansible.builtin.include_tasks: storage-health.yml
+
 - name: Configure base cloud-init policy
   when: base_manage_cloud_init | bool
   ansible.builtin.include_tasks: cloud-init.yml

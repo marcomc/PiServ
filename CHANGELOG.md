@@ -20,6 +20,11 @@ All notable project changes are documented here.
 
 - Retained bounded systemd journals on the PiServ root NVMe filesystem so
   previous-boot power, USB, and filesystem evidence survives a reboot.
+- Installed `smartmontools` in the base role and validated the dynamically
+  discovered root NVMe SMART health.
+- Removed host-specific external model, serial, and by-id inputs; the external
+  storage playbook now discovers the unique `external-data` filesystem and
+  validates the resolved parent disk with bridge-aware SMART health checks.
 
 ## 0.2.0 - 2026-07-28
 

@@ -13,4 +13,6 @@
         base_manage_unattended_upgrades: false
         base_manage_reboot_notification: false
         base_manage_journald: false
+        base_manage_smartmontools: false
+        base_validate_root_storage: false
         base_manage_cloud_init: false
