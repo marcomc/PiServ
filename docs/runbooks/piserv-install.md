@@ -9,13 +9,14 @@
 - [Included Playbooks](#included-playbooks)
 - [Excluded Playbooks](#excluded-playbooks)
 - [Validation](#validation)
+- [Observed Result](#observed-result)
 
 ## Purpose
 
 Use `ansible/playbooks/piserv-install.yml` as the repeatable entry point for
-installing and reconciling the PiServ host. The entry point owns orchestration
-order; the existing roles and playbooks remain the implementation of each
-policy.
+installing and reconciling a manually bootstrapped PiServ host. The entry point
+owns orchestration order; the existing roles and playbooks remain the
+implementation of each policy.
 
 ## Prerequisites
 
@@ -26,9 +27,18 @@ ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/ro
 ansible-galaxy collection install -r ansible/requirements.yml --force
 ```
 
-Ensure the inventory can reach PiServ as `admin` and that the operator has
-completed manual steps that cannot be stored in Git, including Tailscale login
-and pCloud credential bootstrap when those workloads are enabled.
+Ensure the inventory can reach PiServ as `admin`. For a first installation,
+complete the required manual bootstrap before running the full entry point:
+
+1. Apply `ansible/playbooks/tailscale.yml`, then complete the Tailscale login
+   described in the [Tailscale access runbook](tailscale-access.md).
+2. Apply `ansible/playbooks/pcloudcc-install.yml` to install the client. It
+   stops before user-service management until a saved pCloud session exists.
+3. Complete the pCloud credential bootstrap in the
+   [pCloud storage runbook](pcloudcc-storage.md), then rerun
+   `ansible/playbooks/piserv-install.yml`.
+
+Tailscale and pCloud credentials are never stored in Git or Ansible variables.
 
 ## Apply
 
@@ -55,7 +65,10 @@ report `changed=0`. A non-zero change count is evidence of drift, a newly
 required dependency, or a task that needs investigation; it is not a reason to
 silence the report.
 
-Use check mode as an early signal, not as the only acceptance test:
+Use check mode as an early signal, not as the only acceptance test. The pinned
+Tailscale role is skipped in check mode because it parses an internally skipped
+runtime command; PiServ still probes an existing Tailscale binary, service, and
+preferences read-only.
 
 ```sh
 ansible-playbook --check --diff ansible/playbooks/piserv-install.yml
@@ -105,3 +118,25 @@ ansible-playbook --syntax-check ansible/playbooks/*.yml
 
 After a live apply, repeat the entry point and confirm the second run reports
 `changed=0`, then run the workload-specific health checks and runbooks.
+
+## Observed Result
+
+On 2026-07-28, the entry point completed against PiServ with:
+
+```text
+ok=408 changed=0 unreachable=0 failed=0
+```
+
+A subsequent rerun was interrupted during the Freenove controller-copy task
+when the controller could no longer resolve `piserv.local`; it did not report a
+configuration failure. To repeat the full validation after an mDNS failure, use
+the current DHCP lease supplied by the operator directly:
+
+```sh
+export PISERV_IP=<current-dhcp-lease>
+ansible-playbook -e "ansible_host=${PISERV_IP}" \
+  ansible/playbooks/piserv-install.yml
+```
+
+Follow-up: rerun the entry point through that direct-IP override and confirm a
+second full recap with `changed=0`.

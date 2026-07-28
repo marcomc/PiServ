@@ -156,8 +156,8 @@ Active implementation tracks:
 ### Full PiServ installation
 
 Use `ansible/playbooks/piserv-install.yml` as the repeatable PiServ
-installation and convergence entry point after installing the pinned role and
-collection dependencies:
+installation and convergence entry point after the required manual Tailscale
+and pCloud bootstrap:
 
 ```sh
 ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
@@ -174,6 +174,8 @@ state that has drifted.
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is
 an operator validation step and depends on manual credential bootstrap.
+See the [PiServ installation runbook](docs/runbooks/piserv-install.md) for the
+first-install sequence, full ordering, validation, and mDNS-recovery procedure.
 
 After Tailscale and the firewall policy are active, configure the PiServ base
 host policy:

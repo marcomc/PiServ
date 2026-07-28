@@ -51,6 +51,8 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Name every top-level `import_playbook` entry in orchestration playbooks so
+  Ansible Lint validates the full entry point.
 - When a PiServ playbook overrides a generic role's package or plugin set,
   declare expected runtime registrations explicitly and guard live probes in
   check mode when the service is absent; validate both fresh and converged
