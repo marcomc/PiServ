@@ -140,6 +140,24 @@
     - Add Ansible, secrets handling, health checks, update/rollback policy, and
       an operational runbook.
 
+- [ ] **Evaluate Pi Node deployment for PiServ or a supported external host**
+  - Assessment: The official Linux package is currently `amd64` only, while
+    PiServ is `arm64`; PiServ also has less than the documented minimum disk
+    space. Native installation is therefore blocked until an ARM64 package is
+    published or a supported external `amd64` host is selected.
+  - Proposal: [Pi Node on PiServ investigation](docs/tracks/pi-node-on-piserv.md)
+  - Actions:
+    - Monitor the official Pi Node APT repository and Linux documentation for
+      ARM64 support.
+    - Do not run multiple nodes with the same Pi account; verify the current
+      account-to-node policy before any migration.
+    - If using an external host, validate Docker, Compose v2, 4 vCPUs, 4 GB RAM,
+      300 GB durable storage, router port forwarding, and headless CLI operation.
+    - Keep node private keys, PostgreSQL credentials, and Docker volumes outside
+      tracked repository files.
+    - Add Ansible and an operational runbook only after a supported target is
+      selected and live installation succeeds.
+
 ## Later
 
 - Add Ethernet configuration notes when the server is connected by cable.
