@@ -25,6 +25,7 @@
         name: jackett_search
       vars:
         jackett_search_runtime_user: "{{ piserv_jackett_user }}"
+        jackett_search_repo_version: 1053269cbda9bb1d3b69d31f62e48fc100be8d61
         jackett_search_manage_components: true
         jackett_search_component_config_dir: >-
           /home/{{ piserv_jackett_user }}/.config/jackett-search

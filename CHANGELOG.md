@@ -9,6 +9,7 @@ All notable project changes are documented here.
 - Replaced the project-owned Docker Compose deployment with a Galaxy-ready
   `jackett_search` role that uses the upstream Makefile for the CLI, Jackett,
   and FlareSolverr lifecycle.
+- Pinned the PiServ jackett-search source revision for reproducible deployments.
 - Kept the upstream Jackett and FlareSolverr `latest` image choices rather than
   defining project image pins.
 - Restricted Docker-published TCP `9117` to the current IPv4 LAN and Tailnet
