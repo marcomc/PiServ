@@ -88,9 +88,9 @@ All notable project changes are documented here.
   listener-scope validation to the base playbook.
 - Deferred package-dependent Glances configuration and probes on fresh
   check-mode runs while retaining them for converged hosts.
-- Made the Glances password hash and bootstrap password a recoverable pair that
-  rotates together when either file is missing and completes only after
-  authenticated API validation.
+- Made Glances credential recovery rotate a missing hash or interrupted
+  reconciliation only after authenticated validation, while preserving the
+  active hash after the one-time bootstrap password is removed.
 - Derived the Glances systemd override parent from its configurable destination,
   creating it only when absent and preserving existing system-directory
   metadata.
