@@ -39,8 +39,9 @@ role checks out the upstream project at `/opt/jackett-search` and runs, in
 order, `make install`, `make install-flaresolverr`, and `make install-jackett`.
 It does not maintain a project-owned Compose file or image tag. The generated
 Compose files retain upstream `latest` images.
-PiServ pins the upstream checkout to
-`1053269cbda9bb1d3b69d31f62e48fc100be8d61` for reproducible deployments.
+PiServ pins the upstream checkout to the `v0.2.1` release tag for reproducible
+deployments. It currently resolves to
+`1053269cbda9bb1d3b69d31f62e48fc100be8d61`.
 
 PiServ adds the host-specific policy around those generated files: Jackett is
 published on TCP `9117`, FlareSolverr remains loopback-only on TCP `8191`, and
