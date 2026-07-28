@@ -2,6 +2,16 @@
 
 All notable changes for the jackett_search Ansible role are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Bind Jackett and configure its Linux Docker host gateway before its first
+  upstream-managed start.
+- Preserve existing source-parent ownership and permissions.
+- Declare Docker Compose v2 support on Debian 13 or later and report missing
+  components in check mode.
+
 ## 0.1.0 - Unreleased
 
 ### Added

@@ -147,24 +147,58 @@
       become: true
 
 - name: Install Jackett through the upstream Makefile
-  ansible.builtin.command:
-    argv:
-      - "{{ jackett_search_make_command }}"
-      - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
-      - install-jackett
-  args:
-    chdir: "{{ jackett_search_source_dir }}"
-  become: true
-  become_user: "{{ jackett_search_runtime_user }}"
-  environment:
-    HOME: "{{ jackett_search_runtime_user_home }}"
-    PATH: "/usr/local/bin:/usr/bin:/bin"
-    TZ: "{{ jackett_search_timezone }}"
-  changed_when: true
-  register: jackett_search_make_install_jackett
   when:
     - jackett_search_jackett_install_required | bool
     - not ansible_check_mode
+  block:
+    - name: Copy the upstream Jackett Compose source for a safe first start
+      ansible.builtin.copy:
+        src: "{{ jackett_search_source_dir }}/jackett-compose.yml"
+        dest: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        remote_src: true
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_user }}"
+        mode: "0600"
+      become: true
+
+    - name: Bind the temporary upstream Jackett Compose source safely
+      ansible.builtin.replace:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        regexp: '^(\s*)- "(?:[^\"]+:)?(?:[0-9]+:)?9117"$'
+        replace: '\1- "{{ jackett_search_jackett_bind_address }}:{{ jackett_search_jackett_port }}:9117"'
+      become: true
+
+    - name: Add Linux Docker host gateway to the temporary Jackett Compose source
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED HOST GATEWAY"
+        block: "    extra_hosts:\n      - \"host.docker.internal:host-gateway\""
+      become: true
+
+    - name: Run make install-jackett
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - "JACKETT_COMPOSE_SRC={{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+          - install-jackett
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+        TZ: "{{ jackett_search_timezone }}"
+      changed_when: true
+      register: jackett_search_make_install_jackett
+  always:
+    - name: Remove the temporary Jackett Compose source
+      ansible.builtin.file:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        state: absent
+      become: true
 
 - name: Read generated component Compose files
   ansible.builtin.stat:
@@ -283,12 +317,15 @@
 
 - name: Record deferred upstream component restarts in check mode
   ansible.builtin.debug:
-    msg: Upstream Jackett component services would be started.
+    msg: Upstream Jackett component services would be installed or started.
   changed_when: true
   when:
     - ansible_check_mode
     - >-
-      jackett_search_restart_flaresolverr or jackett_search_restart_jackett
+      jackett_search_flaresolverr_install_required | bool
+      or jackett_search_jackett_install_required | bool
+      or jackett_search_restart_flaresolverr
+      or jackett_search_restart_jackett
 
 - name: Start changed generated component Compose services through the upstream Makefile
   when:

@@ -1,0 +1,15 @@
+---
+- name: Read jackett-search source parent directory
+  ansible.builtin.stat:
+    path: "{{ jackett_search_source_dir | dirname }}"
+  register: jackett_search_source_parent_stat
+
+- name: Create missing jackett-search source parent directory
+  ansible.builtin.file:
+    path: "{{ jackett_search_source_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: not jackett_search_source_parent_stat.stat.exists

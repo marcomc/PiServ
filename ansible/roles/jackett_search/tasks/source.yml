@@ -1,12 +1,6 @@
 ---
-- name: Ensure jackett-search source parent exists
-  ansible.builtin.file:
-    path: "{{ jackett_search_source_dir | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
+- name: Manage jackett-search source parent directory
+  ansible.builtin.include_tasks: source-parent.yml
 
 - name: Ensure jackett-search source directory exists
   ansible.builtin.file:

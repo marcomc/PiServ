@@ -11,3 +11,15 @@
     fail_msg: >-
       jackett_search_state must be present or absent; config mode must be
       managed, create, or unmanaged; and component ports must be positive.
+
+- name: Assert Jackett component platform is supported
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version | int >= 13
+    fail_msg: >-
+      Managed Jackett components require Debian 13 or later because their
+      upstream Makefile invokes the Docker Compose v2 CLI as docker compose.
+  when:
+    - jackett_search_state == 'present'
+    - jackett_search_manage_components | bool

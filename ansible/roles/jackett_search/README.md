@@ -41,7 +41,7 @@ and CLI removal.
 
 | Requirement | Value |
 | --- | --- |
-| Target OS | Debian 12 (Bookworm) and Debian 13 (Trixie) |
+| Target OS | Debian 13 (Trixie) or later |
 | Ansible | `ansible-core >= 2.15` |
 | Privilege escalation | Required |
 | Network | GitHub, Debian repositories, and the configured Jackett API |
@@ -106,18 +106,19 @@ another secret source when one is supplied; the role never logs it.
 
 ## Upstream Components
 
-With `jackett_search_manage_components: true`, the role installs Docker,
-enables its service, gives the runtime user Docker access, then runs these
-upstream targets in order:
+With `jackett_search_manage_components: true`, the role installs Docker Engine
+and Docker Compose v2, enables its service, gives the runtime user Docker
+access, then runs these upstream targets in order:
 
 1. `make install`
 2. `make install-flaresolverr`
 3. `make install-jackett`
 
-For a safe first FlareSolverr start, the role passes a temporary copy of the
-upstream Compose source to the Make target with the requested host binding.
-The temporary file is removed immediately. The persistent Compose files remain
-the files created by the upstream Makefile.
+For a safe first start, the role passes temporary copies of the upstream
+Compose sources to both component Make targets. They include the requested host
+bindings and the Linux Docker host gateway required by Jackett. The temporary
+files are removed immediately. The persistent Compose files remain the files
+created by the upstream Makefile.
 
 The role updates only its documented runtime properties in those generated
 files: host bindings and the Linux host gateway alias that upstream Jackett

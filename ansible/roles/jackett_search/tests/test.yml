@@ -63,6 +63,42 @@
           ansible.builtin.include_role:
             name: "{{ playbook_dir | dirname }}"
             tasks_from: validate-inputs
+          vars:
+            jackett_search_manage_components: false
+
+        - name: Load jackett_search role defaults for package assertions
+          ansible.builtin.include_vars:
+            file: "{{ playbook_dir | dirname }}/defaults/main.yml"
+            name: jackett_search_test_defaults
+
+        - name: Assert the component package defaults provide Docker Compose
+          ansible.builtin.assert:
+            that:
+              - >-
+                'docker-compose' in
+                jackett_search_test_defaults.jackett_search_component_apt_packages
+
+        - name: Create an existing private jackett-search source parent fixture
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/source-parent"
+            state: directory
+            mode: "0700"
+
+        - name: Preserve an existing jackett-search source parent fixture
+          ansible.builtin.include_tasks: ../tasks/source-parent.yml
+          vars:
+            jackett_search_source_dir: >-
+              {{ jackett_search_test_directory.path }}/source-parent/checkout
+
+        - name: Read preserved jackett-search source parent fixture
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/source-parent"
+          register: jackett_search_test_source_parent_stat
+
+        - name: Assert the existing source parent fixture was preserved
+          ansible.builtin.assert:
+            that:
+              - jackett_search_test_source_parent_stat.stat.mode == '0700'
 
         - name: Remove isolated role-owned jackett-search command on Linux
           ansible.builtin.include_role:
