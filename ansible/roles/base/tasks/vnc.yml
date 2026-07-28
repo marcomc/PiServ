@@ -58,6 +58,11 @@
     mode: "0755"
   become: true
 
+- name: Inspect the installed PiServ VNC output selector service
+  ansible.builtin.stat:
+    path: "{{ base_vnc_output_selector_service_path }}"
+  register: base_vnc_output_selector_service_stat
+
 - name: Install PiServ VNC output selector service
   ansible.builtin.template:
     src: piserv-wayvnc-output.service.j2
@@ -69,6 +74,9 @@
   become: true
 
 - name: Enable PiServ VNC output selector service
+  when: >-
+    not ansible_check_mode
+    or base_vnc_output_selector_service_stat.stat.exists
   ansible.builtin.systemd_service:
     name: "{{ base_vnc_output_selector_service_name }}"
     enabled: true

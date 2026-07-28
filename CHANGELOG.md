@@ -11,8 +11,9 @@ All notable project changes are documented here.
   feature-specific branches visible without repeated task-level predicates.
 - Made Freenove hardware apply reporting explicitly normal-mode-only so check
   mode does not parse output from its skipped hardware command.
-- Deferred VNC socket and output validation when check mode only predicts the
-  WayVNC service start, while reporting a pending output selection as changed.
+- Deferred VNC selector enablement, socket probes, and output validation when
+  check mode only predicts their units or service start, while reporting a
+  pending output selection as changed.
 - Deferred pCloud checkout, build, install, and mount-root probes when a fresh
   check-mode run only predicts their artifacts.
 - Deferred RaiPlaySound command and user-timer probes when a fresh check-mode
