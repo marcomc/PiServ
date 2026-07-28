@@ -84,6 +84,15 @@ base_reboot_notification_recipient: root
 base_reboot_notification_subject_prefix: "[PiServ]"
 base_reboot_notification_condition_path: /etc/msmtprc
 
+base_manage_journald: true
+base_journald_dropin_path: /etc/systemd/journald.conf.d/99-piserv-persistent.conf
+base_journald_storage: persistent
+base_journald_compress: true
+base_journald_system_max_use: 1G
+base_journald_system_keep_free: 5G
+base_journald_system_max_file_size: 128M
+base_journald_max_retention_sec: 14day
+
 base_manage_cloud_init: true
 base_cloud_init_disable: true
 base_cloud_init_disabled_marker_path: /etc/cloud/cloud-init.disabled

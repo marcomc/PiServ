@@ -80,6 +80,8 @@
       unmounted APFS layout before formatting.
     - Done: created the UUID-backed journaled ext4 mount at
       `/mnt/external-data` with group/ACL permissions and recovery docs.
+    - Done: retained bounded systemd journals on the root NVMe filesystem for
+      previous-boot power, USB, and filesystem diagnostics.
     - Decide whether the volume needs encryption and Mac access through SMB or
       SFTP.
     - Validate reboot, disconnect, reconnect, filesystem checks, and sustained

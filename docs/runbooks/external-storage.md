@@ -6,6 +6,7 @@
 - [Current State](#current-state)
 - [Provisioning History](#provisioning-history)
 - [Verification](#verification)
+- [Previous-Boot Diagnostics](#previous-boot-diagnostics)
 - [Service Access](#service-access)
 - [Recovery](#recovery)
 
@@ -74,6 +75,24 @@ Expected results are one ext4 partition labeled `external-data`, an active
 The live 2026-07-23 validation proved that an ordinary user can read shared
 data but cannot write it, while the restricted backup directory is not
 readable by ordinary users.
+
+## Previous-Boot Diagnostics
+
+PiServ retains compressed systemd journals on the root NVMe filesystem. This
+keeps power, USB, and filesystem evidence available even when the external SSD
+is disconnected or fails to remount. Inspect the previous boot after a restart
+or unexpected power event with:
+
+```sh
+ssh admin@PiServ.local 'sudo journalctl --list-boots'
+ssh admin@PiServ.local \
+  'sudo journalctl -b -1 -k --no-pager | grep -Ei "under.?volt|throttl|usb|uas|reset|I/O error|Buffer I/O|EXT4-fs|sda|sda1"'
+```
+
+The journal is bounded to 1 GiB with a 5 GiB root-filesystem reserve, 128 MiB
+per file, and 14-day retention. Persistent journald improves diagnosis but
+cannot guarantee the final seconds of an abrupt power loss; compare the
+previous-boot log with the current mount, USB link, and filesystem state.
 
 ## Service Access
 

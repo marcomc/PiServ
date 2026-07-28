@@ -1,0 +1,8 @@
+# Managed by the PiServ base role.
+[Journal]
+Storage={{ base_journald_storage }}
+Compress={{ 'yes' if base_journald_compress | bool else 'no' }}
+SystemMaxUse={{ base_journald_system_max_use }}
+SystemKeepFree={{ base_journald_system_keep_free }}
+SystemMaxFileSize={{ base_journald_system_max_file_size }}
+MaxRetentionSec={{ base_journald_max_retention_sec }}

@@ -2,7 +2,7 @@
 
 All notable project changes are documented here.
 
-## 0.3.0 - 2026-07-28
+## 0.3.0 - Unreleased
 
 ### PiServ Installation
 
@@ -15,6 +15,11 @@ All notable project changes are documented here.
 - Added a read-only external-storage preflight before all mutating installation
   playbooks and documented every manual first-install prerequisite and the
   direct-IP SSH recovery preflight.
+
+### External SSD Resilience
+
+- Retained bounded systemd journals on the PiServ root NVMe filesystem so
+  previous-boot power, USB, and filesystem evidence survives a reboot.
 
 ## 0.2.0 - 2026-07-28
 

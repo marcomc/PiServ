@@ -204,6 +204,42 @@ argument_specs:
         type: path
         default: /etc/msmtprc
         description: Path that must exist before the boot notification service runs.
+      base_manage_journald:
+        type: bool
+        default: true
+        description: Whether to retain systemd journals across reboots.
+      base_journald_dropin_path:
+        type: path
+        default: /etc/systemd/journald.conf.d/99-piserv-persistent.conf
+        description: Journald configuration drop-in path.
+      base_journald_storage:
+        type: str
+        default: persistent
+        choices:
+          - auto
+          - volatile
+          - persistent
+        description: Journald storage mode.
+      base_journald_compress:
+        type: bool
+        default: true
+        description: Whether journald should compress stored entries.
+      base_journald_system_max_use:
+        type: str
+        default: 1G
+        description: Maximum disk space used by persistent journals.
+      base_journald_system_keep_free:
+        type: str
+        default: 5G
+        description: Disk space reserved on the journal filesystem.
+      base_journald_system_max_file_size:
+        type: str
+        default: 128M
+        description: Maximum size of one persistent journal file.
+      base_journald_max_retention_sec:
+        type: str
+        default: 14day
+        description: Maximum persistent journal retention period.
       base_manage_cloud_init:
         type: bool
         default: true
