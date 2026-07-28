@@ -223,17 +223,18 @@ Validated on 2026-07-13:
 | Cockpit LAN HTTPS connection | Passed on 2026-07-16 |
 | pCloud mount | Remained mounted |
 
-On 2026-07-27, a fresh macOS mDNS query was observed as unicast UDP from
-`192.168.1.148:5353` to `192.168.1.181:5353`. The former destination-specific
-multicast rule dropped that query. The steady-state rule now allows UDP `5353`
-from the LAN CIDR to any destination so both multicast discovery and valid
-unicast mDNS queries work. The applied
+On 2026-07-27, a fresh macOS mDNS query was observed as unicast UDP from a LAN
+client to PiServ on port `5353`. The former destination-specific multicast rule
+dropped that query. The steady-state rule now allows UDP `5353` from the LAN
+CIDR to any destination so both multicast discovery and valid unicast mDNS
+queries work. The applied
 `ansible/playbooks/firewall.yml` configured the generic LAN rule and removed
 UFW's default mDNS pre-rules;
 `dns-sd -Q PiServ.local A` and
-`dig @192.168.1.181 -p 5353 PiServ.local A +norecurse +short` both returned
-`192.168.1.181`. The playbook also removes UFW's unrestricted IPv4 and IPv6
-default mDNS pre-rules, making the declared LAN-scoped rule authoritative.
+`dig @"${PISERV_IP}" -p 5353 PiServ.local A +norecurse +short` both returned the
+current PiServ IPv4 address. The playbook also removes UFW's unrestricted IPv4
+and IPv6 default mDNS pre-rules, making the declared LAN-scoped rule
+authoritative.
 
 The same validation found that PiServ accepted an overlapping Tailscale LAN
 route. That sent replies to local clients through `tailscale0`, so direct LAN
