@@ -11,45 +11,26 @@
   register: jackett_search_remove_command_stat
 
 - name: Stop upstream-managed Jackett components before removal
+  ansible.builtin.command:
+    argv:
+      - "{{ jackett_search_make_command }}"
+      - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+      - "{{ item }}"
+  args:
+    chdir: "{{ jackett_search_source_dir }}"
+  become: true
+  become_user: "{{ jackett_search_runtime_user }}"
+  environment:
+    HOME: "{{ jackett_search_runtime_user_home }}"
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  loop:
+    - down-flaresolverr
+    - down-jackett
+  changed_when: true
   when:
     - jackett_search_manage_components | bool
     - jackett_search_makefile_stat.stat.exists
     - not ansible_check_mode
-  block:
-    - name: Read upstream component service state before removal
-      ansible.builtin.command:
-        argv:
-          - "{{ jackett_search_make_command }}"
-          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
-          - ps
-      args:
-        chdir: "{{ jackett_search_source_dir }}"
-      become: true
-      become_user: "{{ jackett_search_runtime_user }}"
-      environment:
-        HOME: "{{ jackett_search_runtime_user_home }}"
-        PATH: "/usr/local/bin:/usr/bin:/bin"
-      register: jackett_search_component_status_before_removal
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Stop running upstream-managed Jackett components
-      ansible.builtin.command:
-        argv:
-          - "{{ jackett_search_make_command }}"
-          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
-          - down
-      args:
-        chdir: "{{ jackett_search_source_dir }}"
-      become: true
-      become_user: "{{ jackett_search_runtime_user }}"
-      environment:
-        HOME: "{{ jackett_search_runtime_user_home }}"
-        PATH: "/usr/local/bin:/usr/bin:/bin"
-      changed_when: true
-      when: >-
-        ' up ' in (jackett_search_component_status_before_removal.stdout | lower)
 
 - name: Remove an installed jackett-search command
   when: jackett_search_remove_command_stat.stat.exists

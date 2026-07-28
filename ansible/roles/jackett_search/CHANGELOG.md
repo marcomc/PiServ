@@ -15,6 +15,7 @@ All notable changes for the jackett_search Ansible role are documented here.
   check mode and support custom component host ports.
 - Wait for the generated Jackett API-key file and derive runtime file groups
   from the account's primary GID.
+- Tear down stopped Jackett and FlareSolverr resources during role removal.
 
 ## 0.1.0 - Unreleased
 

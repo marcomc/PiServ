@@ -36,7 +36,11 @@
       ansible.builtin.copy:
         content: |
           .RECIPEPREFIX := >
-          .PHONY: uninstall
+          .PHONY: down-flaresolverr down-jackett uninstall
+          down-flaresolverr:
+          >@test -n "$(CONFIG_DIR)"
+          down-jackett:
+          >@test -n "$(CONFIG_DIR)"
           uninstall:
           >@rm -f "$(INSTALL_DIR)/jackett-search"
         dest: "{{ jackett_search_test_directory.path }}/source/Makefile"
@@ -138,7 +142,9 @@
             jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
             jackett_search_command_path: >-
               {{ jackett_search_test_directory.path }}/bin/jackett-search
-            jackett_search_manage_components: false
+            jackett_search_manage_components: true
+            jackett_search_component_config_dir: >-
+              {{ jackett_search_test_directory.path }}/components
             jackett_search_config_mode: unmanaged
             jackett_search_config_path: "{{ jackett_search_test_directory.path }}/config.toml"
             jackett_search_validate_api: false

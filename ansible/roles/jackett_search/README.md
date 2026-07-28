@@ -128,10 +128,11 @@ uses to reach loopback-bound FlareSolverr. This alias is mandatory for the
 upstream Linux configuration. It runs the corresponding upstream `make up-*`
 target when those settings change.
 
-`state: absent` runs `make down` for managed components and `make uninstall`
-for the role-owned CLI symlink. The role refuses to remove a command that does
-not point to its source checkout. The upstream removal target does not delete
-Compose files, Jackett data, tracker credentials, or the private CLI config unless
+`state: absent` runs `make down-flaresolverr`, `make down-jackett`, and
+`make uninstall` for role-managed components and the CLI symlink. The role
+refuses to remove a command that does not point to its source checkout. The
+upstream removal target does not delete Compose files, Jackett data, tracker
+credentials, or the private CLI config unless
 `jackett_search_remove_config: true` is selected.
 
 ## Configuration Modes
