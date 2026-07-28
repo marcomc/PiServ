@@ -11,6 +11,8 @@ All notable project changes are documented here.
   feature-specific branches visible without repeated task-level predicates.
 - Made Freenove hardware apply reporting explicitly normal-mode-only so check
   mode does not parse output from its skipped hardware command.
+- Deferred VNC socket and output validation when check mode only predicts the
+  WayVNC service start, while reporting a pending output selection as changed.
 
 ### Jackett Search
 

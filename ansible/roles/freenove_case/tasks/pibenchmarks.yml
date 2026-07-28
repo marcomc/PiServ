@@ -33,7 +33,8 @@
           become: true
           register: freenove_case_pibenchmarks_result
 
-        - name: Mark PiBenchmarks storage test as completed
+        # This marker is an immediate result artifact, not a deferred handler.
+        - name: Mark PiBenchmarks storage test as completed # noqa no-handler
           when: freenove_case_pibenchmarks_result.changed | default(false)
           ansible.builtin.file:
             path: "{{ freenove_case_pibenchmarks_marker }}"

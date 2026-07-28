@@ -102,7 +102,6 @@
   changed_when: true
   become: true
 
-
 - name: Ensure PiServ VNC service is enabled and started
   ansible.builtin.systemd_service:
     name: "{{ base_vnc_service_name }}"
@@ -110,50 +109,71 @@
     state: started
   become: true
 
-- name: Wait for VNC control socket and configured output
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/wayvncctl
-      - "--socket={{ base_vnc_control_socket_path }}"
-      - output-list
-  register: base_vnc_output_list
-  changed_when: false
-  until:
-    - base_vnc_output_list.rc == 0
-    - base_vnc_output in base_vnc_output_list.stdout
-  retries: "{{ base_vnc_output_selector_timeout_seconds | int }}"
-  delay: 1
-  check_mode: false
-  become: true
-
-- name: Select configured VNC output
+- name: Manage and validate the active VNC output
   when: >-
-    ('* ' ~ base_vnc_output ~ ':') not in base_vnc_output_list.stdout
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/wayvncctl
-      - "--socket={{ base_vnc_control_socket_path }}"
-      - output-set
-      - "{{ base_vnc_output }}"
-  changed_when: true
-  become: true
+    not ansible_check_mode
+    or ansible_facts.services[base_vnc_service_name].state == 'running'
+  block:
+    - name: Wait for VNC control socket and configured output
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/wayvncctl
+          - "--socket={{ base_vnc_control_socket_path }}"
+          - output-list
+      register: base_vnc_output_list
+      changed_when: false
+      until:
+        - base_vnc_output_list.rc == 0
+        - base_vnc_output in base_vnc_output_list.stdout
+      retries: "{{ base_vnc_output_selector_timeout_seconds | int }}"
+      delay: 1
+      check_mode: false
+      become: true
 
-- name: Read active VNC captured output
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/wayvncctl
-      - "--socket={{ base_vnc_control_socket_path }}"
-      - output-list
-  register: base_vnc_active_output
-  changed_when: false
-  check_mode: false
-  become: true
+    - name: Reconcile the configured VNC output
+      when: >-
+        ('* ' ~ base_vnc_output ~ ':') not in base_vnc_output_list.stdout
+      block:
+        - name: Record pending VNC output selection in check mode
+          ansible.builtin.debug:
+            msg: >-
+              VNC output {{ base_vnc_output }} would be selected after the
+              service is running.
+          changed_when: true
+          when: ansible_check_mode
 
-- name: Assert VNC actively captures the configured output
-  ansible.builtin.assert:
-    that:
-      - base_vnc_active_output.rc == 0
-      - "('* ' ~ base_vnc_output ~ ':') in base_vnc_active_output.stdout"
-    fail_msg: >-
-      wayvnc is not actively capturing the configured output
-      {{ base_vnc_output }}.
+        - name: Select configured VNC output
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/wayvncctl
+              - "--socket={{ base_vnc_control_socket_path }}"
+              - output-set
+              - "{{ base_vnc_output }}"
+          changed_when: true
+          become: true
+          when: not ansible_check_mode
+
+    - name: Validate the active VNC output
+      when: >-
+        not ansible_check_mode
+        or ('* ' ~ base_vnc_output ~ ':') in base_vnc_output_list.stdout
+      block:
+        - name: Read active VNC captured output
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/wayvncctl
+              - "--socket={{ base_vnc_control_socket_path }}"
+              - output-list
+          register: base_vnc_active_output
+          changed_when: false
+          check_mode: false
+          become: true
+
+        - name: Assert VNC actively captures the configured output
+          ansible.builtin.assert:
+            that:
+              - base_vnc_active_output.rc == 0
+              - "('* ' ~ base_vnc_output ~ ':') in base_vnc_active_output.stdout"
+            fail_msg: >-
+              wayvnc is not actively capturing the configured output
+              {{ base_vnc_output }}.
