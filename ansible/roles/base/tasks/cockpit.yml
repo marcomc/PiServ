@@ -24,6 +24,7 @@
     enabled: true
     state: started
   become: true
+  when: not (ansible_check_mode and base_cockpit_packages_install.changed)
 
 - name: Determine whether Cockpit live validation can run
   ansible.builtin.set_fact:

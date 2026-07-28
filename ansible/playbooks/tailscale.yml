@@ -47,6 +47,27 @@
       check_mode: false
       register: piserv_tailscale_preferences
 
+    - name: Determine whether Tailscale preference changes are pending
+      vars:
+        piserv_tailscale_current_state: >-
+          {{ piserv_tailscale_preferences.stdout | from_json }}
+      ansible.builtin.set_fact:
+        piserv_tailscale_preferences_change_pending: >-
+          {{
+            ((piserv_tailscale_current_state.AdvertiseRoutes
+              | default([], true)
+              | sort)
+             != (piserv_tailscale_advertised_routes | sort))
+            or
+            (piserv_tailscale_current_state.RouteAll
+              | default(false)
+              | bool)
+            or
+            (piserv_tailscale_current_state.NoSNAT
+              | default(false)
+              | bool)
+          }}
+
     - name: Advertise the PiServ local IPv4 LAN
       ansible.builtin.command:
         argv:
@@ -98,6 +119,9 @@
       changed_when: false
       check_mode: false
       register: piserv_tailscale_enforced_preferences
+      when: >-
+        not ansible_check_mode
+        or not piserv_tailscale_preferences_change_pending
 
     - name: Assert advertised subnet routes are not accepted
       vars:
@@ -121,3 +145,6 @@
         fail_msg: >-
           PiServ subnet-router preferences do not match the required local-LAN
           routing policy. Apply the Tailscale playbook again.
+      when: >-
+        not ansible_check_mode
+        or not piserv_tailscale_preferences_change_pending

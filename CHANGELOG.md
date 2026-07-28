@@ -45,6 +45,8 @@ All notable project changes are documented here.
   assertion to the PiServ base role.
 - Kept the reusable base-role default minimal while the PiServ playbook adds
   Storage, SOSReport, and PackageKit extensions.
+- Deferred Cockpit socket management when a fresh check-mode run only predicts
+  package installation.
 - Allowed Cockpit TCP port `9090` only from the current IPv4 LAN while retaining
   the existing Tailnet interface policy and PAM-backed `admin` authentication.
 - Added the Cockpit runbook and architecture decision, including the expected
@@ -117,6 +119,8 @@ All notable project changes are documented here.
   local-LAN clients through its physical network interface.
 - Configured PiServ as a high-availability subnet router for its local IPv4 LAN
   with forwarding, default Tailscale SNAT, and an exact route advertisement.
+- Deferred post-apply Tailscale preference assertions when check mode reports
+  policy drift that it cannot apply.
 - Ensured manual and auth-key first login apply the complete HA subnet-router
   policy.
 - Added a Tailscale access runbook covering manual browser login, verification,
