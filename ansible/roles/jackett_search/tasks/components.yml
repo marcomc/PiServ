@@ -1,4 +1,35 @@
 ---
+- name: Read the shared jackett-search Docker network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - inspect
+      - "{{ jackett_search_component_network_name }}"
+  become: true
+  register: jackett_search_component_network
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether the shared jackett-search Docker network is required
+  ansible.builtin.set_fact:
+    jackett_search_component_network_create_required: >-
+      {{ jackett_search_component_network.rc != 0 }}
+
+- name: Create the shared jackett-search Docker network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - create
+      - "{{ jackett_search_component_network_name }}"
+  become: true
+  changed_when: true
+  when:
+    - jackett_search_component_network_create_required | bool
+    - not ansible_check_mode
+
 - name: Read jackett-search component configuration directory
   ansible.builtin.stat:
     path: "{{ jackett_search_effective_component_config_dir }}"
@@ -123,6 +154,26 @@
         replace: '\1- "{{ jackett_search_flaresolverr_bind_address }}:{{ jackett_search_flaresolverr_port }}:8191"'
       become: true
 
+    - name: Attach the temporary FlareSolverr service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      become: true
+
+    - name: Declare the shared Docker network in the temporary FlareSolverr Compose source
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      become: true
+
     - name: Run make install-flaresolverr
       ansible.builtin.command:
         argv:
@@ -168,12 +219,24 @@
         replace: '\1- "{{ jackett_search_jackett_bind_address }}:{{ jackett_search_jackett_port }}:9117"'
       become: true
 
-    - name: Add Linux Docker host gateway to the temporary Jackett Compose source
+    - name: Attach the temporary Jackett service to the shared Docker network
       ansible.builtin.blockinfile:
         path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
         insertafter: '^    image: .+$'
-        marker: "    # {mark} ANSIBLE MANAGED HOST GATEWAY"
-        block: "    extra_hosts:\n      - \"host.docker.internal:host-gateway\""
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      become: true
+
+    - name: Declare the shared Docker network in the temporary Jackett Compose source
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
       become: true
 
     - name: Run make install-jackett
@@ -268,12 +331,51 @@
         replace: '\1- "{{ jackett_search_jackett_bind_address }}:{{ jackett_search_jackett_port }}:9117"'
       register: jackett_search_jackett_compose_binding
 
-    - name: Add Linux Docker host gateway to generated Jackett Compose service
+    - name: Attach generated FlareSolverr Compose service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      register: jackett_search_flaresolverr_compose_network
+
+    - name: Declare the shared Docker network in generated FlareSolverr Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      register: jackett_search_flaresolverr_compose_network_declaration
+
+    - name: Attach generated Jackett Compose service to the shared Docker network
       ansible.builtin.blockinfile:
         path: "{{ jackett_search_effective_jackett_compose_path }}"
         insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      register: jackett_search_jackett_compose_network
+
+    - name: Declare the shared Docker network in generated Jackett Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      register: jackett_search_jackett_compose_network_declaration
+
+    - name: Remove obsolete Docker host gateway from generated Jackett Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
         marker: "    # {mark} ANSIBLE MANAGED HOST GATEWAY"
-        block: "    extra_hosts:\n      - \"host.docker.internal:host-gateway\""
+        state: absent
       register: jackett_search_jackett_compose_host_gateway
 
     - name: Validate generated component Compose files
@@ -300,6 +402,10 @@
         or not (
           (jackett_search_flaresolverr_compose_binding.changed | default(false))
           or (jackett_search_jackett_compose_binding.changed | default(false))
+          or (jackett_search_flaresolverr_compose_network.changed | default(false))
+          or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
+          or (jackett_search_jackett_compose_network.changed | default(false))
+          or (jackett_search_jackett_compose_network_declaration.changed | default(false))
           or (jackett_search_jackett_compose_host_gateway.changed | default(false))
         )
 
@@ -308,6 +414,8 @@
     jackett_search_restart_flaresolverr: >-
       {{
         (jackett_search_flaresolverr_compose_binding.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
         or (
           not (jackett_search_flaresolverr_install_required | bool)
           and not (jackett_search_flaresolverr_service_running | bool)
@@ -316,6 +424,8 @@
     jackett_search_restart_jackett: >-
       {{
         (jackett_search_jackett_compose_binding.changed | default(false))
+        or (jackett_search_jackett_compose_network.changed | default(false))
+        or (jackett_search_jackett_compose_network_declaration.changed | default(false))
         or (jackett_search_jackett_compose_host_gateway.changed | default(false))
         or (
           not (jackett_search_jackett_install_required | bool)
@@ -332,6 +442,7 @@
     - >-
       jackett_search_flaresolverr_install_required | bool
       or jackett_search_jackett_install_required | bool
+      or jackett_search_component_network_create_required | bool
       or jackett_search_restart_flaresolverr
       or jackett_search_restart_jackett
 
@@ -378,10 +489,15 @@
     jackett_search_components_changed: >-
       {{
         (jackett_search_component_config_directory.changed | default(false))
+        or (jackett_search_component_network_create_required | bool)
         or (jackett_search_flaresolverr_install_required | bool)
         or (jackett_search_jackett_install_required | bool)
         or (jackett_search_flaresolverr_compose_binding.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
         or (jackett_search_jackett_compose_binding.changed | default(false))
+        or (jackett_search_jackett_compose_network.changed | default(false))
+        or (jackett_search_jackett_compose_network_declaration.changed | default(false))
         or (jackett_search_jackett_compose_host_gateway.changed | default(false))
         or (jackett_search_restart_flaresolverr | bool)
         or (jackett_search_restart_jackett | bool)

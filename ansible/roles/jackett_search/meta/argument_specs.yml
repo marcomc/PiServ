@@ -75,6 +75,10 @@ argument_specs:
         type: path
         default: ""
         description: Optional location for upstream-generated component Compose and data files.
+      jackett_search_component_network_name:
+        type: str
+        default: jackett-search
+        description: Docker network shared by the upstream-generated component Compose projects.
       jackett_search_timezone:
         type: str
         default: UTC

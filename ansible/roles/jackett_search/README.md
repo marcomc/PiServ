@@ -75,9 +75,10 @@ ansible-galaxy role install marcomc.jackett_search,0.1.0
 | `jackett_search_install_dir` | `/usr/local/bin` | Makefile `INSTALL_DIR` value |
 | `jackett_search_manage_components` | `true` | Run both upstream component targets |
 | `jackett_search_component_config_dir` | User config directory | Component Compose and data location |
+| `jackett_search_component_network_name` | `jackett-search` | Shared Docker network for the components |
 | `jackett_search_jackett_bind_address` | `127.0.0.1` | Generated Jackett host binding |
 | `jackett_search_jackett_port` | `9117` | Generated Jackett host port |
-| `jackett_search_flaresolverr_bind_address` | `127.0.0.1` | Generated FlareSolverr host binding |
+| `jackett_search_flaresolverr_bind_address` | `docker-gateway` | Generated FlareSolverr host binding |
 | `jackett_search_flaresolverr_port` | `8191` | Generated FlareSolverr host port |
 | `jackett_search_api_url` | `http://127.0.0.1:9117` | Jackett API base URL |
 | `jackett_search_api_key` | empty | Explicit API key, normally unnecessary |
@@ -118,15 +119,17 @@ access, then runs these upstream targets in order:
 
 For a safe first start, the role passes temporary copies of the upstream
 Compose sources to both component Make targets. They include the requested host
-bindings and the Linux Docker host gateway required by Jackett. The temporary
-files are removed immediately. The persistent Compose files remain the files
-created by the upstream Makefile.
+bindings and a shared Docker network. The temporary files are removed
+immediately. The persistent Compose files remain the files created by the
+upstream Makefile.
+
+The role creates the shared network before the first component start. Jackett
+can reach FlareSolverr by its service name (`http://flaresolverr:8191`) while
+FlareSolverr remains loopback-bound on the host.
 
 The role updates only its documented runtime properties in those generated
-files: host bindings and the Linux host gateway alias that upstream Jackett
-uses to reach loopback-bound FlareSolverr. This alias is mandatory for the
-upstream Linux configuration. It runs the corresponding upstream `make up-*`
-target when those settings change.
+files: host bindings and the shared component network. It runs the
+corresponding upstream `make up-*` target when those settings change.
 
 `state: absent` runs `make down-flaresolverr`, `make down-jackett`, and
 `make uninstall` for role-managed components and the CLI symlink. The role

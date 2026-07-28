@@ -31,7 +31,6 @@
         jackett_search_timezone: Europe/Rome
         jackett_search_jackett_bind_address: 0.0.0.0
         jackett_search_jackett_port: "{{ piserv_jackett_port }}"
-        jackett_search_flaresolverr_bind_address: 127.0.0.1
         jackett_search_flaresolverr_port: 8191
         jackett_search_api_url: >-
           http://{{ piserv_jackett_validation_address }}:{{ piserv_jackett_port }}

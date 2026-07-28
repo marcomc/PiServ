@@ -16,6 +16,8 @@ All notable changes for the jackett_search Ansible role are documented here.
 - Wait for the generated Jackett API-key file and derive runtime file groups
   from the account's primary GID.
 - Tear down stopped Jackett and FlareSolverr resources during role removal.
+- Attach Jackett and FlareSolverr to a shared Docker network so they can
+  communicate without publishing FlareSolverr to the LAN.
 
 ## 0.1.0 - Unreleased
 

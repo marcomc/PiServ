@@ -95,6 +95,9 @@
               - >-
                 'docker-compose' in
                 jackett_search_test_defaults.jackett_search_component_apt_packages
+              - >-
+                jackett_search_test_defaults.jackett_search_component_network_name
+                == 'jackett-search'
 
         - name: Assert Compose layout patterns accept custom host ports
           ansible.builtin.assert:
