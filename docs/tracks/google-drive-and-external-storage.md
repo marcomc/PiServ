@@ -121,8 +121,9 @@ privilege token, per-repository failure reporting, and a daily systemd timer.
 ## Jackett and torrent workload
 
 Jackett has documented Linux ARM64 releases and recommends Docker, with the
-LinuxServer.io image as the supported container path. PiServ now deploys pinned
-Jackett and FlareSolverr images through `ansible/playbooks/jackett.yml` with
+LinuxServer.io image as the supported container path. PiServ now uses the
+upstream Makefile-managed Jackett and FlareSolverr Compose lifecycle through
+`ansible/playbooks/jackett.yml`, retaining upstream `latest` image tags and
 persistent configuration. The managed Docker ingress policy permits the API
 from the IPv4 LAN and Tailnet only. Tracker setup, search validation, and the
 update policy remain operator tasks in the Jackett runbook.

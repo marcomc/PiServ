@@ -6,13 +6,18 @@ All notable project changes are documented here.
 
 ### Jackett Search
 
-- Added a pinned Docker Compose deployment for Jackett and FlareSolverr with
-  persistent state under `/opt/jackett`.
+- Replaced the project-owned Docker Compose deployment with a Galaxy-ready
+  `jackett_search` role that uses the upstream Makefile for the CLI, Jackett,
+  and FlareSolverr lifecycle.
+- Kept the upstream Jackett and FlareSolverr `latest` image choices rather than
+  defining project image pins.
 - Restricted Docker-published TCP `9117` to the current IPv4 LAN and Tailnet
   through a persistent `DOCKER-USER` policy, because published Docker ports do
   not traverse UFW's normal input chain.
 - Added the Jackett runbook with tracker-credential, update, validation, and
   recovery procedures.
+- Stored generated Compose files, Jackett state, and API-backed CLI
+  configuration in `admin`'s private `~/.config/jackett-search` directory.
 
 ### External SSD Storage
 

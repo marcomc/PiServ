@@ -9,6 +9,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Status: work in progress; backward compatibility is not required yet.
 - Target host: `PiServ.local`.
 - Target IP: DHCP-assigned; resolve `PiServ.local` before direct-IP diagnostics.
+- For mDNS-failure recovery, require an operator-supplied current DHCP lease in
+  `PISERV_IP` and use it directly for both SSH and Ansible fallback commands;
+  never hard-code or resolve the fallback address through mDNS.
 - Hardware: Raspberry Pi 5, 4 GB RAM, 128 GB NVMe SSD.
 - Current network: Wi-Fi only.
 - Future network: Ethernet may be added.

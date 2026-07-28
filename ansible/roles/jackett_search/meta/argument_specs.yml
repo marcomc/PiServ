@@ -1,0 +1,129 @@
+---
+argument_specs:
+  main:
+    short_description: Install and configure jackett-search.
+    description:
+      - Checks out the jackett-search source repository at the requested Git ref.
+      - Runs the upstream Makefile install and uninstall targets.
+      - Writes an optional private API configuration for a Jackett instance.
+      - Can install upstream Makefile-managed Jackett and FlareSolverr components.
+    options:
+      jackett_search_state:
+        type: str
+        default: present
+        choices:
+          - present
+          - absent
+        description: Whether to install or remove the CLI through the Makefile.
+      jackett_search_runtime_user:
+        type: str
+        default: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+        description: User that owns the checkout and private configuration.
+      jackett_search_source_dir:
+        type: path
+        default: /opt/jackett-search
+        description: Destination for the jackett-search source checkout.
+      jackett_search_repo_url:
+        type: str
+        default: https://github.com/marcomc/jackett-search.git
+        description: Upstream jackett-search Git repository URL.
+      jackett_search_repo_version:
+        type: str
+        default: main
+        description: Git branch, tag, or commit to check out.
+      jackett_search_repo_update:
+        type: bool
+        default: false
+        description: Whether to fetch and update an existing checkout.
+      jackett_search_repo_force:
+        type: bool
+        default: false
+        description: Whether Git may discard local source changes during updates.
+      jackett_search_force_install:
+        type: bool
+        default: false
+        description: Whether to rerun the upstream Makefile install target.
+      jackett_search_make_command:
+        type: path
+        default: /usr/bin/make
+        description: Make executable used for upstream lifecycle targets.
+      jackett_search_install_dir:
+        type: path
+        default: /usr/local/bin
+        description: Destination passed to the upstream Makefile INSTALL_DIR variable.
+      jackett_search_expected_version:
+        type: str
+        default: ""
+        description: Optional string required in jackett-search --version output.
+      jackett_search_apt_packages:
+        type: list
+        elements: str
+        description: Debian packages required for the CLI installer and runtime.
+      jackett_search_manage_components:
+        type: bool
+        default: true
+        description: Whether to run the upstream Docker component install targets.
+      jackett_search_manage_component_dependencies:
+        type: bool
+        default: "{{ jackett_search_manage_components }}"
+        description: Whether to install and enable Docker for optional components.
+      jackett_search_component_apt_packages:
+        type: list
+        elements: str
+        description: Debian packages required by optional upstream Docker components.
+      jackett_search_component_config_dir:
+        type: path
+        default: ""
+        description: Optional location for upstream-generated component Compose and data files.
+      jackett_search_timezone:
+        type: str
+        default: UTC
+        description: Time zone passed to the upstream Jackett Compose lifecycle.
+      jackett_search_jackett_bind_address:
+        type: str
+        default: 127.0.0.1
+        description: Host address used in the generated Jackett Compose port mapping.
+      jackett_search_jackett_port:
+        type: int
+        default: 9117
+        description: Host TCP port used in the generated Jackett Compose port mapping.
+      jackett_search_flaresolverr_bind_address:
+        type: str
+        default: 127.0.0.1
+        description: Host address used in the generated FlareSolverr Compose port mapping.
+      jackett_search_flaresolverr_port:
+        type: int
+        default: 8191
+        description: Host TCP port used in the generated FlareSolverr Compose port mapping.
+      jackett_search_config_mode:
+        type: str
+        default: managed
+        choices:
+          - managed
+          - create
+          - unmanaged
+        description: Whether the role manages, creates, or preserves the CLI config.
+      jackett_search_config_path:
+        type: path
+        default: ""
+        description: Optional override for the runtime user's CLI config path.
+      jackett_search_api_url:
+        type: str
+        default: http://127.0.0.1:9117
+        description: Jackett HTTP API URL used by the CLI configuration.
+      jackett_search_api_key:
+        type: str
+        default: ""
+        description: Jackett API key; provide from encrypted or runtime-only variables.
+      jackett_search_api_key_file:
+        type: path
+        default: ""
+        description: Optional Jackett ServerConfig.json path from which to read the API key.
+      jackett_search_validate_api:
+        type: bool
+        default: true
+        description: Whether to validate API access when the role has an API key.
+      jackett_search_remove_config:
+        type: bool
+        default: false
+        description: Whether state absent removes the private CLI configuration.

@@ -6,7 +6,7 @@ iptables_restore=/usr/sbin/iptables-restore
 port={{ piserv_jackett_port }}
 lan_ipv4_cidr={{ piserv_jackett_lan_ipv4_cidr }}
 chain={{ piserv_jackett_docker_firewall_chain }}
-comment='PiServ Jackett Docker ingress'
+comment='PiServ Jackett Search Docker ingress'
 
 ensure_chain() {
   if ! "${iptables}" -n -L "${chain}" >/dev/null 2>&1; then
@@ -20,68 +20,7 @@ delete_docker_user_rule() {
   done
 }
 
-delete_managed_ingress_hooks() {
-  "${iptables}" -S DOCKER-USER \
-    | awk -v port="${port}" -v chain="${chain}" '
-        $1 == "-A" && $2 == "DOCKER-USER" {
-          interface = ""
-          port_matches = 0
-          chain_matches = 0
-          for (position = 3; position <= NF; position++) {
-            if ($position == "-i" && position < NF) {
-              interface = $(position + 1)
-            }
-            if ($position == "--ctorigdstport" && position < NF && $(position + 1) == port) {
-              port_matches = 1
-            }
-            if ($position == "-j" && position < NF && $(position + 1) == chain) {
-              chain_matches = 1
-            }
-          }
-          if (interface != "" && port_matches && chain_matches) {
-            print interface
-          }
-        }
-      ' \
-    | while IFS= read -r interface; do
-        delete_docker_user_rule \
-          -i "${interface}" -p tcp -m conntrack --ctorigdstport "${port}" \
-          -m comment --comment "${comment}" -j "${chain}"
-      done
-}
-
-delete_managed_destination_hooks() {
-  "${iptables}" -S DOCKER-USER \
-    | awk -v port="${port}" -v chain="${chain}" '
-        $1 == "-A" && $2 == "DOCKER-USER" {
-          destination = ""
-          port_matches = 0
-          chain_matches = 0
-          for (position = 3; position <= NF; position++) {
-            if ($position == "--ctorigdst" && position < NF) {
-              destination = $(position + 1)
-            }
-            if ($position == "--ctorigdstport" && position < NF && $(position + 1) == port) {
-              port_matches = 1
-            }
-            if ($position == "-j" && position < NF && $(position + 1) == chain) {
-              chain_matches = 1
-            }
-          }
-          if (destination != "" && port_matches && chain_matches) {
-            print destination
-          }
-        }
-      ' \
-    | while IFS= read -r destination; do
-        delete_docker_user_rule \
-          -p tcp -m conntrack --ctorigdst "${destination}" \
-          --ctorigdstport "${port}" -m comment --comment "${comment}" \
-          -j "${chain}"
-      done
-}
-
-# Docker DNAT runs before UFW INPUT rules. Keep all Jackett-specific rules in
+# Docker DNAT runs before UFW INPUT rules. Keep all Jackett Search-specific rules in
 # an isolated chain, so reruns replace a changed LAN CIDR without touching
 # unrelated DOCKER-USER policy.
 ensure_chain
@@ -102,38 +41,14 @@ EOF
 # remote TCP 9117 does not enter this chain while every published ingress path
 # remains subject to the source allowlist and terminal drop.
 #
-# Remove every prior managed hook before installing the DNAT-scoped policy, so
-# reruns and migration from unscoped/interface/destination hooks stay clean.
+# Replace the exact managed hook on every run before installing the current
+# DNAT-scoped policy.
 delete_docker_user_rule \
   -p tcp -m conntrack --ctorigdstport "${port}" \
   -m comment --comment "${comment}" -j "${chain}"
-delete_managed_ingress_hooks
-delete_managed_destination_hooks
 delete_docker_user_rule \
   -p tcp -m conntrack --ctstate DNAT --ctorigdstport "${port}" \
   -m comment --comment "${comment}" -j "${chain}"
 "${iptables}" -I DOCKER-USER 1 \
   -p tcp -m conntrack --ctstate DNAT --ctorigdstport "${port}" \
   -m comment --comment "${comment}" -j "${chain}"
-
-# Migrate the untagged direct rules managed by the initial implementation. The
-# source-specific accepts are matched structurally, so a previous LAN CIDR is
-# removed while unrelated DOCKER-USER rules remain untouched.
-delete_docker_user_rule \
-  -i tailscale0 -p tcp -m conntrack --ctorigdstport "${port}" -j ACCEPT
-delete_docker_user_rule \
-  -p tcp -m conntrack --ctorigdstport "${port}" -j DROP
-"${iptables}" -S DOCKER-USER \
-  | awk -v port="${port}" '
-      $1 == "-A" && $2 == "DOCKER-USER" && $3 == "-s" &&
-      $5 == "-p" && $6 == "tcp" && $7 == "-m" && $8 == "conntrack" &&
-      $9 == "--ctorigdstport" && $10 == port && $11 == "-j" &&
-      $12 == "ACCEPT" && NF == 12 {
-        print $4
-      }
-    ' \
-  | while IFS= read -r legacy_lan_ipv4_cidr; do
-      delete_docker_user_rule \
-        -s "${legacy_lan_ipv4_cidr}" -p tcp -m conntrack \
-        --ctorigdstport "${port}" -j ACCEPT
-    done

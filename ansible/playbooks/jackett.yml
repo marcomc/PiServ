@@ -1,270 +1,47 @@
 ---
-- name: Deploy Jackett and FlareSolverr on PiServ
+- name: Deploy jackett-search on PiServ
   hosts: piserv
   gather_facts: true
   become: true
   vars:
     piserv_jackett_user: admin
-    piserv_jackett_uid: "{{ ansible_facts.getent_passwd[piserv_jackett_user][1] }}"
-    piserv_jackett_gid: "{{ ansible_facts.getent_passwd[piserv_jackett_user][2] }}"
-    piserv_jackett_timezone: Europe/Rome
-    piserv_jackett_root: /opt/jackett
-    piserv_jackett_config_dir: "{{ piserv_jackett_root }}/config"
-    piserv_jackett_downloads_dir: "{{ piserv_jackett_root }}/downloads"
-    piserv_jackett_compose_file: "{{ piserv_jackett_root }}/compose.yml"
-    piserv_jackett_compose_template: >-
-      {{ playbook_dir | dirname }}/templates/jackett/compose.yml.j2
-    piserv_jackett_firewall_script: /usr/local/libexec/piserv-jackett-docker-firewall
-    piserv_jackett_docker_dropin_dir: /etc/systemd/system/docker.service.d
-    piserv_jackett_docker_dropin_path: >-
-      {{ piserv_jackett_docker_dropin_dir }}/piserv-jackett-firewall.conf
-    piserv_jackett_docker_firewall_chain: PISERV-JACKETT
+    piserv_jackett_port: 9117
     piserv_jackett_lan_ipv4_cidr: >-
       {{ ansible_facts.default_ipv4.network }}/{{ ansible_facts.default_ipv4.prefix }}
+    piserv_jackett_firewall_script: >-
+      /usr/local/libexec/piserv-jackett-search-docker-firewall
+    piserv_jackett_docker_dropin_dir: /etc/systemd/system/docker.service.d
+    piserv_jackett_docker_dropin_path: >-
+      {{ piserv_jackett_docker_dropin_dir }}/piserv-jackett-search-firewall.conf
+    piserv_jackett_docker_firewall_chain: PISERV-JACKETT-SEARCH
     piserv_jackett_validation_address: 127.0.0.1
-    piserv_jackett_port: 9117
-    piserv_jackett_image: lscr.io/linuxserver/jackett:v0.24.1968-ls414
-    piserv_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
   pre_tasks:
-    - name: Read PiServ administrator account facts
-      ansible.builtin.getent:
-        database: passwd
-        key: "{{ piserv_jackett_user }}"
+    - name: Apply PiServ Docker ingress policy prerequisites
+      ansible.builtin.import_tasks: ../tasks/jackett/firewall.yml
 
-    - name: Install Docker and Docker Compose
-      ansible.builtin.apt:
-        name:
-          - docker.io
-          - docker-compose
-        state: present
-        update_cache: true
-      register: piserv_jackett_docker_packages
-
-    - name: Ensure Docker is enabled and active
-      ansible.builtin.systemd_service:
-        name: docker.service
-        enabled: true
-        state: started
-      register: piserv_jackett_docker_service
-      when: not ansible_check_mode or not piserv_jackett_docker_packages.changed
-
-    - name: Allow the PiServ administrator to operate Docker
-      ansible.builtin.user:
-        name: "{{ piserv_jackett_user }}"
-        groups: docker
-        append: true
-      when: not ansible_check_mode or not piserv_jackett_docker_packages.changed
-
-    - name: Create persistent Jackett directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: "{{ piserv_jackett_user }}"
-        group: "{{ piserv_jackett_user }}"
-        mode: "0750"
-      loop:
-        - "{{ piserv_jackett_root }}"
-        - "{{ piserv_jackett_config_dir }}"
-        - "{{ piserv_jackett_downloads_dir }}"
-      register: piserv_jackett_directories
-
-    - name: Install the PiServ Jackett Compose definition
-      ansible.builtin.template:
-        src: "{{ piserv_jackett_compose_template }}"
-        dest: "{{ piserv_jackett_compose_file }}"
-        owner: root
-        group: root
-        mode: "0644"
-      register: piserv_jackett_compose
-      when: not ansible_check_mode or not piserv_jackett_directories.changed
-
-    - name: Install the PiServ Docker ingress policy helper
-      ansible.builtin.template:
-        src: "{{ playbook_dir | dirname }}/templates/jackett/piserv-jackett-docker-firewall.sh.j2"
-        dest: "{{ piserv_jackett_firewall_script }}"
-        owner: root
-        group: root
-        mode: "0750"
-      register: piserv_jackett_firewall_script_state
-      when: not ansible_check_mode or not piserv_jackett_directories.changed
-
-    - name: Ensure the Docker systemd drop-in directory exists
-      ansible.builtin.file:
-        path: "{{ piserv_jackett_docker_dropin_dir }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      register: piserv_jackett_docker_dropin_dir_state
-
-    - name: Run the PiServ Docker ingress policy after Docker starts
-      ansible.builtin.copy:
-        content: |
-          [Service]
-          ExecStartPost={{ piserv_jackett_firewall_script }}
-        dest: "{{ piserv_jackett_docker_dropin_path }}"
-        owner: root
-        group: root
-        mode: "0644"
-      register: piserv_jackett_docker_dropin
-      notify: Reload systemd after adding the Docker ingress policy
-      when: >-
-        not ansible_check_mode or not piserv_jackett_docker_dropin_dir_state.changed
-
-    - name: Activate the Docker ingress policy drop-in
-      ansible.builtin.meta: flush_handlers
-
-    - name: Apply the PiServ Docker ingress policy
-      ansible.builtin.command:
-        argv:
-          - "{{ piserv_jackett_firewall_script }}"
-      changed_when: false
-
-    - name: Start the PiServ Jackett stack
-      ansible.builtin.command:
-        argv:
-          - docker-compose
-          - -f
-          - "{{ piserv_jackett_compose_file }}"
-          - up
-          - -d
-      changed_when: >-
-        'Started' in piserv_jackett_stack.stdout
-        or 'Recreated' in piserv_jackett_stack.stdout
-        or piserv_jackett_compose.changed
-      register: piserv_jackett_stack
-
-    - name: Read the converged Jackett stack in check mode
-      ansible.builtin.command:
-        argv:
-          - docker-compose
-          - -f
-          - "{{ piserv_jackett_compose_file }}"
-          - ps
-          - --services
-          - --filter
-          - status=running
-      register: piserv_jackett_running_services
-      changed_when: false
-      check_mode: false
-      when:
-        - ansible_check_mode
-        - not piserv_jackett_docker_packages.changed
-        - not piserv_jackett_docker_service.changed
-        - not piserv_jackett_compose.changed
-        - not piserv_jackett_firewall_script_state.changed
-        - not piserv_jackett_docker_dropin.changed
-
-    - name: Decide whether the current Jackett deployment can be live validated
-      ansible.builtin.set_fact:
-        piserv_jackett_live_validation_safe: >-
-          {{
-            not ansible_check_mode
-            or (
-              not piserv_jackett_docker_packages.changed
-              and not piserv_jackett_docker_service.changed
-              and not piserv_jackett_compose.changed
-              and not piserv_jackett_firewall_script_state.changed
-              and not piserv_jackett_docker_dropin.changed
-              and piserv_jackett_running_services.rc | default(1) == 0
-              and 'jackett' in (piserv_jackett_running_services.stdout_lines | default([]))
-              and 'flaresolverr' in (piserv_jackett_running_services.stdout_lines | default([]))
-            )
-          }}
-
-    - name: Read the deployed Jackett services
-      ansible.builtin.command:
-        argv:
-          - docker-compose
-          - -f
-          - "{{ piserv_jackett_compose_file }}"
-          - ps
-          - --services
-          - --filter
-          - status=running
-      register: piserv_jackett_deployed_services
-      changed_when: false
-      check_mode: false
-      when: piserv_jackett_live_validation_safe
-
-    - name: Assert the Jackett and FlareSolverr services are running
-      ansible.builtin.assert:
-        that:
-          - "'jackett' in piserv_jackett_deployed_services.stdout_lines"
-          - "'flaresolverr' in piserv_jackett_deployed_services.stdout_lines"
-        fail_msg: Jackett and FlareSolverr must both be running after deployment.
-      when: piserv_jackett_live_validation_safe
-
-    - name: Wait for the Jackett web interface
-      ansible.builtin.uri:
-        url: >-
+  tasks:
+    - name: Install jackett-search and its upstream-managed components
+      ansible.builtin.include_role:
+        name: jackett_search
+      vars:
+        jackett_search_runtime_user: "{{ piserv_jackett_user }}"
+        jackett_search_manage_components: true
+        jackett_search_component_config_dir: >-
+          /home/{{ piserv_jackett_user }}/.config/jackett-search
+        jackett_search_timezone: Europe/Rome
+        jackett_search_jackett_bind_address: 0.0.0.0
+        jackett_search_jackett_port: "{{ piserv_jackett_port }}"
+        jackett_search_flaresolverr_bind_address: 127.0.0.1
+        jackett_search_flaresolverr_port: 8191
+        jackett_search_api_url: >-
           http://{{ piserv_jackett_validation_address }}:{{ piserv_jackett_port }}
-        follow_redirects: none
-        status_code:
-          - 200
-          - 301
-      register: piserv_jackett_health
-      retries: 30
-      delay: 2
-      until: piserv_jackett_health.status in [200, 301]
-      check_mode: false
-      when: piserv_jackett_live_validation_safe
-    - name: Read the managed Docker ingress policy
-      ansible.builtin.command:
-        argv:
-          - /usr/sbin/iptables
-          - -S
-          - DOCKER-USER
-      register: piserv_jackett_docker_firewall
-      changed_when: false
-      check_mode: false
-      when: piserv_jackett_live_validation_safe
 
-    - name: Read the managed Jackett Docker ingress chain
-      ansible.builtin.command:
-        argv:
-          - /usr/sbin/iptables
-          - -S
-          - "{{ piserv_jackett_docker_firewall_chain }}"
-      register: piserv_jackett_docker_firewall_chain_state
-      changed_when: false
-      check_mode: false
-      when: piserv_jackett_live_validation_safe
-
-    - name: Assert Jackett Docker ingress is limited to the LAN and Tailnet
-      ansible.builtin.assert:
-        that:
-          - >-
-            ('-A DOCKER-USER -p tcp -m conntrack --ctstate DNAT '
-            ~ '--ctorigdstport '
-            ~ (piserv_jackett_port | string)
-            ~ ' -m comment --comment "PiServ Jackett Docker ingress" -j '
-            ~ piserv_jackett_docker_firewall_chain)
-            in piserv_jackett_docker_firewall.stdout
-          - >-
-            ('-A ' ~ piserv_jackett_docker_firewall_chain
-            ~ ' -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN')
-            in piserv_jackett_docker_firewall_chain_state.stdout
-          - >-
-            ('-A ' ~ piserv_jackett_docker_firewall_chain
-            ~ ' -i tailscale0 -m conntrack --ctstate NEW -j ACCEPT')
-            in piserv_jackett_docker_firewall_chain_state.stdout
-          - >-
-            ('-A ' ~ piserv_jackett_docker_firewall_chain
-            ~ ' -s ' ~ piserv_jackett_lan_ipv4_cidr
-            ~ ' -m conntrack --ctstate NEW -j ACCEPT')
-            in piserv_jackett_docker_firewall_chain_state.stdout
-          - >-
-            ('-A ' ~ piserv_jackett_docker_firewall_chain ~ ' -j DROP')
-            in piserv_jackett_docker_firewall_chain_state.stdout
-        fail_msg: >-
-          The managed Jackett hooks must match only PiServ's LAN and Tailnet
-          IPv4 addresses; the chain must return established traffic, allow new
-          connections only from PiServ's IPv4 LAN and the Tailnet, and drop all
-          other published-port traffic.
-      when: piserv_jackett_live_validation_safe
+  post_tasks:
+    - name: Validate PiServ Docker ingress policy
+      ansible.builtin.import_tasks: ../tasks/jackett/validate-firewall.yml
 
   handlers:
-    - name: Reload systemd after adding the Docker ingress policy
+    - name: Reload systemd after adding the Jackett Search ingress policy
       ansible.builtin.systemd_service:
         daemon_reload: true
+      when: not ansible_check_mode

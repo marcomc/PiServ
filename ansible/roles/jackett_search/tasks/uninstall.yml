@@ -1,0 +1,94 @@
+---
+- name: Read jackett-search source Makefile before removal
+  ansible.builtin.stat:
+    path: "{{ jackett_search_source_dir }}/Makefile"
+  register: jackett_search_makefile_stat
+
+- name: Read installed jackett-search command before removal
+  ansible.builtin.stat:
+    path: "{{ jackett_search_command_path }}"
+    follow: false
+  register: jackett_search_remove_command_stat
+
+- name: Stop upstream-managed Jackett components before removal
+  when:
+    - jackett_search_manage_components | bool
+    - jackett_search_makefile_stat.stat.exists
+    - not ansible_check_mode
+  block:
+    - name: Read upstream component service state before removal
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - ps
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      register: jackett_search_component_status_before_removal
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop running upstream-managed Jackett components
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - down
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+      when: >-
+        ' up ' in (jackett_search_component_status_before_removal.stdout | lower)
+
+- name: Remove an installed jackett-search command
+  when: jackett_search_remove_command_stat.stat.exists
+  block:
+    - name: Assert the upstream Makefile is available for removal
+      ansible.builtin.assert:
+        that:
+          - jackett_search_makefile_stat.stat.exists
+        fail_msg: >-
+          Cannot run the upstream jackett-search removal procedure because its
+          Makefile is absent from {{ jackett_search_source_dir }}.
+
+    - name: Assert installed jackett-search command belongs to this role
+      ansible.builtin.assert:
+        that:
+          - jackett_search_remove_command_stat.stat.islnk
+          - >-
+            jackett_search_remove_command_stat.stat.lnk_target
+            == jackett_search_source_dir ~ '/jackett-search'
+        fail_msg: >-
+          Refusing to remove {{ jackett_search_command_path }} because it is not
+          the jackett-search command installed from {{ jackett_search_source_dir }}.
+
+    - name: Remove jackett-search through the upstream Makefile
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "INSTALL_DIR={{ jackett_search_install_dir }}"
+          - uninstall
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+        removes: "{{ jackett_search_command_path }}"
+      become: true
+      changed_when: true
+
+- name: Remove managed jackett-search configuration
+  ansible.builtin.file:
+    path: "{{ jackett_search_effective_config_path }}"
+    state: absent
+  become: true
+  when: jackett_search_remove_config | bool
+  no_log: true

@@ -114,10 +114,12 @@
   - Assessment: Jackett documents ARM64 Linux support and a Docker deployment;
     the existing Jackett Search project should remain the operator-facing CLI.
   - Actions:
-    - Done: deploy pinned Jackett and FlareSolverr images with persistent state
-      through `ansible/playbooks/jackett.yml`.
+    - Done: migrate the existing containers and persistent state to the
+      upstream Makefile-managed layout through `ansible/playbooks/jackett.yml`.
     - Done: enforce TCP `9117` access in Docker's `DOCKER-USER` chain for the
       current IPv4 LAN and Tailnet.
+    - Done: prepare the reusable `ansible/roles/jackett_search` Makefile-wrapper
+      role, including upstream component lifecycle targets.
     - Configure tracker credentials outside Git, then validate search results
       and restart recovery.
 

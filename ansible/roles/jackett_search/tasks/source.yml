@@ -1,0 +1,29 @@
+---
+- name: Ensure jackett-search source parent exists
+  ansible.builtin.file:
+    path: "{{ jackett_search_source_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Ensure jackett-search source directory exists
+  ansible.builtin.file:
+    path: "{{ jackett_search_source_dir }}"
+    state: directory
+    owner: "{{ jackett_search_runtime_user }}"
+    group: "{{ jackett_search_runtime_user }}"
+    mode: "0755"
+  become: true
+
+- name: Check out jackett-search source
+  ansible.builtin.git:
+    repo: "{{ jackett_search_repo_url }}"
+    dest: "{{ jackett_search_source_dir }}"
+    version: "{{ jackett_search_repo_version }}"
+    update: "{{ jackett_search_repo_update }}"
+    force: "{{ jackett_search_repo_force }}"
+  become: true
+  become_user: "{{ jackett_search_runtime_user }}"
+  register: jackett_search_git_checkout

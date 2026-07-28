@@ -1,0 +1,43 @@
+---
+jackett_search_state: present
+jackett_search_runtime_user: >-
+  {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+jackett_search_source_dir: /opt/jackett-search
+jackett_search_repo_url: https://github.com/marcomc/jackett-search.git
+jackett_search_repo_version: main
+jackett_search_repo_update: false
+jackett_search_repo_force: false
+jackett_search_force_install: false
+
+jackett_search_make_command: /usr/bin/make
+jackett_search_install_dir: /usr/local/bin
+jackett_search_command_path: "{{ jackett_search_install_dir }}/jackett-search"
+jackett_search_expected_version: ""
+
+jackett_search_apt_packages:
+  - ca-certificates
+  - git
+  - make
+  - python3
+
+jackett_search_manage_components: true
+jackett_search_manage_component_dependencies: >-
+  {{ jackett_search_manage_components }}
+jackett_search_component_apt_packages:
+  - docker.io
+  - docker-compose
+jackett_search_force_component_install: false
+jackett_search_component_config_dir: ""
+jackett_search_timezone: UTC
+jackett_search_jackett_bind_address: 127.0.0.1
+jackett_search_jackett_port: 9117
+jackett_search_flaresolverr_bind_address: 127.0.0.1
+jackett_search_flaresolverr_port: 8191
+
+jackett_search_config_mode: managed
+jackett_search_config_path: ""
+jackett_search_api_url: http://127.0.0.1:9117
+jackett_search_api_key: ""
+jackett_search_api_key_file: ""
+jackett_search_validate_api: true
+jackett_search_remove_config: false

@@ -1,0 +1,13 @@
+---
+- name: Assert jackett-search state and configuration mode are supported
+  ansible.builtin.assert:
+    that:
+      - jackett_search_state in ['present', 'absent']
+      - jackett_search_config_mode in ['managed', 'create', 'unmanaged']
+      - jackett_search_jackett_port | int > 0
+      - jackett_search_flaresolverr_port | int > 0
+      - jackett_search_jackett_bind_address | length > 0
+      - jackett_search_flaresolverr_bind_address | length > 0
+    fail_msg: >-
+      jackett_search_state must be present or absent; config mode must be
+      managed, create, or unmanaged; and component ports must be positive.

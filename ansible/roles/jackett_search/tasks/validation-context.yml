@@ -1,0 +1,18 @@
+---
+- name: Decide whether the current jackett-search state can be live validated
+  ansible.builtin.set_fact:
+    jackett_search_live_validation_safe: >-
+      {{
+        not ansible_check_mode
+        or (
+          jackett_search_base_converged
+          and not jackett_search_runtime_packages.changed
+          and not jackett_search_git_checkout.changed
+          and jackett_search_command_stat.stat.exists
+          and jackett_search_command_stat.stat.islnk
+          and jackett_search_command_stat.stat.lnk_target
+              == jackett_search_source_dir ~ '/jackett-search'
+          and not (jackett_search_components_changed | default(false))
+          and not (jackett_search_config.changed | default(false))
+        )
+      }}

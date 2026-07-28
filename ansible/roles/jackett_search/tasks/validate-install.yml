@@ -1,0 +1,113 @@
+---
+- name: Read installed jackett-search command after installation
+  ansible.builtin.stat:
+    path: "{{ jackett_search_command_path }}"
+    follow: false
+  register: jackett_search_installed_command_stat
+
+- name: Assert the upstream Makefile installed jackett-search
+  ansible.builtin.assert:
+    that:
+      - jackett_search_installed_command_stat.stat.exists
+      - jackett_search_installed_command_stat.stat.islnk
+      - >-
+        jackett_search_installed_command_stat.stat.lnk_target
+        == jackett_search_source_dir ~ '/jackett-search'
+    fail_msg: >-
+      The upstream Makefile did not install the expected jackett-search command
+      at {{ jackett_search_command_path }}.
+
+- name: Read installed jackett-search version
+  ansible.builtin.command:
+    argv:
+      - "{{ jackett_search_command_path }}"
+      - --version
+  become: true
+  become_user: "{{ jackett_search_runtime_user }}"
+  environment:
+    HOME: "{{ jackett_search_runtime_user_home }}"
+    PATH: "{{ jackett_search_install_dir }}:/usr/local/bin:/usr/bin:/bin"
+  register: jackett_search_version
+  changed_when: false
+  check_mode: false
+
+- name: Assert expected jackett-search version
+  ansible.builtin.assert:
+    that:
+      - jackett_search_expected_version in jackett_search_version.stdout
+    fail_msg: >-
+      jackett-search did not report the expected version:
+      {{ jackett_search_expected_version }}.
+  when: jackett_search_expected_version | length > 0
+
+- name: Validate upstream-managed component services
+  when: jackett_search_manage_components | bool
+  block:
+    - name: Read FlareSolverr Compose service state
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - ps-flaresolverr
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      register: jackett_search_flaresolverr_status
+      changed_when: false
+      check_mode: false
+
+    - name: Read Jackett Compose service state
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - ps-jackett
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+        TZ: "{{ jackett_search_timezone }}"
+      register: jackett_search_jackett_status
+      changed_when: false
+      check_mode: false
+
+    - name: Assert upstream-managed component services are up
+      ansible.builtin.assert:
+        that:
+          - jackett_search_flaresolverr_status.rc == 0
+          - jackett_search_jackett_status.rc == 0
+          - "' up ' in (jackett_search_flaresolverr_status.stdout | lower)"
+          - "' up ' in (jackett_search_jackett_status.stdout | lower)"
+        fail_msg: >-
+          The upstream Makefile-managed Jackett and FlareSolverr services must
+          both be up.
+
+- name: Validate configured Jackett API access
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (jackett_search_api_url | regex_replace('/+$', ''))
+        ~ '/api/v2.0/indexers/all/results/torznab/api'
+        ~ '?t=indexers&configured=true&apikey='
+        ~ (jackett_search_effective_api_key | urlencode)
+      }}
+    status_code: 200
+    return_content: false
+  register: jackett_search_api_validation
+  changed_when: false
+  check_mode: false
+  retries: 30
+  delay: 2
+  until: jackett_search_api_validation.status | default(0) == 200
+  when:
+    - jackett_search_validate_api | bool
+    - jackett_search_config_mode in ['managed', 'create']
+    - jackett_search_effective_api_key is defined
+  no_log: true
