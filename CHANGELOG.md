@@ -2,7 +2,7 @@
 
 All notable project changes are documented here.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-07-28
 
 ### Jackett Search
 
