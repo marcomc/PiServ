@@ -108,6 +108,5 @@
   until: jackett_search_api_validation.status | default(0) == 200
   when:
     - jackett_search_validate_api | bool
-    - jackett_search_config_mode in ['managed', 'create']
     - jackett_search_effective_api_key is defined
   no_log: true

@@ -6,8 +6,7 @@ All notable changes for the jackett_search Ansible role are documented here.
 
 ### Fixed
 
-- Bind Jackett and configure its Linux Docker host gateway before its first
-  upstream-managed start.
+- Bind Jackett before its first upstream-managed start.
 - Preserve existing source-parent ownership and permissions.
 - Declare Docker Compose v2 support on Debian 13 or later and report missing
   components in check mode.
@@ -18,6 +17,8 @@ All notable changes for the jackett_search Ansible role are documented here.
 - Tear down stopped Jackett and FlareSolverr resources during role removal.
 - Attach Jackett and FlareSolverr to a shared Docker network so they can
   communicate without publishing FlareSolverr to the LAN.
+- Validate an unmanaged configuration with an explicitly supplied Jackett API
+  key.
 
 ## 0.1.0 - Unreleased
 

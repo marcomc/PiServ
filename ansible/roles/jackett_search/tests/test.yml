@@ -187,6 +187,20 @@
                 jackett_search_preserved_config.content | b64decode
                 == 'url = "http://existing.example.test"\napi_key = "existing"\n'
 
+        - name: Store an explicit API key with unmanaged configuration
+          ansible.builtin.include_tasks: ../tasks/config.yml
+          vars:
+            jackett_search_config_mode: unmanaged
+            jackett_search_api_key: unmanaged-test-key
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+
+        - name: Assert unmanaged configuration retains the explicit API key
+          ansible.builtin.assert:
+            that:
+              - jackett_search_effective_api_key == 'unmanaged-test-key'
+          no_log: true
+
         - name: Render an escaped TOML configuration fixture
           ansible.builtin.template:
             src: "{{ playbook_dir | dirname }}/templates/config.toml.j2"

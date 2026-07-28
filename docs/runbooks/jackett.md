@@ -129,10 +129,14 @@ dependent on the operator adding tracker credentials outside Git, as tracked in
 ## Updates and Recovery
 
 The upstream Compose files use `latest` image tags, which are not an automatic
-image-update policy. To update the source and Jackett image, run the playbook
-with `-e jackett_search_repo_update=true`; its upstream `make install-jackett`
-target pulls Jackett. Refresh FlareSolverr explicitly, then repeat the access
-checks:
+image-update policy. PiServ pins the upstream source release, so force the
+component installation to pull the latest Jackett image. Refresh FlareSolverr
+explicitly, then repeat the access checks:
+
+```sh
+ansible-playbook -i ansible/inventory.ini ansible/playbooks/jackett.yml \
+  -e jackett_search_force_component_install=true
+```
 
 ```sh
 sudo -u admin HOME=/home/admin docker compose \
