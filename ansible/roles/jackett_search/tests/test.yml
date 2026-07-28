@@ -78,6 +78,20 @@
                 'docker-compose' in
                 jackett_search_test_defaults.jackett_search_component_apt_packages
 
+        - name: Assert Compose layout patterns accept custom host ports
+          ansible.builtin.assert:
+            that:
+              - >-
+                (
+                  'services:\n  flaresolverr:\n    ports:\n      - "127.0.0.1:9001:8191"\n'
+                  | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?8191"$')
+                ) is not none
+              - >-
+                (
+                  'services:\n  jackett:\n    ports:\n      - "127.0.0.1:9000:9117"\n'
+                  | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?9117"$')
+                ) is not none
+
         - name: Create an existing private jackett-search source parent fixture
           ansible.builtin.file:
             path: "{{ jackett_search_test_directory.path }}/source-parent"

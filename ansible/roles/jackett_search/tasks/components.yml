@@ -238,9 +238,17 @@
       ansible.builtin.assert:
         that:
           - "'flaresolverr:' in (jackett_search_generated_component_compose_content.results[0].content | b64decode)"
-          - "'8191:8191\"' in (jackett_search_generated_component_compose_content.results[0].content | b64decode)"
+          - >-
+            (
+              (jackett_search_generated_component_compose_content.results[0].content | b64decode)
+              | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?8191"$')
+            ) is not none
           - "'jackett:' in (jackett_search_generated_component_compose_content.results[1].content | b64decode)"
-          - "'9117:9117\"' in (jackett_search_generated_component_compose_content.results[1].content | b64decode)"
+          - >-
+            (
+              (jackett_search_generated_component_compose_content.results[1].content | b64decode)
+              | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?9117"$')
+            ) is not none
           - "'    image: ' in (jackett_search_generated_component_compose_content.results[1].content | b64decode)"
         fail_msg: >-
           Upstream-generated Compose files no longer have the expected Jackett

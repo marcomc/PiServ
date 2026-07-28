@@ -76,7 +76,9 @@ ansible-galaxy role install marcomc.jackett_search,0.1.0
 | `jackett_search_manage_components` | `true` | Run both upstream component targets |
 | `jackett_search_component_config_dir` | User config directory | Component Compose and data location |
 | `jackett_search_jackett_bind_address` | `127.0.0.1` | Generated Jackett host binding |
+| `jackett_search_jackett_port` | `9117` | Generated Jackett host port |
 | `jackett_search_flaresolverr_bind_address` | `127.0.0.1` | Generated FlareSolverr host binding |
+| `jackett_search_flaresolverr_port` | `8191` | Generated FlareSolverr host port |
 | `jackett_search_api_url` | `http://127.0.0.1:9117` | Jackett API base URL |
 | `jackett_search_api_key` | empty | Explicit API key, normally unnecessary |
 | `jackett_search_api_key_file` | Generated `ServerConfig.json` | Optional API-key source |
@@ -147,6 +149,9 @@ only if it is absent; existing directory ownership and permissions are not
 changed. The config itself has mode `0600`. When `create` preserves an existing
 config, the role does not read a generated API key or validate that existing
 configuration; supply `jackett_search_api_key` explicitly to validate it.
+
+When check mode defers an upstream component installation or restart, the role
+also defers configuration tasks that require the generated Jackett API key.
 
 ## Validation
 

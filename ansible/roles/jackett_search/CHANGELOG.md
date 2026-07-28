@@ -11,6 +11,8 @@ All notable changes for the jackett_search Ansible role are documented here.
 - Preserve existing source-parent ownership and permissions.
 - Declare Docker Compose v2 support on Debian 13 or later and report missing
   components in check mode.
+- Defer API-key-dependent configuration when component changes are deferred in
+  check mode and support custom component host ports.
 
 ## 0.1.0 - Unreleased
 
