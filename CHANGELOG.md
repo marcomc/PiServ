@@ -129,10 +129,11 @@ All notable project changes are documented here.
   three-restart acceptance test and explicit resolution criteria.
 - Corrected pCloud and RaiPlaySound read-only validation probes so role check
   mode evaluates their live state before assertions run.
-- Hardened VNC selector path validation, aligned its wait budget with the role
-  timeout, and re-ran it after either vendor VNC service starts without
-  restarting the current WayVNC process during deployment. Selector unit
-  changes and missing installation links now reconcile both systemd links.
+- Hardened VNC selector path validation, including rejecting every group- or
+  other-writable parent mode, aligned its wait budget with the role timeout,
+  and re-ran it after either vendor VNC service starts without restarting the
+  current WayVNC process during deployment. Selector unit changes and missing
+  installation links now reconcile both systemd links.
 - Recorded the installed TigerVNC client and added its direct and Tailscale
   connection acceptance test to the current backlog.
 

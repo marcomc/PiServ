@@ -34,7 +34,7 @@
       - base_vnc_output_selector_parent_stat.stat.isdir
       - base_vnc_output_selector_parent_stat.stat.pw_name == 'root'
       - base_vnc_output_selector_parent_stat.stat.gr_name == 'root'
-      - base_vnc_output_selector_parent_stat.stat.mode is match('^0[0-7][0-5][0-5]$')
+      - base_vnc_output_selector_parent_stat.stat.mode is match('^0[0-7][0145][0145]$')
     fail_msg: >-
       The existing PiServ VNC selector parent must be a root-owned directory
       that is not writable by group or other users.
