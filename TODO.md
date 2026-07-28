@@ -4,8 +4,6 @@
 
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
-- Decide whether PiServ needs IPv6 LAN management access and, if so, add an
-  explicitly scoped dual-stack UFW policy with live validation.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.

@@ -167,6 +167,9 @@ All notable project changes are documented here.
 
 ### Firewall Policy
 
+- Reaffirmed default-deny IPv6 LAN ingress and removed the deferred dual-stack
+  management decision from the active TODO list; IPv6 Tailnet ingress remains
+  governed by the existing `tailscale0` policy.
 - Added a commit-pinned `marcomc/ansible-ufw` fork integration.
 - Declared its pinned `ansible.posix` dependency and configured the firewall
   playbook to use the inventory user's sudo privileges.

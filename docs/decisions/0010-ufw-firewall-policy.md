@@ -3,7 +3,8 @@
 ## Status
 
 Accepted and applied on 2026-07-13, including the PiServ subnet-router
-forwarding rule.
+forwarding rule. Reaffirmed on 2026-07-28: unsolicited IPv6 LAN management
+access remains denied.
 
 ## Context
 
@@ -45,7 +46,9 @@ ranges must be configured explicitly when the network topology changes.
 
 UFW IPv6 support remains enabled, but PiServ has no IPv6 LAN allow rules. This
 keeps unsolicited IPv6 LAN traffic denied until an explicitly scoped dual-stack
-management policy is designed and validated.
+management policy is designed and validated. The project has decided not to
+add that dual-stack management policy unless the operational requirement
+changes.
 
 The fork integration of `oefenweb.ufw` owns generic UFW package, policy, rule,
 and logging behavior. PiServ-specific ranges, ports, interfaces, and comments
@@ -131,6 +134,11 @@ Automation validation on 2026-07-13 applied
 `ansible/playbooks/firewall.yml`; a repeat run completed with `changed=0` while
 new LAN and Tailscale SSH connections remained available. Cockpit port `9090`
 and Glances API port `61208` were added and LAN-validated on 2026-07-16.
+
+On 2026-07-28, live `sudo ufw status verbose` validation showed no IPv6 LAN
+allow rules. IPv6 listeners that bind wildcard addresses remain protected by
+the default-deny incoming policy; IPv6 ingress through `tailscale0` remains
+the separate authenticated Tailnet boundary.
 
 ## References
 
