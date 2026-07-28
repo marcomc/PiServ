@@ -3,6 +3,8 @@
 #
 # Keep this file limited to repeatable configuration playbooks. One-time
 # migrations and operator-triggered health checks remain separate entry points.
+- name: Preflight external storage
+  import_playbook: external-storage-preflight.yml
 - name: Install Tailscale
   import_playbook: tailscale.yml
 - name: Configure firewall policy

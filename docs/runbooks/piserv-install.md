@@ -30,11 +30,20 @@ ansible-galaxy collection install -r ansible/requirements.yml --force
 Ensure the inventory can reach PiServ as `admin`. For a first installation,
 complete the required manual bootstrap before running the full entry point:
 
-1. Apply `ansible/playbooks/tailscale.yml`, then complete the Tailscale login
+1. Copy `ansible/vars/external-storage.yml.example` to the ignored
+   `ansible/vars/external-storage.yml`, then replace every placeholder with
+   the verified disk identity as described in the
+   [external-storage runbook](external-storage.md).
+2. Create the ignored Freenove controller source with the
+   [vendor-resource procedure](../../README.md#vendor-resources).
+3. Restore the non-empty `/etc/ha-mqtt-agent/config.toml` from the approved
+   secure source, as required by the
+   [Home Assistant MQTT Agent runbook](ha-mqtt-agent.md).
+4. Apply `ansible/playbooks/tailscale.yml`, then complete the Tailscale login
    described in the [Tailscale access runbook](tailscale-access.md).
-2. Apply `ansible/playbooks/pcloudcc-install.yml` to install the client. It
+5. Apply `ansible/playbooks/pcloudcc-install.yml` to install the client. It
    stops before user-service management until a saved pCloud session exists.
-3. Complete the pCloud credential bootstrap in the
+6. Complete the pCloud credential bootstrap in the
    [pCloud storage runbook](pcloudcc-storage.md), then rerun
    `ansible/playbooks/piserv-install.yml`.
 
@@ -78,19 +87,21 @@ ansible-playbook --check --diff ansible/playbooks/piserv-install.yml
 
 The entry point imports these playbooks in order:
 
-1. `tailscale.yml`
-2. `firewall.yml`
-3. `piserv-base.yml`
-4. `external-storage.yml`
-5. `freenove-post-os.yml`
-6. `pcloudcc-install.yml`
-7. `ha-mqtt-agent.yml`
-8. `jackett.yml`
-9. `raiplaysound-cli-daily-sync.yml`
+1. `external-storage-preflight.yml`
+2. `tailscale.yml`
+3. `firewall.yml`
+4. `piserv-base.yml`
+5. `external-storage.yml`
+6. `freenove-post-os.yml`
+7. `pcloudcc-install.yml`
+8. `ha-mqtt-agent.yml`
+9. `jackett.yml`
+10. `raiplaysound-cli-daily-sync.yml`
 
-The order keeps Tailscale and the firewall ready before the base playbook's
-listener preconditions, and installs pCloud before the RaiPlaySound workload
-that depends on its mount health.
+The storage preflight rejects an invalid identity before any host mutation.
+The remaining order keeps Tailscale and the firewall ready before the base
+playbook's listener preconditions, and installs pCloud before the RaiPlaySound
+workload that depends on its mount health.
 
 ## Excluded Playbooks
 
@@ -134,6 +145,8 @@ the current DHCP lease supplied by the operator directly:
 
 ```sh
 export PISERV_IP=<current-dhcp-lease>
+: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
+ssh -o BatchMode=yes -o ConnectTimeout=10 "admin@${PISERV_IP}" 'sudo -n true'
 ansible-playbook -e "ansible_host=${PISERV_IP}" \
   ansible/playbooks/piserv-install.yml
 ```
