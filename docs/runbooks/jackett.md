@@ -73,8 +73,9 @@ PiServ-reachable LAN hostname or the Tailnet hostname/domain. Create the Jackett
 administrator and tracker credentials in the web interface. They remain only in
 the managed Jackett data directory and must never be committed here.
 
-Jackett reaches the loopback-bound FlareSolverr service through the Docker host
-gateway. Do not publish TCP `8191` to the LAN or Tailnet.
+Configure FlareSolverr-backed trackers in Jackett with
+`http://flaresolverr:8191`. The generated Compose projects share a private
+Docker network, while TCP `8191` remains loopback-bound on PiServ.
 
 ## Access and Validation
 
