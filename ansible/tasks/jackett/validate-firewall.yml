@@ -1,0 +1,59 @@
+---
+- name: Read the managed Docker ingress policy
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/iptables
+      - -S
+      - DOCKER-USER
+  register: piserv_jackett_docker_firewall
+  changed_when: false
+  check_mode: false
+  when:
+    - jackett_search_live_validation_safe | default(false)
+    - piserv_jackett_firewall_live_validation_safe | default(false)
+
+- name: Read the managed Jackett Search Docker ingress chain
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/iptables
+      - -S
+      - "{{ piserv_jackett_docker_firewall_chain }}"
+  register: piserv_jackett_docker_firewall_chain_state
+  changed_when: false
+  check_mode: false
+  when:
+    - jackett_search_live_validation_safe | default(false)
+    - piserv_jackett_firewall_live_validation_safe | default(false)
+
+- name: Assert Jackett Search Docker ingress is limited to the LAN and Tailnet
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('-A DOCKER-USER -p tcp -m conntrack --ctstate DNAT '
+        ~ '--ctorigdstport '
+        ~ (piserv_jackett_port | string)
+        ~ ' -m comment --comment "PiServ Jackett Search Docker ingress" -j '
+        ~ piserv_jackett_docker_firewall_chain)
+        in piserv_jackett_docker_firewall.stdout
+      - >-
+        ('-A ' ~ piserv_jackett_docker_firewall_chain
+        ~ ' -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN')
+        in piserv_jackett_docker_firewall_chain_state.stdout
+      - >-
+        ('-A ' ~ piserv_jackett_docker_firewall_chain
+        ~ ' -i tailscale0 -m conntrack --ctstate NEW -j ACCEPT')
+        in piserv_jackett_docker_firewall_chain_state.stdout
+      - >-
+        ('-A ' ~ piserv_jackett_docker_firewall_chain
+        ~ ' -s ' ~ piserv_jackett_lan_ipv4_cidr
+        ~ ' -m conntrack --ctstate NEW -j ACCEPT')
+        in piserv_jackett_docker_firewall_chain_state.stdout
+      - >-
+        ('-A ' ~ piserv_jackett_docker_firewall_chain ~ ' -j DROP')
+        in piserv_jackett_docker_firewall_chain_state.stdout
+    fail_msg: >-
+      The managed Jackett Search hook must allow only PiServ's IPv4 LAN and
+      Tailnet before dropping other published TCP 9117 traffic.
+  when:
+    - jackett_search_live_validation_safe | default(false)
+    - piserv_jackett_firewall_live_validation_safe | default(false)

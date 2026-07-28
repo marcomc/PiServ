@@ -1,0 +1,504 @@
+---
+- name: Read the shared jackett-search Docker network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - inspect
+      - "{{ jackett_search_component_network_name }}"
+  become: true
+  register: jackett_search_component_network
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether the shared jackett-search Docker network is required
+  ansible.builtin.set_fact:
+    jackett_search_component_network_create_required: >-
+      {{ jackett_search_component_network.rc != 0 }}
+
+- name: Create the shared jackett-search Docker network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - create
+      - "{{ jackett_search_component_network_name }}"
+  become: true
+  changed_when: true
+  when:
+    - jackett_search_component_network_create_required | bool
+    - not ansible_check_mode
+
+- name: Read jackett-search component configuration directory
+  ansible.builtin.stat:
+    path: "{{ jackett_search_effective_component_config_dir }}"
+  register: jackett_search_component_config_directory_stat
+
+- name: Prepare jackett-search component configuration directory
+  when: not jackett_search_component_config_directory_stat.stat.exists
+  block:
+    - name: Create private jackett-search component configuration directory
+      ansible.builtin.file:
+        path: "{{ jackett_search_effective_component_config_dir }}"
+        state: directory
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0700"
+      become: true
+      register: jackett_search_component_config_directory
+
+- name: Assert existing component configuration directory is usable
+  ansible.builtin.assert:
+    that:
+      - jackett_search_component_config_directory_stat.stat.isdir
+    fail_msg: >-
+      jackett-search component configuration path exists but is not a directory:
+      {{ jackett_search_effective_component_config_dir }}.
+  when: jackett_search_component_config_directory_stat.stat.exists
+
+- name: Read installed upstream component Compose files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ jackett_search_effective_flaresolverr_compose_path }}"
+    - "{{ jackett_search_effective_jackett_compose_path }}"
+  register: jackett_search_component_compose_stats
+
+- name: Read existing FlareSolverr Compose service state
+  ansible.builtin.command:
+    argv:
+      - "{{ jackett_search_make_command }}"
+      - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+      - ps-flaresolverr
+  args:
+    chdir: "{{ jackett_search_source_dir }}"
+  become: true
+  become_user: "{{ jackett_search_runtime_user }}"
+  environment:
+    HOME: "{{ jackett_search_runtime_user_home }}"
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  register: jackett_search_flaresolverr_status_before
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: jackett_search_component_compose_stats.results[0].stat.exists
+
+- name: Read existing Jackett Compose service state
+  ansible.builtin.command:
+    argv:
+      - "{{ jackett_search_make_command }}"
+      - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+      - ps-jackett
+  args:
+    chdir: "{{ jackett_search_source_dir }}"
+  become: true
+  become_user: "{{ jackett_search_runtime_user }}"
+  environment:
+    HOME: "{{ jackett_search_runtime_user_home }}"
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+    TZ: "{{ jackett_search_timezone }}"
+  register: jackett_search_jackett_status_before
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: jackett_search_component_compose_stats.results[1].stat.exists
+
+- name: Record existing upstream component service state
+  ansible.builtin.set_fact:
+    jackett_search_flaresolverr_service_running: >-
+      {{
+        ((jackett_search_flaresolverr_status_before | default({})).rc | default(1)) == 0
+        and (' up ' in ((jackett_search_flaresolverr_status_before | default({})).stdout | default('') | lower))
+      }}
+    jackett_search_jackett_service_running: >-
+      {{
+        ((jackett_search_jackett_status_before | default({})).rc | default(1)) == 0
+        and (' up ' in ((jackett_search_jackett_status_before | default({})).stdout | default('') | lower))
+      }}
+
+- name: Decide whether upstream component installation is required
+  ansible.builtin.set_fact:
+    jackett_search_flaresolverr_install_required: >-
+      {{
+        jackett_search_force_component_install | bool
+        or jackett_search_git_checkout.changed
+        or not jackett_search_component_compose_stats.results[0].stat.exists
+      }}
+    jackett_search_jackett_install_required: >-
+      {{
+        jackett_search_force_component_install | bool
+        or jackett_search_git_checkout.changed
+        or not jackett_search_component_compose_stats.results[1].stat.exists
+      }}
+
+- name: Install FlareSolverr through the upstream Makefile
+  when:
+    - jackett_search_flaresolverr_install_required | bool
+    - not ansible_check_mode
+  block:
+    - name: Copy the upstream FlareSolverr Compose source for a safe first start
+      ansible.builtin.copy:
+        src: "{{ jackett_search_source_dir }}/flaresolverr-compose.yml"
+        dest: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        remote_src: true
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0600"
+      become: true
+
+    - name: Bind the temporary upstream FlareSolverr Compose source safely
+      ansible.builtin.replace:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        regexp: '^(\s*)- "8191:8191"$'
+        replace: '\1- "{{ jackett_search_flaresolverr_bind_address }}:{{ jackett_search_flaresolverr_port }}:8191"'
+      become: true
+
+    - name: Attach the temporary FlareSolverr service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      become: true
+
+    - name: Declare the shared Docker network in the temporary FlareSolverr Compose source
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      become: true
+
+    - name: Run make install-flaresolverr
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - "FLARESOLVERR_COMPOSE_SRC={{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+          - install-flaresolverr
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+      register: jackett_search_make_install_flaresolverr
+  always:
+    - name: Remove the temporary FlareSolverr Compose source
+      ansible.builtin.file:
+        path: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
+        state: absent
+      become: true
+
+- name: Install Jackett through the upstream Makefile
+  when:
+    - jackett_search_jackett_install_required | bool
+    - not ansible_check_mode
+  block:
+    - name: Copy the upstream Jackett Compose source for a safe first start
+      ansible.builtin.copy:
+        src: "{{ jackett_search_source_dir }}/jackett-compose.yml"
+        dest: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        remote_src: true
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0600"
+      become: true
+
+    - name: Bind the temporary upstream Jackett Compose source safely
+      ansible.builtin.replace:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        regexp: '^(\s*)- "(?:[^\"]+:)?(?:[0-9]+:)?9117"$'
+        replace: '\1- "{{ jackett_search_jackett_bind_address }}:{{ jackett_search_jackett_port }}:9117"'
+      become: true
+
+    - name: Attach the temporary Jackett service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      become: true
+
+    - name: Declare the shared Docker network in the temporary Jackett Compose source
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      become: true
+
+    - name: Run make install-jackett
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - "JACKETT_COMPOSE_SRC={{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+          - install-jackett
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+        TZ: "{{ jackett_search_timezone }}"
+      changed_when: true
+      register: jackett_search_make_install_jackett
+  always:
+    - name: Remove the temporary Jackett Compose source
+      ansible.builtin.file:
+        path: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
+        state: absent
+      become: true
+
+- name: Read generated component Compose files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ jackett_search_effective_flaresolverr_compose_path }}"
+    - "{{ jackett_search_effective_jackett_compose_path }}"
+  register: jackett_search_generated_component_compose_stats
+
+- name: Assert upstream Makefile generated component Compose files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      The upstream Makefile did not create its expected component Compose file:
+      {{ item.item }}.
+  loop: "{{ jackett_search_generated_component_compose_stats.results }}"
+  when: not ansible_check_mode
+
+- name: Apply role-owned runtime settings to generated component Compose files
+  when:
+    - not ansible_check_mode or (
+        jackett_search_generated_component_compose_stats.results[0].stat.exists
+        and jackett_search_generated_component_compose_stats.results[1].stat.exists
+      )
+  block:
+    - name: Read generated component Compose content
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        - "{{ jackett_search_effective_jackett_compose_path }}"
+      register: jackett_search_generated_component_compose_content
+
+    - name: Assert generated component Compose files expose expected services
+      ansible.builtin.assert:
+        that:
+          - "'flaresolverr:' in (jackett_search_generated_component_compose_content.results[0].content | b64decode)"
+          - >-
+            (
+              (jackett_search_generated_component_compose_content.results[0].content | b64decode)
+              | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?8191"$')
+            ) is not none
+          - "'jackett:' in (jackett_search_generated_component_compose_content.results[1].content | b64decode)"
+          - >-
+            (
+              (jackett_search_generated_component_compose_content.results[1].content | b64decode)
+              | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?9117"$')
+            ) is not none
+          - "'    image: ' in (jackett_search_generated_component_compose_content.results[1].content | b64decode)"
+        fail_msg: >-
+          Upstream-generated Compose files no longer have the expected Jackett
+          or FlareSolverr layout required by this role.
+
+    - name: Bind generated FlareSolverr Compose service
+      ansible.builtin.replace:
+        path: "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        regexp: '^(\s*)- "(?:[^\"]+:)?(?:[0-9]+:)?8191"$'
+        replace: '\1- "{{ jackett_search_flaresolverr_bind_address }}:{{ jackett_search_flaresolverr_port }}:8191"'
+      register: jackett_search_flaresolverr_compose_binding
+
+    - name: Bind generated Jackett Compose service
+      ansible.builtin.replace:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
+        regexp: '^(\s*)- "(?:[^\"]+:)?(?:[0-9]+:)?9117"$'
+        replace: '\1- "{{ jackett_search_jackett_bind_address }}:{{ jackett_search_jackett_port }}:9117"'
+      register: jackett_search_jackett_compose_binding
+
+    - name: Attach generated FlareSolverr Compose service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      register: jackett_search_flaresolverr_compose_network
+
+    - name: Declare the shared Docker network in generated FlareSolverr Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      register: jackett_search_flaresolverr_compose_network_declaration
+
+    - name: Attach generated Jackett Compose service to the shared Docker network
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
+        insertafter: '^    image: .+$'
+        marker: "    # {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: "    networks:\n      - jackett-search"
+      register: jackett_search_jackett_compose_network
+
+    - name: Declare the shared Docker network in generated Jackett Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
+        insertafter: EOF
+        marker: "# {mark} ANSIBLE MANAGED COMPONENT NETWORK"
+        block: |-
+          networks:
+            jackett-search:
+              external: true
+              name: "{{ jackett_search_component_network_name }}"
+      register: jackett_search_jackett_compose_network_declaration
+
+    - name: Remove obsolete Docker host gateway from generated Jackett Compose
+      ansible.builtin.blockinfile:
+        path: "{{ jackett_search_effective_jackett_compose_path }}"
+        marker: "    # {mark} ANSIBLE MANAGED HOST GATEWAY"
+        state: absent
+      register: jackett_search_jackett_compose_host_gateway
+
+    - name: Validate generated component Compose files
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ item }}"
+          - config
+          - -q
+      loop:
+        - "{{ jackett_search_effective_flaresolverr_compose_path }}"
+        - "{{ jackett_search_effective_jackett_compose_path }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      changed_when: false
+      check_mode: false
+      when: >-
+        not ansible_check_mode
+        or not (
+          (jackett_search_flaresolverr_compose_binding.changed | default(false))
+          or (jackett_search_jackett_compose_binding.changed | default(false))
+          or (jackett_search_flaresolverr_compose_network.changed | default(false))
+          or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
+          or (jackett_search_jackett_compose_network.changed | default(false))
+          or (jackett_search_jackett_compose_network_declaration.changed | default(false))
+          or (jackett_search_jackett_compose_host_gateway.changed | default(false))
+        )
+
+- name: Decide whether generated component Compose services need starting
+  ansible.builtin.set_fact:
+    jackett_search_restart_flaresolverr: >-
+      {{
+        (jackett_search_flaresolverr_compose_binding.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
+        or (
+          not (jackett_search_flaresolverr_install_required | bool)
+          and not (jackett_search_flaresolverr_service_running | bool)
+        )
+      }}
+    jackett_search_restart_jackett: >-
+      {{
+        (jackett_search_jackett_compose_binding.changed | default(false))
+        or (jackett_search_jackett_compose_network.changed | default(false))
+        or (jackett_search_jackett_compose_network_declaration.changed | default(false))
+        or (jackett_search_jackett_compose_host_gateway.changed | default(false))
+        or (
+          not (jackett_search_jackett_install_required | bool)
+          and not (jackett_search_jackett_service_running | bool)
+        )
+      }}
+
+- name: Record deferred upstream component restarts in check mode
+  ansible.builtin.debug:
+    msg: Upstream Jackett component services would be installed or started.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - >-
+      jackett_search_flaresolverr_install_required | bool
+      or jackett_search_jackett_install_required | bool
+      or jackett_search_component_network_create_required | bool
+      or jackett_search_restart_flaresolverr
+      or jackett_search_restart_jackett
+
+- name: Start changed generated component Compose services through the upstream Makefile
+  when:
+    - not ansible_check_mode
+    - jackett_search_restart_flaresolverr or jackett_search_restart_jackett
+  block:
+    - name: Run make up-flaresolverr after Compose changes
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - up-flaresolverr
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+      when: jackett_search_restart_flaresolverr
+
+    - name: Run make up-jackett after Compose changes
+      ansible.builtin.command:
+        argv:
+          - "{{ jackett_search_make_command }}"
+          - "CONFIG_DIR={{ jackett_search_effective_component_config_dir }}"
+          - up-jackett
+      args:
+        chdir: "{{ jackett_search_source_dir }}"
+      become: true
+      become_user: "{{ jackett_search_runtime_user }}"
+      environment:
+        HOME: "{{ jackett_search_runtime_user_home }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+        TZ: "{{ jackett_search_timezone }}"
+      changed_when: true
+      when: jackett_search_restart_jackett
+
+- name: Record generated component changes
+  ansible.builtin.set_fact:
+    jackett_search_components_changed: >-
+      {{
+        (jackett_search_component_config_directory.changed | default(false))
+        or (jackett_search_component_network_create_required | bool)
+        or (jackett_search_flaresolverr_install_required | bool)
+        or (jackett_search_jackett_install_required | bool)
+        or (jackett_search_flaresolverr_compose_binding.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network.changed | default(false))
+        or (jackett_search_flaresolverr_compose_network_declaration.changed | default(false))
+        or (jackett_search_jackett_compose_binding.changed | default(false))
+        or (jackett_search_jackett_compose_network.changed | default(false))
+        or (jackett_search_jackett_compose_network_declaration.changed | default(false))
+        or (jackett_search_jackett_compose_host_gateway.changed | default(false))
+        or (jackett_search_restart_flaresolverr | bool)
+        or (jackett_search_restart_jackett | bool)
+      }}

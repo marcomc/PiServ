@@ -1,0 +1,99 @@
+---
+- name: Validate jackett-search role inputs
+  ansible.builtin.import_tasks: validate-inputs.yml
+
+- name: Load jackett-search runtime user facts
+  ansible.builtin.import_tasks: runtime-user.yml
+
+- name: Install and configure jackett-search
+  when: jackett_search_state == 'present'
+  block:
+    - name: Install jackett-search packages
+      ansible.builtin.import_tasks: packages.yml
+
+    - name: Decide whether jackett-search CLI tasks can run
+      ansible.builtin.set_fact:
+        jackett_search_cli_tasks_safe: >-
+          {{
+            not ansible_check_mode
+            or not jackett_search_runtime_packages.changed
+          }}
+
+    - name: Record deferred jackett-search CLI changes in check mode
+      ansible.builtin.set_fact:
+        jackett_search_install_required: true
+      when: not jackett_search_cli_tasks_safe
+
+    - name: Check out jackett-search source
+      ansible.builtin.include_tasks: source.yml
+      when: jackett_search_cli_tasks_safe
+
+    - name: Install jackett-search with the upstream Makefile
+      ansible.builtin.include_tasks: install.yml
+      when: jackett_search_cli_tasks_safe
+
+    - name: Record deferred jackett-search CLI installation in check mode
+      ansible.builtin.debug:
+        msg: The upstream jackett-search Makefile installation would run.
+      changed_when: true
+      when:
+        - ansible_check_mode
+        - jackett_search_cli_tasks_safe
+        - jackett_search_install_required | bool
+
+    - name: Decide whether jackett-search component tasks can run
+      ansible.builtin.set_fact:
+        jackett_search_base_converged: >-
+          {{
+            not ansible_check_mode
+            or (
+              not jackett_search_runtime_packages.changed
+              and not (
+                (jackett_search_component_packages | default({})).changed
+                | default(false)
+              )
+              and not (
+                (jackett_search_git_checkout | default({})).changed
+                | default(false)
+              )
+              and not (jackett_search_install_required | bool)
+            )
+          }}
+
+    - name: Record deferred component changes in check mode
+      ansible.builtin.set_fact:
+        jackett_search_components_changed: true
+      when:
+        - jackett_search_manage_components | bool
+        - not jackett_search_base_converged
+
+    - name: Manage optional upstream Jackett components
+      ansible.builtin.include_tasks: components.yml
+      when:
+        - jackett_search_manage_components | bool
+        - jackett_search_base_converged
+
+    - name: Decide whether jackett-search configuration tasks can run
+      ansible.builtin.set_fact:
+        jackett_search_config_tasks_safe: >-
+          {{
+            not ansible_check_mode
+            or not (jackett_search_components_changed | default(false))
+          }}
+
+    - name: Manage jackett-search configuration
+      ansible.builtin.include_tasks: config.yml
+      when:
+        - jackett_search_base_converged
+        - jackett_search_config_tasks_safe
+
+    - name: Decide whether jackett-search can be live validated
+      ansible.builtin.include_tasks: validation-context.yml
+
+    - name: Validate jackett-search installation
+      ansible.builtin.include_tasks: validate-install.yml
+      when: jackett_search_live_validation_safe
+
+- name: Remove jackett-search with the upstream Makefile
+  ansible.builtin.include_tasks: uninstall.yml
+  when: jackett_search_state == 'absent'

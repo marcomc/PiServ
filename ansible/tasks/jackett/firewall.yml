@@ -1,0 +1,81 @@
+---
+- name: Read the Docker systemd drop-in directory
+  ansible.builtin.stat:
+    path: "{{ piserv_jackett_docker_dropin_dir }}"
+  register: piserv_jackett_docker_dropin_dir_stat
+
+- name: Prepare the Docker systemd drop-in directory
+  when: not piserv_jackett_docker_dropin_dir_stat.stat.exists
+  block:
+    - name: Create the Docker systemd drop-in directory
+      ansible.builtin.file:
+        path: "{{ piserv_jackett_docker_dropin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+- name: Assert an existing Docker systemd drop-in path is a directory
+  ansible.builtin.assert:
+    that:
+      - piserv_jackett_docker_dropin_dir_stat.stat.isdir
+    fail_msg: >-
+      Docker systemd drop-in path exists but is not a directory:
+      {{ piserv_jackett_docker_dropin_dir }}.
+  when: piserv_jackett_docker_dropin_dir_stat.stat.exists
+
+- name: Install the PiServ Jackett Search Docker ingress policy helper
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/jackett/piserv-jackett-docker-firewall.sh.j2"
+    dest: "{{ piserv_jackett_firewall_script }}"
+    owner: root
+    group: root
+    mode: "0750"
+  register: piserv_jackett_firewall_script_state
+
+- name: Run the PiServ Jackett Search Docker ingress policy after Docker starts
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      ExecStartPost={{ piserv_jackett_firewall_script }}
+    dest: "{{ piserv_jackett_docker_dropin_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: piserv_jackett_docker_dropin
+  notify: Reload systemd after adding the Jackett Search ingress policy
+
+- name: Activate the Docker ingress policy drop-in
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Decide whether the Docker ingress policy can be live validated
+  ansible.builtin.set_fact:
+    piserv_jackett_firewall_live_validation_safe: >-
+      {{
+        not ansible_check_mode
+        or (
+          not piserv_jackett_firewall_script_state.changed
+          and not piserv_jackett_docker_dropin.changed
+        )
+      }}
+
+- name: Read Docker service state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - docker.service
+  register: piserv_jackett_docker_service_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Apply the PiServ Jackett Search Docker ingress policy
+  ansible.builtin.command:
+    argv:
+      - "{{ piserv_jackett_firewall_script }}"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - piserv_jackett_docker_service_state.stdout == 'active'

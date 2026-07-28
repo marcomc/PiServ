@@ -248,12 +248,14 @@ Deploy Jackett and FlareSolverr:
 ansible-playbook ansible/playbooks/jackett.yml
 ```
 
-The Jackett playbook installs Docker Compose, deploys pinned ARM64-compatible
-Jackett and FlareSolverr images with persistent state under `/opt/jackett`, and
-publishes TCP `9117`. Its Docker-aware policy permits the API only from the
-current IPv4 LAN and through `tailscale0`, so use PiServ's LAN hostname or its
-Tailscale hostname/domain; do not publish a public DNS record for the service.
-See the [Jackett runbook](docs/runbooks/jackett.md) for tracker configuration,
+The Jackett playbook applies the local, Galaxy-ready `jackett_search` role.
+The role uses the upstream Makefile to install the CLI plus its Jackett and
+FlareSolverr containers, retaining upstream `latest` image tags. Persistent
+Compose files, Jackett state, and the private CLI config are owned by `admin`
+under `/home/admin/.config/jackett-search`. PiServ adds only the Docker-aware
+TCP `9117` ingress policy: the current IPv4 LAN and `tailscale0` are allowed,
+and other published-port access is dropped. See the
+[Jackett runbook](docs/runbooks/jackett.md) for tracker configuration,
 validation, updates, and recovery.
 
 Install and manage the RaiPlaySound daily podcast sync:

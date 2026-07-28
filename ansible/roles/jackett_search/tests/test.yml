@@ -1,0 +1,227 @@
+---
+- name: Test jackett_search role
+  hosts: localhost
+  gather_facts: true
+  vars:
+    jackett_search_test_api_url: 'http://127.0.0.1:9117/path?value="quoted"'
+    jackett_search_test_api_key: 'key"with\\escapes'
+  pre_tasks:
+    - name: Create jackett_search test directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: jackett-search-role-test
+      register: jackett_search_test_directory
+
+    - name: Create isolated jackett-search source fixture
+      ansible.builtin.file:
+        path: "{{ jackett_search_test_directory.path }}/source"
+        state: directory
+        mode: "0700"
+
+    - name: Create isolated jackett-search install fixture
+      ansible.builtin.file:
+        path: "{{ jackett_search_test_directory.path }}/bin"
+        state: directory
+        mode: "0700"
+
+    - name: Create isolated jackett-search source command fixture
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit 0
+        dest: "{{ jackett_search_test_directory.path }}/source/jackett-search"
+        mode: "0700"
+
+    - name: Create isolated jackett-search uninstall Makefile fixture
+      ansible.builtin.copy:
+        content: |
+          .RECIPEPREFIX := >
+          .PHONY: down-flaresolverr down-jackett uninstall
+          down-flaresolverr:
+          >@test -n "$(CONFIG_DIR)"
+          down-jackett:
+          >@test -n "$(CONFIG_DIR)"
+          uninstall:
+          >@rm -f "$(INSTALL_DIR)/jackett-search"
+        dest: "{{ jackett_search_test_directory.path }}/source/Makefile"
+        mode: "0600"
+
+    - name: Create isolated installed jackett-search command fixture
+      ansible.builtin.file:
+        src: "{{ jackett_search_test_directory.path }}/source/jackett-search"
+        dest: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
+        state: link
+
+    - name: Create existing jackett-search configuration fixture
+      ansible.builtin.copy:
+        content: |
+          url = "http://existing.example.test"
+          api_key = "existing"
+        dest: "{{ jackett_search_test_directory.path }}/config.toml"
+        mode: "0600"
+
+  tasks:
+    - name: Test jackett_search role behavior
+      block:
+        - name: Load role directly from its root
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+            tasks_from: validate-inputs
+          vars:
+            jackett_search_manage_components: false
+
+        - name: Load jackett-search runtime user facts
+          ansible.builtin.include_tasks: ../tasks/runtime-user.yml
+          vars:
+            jackett_search_runtime_user: "{{ ansible_facts.user_id }}"
+          when: ansible_facts.system == 'Linux'
+
+        - name: Assert the runtime user's primary group is derived from passwd facts
+          ansible.builtin.assert:
+            that:
+              - >-
+                jackett_search_runtime_group | string
+                == ansible_facts.getent_passwd[ansible_facts.user_id][2] | string
+          when: ansible_facts.system == 'Linux'
+
+        - name: Load jackett_search role defaults for package assertions
+          ansible.builtin.include_vars:
+            file: "{{ playbook_dir | dirname }}/defaults/main.yml"
+            name: jackett_search_test_defaults
+
+        - name: Assert the component package defaults provide Docker Compose
+          ansible.builtin.assert:
+            that:
+              - >-
+                'docker-compose' in
+                jackett_search_test_defaults.jackett_search_component_apt_packages
+              - >-
+                jackett_search_test_defaults.jackett_search_component_network_name
+                == 'jackett-search'
+
+        - name: Assert Compose layout patterns accept custom host ports
+          ansible.builtin.assert:
+            that:
+              - >-
+                (
+                  'services:\n  flaresolverr:\n    ports:\n      - "127.0.0.1:9001:8191"\n'
+                  | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?8191"$')
+                ) is not none
+              - >-
+                (
+                  'services:\n  jackett:\n    ports:\n      - "127.0.0.1:9000:9117"\n'
+                  | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?9117"$')
+                ) is not none
+
+        - name: Create an existing private jackett-search source parent fixture
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/source-parent"
+            state: directory
+            mode: "0700"
+
+        - name: Preserve an existing jackett-search source parent fixture
+          ansible.builtin.include_tasks: ../tasks/source-parent.yml
+          vars:
+            jackett_search_source_dir: >-
+              {{ jackett_search_test_directory.path }}/source-parent/checkout
+
+        - name: Read preserved jackett-search source parent fixture
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/source-parent"
+          register: jackett_search_test_source_parent_stat
+
+        - name: Assert the existing source parent fixture was preserved
+          ansible.builtin.assert:
+            that:
+              - jackett_search_test_source_parent_stat.stat.mode == '0700'
+
+        - name: Remove isolated role-owned jackett-search command on Linux
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            jackett_search_state: absent
+            jackett_search_runtime_user: "{{ ansible_user_id }}"
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+            jackett_search_manage_components: true
+            jackett_search_component_config_dir: >-
+              {{ jackett_search_test_directory.path }}/components
+            jackett_search_config_mode: unmanaged
+            jackett_search_config_path: "{{ jackett_search_test_directory.path }}/config.toml"
+            jackett_search_validate_api: false
+          when: ansible_facts.system == 'Linux'
+
+        - name: Read isolated jackett-search command after removal on Linux
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
+            follow: false
+          register: jackett_search_test_command_stat
+          when: ansible_facts.system == 'Linux'
+
+        - name: Assert isolated jackett-search command was removed on Linux
+          ansible.builtin.assert:
+            that:
+              - not jackett_search_test_command_stat.stat.exists
+          when: ansible_facts.system == 'Linux'
+
+        - name: Preserve an existing create-only configuration without an API key
+          ansible.builtin.include_tasks: ../tasks/config.yml
+          vars:
+            jackett_search_config_mode: create
+            jackett_search_api_key: ""
+            jackett_search_runtime_user: "{{ ansible_user_id }}"
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+
+        - name: Read preserved create-only configuration
+          ansible.builtin.slurp:
+            src: "{{ jackett_search_test_directory.path }}/config.toml"
+          register: jackett_search_preserved_config
+
+        - name: Assert create-only configuration was preserved
+          ansible.builtin.assert:
+            that:
+              - >-
+                jackett_search_preserved_config.content | b64decode
+                == 'url = "http://existing.example.test"\napi_key = "existing"\n'
+
+        - name: Store an explicit API key with unmanaged configuration
+          ansible.builtin.include_tasks: ../tasks/config.yml
+          vars:
+            jackett_search_config_mode: unmanaged
+            jackett_search_api_key: unmanaged-test-key
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+
+        - name: Assert unmanaged configuration retains the explicit API key
+          ansible.builtin.assert:
+            that:
+              - jackett_search_effective_api_key == 'unmanaged-test-key'
+          no_log: true
+
+        - name: Render an escaped TOML configuration fixture
+          ansible.builtin.template:
+            src: "{{ playbook_dir | dirname }}/templates/config.toml.j2"
+            dest: "{{ jackett_search_test_directory.path }}/escaped-config.toml"
+            mode: "0600"
+          vars:
+            jackett_search_api_url: "{{ jackett_search_test_api_url }}"
+            jackett_search_effective_api_key: "{{ jackett_search_test_api_key }}"
+
+        - name: Parse escaped TOML configuration fixture
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_facts.python.executable }}"
+              - -c
+              - >-
+                import sys, tomllib;
+                tomllib.load(open(sys.argv[1], 'rb'))
+              - "{{ jackett_search_test_directory.path }}/escaped-config.toml"
+          changed_when: false
+      always:
+        - name: Remove jackett_search test directory
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}"
+            state: absent

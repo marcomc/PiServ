@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: jackett_search
+  author: jackett-search role maintainers
+  description: Install and configure the jackett-search CLI through its upstream Makefile.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - jackett
+    - torrent
+    - search
+    - cli
+    - docker
+    - debian
+dependencies: []

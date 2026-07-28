@@ -1,0 +1,34 @@
+---
+- name: Read installed jackett-search command
+  ansible.builtin.stat:
+    path: "{{ jackett_search_command_path }}"
+    follow: false
+  register: jackett_search_command_stat
+
+- name: Decide whether jackett-search needs Makefile installation
+  ansible.builtin.set_fact:
+    jackett_search_install_required: >-
+      {{
+        jackett_search_force_install | bool
+        or jackett_search_git_checkout.changed
+        or not jackett_search_command_stat.stat.exists
+        or not jackett_search_command_stat.stat.islnk
+        or (jackett_search_command_stat.stat.lnk_target | default(''))
+           != jackett_search_source_dir ~ '/jackett-search'
+      }}
+
+- name: Install jackett-search through the upstream Makefile
+  ansible.builtin.command:
+    argv:
+      - "{{ jackett_search_make_command }}"
+      - "INSTALL_DIR={{ jackett_search_install_dir }}"
+      - install
+  args:
+    chdir: "{{ jackett_search_source_dir }}"
+  become: true
+  environment:
+    HOME: "{{ jackett_search_runtime_user_home }}"
+    PATH: "{{ jackett_search_install_dir }}:/usr/local/bin:/usr/bin:/bin"
+  register: jackett_search_make_install
+  changed_when: true
+  when: jackett_search_install_required | bool
