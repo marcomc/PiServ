@@ -159,6 +159,12 @@ All notable project changes are documented here.
 - Documented that PiServ keeps standard OpenSSH as the administration path and
   does not enable Tailscale SSH for now.
 
+### VNC Client Validation
+
+- Validated TigerVNC 1.16.2 from the operator Mac through the direct LAN,
+  mDNS, and Tailscale endpoints, including certificate handling, `admin` PAM
+  authentication, and the `DSI-1` desktop output.
+
 ### Firewall Policy
 
 - Added a commit-pinned `marcomc/ansible-ufw` fork integration.

@@ -4,17 +4,11 @@
 
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
-- Approve PiServ's advertised subnet route in the Tailscale admin console and
-  validate failover through the existing primary subnet router.
 - Decide whether PiServ needs IPv6 LAN management access and, if so, add an
   explicitly scoped dual-stack UFW policy with live validation.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
-- Validate TigerVNC 1.16.2 from this Mac to both direct PiServ LAN endpoints
-  and the Tailscale `piserv` name. Confirm its certificate prompt, `admin` PAM
-  authentication, and the `DSI-1` desktop, then record the outcome in the VNC
-  runbook.
 - Create an umbrella bootstrap playbook that orchestrates the existing base,
   Freenove, pCloud, mail, Home Assistant MQTT Agent, and other workload
   playbooks after their ordering is final.

@@ -46,7 +46,7 @@ ssh admin@PiServ.local \
 ## Operator Access
 
 TigerVNC 1.16.2 is installed on the operator Mac. Its PiServ connection
-acceptance test remains pending.
+acceptance test passed on 2026-07-28.
 
 On the operator Mac, `piserv` resolves to PiServ's Tailscale hostname and
 address. The direct LAN endpoints are `PiServ.local` and `<piserv-lan-ip>`,
@@ -54,15 +54,16 @@ where the placeholder means PiServ's current DHCP address.
 
 ## Direct TigerVNC Validation
 
-Validate the direct LAN client connection with the installed TigerVNC client.
+The installed TigerVNC client successfully connected to PiServ through every
+tested endpoint on 2026-07-28:
 
-1. Connect TigerVNC to `<piserv-lan-ip>:5900`, then repeat with
-   `PiServ.local:5900`.
-2. Confirm the first-use certificate prompt matches PiServ, then authenticate
-   as `admin` with the local PiServ password.
-3. Repeat against the Tailscale `piserv:5900` endpoint.
-4. Confirm the displayed desktop matches the touchscreen for every endpoint,
-   then update this runbook and remove the matching TODO item.
+- Direct LAN address
+- mDNS hostname: `piserv.local`
+- Tailscale address
+- Tailscale hostname
+
+The certificate prompt, `admin` PAM authentication, and `DSI-1` desktop
+display all passed for the tested connections.
 
 ## 2026-07-14 Incident Note
 
