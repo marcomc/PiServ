@@ -19,6 +19,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Cockpit web console and extensions](cockpit-web-console.md) | Operate the Cockpit HTTPS administration console and extensions |
 | [Glances observability](glances-observability.md) | Operate the LAN-accessible Glances JSON API |
 | [Jackett search](jackett.md) | Deploy and operate trusted-network Jackett search |
+| [PiServ installation and convergence](piserv-install.md) | Apply the ordered full-host installation entry point |
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |
 | [Freenove FNK0100K post-OS](freenove-fnk0100k-post-os.md) | Configure the case after OS boot |
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |

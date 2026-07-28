@@ -20,6 +20,9 @@
       --snat-subnet-routes=true
   roles:
     - role: artis3n.tailscale.machine
+      # The upstream role parses the output of a command Ansible skips in check
+      # mode. PiServ's check-mode tasks below inspect the existing runtime.
+      when: not ansible_check_mode
       vars:
         state: present
         release_stability: stable

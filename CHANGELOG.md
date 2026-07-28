@@ -2,6 +2,20 @@
 
 All notable project changes are documented here.
 
+## 0.3.0 - 2026-07-28
+
+### PiServ Installation
+
+- Added the repeatable `ansible/playbooks/piserv-install.yml` entry point for
+  ordered full-host convergence after manual Tailscale and pCloud bootstrap,
+  while keeping destructive migration and operator-only health checks separate.
+- Made the Tailscale wrapper safe in check mode by skipping an upstream role
+  that parses command output Ansible does not produce in that mode, while
+  retaining PiServ's read-only runtime probes.
+- Added a read-only external-storage preflight before all mutating installation
+  playbooks and documented every manual first-install prerequisite and the
+  direct-IP SSH recovery preflight.
+
 ## 0.2.0 - 2026-07-28
 
 ### Ansible Maintainability

@@ -1,0 +1,209 @@
+---
+- name: Assert external storage identity inputs are concrete
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_device is match('^/dev/disk/by-id/.+')
+      - piserv_external_storage_expected_model | trim | length > 0
+      - piserv_external_storage_expected_serial | trim | length > 0
+      - piserv_external_storage_device is not search('<|>')
+      - piserv_external_storage_expected_model is not search('<|>')
+      - piserv_external_storage_expected_serial is not search('<|>')
+    fail_msg: >-
+      External storage requires a concrete stable by-id device path, model, and
+      serial. Copy ansible/vars/external-storage.yml.example to the ignored
+      external-storage.yml file and replace every placeholder before applying.
+
+- name: Verify configured external storage access users exist
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ item }}"
+  loop: "{{ ['admin'] + piserv_external_storage_service_users }}"
+  register: piserv_external_storage_access_users
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Assert configured external storage access users exist
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_access_users.results
+        | selectattr('rc', 'equalto', 0) | list | length ==
+        (piserv_external_storage_access_users.results | length)
+    fail_msg: >-
+      The configured external storage access users do not all exist:
+      {{ piserv_external_storage_access_users.results
+         | rejectattr('rc', 'equalto', 0) | map(attribute='item') | join(', ') }}.
+
+- name: Verify the configured external storage device identity
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - info
+      - --query=property
+      - --name={{ piserv_external_storage_device }}
+  register: piserv_external_storage_udev
+  changed_when: false
+  check_mode: false
+
+- name: Assert the configured external storage device is the expected disk
+  ansible.builtin.assert:
+    that:
+      - "'ID_TYPE=disk' in piserv_external_storage_udev.stdout_lines"
+      - piserv_external_storage_expected_model | trim | length > 0
+      - piserv_external_storage_expected_serial | trim | length > 0
+      - >-
+        ('ID_MODEL=' ~ (piserv_external_storage_expected_model | trim))
+        in piserv_external_storage_udev.stdout_lines
+      - >-
+        ('ID_SERIAL_SHORT=' ~ (piserv_external_storage_expected_serial | trim))
+        in piserv_external_storage_udev.stdout_lines
+    fail_msg: >-
+      The configured external storage identity does not match the expected
+      ASM246X disk. Refusing to manage the wrong device.
+
+- name: Read the external storage filesystem type
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -s
+      - TYPE
+      - -o
+      - value
+      - "{{ piserv_external_storage_partition_device }}"
+  register: piserv_external_storage_fstype
+  changed_when: false
+  check_mode: false
+
+- name: Read the external storage filesystem label
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -s
+      - LABEL
+      - -o
+      - value
+      - "{{ piserv_external_storage_partition_device }}"
+  register: piserv_external_storage_label
+  changed_when: false
+  check_mode: false
+
+- name: Read the external storage filesystem UUID
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -s
+      - UUID
+      - -o
+      - value
+      - "{{ piserv_external_storage_partition_device }}"
+  register: piserv_external_storage_uuid
+  changed_when: false
+  check_mode: false
+
+- name: Assert the external storage filesystem contract
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_fstype.stdout | trim == 'ext4'
+      - piserv_external_storage_label.stdout | trim == piserv_external_storage_volume_label
+    fail_msg: >-
+      External storage is not the expected ext4 filesystem labeled
+      {{ piserv_external_storage_volume_label }}. Do not reformat it; follow
+      the diagnostic and recovery procedure in docs/runbooks/external-storage.md.
+
+- name: Read the external storage partition layout
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --raw
+      - --output
+      - TYPE
+      - "{{ piserv_external_storage_device }}"
+  register: piserv_external_storage_layout
+  changed_when: false
+  check_mode: false
+
+- name: Assert the external storage has one data partition
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_layout.stdout_lines | select('equalto', 'disk')
+        | list | length == 1
+      - >-
+        piserv_external_storage_layout.stdout_lines | select('equalto', 'part')
+        | list | length == 1
+    fail_msg: >-
+      External storage must contain exactly one data partition and its parent
+      disk.
+
+- name: Read ext4 filesystem features
+  ansible.builtin.command:
+    argv:
+      - tune2fs
+      - -l
+      - "{{ piserv_external_storage_partition_device }}"
+  register: piserv_external_storage_ext4_features
+  changed_when: false
+  check_mode: false
+
+- name: Assert the external storage filesystem is journaled
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_ext4_features.stdout is search('has_journal')
+    fail_msg: External storage ext4 filesystem does not report a journal.
+
+- name: Check whether the external storage mountpoint is already mounted
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --mountpoint
+      - "{{ piserv_external_storage_mountpoint }}"
+      - --output
+      - UUID
+      - --noheadings
+  register: piserv_external_storage_mountpoint_before_mount
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse an unrelated filesystem at the external storage mountpoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_mountpoint_before_mount.rc != 0 or
+        (piserv_external_storage_mountpoint_before_mount.stdout | trim ==
+        piserv_external_storage_uuid.stdout | trim)
+    fail_msg: >-
+      {{ piserv_external_storage_mountpoint }} is mounted from a filesystem
+      other than the configured external storage UUID. Refusing to change it.
+
+- name: Check whether the external storage volume is mounted elsewhere
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --source
+      - "UUID={{ piserv_external_storage_uuid.stdout | trim }}"
+      - --output
+      - TARGET
+      - --noheadings
+  register: piserv_external_storage_existing_mounts
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse external storage mounted outside the configured mountpoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_external_storage_existing_mounts.rc != 0 or
+        (
+          piserv_external_storage_existing_mounts.stdout_lines
+          | map('trim') | reject('equalto', '') | list
+          | difference([piserv_external_storage_mountpoint]) | length == 0
+        )
+    fail_msg: >-
+      The configured external storage UUID is already mounted outside
+      {{ piserv_external_storage_mountpoint }}. Refusing to manage it twice.

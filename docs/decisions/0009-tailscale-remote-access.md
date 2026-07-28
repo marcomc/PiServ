@@ -49,6 +49,9 @@ interface, preventing direct LAN connections from completing.
   a maintained upstream role and have been validated on PiServ.
 - The project now depends on installing pinned Ansible collection requirements
   before running the Tailscale playbook.
+- Check mode skips the upstream role because it parses output from a command
+  that Ansible skips in that mode. PiServ instead performs read-only runtime
+  probes when Tailscale is already installed and running.
 - Tailnet membership still requires either a one-time manual browser login or a
   private runtime auth key.
 - Device key expiry should be reviewed in the Tailscale operator console after
