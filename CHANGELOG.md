@@ -13,6 +13,10 @@ All notable project changes are documented here.
   mode does not parse output from its skipped hardware command.
 - Deferred VNC socket and output validation when check mode only predicts the
   WayVNC service start, while reporting a pending output selection as changed.
+- Deferred pCloud checkout, build, install, and mount-root probes when a fresh
+  check-mode run only predicts their artifacts.
+- Deferred RaiPlaySound command and user-timer probes when a fresh check-mode
+  run only predicts their installed files.
 
 ### Jackett Search
 

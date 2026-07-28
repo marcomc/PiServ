@@ -7,11 +7,14 @@
   check_mode: false
 
 - name: Build and install pcloudcc
-  when: >-
-    pcloudcc_force_rebuild | bool
-    or pcloudcc_git_checkout.changed
-    or pcloudcc_patch_apply.changed
-    or pcloudcc_binary_check.rc != 0
+  when:
+    - not ansible_check_mode
+      or pcloudcc_source_git_dir.stat.isdir | default(false)
+    - >-
+      pcloudcc_force_rebuild | bool
+      or pcloudcc_git_checkout.changed
+      or pcloudcc_patch_apply.changed
+      or pcloudcc_binary_check.rc != 0
   block:
     - name: Clean pcloudcc sync library build
       ansible.builtin.command: make clean
