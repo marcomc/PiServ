@@ -29,9 +29,16 @@ ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/ro
 ansible-playbook ansible/playbooks/ha-mqtt-agent.yml
 ```
 
-If mDNS does not provide a usable SSH address, resolve the current IPv4 address
-first, then run the same playbook with
-`-e ansible_host=<resolved-ipv4>`. Do not store the DHCP address in inventory.
+If mDNS does not provide a usable SSH address, the operator must obtain the
+current DHCP lease independently and export it as `PISERV_IP`. Do not resolve
+the fallback through `PiServ.local` or store the DHCP address in inventory.
+Require the value, then use it directly for both SSH and Ansible:
+
+```sh
+: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
+ssh "admin@${PISERV_IP}" 'sudo -n true'
+ansible-playbook ansible/playbooks/ha-mqtt-agent.yml -e "ansible_host=${PISERV_IP}"
+```
 
 The playbook pins Galaxy role `marcomc.ha_mqtt_agent` to `v0.1.1` and its
 upstream agent checkout to commit `57b8bfb907d3a7192ba6ba4fdf1337a28569cc25`

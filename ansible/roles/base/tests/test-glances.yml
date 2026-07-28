@@ -63,6 +63,25 @@
             'Clear Glances API credential recovery marker' in
             base_glances_installed_tasks_source
 
+    - name: Assert Glances custom drop-in parent contract
+      ansible.builtin.assert:
+        that:
+          - >-
+            'Read Glances systemd drop-in parent directory' in
+            base_glances_installed_tasks_source
+          - >-
+            'Assert existing Glances systemd drop-in parent is a directory' in
+            base_glances_installed_tasks_source
+          - >-
+            'base_glances_dropin_path | dirname' in
+            base_glances_installed_tasks_source
+          - >-
+            'when: not base_glances_dropin_parent_stat.stat.exists' in
+            base_glances_installed_tasks_source
+          - >-
+            'base_glances_dropin_dir' not in
+            base_glances_installed_tasks_source
+
     - name: Test Glances API systemd override rendering
       block:
         - name: Render Glances API systemd override

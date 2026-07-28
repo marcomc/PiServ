@@ -76,6 +76,9 @@ All notable project changes are documented here.
 - Made the Glances password hash and bootstrap password a recoverable pair that
   rotates together when either file is missing and completes only after
   authenticated API validation.
+- Derived the Glances systemd override parent from its configurable destination,
+  creating it only when absent and preserving existing system-directory
+  metadata.
 - Recorded acceptance of the direct, HTTP Basic-authenticated API exposure only
   to the trusted LAN and ACL-controlled Tailnet boundary while Debian security
   updates are applied.

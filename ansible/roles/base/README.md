@@ -40,6 +40,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_vnc_output_selector_timeout_seconds` | `30` | Maximum selector and validation wait time |
 | `base_manage_glances` | `true` | Install and manage the local Glances API service |
 | `base_glances_packages` | `glances`, `lm-sensors`, `python3-uvicorn`, `python3-jinja2` | API, sensor, and webserver runtime packages |
+| `base_glances_dropin_path` | `/etc/systemd/system/glances.service.d/piserv-api.conf` | PiServ-managed systemd override path |
 | `base_glances_bind_address` | `127.0.0.1` | Loopback or wildcard IPv4 API listener |
 | `base_glances_validation_address` | `127.0.0.1` | Loopback address used for API validation |
 | `base_glances_port` | `61208` | Local Glances API port |
@@ -109,11 +110,13 @@ IPv4 for LAN observability and Home Assistant. It enables HTTP Basic
 authentication with a salted password hash and creates a root-only bootstrap
 password alongside it. If either credential file is missing, the role rotates
 both files so their values cannot remain inconsistent after an interrupted run.
-The web UI stays disabled, and the dynamic systemd user and service sandboxing
-remain in effect. The firewall permits the current IPv4 LAN, while the existing
-Tailscale interface policy and tailnet ACLs govern tailnet access. The role
-verifies that anonymous requests receive `401`, tests the reconciled bootstrap
-credentials, and asserts the configured IPv4 listener without an IPv6 wildcard.
+The role creates a missing configured drop-in parent but preserves the metadata
+of an existing system directory. The web UI stays disabled, and the dynamic
+systemd user and service sandboxing remain in effect. The firewall permits the
+current IPv4 LAN, while the existing Tailscale interface policy and tailnet ACLs
+govern tailnet access. The role verifies that anonymous requests receive `401`,
+tests the reconciled bootstrap credentials, and asserts the configured IPv4
+listener without an IPv6 wildcard.
 
 Cockpit is installed without its optional storage, NetworkManager, and package
 management modules by default. The PiServ base playbook overrides

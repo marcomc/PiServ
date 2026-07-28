@@ -155,13 +155,30 @@
     - not ansible_check_mode
   become: true
 
-- name: Ensure Glances systemd drop-in directory exists
+- name: Read Glances systemd drop-in parent directory
+  ansible.builtin.stat:
+    path: "{{ base_glances_dropin_path | dirname }}"
+  register: base_glances_dropin_parent_stat
+  changed_when: false
+  become: true
+
+- name: Assert existing Glances systemd drop-in parent is a directory
+  ansible.builtin.assert:
+    that:
+      - base_glances_dropin_parent_stat.stat.isdir
+    fail_msg: >-
+      Glances systemd drop-in parent exists but is not a directory:
+      {{ base_glances_dropin_path | dirname }}.
+  when: base_glances_dropin_parent_stat.stat.exists
+
+- name: Create missing Glances systemd drop-in parent directory
   ansible.builtin.file:
-    path: "{{ base_glances_dropin_dir }}"
+    path: "{{ base_glances_dropin_path | dirname }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  when: not base_glances_dropin_parent_stat.stat.exists
   become: true
 
 - name: Install PiServ Glances API systemd override
