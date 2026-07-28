@@ -19,6 +19,8 @@ All notable project changes are documented here.
   recovery procedures.
 - Stored generated Compose files, Jackett state, and API-backed CLI
   configuration in `admin`'s private `~/.config/jackett-search` directory.
+- Kept create-only configuration preservation while loading its generated API
+  key whenever live Jackett validation is enabled.
 
 ### External SSD Storage
 
@@ -29,6 +31,8 @@ All notable project changes are documented here.
   stable by-id device identity.
 - Deferred post-mount state probes when check mode only predicts a storage
   reconnect or mount-option change.
+- Deferred group- and ACL-dependent storage work when a fresh check-mode run
+  only predicts those prerequisites.
 - Added the dedicated `external-data` group, shared ACL policy, restricted
   backup directory, and non-destructive convergence playbook.
 - Added the external SSD storage decision record and operator runbook.

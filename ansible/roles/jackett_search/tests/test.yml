@@ -166,26 +166,50 @@
               - not jackett_search_test_command_stat.stat.exists
           when: ansible_facts.system == 'Linux'
 
-        - name: Preserve an existing create-only configuration without an API key
+        - name: Preserve existing create-only config with API validation disabled
           ansible.builtin.include_tasks: ../tasks/config.yml
           vars:
             jackett_search_config_mode: create
             jackett_search_api_key: ""
+            jackett_search_validate_api: false
             jackett_search_runtime_user: "{{ ansible_user_id }}"
             jackett_search_effective_config_path: >-
               {{ jackett_search_test_directory.path }}/config.toml
+            jackett_search_effective_api_key_file: >-
+              {{ jackett_search_test_directory.path }}/missing-server-config.json
+
+        - name: Create generated Jackett API key fixture
+          ansible.builtin.copy:
+            content: |
+              {"APIKey": "generated-test-key"}
+            dest: "{{ jackett_search_test_directory.path }}/server-config.json"
+            mode: "0600"
+
+        - name: Preserve create-only configuration and load the generated API key
+          ansible.builtin.include_tasks: ../tasks/config.yml
+          vars:
+            jackett_search_config_mode: create
+            jackett_search_api_key: ""
+            jackett_search_validate_api: true
+            jackett_search_runtime_user: "{{ ansible_user_id }}"
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+            jackett_search_effective_api_key_file: >-
+              {{ jackett_search_test_directory.path }}/server-config.json
 
         - name: Read preserved create-only configuration
           ansible.builtin.slurp:
             src: "{{ jackett_search_test_directory.path }}/config.toml"
           register: jackett_search_preserved_config
 
-        - name: Assert create-only configuration was preserved
+        - name: Assert create-only configuration was preserved with generated key loaded
           ansible.builtin.assert:
             that:
               - >-
                 jackett_search_preserved_config.content | b64decode
                 == 'url = "http://existing.example.test"\napi_key = "existing"\n'
+              - jackett_search_effective_api_key == 'generated-test-key'
+          no_log: true
 
         - name: Store an explicit API key with unmanaged configuration
           ansible.builtin.include_tasks: ../tasks/config.yml

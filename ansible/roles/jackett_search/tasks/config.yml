@@ -49,27 +49,31 @@
             or not jackett_search_config_stat.stat.exists
           }}
 
-    - name: Write required jackett-search configuration
+    - name: Read the Jackett API key for configuration and validation
+      ansible.builtin.include_tasks: api-key.yml
+      when:
+        - >-
+          jackett_search_config_write_required
+          or jackett_search_validate_api | bool
+
+    - name: Write private jackett-search configuration
+      ansible.builtin.template:
+        src: config.toml.j2
+        dest: "{{ jackett_search_effective_config_path }}"
+        owner: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
+        mode: "0600"
+      become: true
+      register: jackett_search_config
+      no_log: true
       when: jackett_search_config_write_required
-      block:
-        - name: Read the Jackett API key for jackett-search configuration
-          ansible.builtin.import_tasks: api-key.yml
 
-        - name: Write private jackett-search configuration
-          ansible.builtin.template:
-            src: config.toml.j2
-            dest: "{{ jackett_search_effective_config_path }}"
-            owner: "{{ jackett_search_runtime_user }}"
-            group: "{{ jackett_search_runtime_group }}"
-            mode: "0600"
-          become: true
-          register: jackett_search_config
-          no_log: true
-
-- name: Store explicitly supplied Jackett API key for validation
+- name: Store explicitly supplied Jackett API key for unmanaged validation
   ansible.builtin.set_fact:
     jackett_search_effective_api_key: "{{ jackett_search_api_key }}"
-  when: jackett_search_api_key | length > 0
+  when:
+    - jackett_search_config_mode == 'unmanaged'
+    - jackett_search_api_key | length > 0
   no_log: true
 
 - name: Validate unmanaged jackett-search configuration
