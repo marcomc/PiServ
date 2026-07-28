@@ -12,7 +12,7 @@
         path: "{{ jackett_search_effective_component_config_dir }}"
         state: directory
         owner: "{{ jackett_search_runtime_user }}"
-        group: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
         mode: "0700"
       become: true
       register: jackett_search_component_config_directory
@@ -112,7 +112,7 @@
         dest: "{{ jackett_search_effective_component_config_dir }}/.flaresolverr-compose.ansible.yml"
         remote_src: true
         owner: "{{ jackett_search_runtime_user }}"
-        group: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
         mode: "0600"
       become: true
 
@@ -157,7 +157,7 @@
         dest: "{{ jackett_search_effective_component_config_dir }}/.jackett-compose.ansible.yml"
         remote_src: true
         owner: "{{ jackett_search_runtime_user }}"
-        group: "{{ jackett_search_runtime_user }}"
+        group: "{{ jackett_search_runtime_group }}"
         mode: "0600"
       become: true
 

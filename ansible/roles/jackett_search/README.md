@@ -149,6 +149,8 @@ only if it is absent; existing directory ownership and permissions are not
 changed. The config itself has mode `0600`. When `create` preserves an existing
 config, the role does not read a generated API key or validate that existing
 configuration; supply `jackett_search_api_key` explicitly to validate it.
+After a new Jackett start, the role waits for `ServerConfig.json` to be written
+before generating the CLI configuration.
 
 When check mode defers an upstream component installation or restart, the role
 also defers configuration tasks that require the generated Jackett API key.

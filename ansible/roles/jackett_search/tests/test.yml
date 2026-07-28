@@ -66,6 +66,20 @@
           vars:
             jackett_search_manage_components: false
 
+        - name: Load jackett-search runtime user facts
+          ansible.builtin.include_tasks: ../tasks/runtime-user.yml
+          vars:
+            jackett_search_runtime_user: "{{ ansible_facts.user_id }}"
+          when: ansible_facts.system == 'Linux'
+
+        - name: Assert the runtime user's primary group is derived from passwd facts
+          ansible.builtin.assert:
+            that:
+              - >-
+                jackett_search_runtime_group | string
+                == ansible_facts.getent_passwd[ansible_facts.user_id][2] | string
+          when: ansible_facts.system == 'Linux'
+
         - name: Load jackett_search role defaults for package assertions
           ansible.builtin.include_vars:
             file: "{{ playbook_dir | dirname }}/defaults/main.yml"

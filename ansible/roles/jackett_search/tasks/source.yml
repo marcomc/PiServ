@@ -7,7 +7,7 @@
     path: "{{ jackett_search_source_dir }}"
     state: directory
     owner: "{{ jackett_search_runtime_user }}"
-    group: "{{ jackett_search_runtime_user }}"
+    group: "{{ jackett_search_runtime_group }}"
     mode: "0755"
   become: true
 

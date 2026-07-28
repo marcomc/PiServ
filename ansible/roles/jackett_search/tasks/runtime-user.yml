@@ -8,6 +8,8 @@
   ansible.builtin.set_fact:
     jackett_search_runtime_user_home: >-
       {{ ansible_facts.getent_passwd[jackett_search_runtime_user][4] }}
+    jackett_search_runtime_group: >-
+      {{ ansible_facts.getent_passwd[jackett_search_runtime_user][2] }}
 
 - name: Store jackett-search component paths
   ansible.builtin.set_fact:

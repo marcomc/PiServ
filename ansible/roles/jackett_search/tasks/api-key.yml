@@ -6,6 +6,11 @@
       ansible.builtin.stat:
         path: "{{ jackett_search_effective_api_key_file }}"
       register: jackett_search_api_key_file_stat
+      retries: 30
+      delay: 2
+      until:
+        - jackett_search_api_key_file_stat.stat.exists
+        - jackett_search_api_key_file_stat.stat.isreg
 
     - name: Assert generated Jackett API key file exists
       ansible.builtin.assert:

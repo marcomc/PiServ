@@ -13,6 +13,8 @@ All notable changes for the jackett_search Ansible role are documented here.
   components in check mode.
 - Defer API-key-dependent configuration when component changes are deferred in
   check mode and support custom component host ports.
+- Wait for the generated Jackett API-key file and derive runtime file groups
+  from the account's primary GID.
 
 ## 0.1.0 - Unreleased
 
