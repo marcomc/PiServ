@@ -107,12 +107,13 @@ Glances uses the Debian package service with a PiServ-managed drop-in. The role
 keeps its safe loopback default, while the PiServ playbook binds the JSON API to
 IPv4 for LAN observability and Home Assistant. It enables HTTP Basic
 authentication with a salted password hash and creates a root-only bootstrap
-password only when no hash exists. The web UI stays disabled, and the dynamic
-systemd user and service sandboxing remain in effect. The firewall permits the
-current IPv4 LAN, while the existing Tailscale interface policy and tailnet ACLs
-govern tailnet access. The role verifies that anonymous requests receive `401`,
-tests bootstrap credentials while present, and asserts the configured IPv4
-listener without an IPv6 wildcard.
+password alongside it. If either credential file is missing, the role rotates
+both files so their values cannot remain inconsistent after an interrupted run.
+The web UI stays disabled, and the dynamic systemd user and service sandboxing
+remain in effect. The firewall permits the current IPv4 LAN, while the existing
+Tailscale interface policy and tailnet ACLs govern tailnet access. The role
+verifies that anonymous requests receive `401`, tests the reconciled bootstrap
+credentials, and asserts the configured IPv4 listener without an IPv6 wildcard.
 
 Cockpit is installed without its optional storage, NetworkManager, and package
 management modules by default. The PiServ base playbook overrides

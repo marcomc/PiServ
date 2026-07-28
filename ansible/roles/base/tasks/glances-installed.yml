@@ -62,6 +62,32 @@
   no_log: true
   become: true
 
+- name: Read initial Glances API bootstrap password state
+  ansible.builtin.stat:
+    path: "{{ base_glances_bootstrap_password_file }}"
+  register: base_glances_bootstrap_password_file_initial_stat
+  changed_when: false
+  no_log: true
+  become: true
+
+- name: Read Glances API credential recovery marker state
+  ansible.builtin.stat:
+    path: "{{ base_glances_bootstrap_password_file }}.pending"
+  register: base_glances_credentials_recovery_marker_stat
+  changed_when: false
+  no_log: true
+  become: true
+
+- name: Decide whether Glances API credentials must be regenerated
+  ansible.builtin.set_fact:
+    base_glances_credentials_regeneration_required: >-
+      {{
+        not base_glances_password_file_stat.stat.exists
+        or not base_glances_bootstrap_password_file_initial_stat.stat.exists
+        or base_glances_credentials_recovery_marker_stat.stat.exists
+      }}
+  no_log: true
+
 - name: Generate Glances API bootstrap credentials
   ansible.builtin.command:
     argv:
@@ -85,7 +111,20 @@
   changed_when: false
   no_log: true
   when:
-    - not base_glances_password_file_stat.stat.exists
+    - base_glances_credentials_regeneration_required | bool
+    - not ansible_check_mode
+  become: true
+
+- name: Mark Glances API credential reconciliation pending
+  ansible.builtin.copy:
+    content: "pending\n"
+    dest: "{{ base_glances_bootstrap_password_file }}.pending"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - base_glances_credentials_regeneration_required | bool
     - not ansible_check_mode
   become: true
 
@@ -99,7 +138,7 @@
   no_log: true
   notify: Restart Glances service
   when:
-    - not base_glances_password_file_stat.stat.exists
+    - base_glances_credentials_regeneration_required | bool
     - not ansible_check_mode
   become: true
 
@@ -112,7 +151,7 @@
     mode: "0600"
   no_log: true
   when:
-    - not base_glances_password_file_stat.stat.exists
+    - base_glances_credentials_regeneration_required | bool
     - not ansible_check_mode
   become: true
 
@@ -173,6 +212,16 @@
   no_log: true
   become: true
 
+- name: Assert Glances API bootstrap password is available
+  ansible.builtin.assert:
+    that:
+      - base_glances_bootstrap_password_file_stat.stat.exists
+      - base_glances_bootstrap_password_file_stat.stat.isreg
+    fail_msg: >-
+      Glances API bootstrap password is unavailable after credential
+      reconciliation.
+  when: not ansible_check_mode
+
 - name: Read Glances API bootstrap password
   ansible.builtin.slurp:
     src: "{{ base_glances_bootstrap_password_file }}"
@@ -203,6 +252,16 @@
       - base_glances_authenticated_api_status.json.version is defined
     fail_msg: Glances did not return a valid authenticated local API response.
   when: base_glances_bootstrap_password_file_stat.stat.exists
+
+- name: Clear Glances API credential recovery marker
+  ansible.builtin.file:
+    path: "{{ base_glances_bootstrap_password_file }}.pending"
+    state: absent
+  no_log: true
+  when:
+    - base_glances_credentials_regeneration_required | bool
+    - not ansible_check_mode
+  become: true
 
 - name: Read TCP listening sockets for Glances validation
   ansible.builtin.command:

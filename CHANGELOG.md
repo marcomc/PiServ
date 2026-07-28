@@ -29,8 +29,8 @@ All notable project changes are documented here.
 - Added UUID-based mounting at `/mnt/external-data` with `nodev`, `nosuid`,
   and optional-device boot behavior, while destructive actions verify a local
   stable by-id device identity.
-- Deferred post-mount state probes when check mode only predicts a storage
-  reconnect or mount-option change.
+- Deferred post-mount paths, ACLs, and state probes when check mode only
+  predicts a storage reconnect or mount-option change.
 - Deferred group- and ACL-dependent storage work when a fresh check-mode run
   only predicts those prerequisites.
 - Added the dedicated `external-data` group, shared ACL policy, restricted
@@ -73,6 +73,9 @@ All notable project changes are documented here.
   listener-scope validation to the base playbook.
 - Deferred package-dependent Glances configuration and probes on fresh
   check-mode runs while retaining them for converged hosts.
+- Made the Glances password hash and bootstrap password a recoverable pair that
+  rotates together when either file is missing and completes only after
+  authenticated API validation.
 - Recorded acceptance of the direct, HTTP Basic-authenticated API exposure only
   to the trusted LAN and ACL-controlled Tailnet boundary while Debian security
   updates are applied.
@@ -127,6 +130,8 @@ All notable project changes are documented here.
   with forwarding, default Tailscale SNAT, and an exact route advertisement.
 - Deferred post-apply Tailscale preference assertions when check mode reports
   policy drift that it cannot apply.
+- Deferred PiServ preference management when a fresh check-mode run only
+  predicts the Tailscale runtime installation.
 - Ensured manual and auth-key first login apply the complete HA subnet-router
   policy.
 - Added a Tailscale access runbook covering manual browser login, verification,

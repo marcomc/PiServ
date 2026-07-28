@@ -36,6 +36,41 @@
         reload: true
       become: true
 
+    - name: Inspect the installed Tailscale runtime in check mode
+      when: ansible_check_mode
+      block:
+        - name: Read the installed Tailscale binary state
+          ansible.builtin.stat:
+            path: /usr/bin/tailscale
+          register: piserv_tailscale_binary
+
+        - name: Read the installed Tailscale service state
+          ansible.builtin.service_facts:
+          when: piserv_tailscale_binary.stat.exists
+
+    - name: Determine whether Tailscale preferences can be managed
+      vars:
+        piserv_tailscale_services: >-
+          {{ ansible_facts.services | default({}) }}
+        piserv_tailscale_service_state: >-
+          {{
+            piserv_tailscale_services
+            .get(
+              'tailscaled.service',
+              piserv_tailscale_services.get('tailscaled', {})
+            )
+            .get('state', '')
+          }}
+      ansible.builtin.set_fact:
+        piserv_tailscale_preferences_runtime_available: >-
+          {{
+            not ansible_check_mode
+            or (
+              piserv_tailscale_binary.stat.exists | default(false)
+              and piserv_tailscale_service_state == 'running'
+            )
+          }}
+
     - name: Read Tailscale preferences
       ansible.builtin.command:
         argv:
@@ -46,6 +81,7 @@
       changed_when: false
       check_mode: false
       register: piserv_tailscale_preferences
+      when: piserv_tailscale_preferences_runtime_available
 
     - name: Determine whether Tailscale preference changes are pending
       vars:
@@ -67,6 +103,7 @@
               | default(false)
               | bool)
           }}
+      when: piserv_tailscale_preferences_runtime_available
 
     - name: Advertise the PiServ local IPv4 LAN
       ansible.builtin.command:
@@ -77,11 +114,13 @@
             --advertise-routes={{ piserv_tailscale_advertised_routes_argument }}
       become: true
       changed_when: true
-      when: >-
-        ((piserv_tailscale_preferences.stdout | from_json).AdvertiseRoutes
-        | default([], true)
-        | sort)
-        != (piserv_tailscale_advertised_routes | sort)
+      when:
+        - piserv_tailscale_preferences_runtime_available
+        - >-
+          ((piserv_tailscale_preferences.stdout | from_json).AdvertiseRoutes
+          | default([], true)
+          | sort)
+          != (piserv_tailscale_advertised_routes | sort)
 
     - name: Disable acceptance of advertised subnet routes
       ansible.builtin.command:
@@ -91,10 +130,12 @@
           - --accept-routes=false
       become: true
       changed_when: true
-      when: >-
-        (piserv_tailscale_preferences.stdout | from_json).RouteAll
-        | default(false)
-        | bool
+      when:
+        - piserv_tailscale_preferences_runtime_available
+        - >-
+          (piserv_tailscale_preferences.stdout | from_json).RouteAll
+          | default(false)
+          | bool
 
     - name: Enable subnet-route source NAT
       ansible.builtin.command:
@@ -104,10 +145,12 @@
           - --snat-subnet-routes=true
       become: true
       changed_when: true
-      when: >-
-        (piserv_tailscale_preferences.stdout | from_json).NoSNAT
-        | default(false)
-        | bool
+      when:
+        - piserv_tailscale_preferences_runtime_available
+        - >-
+          (piserv_tailscale_preferences.stdout | from_json).NoSNAT
+          | default(false)
+          | bool
 
     - name: Read enforced Tailscale preferences
       ansible.builtin.command:
@@ -119,9 +162,11 @@
       changed_when: false
       check_mode: false
       register: piserv_tailscale_enforced_preferences
-      when: >-
-        not ansible_check_mode
-        or not piserv_tailscale_preferences_change_pending
+      when:
+        - piserv_tailscale_preferences_runtime_available
+        - >-
+          not ansible_check_mode
+          or not piserv_tailscale_preferences_change_pending
 
     - name: Assert advertised subnet routes are not accepted
       vars:
@@ -145,6 +190,8 @@
         fail_msg: >-
           PiServ subnet-router preferences do not match the required local-LAN
           routing policy. Apply the Tailscale playbook again.
-      when: >-
-        not ansible_check_mode
-        or not piserv_tailscale_preferences_change_pending
+      when:
+        - piserv_tailscale_preferences_runtime_available
+        - >-
+          not ansible_check_mode
+          or not piserv_tailscale_preferences_change_pending

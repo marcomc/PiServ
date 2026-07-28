@@ -33,6 +33,36 @@
         suffix: glances-service
       register: base_glances_test_directory
 
+    - name: Read Glances installed-runtime task source
+      ansible.builtin.set_fact:
+        base_glances_installed_tasks_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              base_test_role_path ~ '/tasks/glances-installed.yml'
+            )
+          }}
+
+    - name: Assert Glances credential-pair recovery contract
+      ansible.builtin.assert:
+        that:
+          - >-
+            'not base_glances_password_file_stat.stat.exists' in
+            base_glances_installed_tasks_source
+          - >-
+            'or not
+            base_glances_bootstrap_password_file_initial_stat.stat.exists' in
+            base_glances_installed_tasks_source
+          - >-
+            'base_glances_credentials_recovery_marker_stat.stat.exists' in
+            base_glances_installed_tasks_source
+          - >-
+            'Assert Glances API bootstrap password is available' in
+            base_glances_installed_tasks_source
+          - >-
+            'Clear Glances API credential recovery marker' in
+            base_glances_installed_tasks_source
+
     - name: Test Glances API systemd override rendering
       block:
         - name: Render Glances API systemd override

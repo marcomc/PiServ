@@ -325,6 +325,7 @@
     group: "{{ piserv_external_storage_group }}"
     mode: "2775"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
 - name: Grant the existing admin group write access to the mount root
@@ -335,6 +336,7 @@
     permissions: rwx
     state: present
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
 
 - name: Create external storage data directories
@@ -346,6 +348,7 @@
     mode: "{{ item.mode }}"
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
 - name: Grant the existing admin group write access to data directories
@@ -357,6 +360,7 @@
     state: present
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
@@ -371,6 +375,7 @@
     state: present
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
@@ -385,6 +390,7 @@
     state: present
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
@@ -399,6 +405,7 @@
     state: present
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
@@ -413,6 +420,7 @@
     state: present
   loop: "{{ piserv_external_storage_directories }}"
   when:
+    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
     - not ansible_check_mode or not piserv_external_storage_acl_package.changed
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
 
