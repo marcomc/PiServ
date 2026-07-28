@@ -24,22 +24,22 @@
         jackett_search_install_required: true
       when: not jackett_search_cli_tasks_safe
 
-    - name: Check out jackett-search source
-      ansible.builtin.include_tasks: source.yml
+    - name: Manage jackett-search CLI installation
       when: jackett_search_cli_tasks_safe
+      block:
+        - name: Check out jackett-search source
+          ansible.builtin.include_tasks: source.yml
 
-    - name: Install jackett-search with the upstream Makefile
-      ansible.builtin.include_tasks: install.yml
-      when: jackett_search_cli_tasks_safe
+        - name: Install jackett-search with the upstream Makefile
+          ansible.builtin.include_tasks: install.yml
 
-    - name: Record deferred jackett-search CLI installation in check mode
-      ansible.builtin.debug:
-        msg: The upstream jackett-search Makefile installation would run.
-      changed_when: true
-      when:
-        - ansible_check_mode
-        - jackett_search_cli_tasks_safe
-        - jackett_search_install_required | bool
+        - name: Record deferred jackett-search CLI installation in check mode
+          ansible.builtin.debug:
+            msg: The upstream jackett-search Makefile installation would run.
+          changed_when: true
+          when:
+            - ansible_check_mode
+            - jackett_search_install_required | bool
 
     - name: Decide whether jackett-search component tasks can run
       ansible.builtin.set_fact:
@@ -60,18 +60,17 @@
             )
           }}
 
-    - name: Record deferred component changes in check mode
-      ansible.builtin.set_fact:
-        jackett_search_components_changed: true
-      when:
-        - jackett_search_manage_components | bool
-        - not jackett_search_base_converged
+    - name: Manage optional upstream Jackett component tasks
+      when: jackett_search_manage_components | bool
+      block:
+        - name: Record deferred component changes in check mode
+          ansible.builtin.set_fact:
+            jackett_search_components_changed: true
+          when: not jackett_search_base_converged
 
-    - name: Manage optional upstream Jackett components
-      ansible.builtin.include_tasks: components.yml
-      when:
-        - jackett_search_manage_components | bool
-        - jackett_search_base_converged
+        - name: Manage optional upstream Jackett components
+          ansible.builtin.include_tasks: components.yml
+          when: jackett_search_base_converged
 
     - name: Decide whether jackett-search configuration tasks can run
       ansible.builtin.set_fact:

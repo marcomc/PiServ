@@ -88,72 +88,62 @@
       }}
   no_log: true
 
-- name: Generate Glances API bootstrap credentials
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/python3
-      - -c
-      - |
-        import hashlib
-        import json
-        import secrets
-
-        password = secrets.token_urlsafe(32)
-        password_digest = hashlib.pbkdf2_hmac(
-            'sha256', password.encode(), b'', 100000, dklen=128
-        ).hex()
-        salt = secrets.token_hex(16)
-        password_hash = hashlib.pbkdf2_hmac(
-            'sha256', password_digest.encode(), salt.encode(), 100000, dklen=128
-        ).hex()
-        print(json.dumps({'password': password, 'hash': f'{salt}${password_hash}'}))
-  register: base_glances_bootstrap_credentials
-  changed_when: false
-  no_log: true
+- name: Regenerate Glances API credentials
   when:
     - base_glances_credentials_regeneration_required | bool
     - not ansible_check_mode
-  become: true
-
-- name: Mark Glances API credential reconciliation pending
-  ansible.builtin.copy:
-    content: "pending\n"
-    dest: "{{ base_glances_bootstrap_password_file }}.pending"
-    owner: root
-    group: root
-    mode: "0600"
   no_log: true
-  when:
-    - base_glances_credentials_regeneration_required | bool
-    - not ansible_check_mode
-  become: true
+  block:
+    - name: Generate Glances API bootstrap credentials
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import hashlib
+            import json
+            import secrets
 
-- name: Store Glances API password hash
-  ansible.builtin.copy:
-    content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).hash }}"
-    dest: "{{ base_glances_password_file }}"
-    owner: root
-    group: glances
-    mode: "0640"
-  no_log: true
-  notify: Restart Glances service
-  when:
-    - base_glances_credentials_regeneration_required | bool
-    - not ansible_check_mode
-  become: true
+            password = secrets.token_urlsafe(32)
+            password_digest = hashlib.pbkdf2_hmac(
+                'sha256', password.encode(), b'', 100000, dklen=128
+            ).hex()
+            salt = secrets.token_hex(16)
+            password_hash = hashlib.pbkdf2_hmac(
+                'sha256', password_digest.encode(), salt.encode(), 100000, dklen=128
+            ).hex()
+            print(json.dumps({'password': password, 'hash': f'{salt}${password_hash}'}))
+      register: base_glances_bootstrap_credentials
+      changed_when: false
+      become: true
 
-- name: Store root-only Glances API bootstrap password
-  ansible.builtin.copy:
-    content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).password }}"
-    dest: "{{ base_glances_bootstrap_password_file }}"
-    owner: root
-    group: root
-    mode: "0600"
-  no_log: true
-  when:
-    - base_glances_credentials_regeneration_required | bool
-    - not ansible_check_mode
-  become: true
+    - name: Mark Glances API credential reconciliation pending
+      ansible.builtin.copy:
+        content: "pending\n"
+        dest: "{{ base_glances_bootstrap_password_file }}.pending"
+        owner: root
+        group: root
+        mode: "0600"
+      become: true
+
+    - name: Store Glances API password hash
+      ansible.builtin.copy:
+        content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).hash }}"
+        dest: "{{ base_glances_password_file }}"
+        owner: root
+        group: glances
+        mode: "0640"
+      notify: Restart Glances service
+      become: true
+
+    - name: Store root-only Glances API bootstrap password
+      ansible.builtin.copy:
+        content: "{{ (base_glances_bootstrap_credentials.stdout | from_json).password }}"
+        dest: "{{ base_glances_bootstrap_password_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      become: true
 
 - name: Read Glances systemd drop-in parent directory
   ansible.builtin.stat:
@@ -239,36 +229,35 @@
       reconciliation.
   when: not ansible_check_mode
 
-- name: Read Glances API bootstrap password
-  ansible.builtin.slurp:
-    src: "{{ base_glances_bootstrap_password_file }}"
-  register: base_glances_bootstrap_password
+- name: Validate Glances API with bootstrap credentials
+  when: base_glances_bootstrap_password_file_stat.stat.exists
   no_log: true
-  when: base_glances_bootstrap_password_file_stat.stat.exists
-  become: true
+  block:
+    - name: Read Glances API bootstrap password
+      ansible.builtin.slurp:
+        src: "{{ base_glances_bootstrap_password_file }}"
+      register: base_glances_bootstrap_password
+      become: true
 
-- name: Validate Glances local API with bootstrap credentials
-  ansible.builtin.uri:
-    url: >-
-      http://{{ base_glances_validation_address }}:{{ base_glances_port }}/api/4/status
-    url_username: "{{ base_glances_auth_username }}"
-    url_password: "{{ base_glances_bootstrap_password.content | b64decode }}"
-    force_basic_auth: true
-    return_content: true
-    status_code: 200
-  register: base_glances_authenticated_api_status
-  changed_when: false
-  no_log: true
-  when: base_glances_bootstrap_password_file_stat.stat.exists
-  check_mode: false
+    - name: Validate Glances local API with bootstrap credentials
+      ansible.builtin.uri:
+        url: >-
+          http://{{ base_glances_validation_address }}:{{ base_glances_port }}/api/4/status
+        url_username: "{{ base_glances_auth_username }}"
+        url_password: "{{ base_glances_bootstrap_password.content | b64decode }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: base_glances_authenticated_api_status
+      changed_when: false
+      check_mode: false
 
-- name: Assert Glances local API returns its version with bootstrap credentials
-  ansible.builtin.assert:
-    that:
-      - base_glances_authenticated_api_status.status | int == 200
-      - base_glances_authenticated_api_status.json.version is defined
-    fail_msg: Glances did not return a valid authenticated local API response.
-  when: base_glances_bootstrap_password_file_stat.stat.exists
+    - name: Assert Glances local API returns its version with bootstrap credentials
+      ansible.builtin.assert:
+        that:
+          - base_glances_authenticated_api_status.status | int == 200
+          - base_glances_authenticated_api_status.json.version is defined
+        fail_msg: Glances did not return a valid authenticated local API response.
 
 - name: Clear Glances API credential recovery marker
   ansible.builtin.file:

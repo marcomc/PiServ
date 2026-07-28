@@ -20,25 +20,25 @@
         mode: "0755"
       become: true
 
-    - name: Run PiBenchmarks storage test once
+    - name: Run and record the optional PiBenchmarks storage test
       when: freenove_case_run_pibenchmarks | bool
-      ansible.builtin.command:
-        argv:
-          - "{{ freenove_case_pibenchmarks_dir }}/Storage.sh"
-          - "/home/{{ freenove_case_install_user }}/"
-        chdir: "{{ freenove_case_pibenchmarks_dir }}"
-        creates: "{{ freenove_case_pibenchmarks_marker }}"
-      become: true
-      register: freenove_case_pibenchmarks_result
+      block:
+        - name: Run PiBenchmarks storage test once
+          ansible.builtin.command:
+            argv:
+              - "{{ freenove_case_pibenchmarks_dir }}/Storage.sh"
+              - "/home/{{ freenove_case_install_user }}/"
+            chdir: "{{ freenove_case_pibenchmarks_dir }}"
+            creates: "{{ freenove_case_pibenchmarks_marker }}"
+          become: true
+          register: freenove_case_pibenchmarks_result
 
-    - name: Mark PiBenchmarks storage test as completed
-      when:
-        - freenove_case_run_pibenchmarks | bool
-        - freenove_case_pibenchmarks_result is changed
-      ansible.builtin.file:
-        path: "{{ freenove_case_pibenchmarks_marker }}"
-        state: touch
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
+        - name: Mark PiBenchmarks storage test as completed
+          when: freenove_case_pibenchmarks_result.changed | default(false)
+          ansible.builtin.file:
+            path: "{{ freenove_case_pibenchmarks_marker }}"
+            state: touch
+            owner: root
+            group: root
+            mode: "0644"
+          become: true

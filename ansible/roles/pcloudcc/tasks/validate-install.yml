@@ -32,18 +32,19 @@
   failed_when: false
   check_mode: false
 
-- name: Validate pCloud mount root directory
+- name: Validate unmounted pCloud mount root
   when: pcloudcc_validate_mount_root_mount.rc != 0
-  ansible.builtin.stat:
-    path: "{{ pcloudcc_mount_root }}"
-  register: pcloudcc_mount_root_stat
+  block:
+    - name: Validate pCloud mount root directory
+      ansible.builtin.stat:
+        path: "{{ pcloudcc_mount_root }}"
+      register: pcloudcc_mount_root_stat
 
-- name: Assert pCloud mount root is prepared
-  when: pcloudcc_validate_mount_root_mount.rc != 0
-  ansible.builtin.assert:
-    that:
-      - pcloudcc_mount_root_stat.stat.isdir
-      - pcloudcc_mount_root_stat.stat.pw_name == pcloudcc_runtime_user
+    - name: Assert pCloud mount root is prepared
+      ansible.builtin.assert:
+        that:
+          - pcloudcc_mount_root_stat.stat.isdir
+          - pcloudcc_mount_root_stat.stat.pw_name == pcloudcc_runtime_user
 
 - name: Assert pCloud mount root is active
   when: pcloudcc_validate_mount_root_mount.rc == 0

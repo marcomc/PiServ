@@ -4,6 +4,14 @@ All notable project changes are documented here.
 
 ## 0.2.0 - 2026-07-28
 
+### Ansible Maintainability
+
+- Grouped adjacent playbook and role tasks behind named blocks when they share
+  execution conditions, making check-mode, configuration-mode, and
+  feature-specific branches visible without repeated task-level predicates.
+- Made Freenove hardware apply reporting explicitly normal-mode-only so check
+  mode does not parse output from its skipped hardware command.
+
 ### Jackett Search
 
 - Replaced the project-owned Docker Compose deployment with a Galaxy-ready

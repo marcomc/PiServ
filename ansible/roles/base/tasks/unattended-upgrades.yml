@@ -25,25 +25,26 @@
     mode: "0644"
   become: true
 
-- name: Ensure unattended-upgrades plugin directory exists
+- name: Install unattended-upgrades digest integration
   when: base_manage_unattended_upgrade_digest | bool
-  ansible.builtin.file:
-    path: /etc/unattended-upgrades/plugins
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
+  block:
+    - name: Ensure unattended-upgrades plugin directory exists
+      ansible.builtin.file:
+        path: /etc/unattended-upgrades/plugins
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
 
-- name: Install PiServ unattended-upgrades digest plugin
-  when: base_manage_unattended_upgrade_digest | bool
-  ansible.builtin.copy:
-    src: UnattendedUpgradesPluginPiServMail.py
-    dest: /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+    - name: Install PiServ unattended-upgrades digest plugin
+      ansible.builtin.copy:
+        src: UnattendedUpgradesPluginPiServMail.py
+        dest: /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
 
 - name: Remove PiServ unattended-upgrades digest plugin when disabled
   when: not (base_manage_unattended_upgrade_digest | bool)

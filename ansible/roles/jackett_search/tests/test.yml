@@ -70,19 +70,20 @@
           vars:
             jackett_search_manage_components: false
 
-        - name: Load jackett-search runtime user facts
-          ansible.builtin.include_tasks: ../tasks/runtime-user.yml
-          vars:
-            jackett_search_runtime_user: "{{ ansible_facts.user_id }}"
+        - name: Validate Linux runtime-user fact derivation
           when: ansible_facts.system == 'Linux'
+          block:
+            - name: Load jackett-search runtime user facts
+              ansible.builtin.include_tasks: ../tasks/runtime-user.yml
+              vars:
+                jackett_search_runtime_user: "{{ ansible_facts.user_id }}"
 
-        - name: Assert the runtime user's primary group is derived from passwd facts
-          ansible.builtin.assert:
-            that:
-              - >-
-                jackett_search_runtime_group | string
-                == ansible_facts.getent_passwd[ansible_facts.user_id][2] | string
-          when: ansible_facts.system == 'Linux'
+            - name: Assert the runtime user's primary group is derived from passwd facts
+              ansible.builtin.assert:
+                that:
+                  - >-
+                    jackett_search_runtime_group | string
+                    == ansible_facts.getent_passwd[ansible_facts.user_id][2] | string
 
         - name: Load jackett_search role defaults for package assertions
           ansible.builtin.include_vars:
@@ -135,36 +136,36 @@
             that:
               - jackett_search_test_source_parent_stat.stat.mode == '0700'
 
-        - name: Remove isolated role-owned jackett-search command on Linux
-          ansible.builtin.include_role:
-            name: "{{ playbook_dir | dirname }}"
-          vars:
-            jackett_search_state: absent
-            jackett_search_runtime_user: "{{ ansible_user_id }}"
-            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
-            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
-            jackett_search_command_path: >-
-              {{ jackett_search_test_directory.path }}/bin/jackett-search
-            jackett_search_manage_components: true
-            jackett_search_component_config_dir: >-
-              {{ jackett_search_test_directory.path }}/components
-            jackett_search_config_mode: unmanaged
-            jackett_search_config_path: "{{ jackett_search_test_directory.path }}/config.toml"
-            jackett_search_validate_api: false
+        - name: Validate Linux jackett-search removal
           when: ansible_facts.system == 'Linux'
+          block:
+            - name: Remove isolated role-owned jackett-search command
+              ansible.builtin.include_role:
+                name: "{{ playbook_dir | dirname }}"
+              vars:
+                jackett_search_state: absent
+                jackett_search_runtime_user: "{{ ansible_user_id }}"
+                jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+                jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+                jackett_search_command_path: >-
+                  {{ jackett_search_test_directory.path }}/bin/jackett-search
+                jackett_search_manage_components: true
+                jackett_search_component_config_dir: >-
+                  {{ jackett_search_test_directory.path }}/components
+                jackett_search_config_mode: unmanaged
+                jackett_search_config_path: "{{ jackett_search_test_directory.path }}/config.toml"
+                jackett_search_validate_api: false
 
-        - name: Read isolated jackett-search command after removal on Linux
-          ansible.builtin.stat:
-            path: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
-            follow: false
-          register: jackett_search_test_command_stat
-          when: ansible_facts.system == 'Linux'
+            - name: Read isolated jackett-search command after removal
+              ansible.builtin.stat:
+                path: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
+                follow: false
+              register: jackett_search_test_command_stat
 
-        - name: Assert isolated jackett-search command was removed on Linux
-          ansible.builtin.assert:
-            that:
-              - not jackett_search_test_command_stat.stat.exists
-          when: ansible_facts.system == 'Linux'
+            - name: Assert isolated jackett-search command was removed
+              ansible.builtin.assert:
+                that:
+                  - not jackett_search_test_command_stat.stat.exists
 
         - name: Preserve existing create-only config with API validation disabled
           ansible.builtin.include_tasks: ../tasks/config.yml

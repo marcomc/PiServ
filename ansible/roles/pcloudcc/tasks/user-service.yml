@@ -71,28 +71,30 @@
         XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path={{ pcloudcc_runtime_dir }}/bus"
 
-    - name: Validate pcloudcc user service is active
+    - name: Validate started pcloudcc user service and mount
       when: pcloudcc_user_service_state == "started"
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/systemctl
-          - --user
-          - is-active
-          - "{{ pcloudcc_user_service_name }}"
-      become: true
-      become_user: "{{ pcloudcc_runtime_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
-        DBUS_SESSION_BUS_ADDRESS: "unix:path={{ pcloudcc_runtime_dir }}/bus"
-      changed_when: false
-      check_mode: false
+      block:
+        - name: Validate pcloudcc user service is active
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/systemctl
+              - --user
+              - is-active
+              - "{{ pcloudcc_user_service_name }}"
+          become: true
+          become_user: "{{ pcloudcc_runtime_user }}"
+          environment:
+            XDG_RUNTIME_DIR: "{{ pcloudcc_runtime_dir }}"
+            DBUS_SESSION_BUS_ADDRESS: >-
+              unix:path={{ pcloudcc_runtime_dir }}/bus
+          changed_when: false
+          check_mode: false
 
-    - name: Validate pcloudcc mount is active
-      when: pcloudcc_user_service_state == "started"
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/findmnt
-          - --mountpoint
-          - "{{ pcloudcc_mount_root }}"
-      changed_when: false
-      check_mode: false
+        - name: Validate pcloudcc mount is active
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/findmnt
+              - --mountpoint
+              - "{{ pcloudcc_mount_root }}"
+          changed_when: false
+          check_mode: false

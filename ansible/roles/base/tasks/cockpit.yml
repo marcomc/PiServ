@@ -32,30 +32,29 @@
       {{ (not ansible_check_mode) or
          (base_cockpit_socket_state.status.ActiveState | default('') == 'active') }}
 
-- name: Read installed Cockpit packages for check-mode module validation
-  ansible.builtin.command:
-    argv: >-
-      {{ ['dpkg-query', '--show', '--showformat=${Package}\t${db:Status-Status}\n']
-         + base_cockpit_packages }}
-  register: base_cockpit_package_states
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
+- name: Discover installed Cockpit packages in check mode
   when:
     - ansible_check_mode
     - base_cockpit_expected_modules | length > 0
+  block:
+    - name: Read installed Cockpit packages for check-mode module validation
+      ansible.builtin.command:
+        argv: >-
+          {{ ['dpkg-query', '--show', '--showformat=${Package}\t${db:Status-Status}\n']
+             + base_cockpit_packages }}
+      register: base_cockpit_package_states
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: true
 
-- name: Determine installed Cockpit packages for check-mode module validation
-  ansible.builtin.set_fact:
-    base_cockpit_installed_packages: >-
-      {{ base_cockpit_package_states.stdout_lines | default([])
-         | select('match', '^[^\t]+\tinstalled$')
-         | map('regex_replace', '\tinstalled$', '')
-         | list }}
-  when:
-    - ansible_check_mode
-    - base_cockpit_expected_modules | length > 0
+    - name: Determine installed Cockpit packages for check-mode module validation
+      ansible.builtin.set_fact:
+        base_cockpit_installed_packages: >-
+          {{ base_cockpit_package_states.stdout_lines | default([])
+             | select('match', '^[^\t]+\tinstalled$')
+             | map('regex_replace', '\tinstalled$', '')
+             | list }}
 
 - name: Determine whether Cockpit module validation can run
   ansible.builtin.set_fact:
@@ -65,50 +64,51 @@
           (base_cockpit_packages | difference(
             base_cockpit_installed_packages | default([])) | length == 0)) }}
 
-- name: Validate Cockpit local HTTPS login page
-  ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ base_cockpit_port }}/"
-    return_content: true
-    status_code: 200
-    use_proxy: false
-    validate_certs: false
-  register: base_cockpit_https
-  changed_when: false
-  failed_when: false
-  until: base_cockpit_https.status | int == 200
-  retries: 10
-  delay: 1
-  check_mode: false
+- name: Validate Cockpit HTTPS service
   when: base_cockpit_live_validation_enabled | bool
+  block:
+    - name: Validate Cockpit local HTTPS login page
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ base_cockpit_port }}/"
+        return_content: true
+        status_code: 200
+        use_proxy: false
+        validate_certs: false
+      register: base_cockpit_https
+      changed_when: false
+      failed_when: false
+      until: base_cockpit_https.status | int == 200
+      retries: 10
+      delay: 1
+      check_mode: false
 
-- name: Assert Cockpit returns its login page
-  ansible.builtin.assert:
-    that:
-      - base_cockpit_https.status | int == 200
-      - "'cockpit/static/login.js' in base_cockpit_https.content"
-    fail_msg: Cockpit did not return its HTTPS login page.
-  when: base_cockpit_live_validation_enabled | bool
+    - name: Assert Cockpit returns its login page
+      ansible.builtin.assert:
+        that:
+          - base_cockpit_https.status | int == 200
+          - "'cockpit/static/login.js' in base_cockpit_https.content"
+        fail_msg: Cockpit did not return its HTTPS login page.
 
-- name: Read registered Cockpit modules
-  ansible.builtin.command:
-    cmd: cockpit-bridge --packages
-  register: base_cockpit_registered_modules
-  changed_when: false
-  check_mode: false
+- name: Validate registered Cockpit modules
   when:
     - base_cockpit_expected_modules | length > 0
     - base_cockpit_module_validation_enabled | bool
+  block:
+    - name: Read registered Cockpit modules
+      ansible.builtin.command:
+        cmd: cockpit-bridge --packages
+      register: base_cockpit_registered_modules
+      changed_when: false
+      check_mode: false
 
-- name: Assert expected Cockpit modules are registered
-  ansible.builtin.assert:
-    that:
-      - >-
-        base_cockpit_registered_modules.stdout_lines
-        | select('match', '^' ~ (item | regex_escape) ~ '(?:\\s|:)')
-        | list
-        | length > 0
-    fail_msg: "Cockpit module '{{ item }}' is not registered by cockpit-bridge."
-  loop: "{{ base_cockpit_expected_modules }}"
-  when:
-    - base_cockpit_expected_modules | length > 0
-    - base_cockpit_module_validation_enabled | bool
+    - name: Assert expected Cockpit modules are registered
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_cockpit_registered_modules.stdout_lines
+            | select('match', '^' ~ (item | regex_escape) ~ '(?:\\s|:)')
+            | list
+            | length > 0
+        fail_msg: >-
+          Cockpit module '{{ item }}' is not registered by cockpit-bridge.
+      loop: "{{ base_cockpit_expected_modules }}"

@@ -42,31 +42,33 @@
   become: true
   become_user: "{{ freenove_case_install_user }}"
 
-- name: Validate controller Freenove source exists
+- name: Install Freenove source from the controller
   when: freenove_case_source_mode == "controller_copy"
-  ansible.builtin.stat:
-    path: "{{ freenove_case_controller_src }}/Code/app_ui.py"
-  delegate_to: localhost
-  become: false
-  register: freenove_case_controller_src_stat
+  block:
+    - name: Validate controller Freenove source exists
+      ansible.builtin.stat:
+        path: "{{ freenove_case_controller_src }}/Code/app_ui.py"
+      delegate_to: localhost
+      become: false
+      register: freenove_case_controller_src_stat
 
-- name: Require controller Freenove source files
-  when: freenove_case_source_mode == "controller_copy"
-  ansible.builtin.assert:
-    that:
-      - freenove_case_controller_src_stat.stat.exists
-    fail_msg: "Controller source does not look like a Freenove checkout: {{ freenove_case_controller_src }}"
+    - name: Require controller Freenove source files
+      ansible.builtin.assert:
+        that:
+          - freenove_case_controller_src_stat.stat.exists
+        fail_msg: >-
+          Controller source does not look like a Freenove checkout:
+          {{ freenove_case_controller_src }}
 
-- name: Copy Freenove case repository from controller
-  when: freenove_case_source_mode == "controller_copy"
-  ansible.builtin.copy:
-    src: "{{ freenove_case_controller_src }}/"
-    dest: "{{ freenove_case_install_dir }}/"
-    owner: "{{ freenove_case_install_user }}"
-    group: "{{ freenove_case_install_user }}"
-    mode: preserve
-    directory_mode: "0755"
-  become: true
+    - name: Copy Freenove case repository from controller
+      ansible.builtin.copy:
+        src: "{{ freenove_case_controller_src }}/"
+        dest: "{{ freenove_case_install_dir }}/"
+        owner: "{{ freenove_case_install_user }}"
+        group: "{{ freenove_case_install_user }}"
+        mode: preserve
+        directory_mode: "0755"
+      become: true
 
 - name: Extract Freenove case archive URL
   when: freenove_case_source_mode == "archive_url"

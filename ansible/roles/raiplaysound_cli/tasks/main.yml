@@ -87,65 +87,61 @@
     PATH: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
   changed_when: true
 
-- name: Read raiplaysound-cli config directory
+- name: Manage role-owned raiplaysound-cli configuration
   when: raiplaysound_cli_config_mode in ['managed', 'create']
-  ansible.builtin.stat:
-    path: "{{ raiplaysound_cli_effective_config_path | dirname }}"
-  register: raiplaysound_cli_config_dir_stat
+  block:
+    - name: Read raiplaysound-cli config directory
+      ansible.builtin.stat:
+        path: "{{ raiplaysound_cli_effective_config_path | dirname }}"
+      register: raiplaysound_cli_config_dir_stat
 
-- name: Assert raiplaysound-cli config directory path is valid
-  when:
-    - raiplaysound_cli_config_mode in ['managed', 'create']
-    - raiplaysound_cli_config_dir_stat.stat.exists
-  ansible.builtin.assert:
-    that:
-      - raiplaysound_cli_config_dir_stat.stat.isdir
-    fail_msg: >-
-      Config directory path exists but is not a directory:
-      {{ raiplaysound_cli_effective_config_path | dirname }}.
+    - name: Assert raiplaysound-cli config directory path is valid
+      ansible.builtin.assert:
+        that:
+          - raiplaysound_cli_config_dir_stat.stat.isdir
+        fail_msg: >-
+          Config directory path exists but is not a directory:
+          {{ raiplaysound_cli_effective_config_path | dirname }}.
+      when: raiplaysound_cli_config_dir_stat.stat.exists
 
-- name: Ensure raiplaysound-cli config directory exists
-  when:
-    - raiplaysound_cli_config_mode in ['managed', 'create']
-    - not raiplaysound_cli_config_dir_stat.stat.exists
-  ansible.builtin.file:
-    path: "{{ raiplaysound_cli_effective_config_path | dirname }}"
-    state: directory
-    owner: "{{ raiplaysound_cli_runtime_user }}"
-    group: "{{ raiplaysound_cli_runtime_user }}"
-    mode: "0700"
-  become: true
+    - name: Ensure raiplaysound-cli config directory exists
+      ansible.builtin.file:
+        path: "{{ raiplaysound_cli_effective_config_path | dirname }}"
+        state: directory
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0700"
+      become: true
+      when: not raiplaysound_cli_config_dir_stat.stat.exists
 
-- name: Install raiplaysound-cli config
-  when: raiplaysound_cli_config_mode in ['managed', 'create']
-  ansible.builtin.template:
-    src: raiplaysound-cli.conf.j2
-    dest: "{{ raiplaysound_cli_effective_config_path }}"
-    owner: "{{ raiplaysound_cli_runtime_user }}"
-    group: "{{ raiplaysound_cli_runtime_user }}"
-    mode: "0600"
-    force: "{{ raiplaysound_cli_config_mode == 'managed' }}"
-  become: true
+    - name: Install raiplaysound-cli config
+      ansible.builtin.template:
+        src: raiplaysound-cli.conf.j2
+        dest: "{{ raiplaysound_cli_effective_config_path }}"
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0600"
+        force: "{{ raiplaysound_cli_config_mode == 'managed' }}"
+      become: true
 
-- name: Validate unmanaged raiplaysound-cli config file
+- name: Validate unmanaged raiplaysound-cli timer configuration
   when:
     - raiplaysound_cli_config_mode == 'unmanaged'
     - raiplaysound_cli_manage_user_timer | bool
-  ansible.builtin.stat:
-    path: "{{ raiplaysound_cli_effective_config_path }}"
-  register: raiplaysound_cli_unmanaged_config_stat
+  block:
+    - name: Read unmanaged raiplaysound-cli config file
+      ansible.builtin.stat:
+        path: "{{ raiplaysound_cli_effective_config_path }}"
+      register: raiplaysound_cli_unmanaged_config_stat
 
-- name: Assert unmanaged raiplaysound-cli config file exists
-  when:
-    - raiplaysound_cli_config_mode == 'unmanaged'
-    - raiplaysound_cli_manage_user_timer | bool
-  ansible.builtin.assert:
-    that:
-      - raiplaysound_cli_unmanaged_config_stat.stat.exists
-      - raiplaysound_cli_unmanaged_config_stat.stat.isreg
-    fail_msg: >-
-      raiplaysound_cli_config_mode is unmanaged, but the timer requires an
-      existing config file at {{ raiplaysound_cli_effective_config_path }}.
+    - name: Assert unmanaged raiplaysound-cli config file exists
+      ansible.builtin.assert:
+        that:
+          - raiplaysound_cli_unmanaged_config_stat.stat.exists
+          - raiplaysound_cli_unmanaged_config_stat.stat.isreg
+        fail_msg: >-
+          raiplaysound_cli_config_mode is unmanaged, but the timer requires an
+          existing config file at {{ raiplaysound_cli_effective_config_path }}.
 
 - name: Validate raiplaysound-cli command
   ansible.builtin.command:

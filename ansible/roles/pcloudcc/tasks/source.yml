@@ -69,38 +69,46 @@
   loop_control:
     loop_var: pcloudcc_patch_file_item
 
-- name: Check pcloudcc source patches apply cleanly
-  when: pcloudcc_patch_reverse_check_item.rc != 0
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/git
-      - apply
-      - --check
-      - "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
-  args:
-    chdir: "{{ pcloudcc_source_dir }}"
-  changed_when: false
-  check_mode: false
-  loop: "{{ pcloudcc_patch_reverse_check.results }}"
-  loop_control:
-    loop_var: pcloudcc_patch_reverse_check_item
-    label: "{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
+- name: Record unapplied pcloudcc source patches
+  ansible.builtin.set_fact:
+    pcloudcc_unapplied_patches: >-
+      {{ pcloudcc_patch_reverse_check.results
+         | rejectattr('rc', 'equalto', 0)
+         | list }}
 
-- name: Apply pcloudcc source patches
-  when: pcloudcc_patch_reverse_check_item.rc != 0
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/git
-      - apply
-      - "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
-  args:
-    chdir: "{{ pcloudcc_source_dir }}"
-  register: pcloudcc_patch_apply
-  changed_when: true
-  loop: "{{ pcloudcc_patch_reverse_check.results }}"
-  loop_control:
-    loop_var: pcloudcc_patch_reverse_check_item
-    label: "{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
+- name: Validate and apply missing pcloudcc source patches
+  when: pcloudcc_unapplied_patches | length > 0
+  block:
+    - name: Check pcloudcc source patches apply cleanly
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - apply
+          - --check
+          - "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
+      args:
+        chdir: "{{ pcloudcc_source_dir }}"
+      changed_when: false
+      check_mode: false
+      loop: "{{ pcloudcc_unapplied_patches }}"
+      loop_control:
+        loop_var: pcloudcc_patch_reverse_check_item
+        label: "{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
+
+    - name: Apply pcloudcc source patches
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - apply
+          - "{{ pcloudcc_install_root }}/{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
+      args:
+        chdir: "{{ pcloudcc_source_dir }}"
+      register: pcloudcc_patch_apply
+      changed_when: true
+      loop: "{{ pcloudcc_unapplied_patches }}"
+      loop_control:
+        loop_var: pcloudcc_patch_reverse_check_item
+        label: "{{ pcloudcc_patch_reverse_check_item.pcloudcc_patch_file_item }}"
 
 - name: Check whether pCloud mount root is already mounted
   ansible.builtin.command:

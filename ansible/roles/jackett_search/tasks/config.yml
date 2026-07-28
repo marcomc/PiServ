@@ -68,17 +68,15 @@
       no_log: true
       when: jackett_search_config_write_required
 
-- name: Store explicitly supplied Jackett API key for unmanaged validation
-  ansible.builtin.set_fact:
-    jackett_search_effective_api_key: "{{ jackett_search_api_key }}"
-  when:
-    - jackett_search_config_mode == 'unmanaged'
-    - jackett_search_api_key | length > 0
-  no_log: true
-
-- name: Validate unmanaged jackett-search configuration
+- name: Manage unmanaged jackett-search configuration
   when: jackett_search_config_mode == 'unmanaged'
   block:
+    - name: Store explicitly supplied Jackett API key for unmanaged validation
+      ansible.builtin.set_fact:
+        jackett_search_effective_api_key: "{{ jackett_search_api_key }}"
+      when: jackett_search_api_key | length > 0
+      no_log: true
+
     - name: Read unmanaged jackett-search configuration
       ansible.builtin.stat:
         path: "{{ jackett_search_effective_config_path }}"

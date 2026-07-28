@@ -223,34 +223,34 @@
     system: true
   register: piserv_external_storage_group_result
 
-- name: Read current external-storage group membership
-  ansible.builtin.command:
-    argv:
-      - getent
-      - group
-      - "{{ piserv_external_storage_group }}"
-  register: piserv_external_storage_group_entry
-  changed_when: false
-  check_mode: false
+- name: Reconcile external-storage group membership
   when:
     - not ansible_check_mode or not piserv_external_storage_group_result.changed
+  block:
+    - name: Read current external-storage group membership
+      ansible.builtin.command:
+        argv:
+          - getent
+          - group
+          - "{{ piserv_external_storage_group }}"
+      register: piserv_external_storage_group_entry
+      changed_when: false
+      check_mode: false
 
-- name: Remove stale external-storage group members
-  ansible.builtin.command:
-    argv:
-      - gpasswd
-      - --delete
-      - "{{ item }}"
-      - "{{ piserv_external_storage_group }}"
-  loop: >-
-    {{ ((piserv_external_storage_group_entry.stdout | default('')).split(':')
-        | last | split(','))
-       | reject('equalto', '')
-       | difference(['admin'] + piserv_external_storage_service_users) }}
-  register: piserv_external_storage_stale_users
-  changed_when: true
-  when:
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
+    - name: Remove stale external-storage group members
+      ansible.builtin.command:
+        argv:
+          - gpasswd
+          - --delete
+          - "{{ item }}"
+          - "{{ piserv_external_storage_group }}"
+      loop: >-
+        {{ ((piserv_external_storage_group_entry.stdout | default('')).split(':')
+            | last | split(','))
+           | reject('equalto', '')
+           | difference(['admin'] + piserv_external_storage_service_users) }}
+      register: piserv_external_storage_stale_users
+      changed_when: true
 
 - name: Check revoked writing service states after storage access revocation
   ansible.builtin.command:
@@ -286,25 +286,25 @@
     path: "{{ piserv_external_storage_mountpoint | dirname }}"
   register: piserv_external_storage_mountpoint_parent
 
-- name: Create a missing external storage mountpoint parent
-  ansible.builtin.file:
-    path: "{{ piserv_external_storage_mountpoint | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when:
-    - piserv_external_storage_mountpoint_before_mount.rc != 0
-    - not piserv_external_storage_mountpoint_parent.stat.exists
-
-- name: Ensure the external storage mountpoint exists before mounting
-  ansible.builtin.file:
-    path: "{{ piserv_external_storage_mountpoint }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+- name: Prepare the unmounted external storage mountpoint
   when: piserv_external_storage_mountpoint_before_mount.rc != 0
+  block:
+    - name: Create a missing external storage mountpoint parent
+      ansible.builtin.file:
+        path: "{{ piserv_external_storage_mountpoint | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: not piserv_external_storage_mountpoint_parent.stat.exists
+
+    - name: Ensure the external storage mountpoint exists before mounting
+      ansible.builtin.file:
+        path: "{{ piserv_external_storage_mountpoint }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
 
 - name: Mount the external storage volume from its filesystem UUID
   ansible.posix.mount:
@@ -317,154 +317,133 @@
     state: mounted
   register: piserv_external_storage_mount_result
 
-- name: Set shared mount-root ownership and permissions
-  ansible.builtin.file:
-    path: "{{ piserv_external_storage_mountpoint }}"
-    state: directory
-    owner: root
-    group: "{{ piserv_external_storage_group }}"
-    mode: "2775"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Grant the existing admin group write access to the mount root
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}"
-    etype: group
-    entity: admin
-    permissions: rwx
-    state: present
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-
-- name: Create external storage data directories
-  ansible.builtin.file:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    state: directory
-    owner: root
-    group: "{{ piserv_external_storage_group }}"
-    mode: "{{ item.mode }}"
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Grant the existing admin group write access to data directories
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    etype: group
-    entity: admin
-    permissions: rwx
-    state: present
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Configure default owner ACLs for external storage directories
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    default: true
-    etype: user
-    entity: ""
-    permissions: rwx
-    recalculate_mask: mask
-    state: present
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Configure default group ACLs for external storage directories
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    default: true
-    etype: group
-    entity: ""
-    permissions: rwx
-    recalculate_mask: mask
-    state: present
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Configure default admin ACLs for external storage directories
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    default: true
-    etype: group
-    entity: admin
-    permissions: rwx
-    recalculate_mask: mask
-    state: present
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Configure default other ACLs for external storage directories
-  ansible.posix.acl:
-    path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
-    default: true
-    etype: other
-    entity: ""
-    permissions: "{{ item.other_permissions }}"
-    recalculate_mask: mask
-    state: present
-  loop: "{{ piserv_external_storage_directories }}"
-  when:
-    - not ansible_check_mode or not piserv_external_storage_mount_result.changed
-    - not ansible_check_mode or not piserv_external_storage_acl_package.changed
-    - not ansible_check_mode or not piserv_external_storage_group_result.changed
-
-- name: Read the mounted external storage state
-  ansible.builtin.command:
-    argv:
-      - findmnt
-      - --mountpoint
-      - "{{ piserv_external_storage_mountpoint }}"
-      - --output
-      - FSTYPE,OPTIONS
-      - --noheadings
-  register: piserv_external_storage_mount
-  changed_when: false
-  check_mode: false
+- name: Configure and validate the mounted external storage volume
   when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
+  block:
+    - name: Set shared mount-root ownership and permissions
+      ansible.builtin.file:
+        path: "{{ piserv_external_storage_mountpoint }}"
+        state: directory
+        owner: root
+        group: "{{ piserv_external_storage_group }}"
+        mode: "2775"
+      when: not ansible_check_mode or not piserv_external_storage_group_result.changed
 
-- name: Read the mounted external storage UUID
-  ansible.builtin.command:
-    argv:
-      - findmnt
-      - --mountpoint
-      - "{{ piserv_external_storage_mountpoint }}"
-      - --output
-      - UUID
-      - --noheadings
-  register: piserv_external_storage_mounted_uuid
-  changed_when: false
-  check_mode: false
-  when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
+    - name: Grant the existing admin group write access to the mount root
+      ansible.posix.acl:
+        path: "{{ piserv_external_storage_mountpoint }}"
+        etype: group
+        entity: admin
+        permissions: rwx
+        state: present
+      when: not ansible_check_mode or not piserv_external_storage_acl_package.changed
 
-- name: Assert the external storage mount is active with hardened options
-  ansible.builtin.assert:
-    that:
-      - >-
-        piserv_external_storage_mounted_uuid.stdout | trim ==
-        piserv_external_storage_uuid.stdout | trim
-      - piserv_external_storage_mount.stdout is search('ext4')
-      - piserv_external_storage_mount.stdout is search('nodev')
-      - piserv_external_storage_mount.stdout is search('nosuid')
-    fail_msg: >-
-      The external storage mount is not active with the expected ext4,
-      nodev, and nosuid state.
-  when: not ansible_check_mode or not piserv_external_storage_mount_result.changed
+    - name: Configure external storage data directories
+      when: not ansible_check_mode or not piserv_external_storage_group_result.changed
+      block:
+        - name: Create external storage data directories
+          ansible.builtin.file:
+            path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+            state: directory
+            owner: root
+            group: "{{ piserv_external_storage_group }}"
+            mode: "{{ item.mode }}"
+          loop: "{{ piserv_external_storage_directories }}"
+
+        - name: Configure shared ACLs for external storage data directories
+          when: not ansible_check_mode or not piserv_external_storage_acl_package.changed
+          block:
+            - name: Grant the existing admin group write access to data directories
+              ansible.posix.acl:
+                path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+                etype: group
+                entity: admin
+                permissions: rwx
+                state: present
+              loop: "{{ piserv_external_storage_directories }}"
+
+            - name: Configure default owner ACLs for external storage directories
+              ansible.posix.acl:
+                path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+                default: true
+                etype: user
+                entity: ""
+                permissions: rwx
+                recalculate_mask: mask
+                state: present
+              loop: "{{ piserv_external_storage_directories }}"
+
+            - name: Configure default group ACLs for external storage directories
+              ansible.posix.acl:
+                path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+                default: true
+                etype: group
+                entity: ""
+                permissions: rwx
+                recalculate_mask: mask
+                state: present
+              loop: "{{ piserv_external_storage_directories }}"
+
+            - name: Configure default admin ACLs for external storage directories
+              ansible.posix.acl:
+                path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+                default: true
+                etype: group
+                entity: admin
+                permissions: rwx
+                recalculate_mask: mask
+                state: present
+              loop: "{{ piserv_external_storage_directories }}"
+
+            - name: Configure default other ACLs for external storage directories
+              ansible.posix.acl:
+                path: "{{ piserv_external_storage_mountpoint }}/{{ item.name }}"
+                default: true
+                etype: other
+                entity: ""
+                permissions: "{{ item.other_permissions }}"
+                recalculate_mask: mask
+                state: present
+              loop: "{{ piserv_external_storage_directories }}"
+
+    - name: Read the mounted external storage state
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --mountpoint
+          - "{{ piserv_external_storage_mountpoint }}"
+          - --output
+          - FSTYPE,OPTIONS
+          - --noheadings
+      register: piserv_external_storage_mount
+      changed_when: false
+      check_mode: false
+
+    - name: Read the mounted external storage UUID
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --mountpoint
+          - "{{ piserv_external_storage_mountpoint }}"
+          - --output
+          - UUID
+          - --noheadings
+      register: piserv_external_storage_mounted_uuid
+      changed_when: false
+      check_mode: false
+
+    - name: Assert the external storage mount is active with hardened options
+      ansible.builtin.assert:
+        that:
+          - >-
+            piserv_external_storage_mounted_uuid.stdout | trim ==
+            piserv_external_storage_uuid.stdout | trim
+          - piserv_external_storage_mount.stdout is search('ext4')
+          - piserv_external_storage_mount.stdout is search('nodev')
+          - piserv_external_storage_mount.stdout is search('nosuid')
+        fail_msg: >-
+          The external storage mount is not active with the expected ext4,
+          nodev, and nosuid state.
 
 - name: Add the human administrator and configured services to storage access
   ansible.builtin.user:
