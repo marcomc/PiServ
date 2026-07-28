@@ -25,6 +25,9 @@ All notable project changes are documented here.
 - Removed host-specific external model, serial, and by-id inputs; the external
   storage playbook now discovers the unique `external-data` filesystem and
   validates the resolved parent disk with bridge-aware SMART health checks.
+- Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
+  cleanup, and fresh kernel-log validation with no new transport or filesystem
+  errors.
 
 ## 0.2.0 - 2026-07-28
 

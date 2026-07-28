@@ -82,6 +82,30 @@ The live 2026-07-23 validation proved that an ordinary user can read shared
 data but cannot write it, while the restricted backup directory is not
 readable by ordinary users.
 
+### Bounded Backup-Write Test
+
+The live 2026-07-29 test used a uniquely named 4 GiB file under
+`/mnt/external-data/backups`. No backup-like service was running, the mount was
+`/dev/sda1` with approximately 3.65 TB free, and the test was bounded by a
+15-minute command timeout.
+
+```sh
+dd if=/dev/zero of="$TEST_FILE" bs=16M count=256 conv=fsync status=progress
+sha256sum "$TEST_FILE" > "$TEST_FILE.sha256"
+sha256sum -c "$TEST_FILE.sha256"
+dd if="$TEST_FILE" of=/dev/null bs=16M iflag=direct status=progress
+rm -f "$TEST_FILE" "$TEST_FILE.sha256"
+```
+
+Observed results:
+
+- write and flush completed: 4 GiB in 12.0 seconds at approximately 357 MB/s;
+- checksum verification passed;
+- direct readback completed: 4 GiB in 16.3 seconds at approximately 264 MB/s;
+- cleanup passed and no test artifacts remained;
+- no new USB reset, I/O, buffer-I/O, or ext4 kernel messages appeared after the
+  test start marker.
+
 ## Previous-Boot Diagnostics
 
 PiServ retains compressed systemd journals on the root NVMe filesystem. This

@@ -79,14 +79,6 @@
     - Keep any encryption or migration path separate from steady-state storage
       convergence.
 
-- [ ] **Run a bounded sustained backup-write test on the external SSD**
-  - Assessment: Deferred to a later backup-workload validation.
-  - Actions:
-    - Write a bounded test file under `/mnt/external-data/backups`.
-    - Verify readback/checksum, remove the test data, and inspect fresh USB,
-      I/O, and ext4 logs.
-    - Record the observed result in the external-storage runbook.
-
 - [ ] **Collect an external SSD SMART baseline**
   - Assessment: `smartmontools` is now installed by the base role and both the
     root NVMe and external storage playbooks validate SMART health status. The
