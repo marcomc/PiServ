@@ -23,6 +23,8 @@ All notable project changes are documented here.
 
 - Retained bounded systemd journals on the PiServ root NVMe filesystem so
   previous-boot power, USB, and filesystem evidence survives a reboot.
+- Extracted journald configuration into a local Galaxy-ready role while keeping
+  PiServ's persistent-storage and retention policy in its consumer playbook.
 - Installed `smartmontools` in the base role and validated the dynamically
   discovered root NVMe SMART health.
 - Added label-based external-storage discovery while retaining an ignored local

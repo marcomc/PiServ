@@ -56,6 +56,15 @@
         msmtp_harden_existing_config: true
         msmtp_harden_existing_aliases: true
         msmtp_manage_compat_wrapper: true
+    - role: journald
+      vars:
+        journald_dropin_path: /etc/systemd/journald.conf.d/99-piserv-persistent.conf
+        journald_storage: persistent
+        journald_compress: true
+        journald_system_max_use: 1G
+        journald_system_keep_free: 5G
+        journald_system_max_file_size: 128M
+        journald_max_retention_sec: 14day
     - role: base
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."
