@@ -13,10 +13,10 @@
 
 ## Purpose
 
-Use `ansible/playbooks/piserv-install.yml` as the repeatable entry point for
-installing and reconciling a manually bootstrapped PiServ host. The entry point
-owns orchestration order; the existing roles and playbooks remain the
-implementation of each policy.
+Use `scripts/run-piserv-install.sh` as the repeatable entry point for installing
+and reconciling a manually bootstrapped PiServ host. It invokes
+`ansible/playbooks/piserv-install.yml` and owns orchestration order; the
+existing roles and playbooks remain the implementation of each policy.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ complete the required manual bootstrap before running the full entry point:
    stops before user-service management until a saved pCloud session exists.
 6. Complete the pCloud credential bootstrap in the
    [pCloud storage runbook](pcloudcc-storage.md), then rerun
-   `ansible/playbooks/piserv-install.yml`.
+   `scripts/run-piserv-install.sh`.
 
 Tailscale and pCloud credentials are never stored in Git or tracked Ansible
 variables. Tailscale may receive a private runtime auth key when required;
@@ -58,8 +58,15 @@ pCloud credential bootstrap remains manual.
 Run the full installation and convergence entry point:
 
 ```sh
-ansible-playbook ansible/playbooks/piserv-install.yml
+scripts/run-piserv-install.sh
 ```
+
+The wrapper rejects `--tags`, `-t`, `--skip-tags`, `--start-at-task`,
+`ANSIBLE_RUN_TAGS`, and `ANSIBLE_SKIP_TAGS`, because each can bypass required
+storage, networking, and firewall ordering. It forwards safe full-run options
+such as `--check`, `--diff`, `--limit`, and `-e`. Direct `ansible-playbook` use
+of the full entrypoint is an unsupported bypass; use individual playbooks only
+for documented narrow maintenance and recovery work.
 
 The playbook fails at the first unsuccessful policy rather than hiding an
 ordering or prerequisite problem.
@@ -70,7 +77,7 @@ The included configuration playbooks are expected to be idempotent. Run the
 entry point again after a successful apply or after an operator change:
 
 ```sh
-ansible-playbook ansible/playbooks/piserv-install.yml
+scripts/run-piserv-install.sh
 ```
 
 When the host already matches the repository state, the second run should
@@ -84,7 +91,7 @@ runtime command; PiServ still probes an existing Tailscale binary, service, and
 preferences read-only.
 
 ```sh
-ansible-playbook --check --diff ansible/playbooks/piserv-install.yml
+scripts/run-piserv-install.sh --check --diff
 ```
 
 ## Included Playbooks
@@ -151,8 +158,7 @@ the current DHCP lease supplied by the operator directly:
 # Export PISERV_IP to the operator-supplied current DHCP lease before this block.
 : "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "admin@${PISERV_IP}" 'sudo -n true'
-ansible-playbook -e "ansible_host=${PISERV_IP}" \
-  ansible/playbooks/piserv-install.yml
+scripts/run-piserv-install.sh -e "ansible_host=${PISERV_IP}"
 ```
 
 Follow-up: rerun the entry point through that direct-IP override and confirm a

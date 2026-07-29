@@ -140,11 +140,35 @@ inspect only result counts:
 
 ```sh
 api_key="$(sudo jq -r '.APIKey' /home/admin/.config/jackett-search/jackett-config/Jackett/ServerConfig.json)"
-curl -sS -G http://127.0.0.1:9117/api/v2.0/indexers/internetarchive/results \
-  --data-urlencode "apikey=${api_key}" \
-  --data-urlencode 'Query=debian' \
-  | jq '{Results: (.Results | length), Links: ([.Results[] | select(.Link != null and .Link != "")] | length), Magnets: ([.Results[] | select(.MagnetUri != null and .MagnetUri != "")] | length)}'
+umask 077
+curl_config="$(mktemp "${TMPDIR:-/tmp}/jackett-api-probe.XXXXXX")"
+cleanup() {
+  rm -f -- "${curl_config}"
+  unset api_key curl_config
+}
+trap cleanup EXIT HUP INT TERM
+printf '%s\n' \
+  'silent' \
+  'show-error' \
+  'get' \
+  'url = "http://127.0.0.1:9117/api/v2.0/indexers/internetarchive/results"' \
+  "data-urlencode = \"apikey=${api_key}\"" \
+  'data-urlencode = "Query=debian"' > "${curl_config}"
 unset api_key
+curl --config "${curl_config}" | jq '
+  def results:
+    if type == "array" then .
+    elif (.Results? | type) == "array" then .Results
+    else []
+    end;
+  def non_empty_string: type == "string" and length > 0;
+  results as $results
+  | {
+      Results: ($results | length),
+      Links: ([$results[] | select(.Link? | non_empty_string)] | length),
+      Magnets: ([$results[] | select(.MagnetUri? | non_empty_string)] | length)
+    }
+'
 ```
 
 Do not log, echo, commit, or paste the API key or tracker credentials.

@@ -16,10 +16,11 @@ bootstrapped credentials.
 
 ## Decision
 
-`ansible/playbooks/piserv-install.yml` is the canonical full-host installation
-and convergence entry point after manual bootstrap. It begins with read-only
-external-storage preflight, then imports the steady-state playbooks in this
-order:
+`scripts/run-piserv-install.sh` is the canonical full-host installation and
+convergence entry point after manual bootstrap. It invokes
+`ansible/playbooks/piserv-install.yml`, rejects partial-execution controls, and
+then begins with read-only external-storage preflight before importing the
+steady-state playbooks in this order:
 
 1. External storage preflight
 2. Tailscale
@@ -48,6 +49,10 @@ narrow maintenance and recovery work.
   credentials are never stored in Git.
 - A failed mDNS lookup must use an operator-supplied `PISERV_IP` override for
   direct-IP recovery rather than a hard-coded address.
+- The wrapper rejects tags, task-start controls, and Ansible tag environment
+  controls. Direct `ansible-playbook` use of the full entrypoint is an
+  unsupported bypass; individual playbooks remain available for documented
+  narrow maintenance and recovery work.
 
 ## Validation
 

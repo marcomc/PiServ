@@ -6,9 +6,10 @@ All notable project changes are documented here.
 
 ### PiServ Installation
 
-- Added the repeatable `ansible/playbooks/piserv-install.yml` entry point for
-  ordered full-host convergence after manual Tailscale and pCloud bootstrap,
-  while keeping destructive migration and operator-only health checks separate.
+- Added the repeatable `scripts/run-piserv-install.sh` wrapper for ordered
+  full-host convergence through `ansible/playbooks/piserv-install.yml` after
+  manual Tailscale and pCloud bootstrap, while keeping destructive migration
+  and operator-only health checks separate.
 - Made the Tailscale wrapper safe in check mode by skipping an upstream role
   that parses command output Ansible does not produce in that mode, while
   retaining PiServ's read-only runtime probes.
@@ -44,8 +45,9 @@ All notable project changes are documented here.
   network declarations under upstream ownership.
 - Install `jq` through the base role's standard host-package step for JSON
   inspection and diagnostics.
-- Guard the full installation entrypoint against unsafe targeted-tag runs and
-  make its check-mode forwarding state flow into the firewall preflight.
+- Reject tag, task-start, and Ansible tag-environment partial-execution
+  controls through the full-install wrapper, and make its check-mode forwarding
+  state flow into the firewall preflight.
 - Make external-storage identity discovery emit redirectable YAML and install
   it with an atomic, mode-restricted write.
 
