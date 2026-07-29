@@ -43,6 +43,8 @@ All notable project changes are documented here.
   removes macOS `._*` metadata sidecars during Jackett installation.
 - Adapt the role to the upstream standalone CLI runtime and leave Compose
   network declarations under upstream ownership.
+- Re-run the applicable upstream component installation when its generated
+  Compose file loses the required shared-network membership or declaration.
 - Reinstall a missing or non-executable standalone runtime even when its
   launcher remains correct, and remove the runtime after partial launcher
   cleanup.

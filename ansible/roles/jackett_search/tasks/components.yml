@@ -65,6 +65,70 @@
     - "{{ jackett_search_effective_jackett_compose_path }}"
   register: jackett_search_component_compose_stats
 
+- name: Read installed upstream component Compose content
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ jackett_search_component_compose_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: jackett_search_component_compose_content
+  when:
+    - item.stat.exists
+    - item.stat.isreg | default(false)
+
+- name: Detect shared Docker network declaration drift in component Compose files
+  ansible.builtin.set_fact:
+    jackett_search_flaresolverr_network_declaration_valid: >-
+      {{
+        (
+          (
+            jackett_search_component_compose_content.results[0].content
+            | default('')
+            | b64decode
+          )
+          | regex_search(
+              '(?m)^networks:\n  jackett-search:\n    external: true\n    name: jackett-search\s*$'
+            )
+          is not none
+        )
+        and (
+          (
+            jackett_search_component_compose_content.results[0].content
+            | default('')
+            | b64decode
+          )
+          | regex_search(
+              '(?ms)^  flaresolverr:\n.*?^    networks:\n      - jackett-search\s*$'
+            )
+          is not none
+        )
+      }}
+    jackett_search_jackett_network_declaration_valid: >-
+      {{
+        (
+          (
+            jackett_search_component_compose_content.results[1].content
+            | default('')
+            | b64decode
+          )
+          | regex_search(
+              '(?m)^networks:\n  jackett-search:\n    external: true\n    name: jackett-search\s*$'
+            )
+          is not none
+        )
+        and (
+          (
+            jackett_search_component_compose_content.results[1].content
+            | default('')
+            | b64decode
+          )
+          | regex_search(
+              '(?ms)^  jackett:\n.*?^    networks:\n      - jackett-search\s*$'
+            )
+          is not none
+        )
+      }}
+
 - name: Read existing FlareSolverr Compose service state
   ansible.builtin.command:
     argv:
@@ -124,12 +188,14 @@
         jackett_search_force_component_install | bool
         or jackett_search_git_checkout.changed
         or not jackett_search_component_compose_stats.results[0].stat.exists
+        or not jackett_search_flaresolverr_network_declaration_valid | bool
       }}
     jackett_search_jackett_install_required: >-
       {{
         jackett_search_force_component_install | bool
         or jackett_search_git_checkout.changed
         or not jackett_search_component_compose_stats.results[1].stat.exists
+        or not jackett_search_jackett_network_declaration_valid | bool
       }}
 
 - name: Install required upstream Jackett components
