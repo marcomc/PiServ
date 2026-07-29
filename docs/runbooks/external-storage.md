@@ -73,12 +73,14 @@ Expected results are one ext4 partition labeled `external-data`, an active
 [Decision 0017](../decisions/0017-external-ssd-storage.md).
 
 The base playbook installs `smartmontools` and validates the dynamically
-discovered root NVMe health. The external-storage playbook validates the
-external disk's SMART health after discovery. On the live ASM246X bridge,
-generic SMART autodetection did not work, but the dynamically selected ASMedia
-NVMe pass-through mode returned `PASSED`. This is a health-status check, not the
-deferred full SMART baseline capture. SMART pass-through is optional by default;
-set `piserv_external_storage_smart_required: true` after accepting a bridge
+discovered root NVMe health. The standalone external-storage playbook installs
+the same package after its read-only identity preflight, then validates the
+external disk before changing its mount, ACLs, groups, or services. On the live
+ASM246X bridge, generic SMART autodetection did not work, but the dynamically
+selected ASMedia NVMe pass-through mode returned `PASSED`. This is a
+health-status check, not the deferred full SMART baseline capture. SMART
+pass-through is optional by default; set
+`piserv_external_storage_smart_required: true` after accepting a bridge
 configuration if external SMART must block convergence.
 
 The live 2026-07-23 validation proved that an ordinary user can read shared

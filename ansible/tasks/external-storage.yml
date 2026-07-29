@@ -1,6 +1,10 @@
 ---
 - name: Validate external storage before mutation
   ansible.builtin.import_tasks: external-storage-preflight.yml
+
+- name: Validate external storage SMART health before mutation
+  ansible.builtin.include_tasks: external-storage-smart.yml
+
 - name: Install ACL tooling for shared external-storage permissions
   ansible.builtin.apt:
     name: acl
@@ -277,6 +281,3 @@
     - >-
       piserv_external_storage_service_states.results | default([])
       | selectattr('rc', 'equalto', 0) | list | length > 0
-
-- name: Validate external storage SMART health
-  ansible.builtin.include_tasks: external-storage-smart.yml

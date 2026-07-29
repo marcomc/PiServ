@@ -78,11 +78,12 @@ create mode `0600` files still require service-specific handling.
   a model or serial mismatch, non-USB parent disks, unexpected filesystem
   layouts, and mount conflicts. It never formats or silently adopts a blank
   disk.
-- `smartmontools` is installed by the base role. The base role validates the
-  root NVMe health; the external-storage playbook validates the discovered
-  external disk and uses a bridge-specific pass-through mode only when the
-  discovered USB vendor requires it. External SMART is advisory by default and
-  can be made a convergence requirement after the bridge path is accepted.
+- `smartmontools` is installed by the base role for root-NVMe validation and by
+  the standalone external-storage path before it probes the verified external
+  disk. The external check uses a bridge-specific pass-through mode only when
+  the discovered USB vendor requires it. External SMART is advisory by default
+  and can be made a convergence requirement after the bridge path is accepted;
+  required SMART validation runs before any external-storage mutation.
 - Reformatting permanently removed the original APFS contents. Independent
   backups remain required.
 
