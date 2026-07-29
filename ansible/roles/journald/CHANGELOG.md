@@ -14,3 +14,8 @@ All notable changes for the journald Ansible role are documented here.
   changes.
 - Added Galaxy-ready metadata, role documentation, validation, and release
   instructions.
+
+### Fixed
+
+- Skip drop-in rendering when check mode only predicts a missing parent
+  directory, allowing configured paths to be checked without failure.

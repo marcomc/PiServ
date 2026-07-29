@@ -97,6 +97,10 @@ target. It stats the drop-in parent and creates it only when missing; an
 existing directory retains its ownership and mode. The managed drop-in is
 `0644 root:root`.
 
+When check mode predicts creation of a missing parent, the role skips rendering
+the drop-in because Ansible does not materialize the parent. A normal run then
+creates the parent and renders the drop-in.
+
 On a changed drop-in, handlers run in order: systemd-journald restarts, then
 `journalctl --flush` writes the current runtime journal to the configured
 storage.
@@ -120,6 +124,7 @@ tmp_dir=$(mktemp -d)
 mkdir -p "$tmp_dir/roles"
 ln -s "$role_root" "$tmp_dir/roles/journald"
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook --syntax-check tests/test.yml
+ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook --check -i <inventory> tests/check-mode-missing-parent.yml
 rm -rf "$tmp_dir"
 ansible-lint .
 ```

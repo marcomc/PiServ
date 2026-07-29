@@ -22,4 +22,5 @@
     group: root
     mode: "0644"
   become: true
+  when: not ansible_check_mode or journald_dropin_parent.stat.exists
   notify: Restart and flush systemd-journald
