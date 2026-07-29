@@ -1,0 +1,79 @@
+---
+- name: Discover the root filesystem source
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --mountpoint
+      - /
+      - --output
+      - SOURCE
+      - --noheadings
+  register: base_root_storage_source
+  changed_when: false
+  check_mode: false
+
+- name: Resolve the root filesystem parent disk
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - PKNAME
+      - "{{ base_root_storage_source.stdout | trim }}"
+  register: base_root_storage_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require a directly discoverable root parent disk
+  ansible.builtin.assert:
+    that:
+      - base_root_storage_source.stdout | trim is match('^/dev/')
+      - base_root_storage_parent.stdout | trim | length > 0
+    fail_msg: >-
+      Could not resolve the physical parent disk for the root filesystem
+      {{ base_root_storage_source.stdout | trim }}.
+
+- name: Read the root parent disk transport
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --nodeps
+      - --noheadings
+      - --output
+      - TYPE,TRAN
+      - "/dev/{{ base_root_storage_parent.stdout | trim }}"
+  register: base_root_storage_transport
+  changed_when: false
+  check_mode: false
+
+- name: Require the PiServ root filesystem to use NVMe storage
+  ansible.builtin.assert:
+    that:
+      - base_root_storage_transport.stdout | trim == 'disk nvme'
+    fail_msg: >-
+      The root filesystem is not backed by the expected NVMe disk:
+      {{ base_root_storage_transport.stdout | trim }}.
+
+- name: Read root NVMe SMART health
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/smartctl
+      - -H
+      - "/dev/{{ base_root_storage_parent.stdout | trim }}"
+  register: base_root_storage_smart
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+
+- name: Require a passing root NVMe SMART health result
+  ansible.builtin.assert:
+    that:
+      - base_root_storage_smart.rc == 0
+      - >-
+        'SMART overall-health self-assessment test result: PASSED'
+        in base_root_storage_smart.stdout
+    fail_msg: >-
+      Root NVMe SMART health validation failed with exit code
+      {{ base_root_storage_smart.rc }}:
+      {{ base_root_storage_smart.stdout | trim }}

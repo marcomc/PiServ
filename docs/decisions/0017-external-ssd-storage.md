@@ -29,9 +29,12 @@ PiServ; direct macOS access is not a requirement for this volume.
 - Erase the existing partition layout.
 - Create one GPT partition spanning the disk.
 - Format it as journaled ext4 with filesystem label `external-data`.
-- Mount it at `/mnt/external-data` using the verified filesystem UUID in an
-  `/etc/fstab` entry. Use the stable USB by-id path only to identify and
-  format the intended physical disk.
+- Mount it at `/mnt/external-data` using the filesystem UUID in an `/etc/fstab`
+  entry. The steady-state playbook discovers the partition by its unique
+  `external-data` filesystem label and resolves the parent disk at runtime.
+  It compares that disk's udev model and serial with the ignored local
+  `ansible/vars/external-storage.yml` identity before any mutation. Stable by-id
+  paths are not configuration inputs.
 - Use `nodev` and `nosuid` mount options. `nofail` allows PiServ to boot when
   the removable disk is absent; services using the disk must declare their
   mount dependency explicitly.
@@ -40,7 +43,7 @@ The current disk identity is:
 
 | Property | Value |
 | --- | --- |
-| Device identity | Local model, serial, and stable by-id configuration |
+| Device identity | Runtime filesystem-label discovery plus ignored local udev model and serial verification |
 | Filesystem UUID | Read at convergence and written to fstab |
 | Mountpoint | `/mnt/external-data` |
 
@@ -71,6 +74,16 @@ create mode `0600` files still require service-specific handling.
 - `nofail` prevents a missing disk from blocking boot, but a service must use
   `RequiresMountsFor=/mnt/external-data` or an equivalent mount dependency to
   avoid writing into an unmounted fallback directory.
+- Runtime discovery refuses zero or multiple `external-data` label matches,
+  a model or serial mismatch, non-USB parent disks, unexpected filesystem
+  layouts, and mount conflicts. It never formats or silently adopts a blank
+  disk.
+- `smartmontools` is installed by the base role for root-NVMe validation and by
+  the standalone external-storage path before it probes the verified external
+  disk. The external check uses a bridge-specific pass-through mode only when
+  the discovered USB vendor requires it. External SMART is advisory by default
+  and can be made a convergence requirement after the bridge path is accepted;
+  required SMART validation runs before any external-storage mutation.
 - Reformatting permanently removed the original APFS contents. Independent
   backups remain required.
 

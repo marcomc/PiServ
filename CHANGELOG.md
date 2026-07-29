@@ -2,7 +2,7 @@
 
 All notable project changes are documented here.
 
-## 0.3.0 - 2026-07-28
+## 0.3.0 - Unreleased
 
 ### PiServ Installation
 
@@ -15,6 +15,25 @@ All notable project changes are documented here.
 - Added a read-only external-storage preflight before all mutating installation
   playbooks and documented every manual first-install prerequisite and the
   direct-IP SSH recovery preflight.
+
+### External SSD Resilience
+
+- Retained bounded systemd journals on the PiServ root NVMe filesystem so
+  previous-boot power, USB, and filesystem evidence survives a reboot.
+- Installed `smartmontools` in the base role and validated the dynamically
+  discovered root NVMe SMART health.
+- Added label-based external-storage discovery while retaining an ignored local
+  model-and-serial identity check before the playbook mutates the resolved disk;
+  bridge-aware SMART checks validate the verified parent disk.
+- Added a read-only Linux helper that discovers the external USB disk identity
+  and, when run on the Ansible controller, creates the ignored model-and-serial
+  file only after explicit operator approval.
+- Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
+  cleanup, and fresh kernel-log validation with no new transport or filesystem
+  errors.
+- Captured the full read-only SMART baseline for the root NVMe and dynamically
+  discovered external NVMe, including health, wear, temperature, power, and
+  error-log fields.
 
 ## 0.2.0 - 2026-07-28
 

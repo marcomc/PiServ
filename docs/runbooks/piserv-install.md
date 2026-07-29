@@ -30,10 +30,12 @@ ansible-galaxy collection install -r ansible/requirements.yml --force
 Ensure the inventory can reach PiServ as `admin`. For a first installation,
 complete the required manual bootstrap before running the full entry point:
 
-1. Copy `ansible/vars/external-storage.yml.example` to the ignored
-   `ansible/vars/external-storage.yml`, then replace every placeholder with
-   the verified disk identity as described in the
-   [external-storage runbook](external-storage.md).
+1. Attach the prepared external disk with its unique `external-data`
+   filesystem label. Use the read-only
+   [device-identity discovery procedure](external-storage.md#configure-device-identity)
+   to create the ignored `ansible/vars/external-storage.yml` file. The preflight
+   discovers the partition and parent disk at runtime, then refuses zero or
+   multiple candidates or an identity mismatch.
 2. Create the ignored Freenove controller source with the
    [vendor-resource procedure](../../README.md#vendor-resources).
 3. Restore the non-empty `/etc/ha-mqtt-agent/config.toml` from the approved
