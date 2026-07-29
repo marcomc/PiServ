@@ -1,0 +1,47 @@
+---
+- name: Verify Freenove I2C changes do not reboot in check mode
+  hosts: all
+  gather_facts: false
+  pre_tasks:
+    - name: Require Ansible check mode for this regression test
+      ansible.builtin.assert:
+        that:
+          - ansible_check_mode
+        fail_msg: >-
+          Run this regression test with --check. It verifies that a pending I2C
+          firmware change does not request a reboot.
+
+    - name: Create an isolated I2C firmware configuration fixture
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: freenove-case-i2c-check-mode
+      register: freenove_case_test_directory
+      check_mode: false
+
+    - name: Create a firmware configuration that requires I2C enablement
+      ansible.builtin.copy:
+        content: "# I2C disabled in this test fixture\n"
+        dest: "{{ freenove_case_test_directory.path }}/config.txt"
+        mode: "0600"
+      check_mode: false
+
+  tasks:
+    - name: Apply the I2C tasks in check mode
+      ansible.builtin.include_tasks: ../tasks/i2c.yml
+      vars:
+        freenove_case_boot_config_path: >-
+          {{ freenove_case_test_directory.path }}/config.txt
+        freenove_case_reboot_on_i2c_config_change: true
+
+    - name: Assert check mode predicts the I2C firmware change
+      ansible.builtin.assert:
+        that:
+          - freenove_case_i2c_config.changed
+          - freenove_case_i2c_reboot.skipped | default(false) | bool
+
+  post_tasks:
+    - name: Remove the isolated I2C firmware configuration fixture
+      ansible.builtin.file:
+        path: "{{ freenove_case_test_directory.path }}"
+        state: absent
+      check_mode: false

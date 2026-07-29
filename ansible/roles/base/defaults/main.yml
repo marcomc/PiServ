@@ -84,6 +84,14 @@ base_reboot_notification_recipient: root
 base_reboot_notification_subject_prefix: "[PiServ]"
 base_reboot_notification_condition_path: /etc/msmtprc
 
+base_manage_smartmontools: true
+base_smartmontools_packages:
+  - smartmontools
+base_validate_root_storage: true
+
+base_packages:
+  - jq
+
 base_manage_cloud_init: true
 base_cloud_init_disable: true
 base_cloud_init_disabled_marker_path: /etc/cloud/cloud-init.disabled

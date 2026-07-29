@@ -153,6 +153,34 @@ Active implementation tracks:
 
 ## Automation
 
+### Full PiServ installation
+
+Use `scripts/run-piserv-install.sh` as the repeatable PiServ installation and
+convergence entry point after the required manual bootstrap:
+
+```sh
+ansible-galaxy role install -r ansible/requirements.yml --roles-path .ansible/roles --force
+ansible-galaxy collection install -r ansible/requirements.yml --force
+scripts/run-piserv-install.sh
+```
+
+The wrapper invokes the complete playbook and rejects tags, task-start and
+interactive-step controls, and Ansible tag environment controls that could
+bypass safety ordering. It passes safe full-run options such as `--check`,
+`--diff`, `--limit`, and `-e` through unchanged. Direct `ansible-playbook` use
+of the full entrypoint is an unsupported bypass. The entry point first
+preflights external storage without mutation, then imports the steady-state
+configuration playbooks in dependency order: Tailscale, firewall, base host
+policy, external storage, Freenove, pCloud, Home Assistant MQTT Agent, Jackett,
+and RaiPlaySound. It is designed to be rerun; a converged second run should
+report `changed=0` apart from live state that has drifted.
+
+The NVMe migration playbook is intentionally excluded because it is destructive
+and one-time. The pCloud health-check playbook is also separate because it is
+an operator validation step and depends on manual credential bootstrap.
+See the [PiServ installation runbook](docs/runbooks/piserv-install.md) for the
+first-install sequence, full ordering, validation, and mDNS-recovery procedure.
+
 After Tailscale and the firewall policy are active, configure the PiServ base
 host policy:
 
@@ -160,17 +188,19 @@ host policy:
 ansible-playbook ansible/playbooks/piserv-base.yml
 ```
 
-The base playbook applies the dedicated `msmtp` role first, then manages SSH
-root-login and password-auth policy, keeps VNC aligned with touchscreen output
-`DSI-1`, exposes the Cockpit HTTPS console on port `9090`, provides an
-authenticated Glances API to the LAN and Home Assistant, disables unneeded
-CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades, and disables
-cloud-init. PiServ uses `msmtp` with operator-managed `/etc/msmtprc` and
-`/etc/aliases` files because they contain SMTP credentials and local delivery
-policy. Boot notifications are skipped until `/etc/msmtprc` exists and is
-non-empty. Unattended upgrades send a mobile-readable routine digest with
-package version transitions; full logs remain on PiServ and native error alerts
-remain enabled as a fallback.
+The base playbook applies the dedicated `msmtp` and `journald` roles first,
+then manages SSH root-login and password-auth policy, keeps VNC aligned with
+touchscreen output `DSI-1`, exposes the Cockpit HTTPS console on port `9090`,
+provides an authenticated Glances API to the LAN and Home Assistant, disables
+unneeded CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades,
+and disables cloud-init. PiServ uses `msmtp` with operator-managed
+`/etc/msmtprc` and `/etc/aliases` files because they contain SMTP credentials
+and local delivery policy. The reusable `journald` role receives PiServ's
+persistent, bounded journal policy from this consumer playbook. Boot
+notifications are skipped until `/etc/msmtprc` exists and is non-empty.
+Unattended upgrades send a mobile-readable routine digest with package version
+transitions; full logs remain on PiServ and native error alerts remain enabled
+as a fallback.
 
 Configure the Freenove FNK0100K post-OS setup:
 

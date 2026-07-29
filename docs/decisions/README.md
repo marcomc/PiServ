@@ -31,6 +31,7 @@ Decision records explain why PiServ setup choices were made.
 | [0015: LAN Glances API observability](0015-local-glances-api-observability.md) | Accepted and implemented |
 | [0016: Cockpit web console and extensions](0016-cockpit-web-console.md) | Accepted and implemented |
 | [0017: External SSD storage](0017-external-ssd-storage.md) | Accepted and implemented |
+| [0018: PiServ installation entry point](0018-piserv-install-entry-point.md) | Accepted and implemented |
 
 ## Template
 

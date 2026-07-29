@@ -1,0 +1,27 @@
+---
+# Full PiServ installation and convergence entry point after manual bootstrap.
+#
+# Keep this file limited to repeatable configuration playbooks. One-time
+# migrations and operator-triggered health checks remain separate entry points.
+- name: Reject unsupported targeted tags
+  import_playbook: piserv-install-guard.yml
+- name: Preflight external storage
+  import_playbook: external-storage-preflight.yml
+- name: Install Tailscale
+  import_playbook: tailscale.yml
+- name: Configure firewall policy
+  import_playbook: firewall.yml
+- name: Configure base host policy
+  import_playbook: piserv-base.yml
+- name: Configure external storage
+  import_playbook: external-storage.yml
+- name: Configure Freenove hardware
+  import_playbook: freenove-post-os.yml
+- name: Install pCloud console client
+  import_playbook: pcloudcc-install.yml
+- name: Install Home Assistant MQTT Agent
+  import_playbook: ha-mqtt-agent.yml
+- name: Deploy Jackett Search
+  import_playbook: jackett.yml
+- name: Install RaiPlaySound daily sync
+  import_playbook: raiplaysound-cli-daily-sync.yml

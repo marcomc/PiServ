@@ -2,6 +2,66 @@
 
 All notable project changes are documented here.
 
+## 0.3.0 - 2026-07-29
+
+### PiServ Installation
+
+- Prevent the Freenove I2C reboot task from executing during check-mode
+  validation.
+- Added the repeatable `scripts/run-piserv-install.sh` wrapper for ordered
+  full-host convergence through `ansible/playbooks/piserv-install.yml` after
+  manual Tailscale and pCloud bootstrap, while keeping destructive migration
+  and operator-only health checks separate.
+- Made the Tailscale wrapper safe in check mode by skipping an upstream role
+  that parses command output Ansible does not produce in that mode, while
+  retaining PiServ's read-only runtime probes.
+- Added a read-only external-storage preflight before all mutating installation
+  playbooks and documented every manual first-install prerequisite and the
+  direct-IP SSH recovery preflight.
+
+### External SSD Resilience
+
+- Retained bounded systemd journals on the PiServ root NVMe filesystem so
+  previous-boot power, USB, and filesystem evidence survives a reboot.
+- Extracted journald configuration into a local Galaxy-ready role while keeping
+  PiServ's persistent-storage and retention policy in its consumer playbook.
+- Installed `smartmontools` in the base role and validated the dynamically
+  discovered root NVMe SMART health.
+- Added label-based external-storage discovery while retaining an ignored local
+  model-and-serial identity check before the playbook mutates the resolved disk;
+  bridge-aware SMART checks validate the verified parent disk.
+- Added a read-only Linux helper that discovers the external USB disk identity
+  and, when run on the Ansible controller, creates the ignored model-and-serial
+  file only after explicit operator approval.
+- Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
+  cleanup, and fresh kernel-log validation with no new transport or filesystem
+  errors.
+- Captured the full read-only SMART baseline for the root NVMe and dynamically
+  discovered external NVMe, including health, wear, temperature, power, and
+  error-log fields.
+
+### Jackett Search
+
+- Pin PiServ's Jackett deployment to the published upstream `v0.3.0` release
+  tag, whose Makefile manages the Linux-Docker FlareSolverr service URL and
+  removes macOS `._*` metadata sidecars during Jackett installation.
+- Adapt the role to the upstream standalone CLI runtime and leave Compose
+  network declarations under upstream ownership.
+- Re-run the applicable upstream component installation when its generated
+  Compose file loses the required shared-network membership or declaration.
+- Reinstall a missing or non-executable standalone runtime even when its
+  launcher remains correct, and remove the runtime after partial launcher
+  cleanup.
+- Refuse recursive standalone-runtime cleanup without the expected managed
+  executable, preserving unrelated directories at an overridden install path.
+- Install `jq` through the base role's standard host-package step for JSON
+  inspection and diagnostics.
+- Reject tag, task-start, interactive-step, and Ansible tag-environment
+  partial-execution controls through the full-install wrapper, and make its
+  check-mode forwarding state flow into the firewall preflight.
+- Make external-storage identity discovery emit redirectable YAML and install
+  it with an atomic, mode-restricted write.
+
 ## 0.2.0 - 2026-07-28
 
 ### Ansible Maintainability

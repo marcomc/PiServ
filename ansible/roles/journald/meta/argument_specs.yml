@@ -1,0 +1,45 @@
+---
+argument_specs:
+  main:
+    short_description: Configure systemd-journald policy.
+    description:
+      - Configures a systemd-journald drop-in on Debian-family hosts.
+      - Restarts and flushes journald when the managed drop-in changes.
+      - Leaves resource limits and retention at package defaults unless explicitly set.
+    options:
+      journald_dropin_path:
+        type: path
+        default: /etc/systemd/journald.conf.d/99-ansible-journald.conf
+        description: Destination path for the managed journald drop-in.
+      journald_storage:
+        type: str
+        default: persistent
+        choices:
+          - auto
+          - volatile
+          - persistent
+        description: Journald storage mode.
+      journald_compress:
+        type: bool
+        default: true
+        description: Whether persistent journal entries are compressed.
+      journald_system_max_use:
+        type: str
+        default: ""
+        description: Optional maximum disk space used by persistent journals.
+      journald_system_keep_free:
+        type: str
+        default: ""
+        description: Optional disk space reserved outside persistent journals.
+      journald_system_max_file_size:
+        type: str
+        default: ""
+        description: Optional maximum size of one persistent journal file.
+      journald_max_retention_sec:
+        type: str
+        default: ""
+        description: Optional maximum age for persistent journal entries.
+      journald_sync_interval_sec:
+        type: str
+        default: ""
+        description: Optional interval between journal data synchronization operations.

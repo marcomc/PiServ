@@ -12,9 +12,9 @@
       - jackett_search_installed_command_stat.stat.islnk
       - >-
         jackett_search_installed_command_stat.stat.lnk_target
-        == jackett_search_source_dir ~ '/jackett-search'
+        == jackett_search_install_script_path
     fail_msg: >-
-      The upstream Makefile did not install the expected jackett-search command
+      The upstream Makefile did not install a standalone jackett-search command
       at {{ jackett_search_command_path }}.
 
 - name: Read installed jackett-search version

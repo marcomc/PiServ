@@ -21,6 +21,8 @@ This project-local role codifies live PiServ baseline hardening:
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
 - boot notification service
+- SMART health inspection tooling for local storage validation
+- base host packages, including `jq` for JSON inspection
 - cloud-init disabled state
 
 ## Role Variables
@@ -66,6 +68,10 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
 | `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
 | `base_reboot_notification_condition_path` | `/etc/msmtprc` | Path required before boot notification runs |
+| `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
+| `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
+| `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
+| `base_packages` | `jq` | Debian packages required for the PiServ base host |
 | `base_manage_cloud_init` | `true` | Manage cloud-init state |
 | `base_cloud_init_disable` | `true` | Disable cloud-init with marker file and units |
 
@@ -103,6 +109,15 @@ recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
 with a separate role before expecting delivery.
+
+The role installs `smartmontools` and derives the physical parent disk from the
+root filesystem. It validates that PiServ is booted from NVMe and that the root
+device reports a passing SMART health status. It does not run a self-test or
+enable the `smartd` daemon.
+
+The role installs the packages in `base_packages` as part of the base host
+package step. PiServ includes `jq` for operator diagnostics and bounded
+automation probes.
 
 Glances uses the Debian package service with a PiServ-managed drop-in. The role
 keeps its safe loopback default, while the PiServ playbook binds the JSON API to

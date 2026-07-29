@@ -1,0 +1,11 @@
+---
+# Generic policy: persist and compress journals while retaining systemd's
+# package defaults for capacity, retention, and sync cadence unless overridden.
+journald_dropin_path: /etc/systemd/journald.conf.d/99-ansible-journald.conf
+journald_storage: persistent
+journald_compress: true
+journald_system_max_use: ""
+journald_system_keep_free: ""
+journald_system_max_file_size: ""
+journald_max_retention_sec: ""
+journald_sync_interval_sec: ""

@@ -6,6 +6,7 @@
 - [Apply](#apply)
 - [Managed Layout](#managed-layout)
 - [Configure Trackers](#configure-trackers)
+- [Upstream Runtime Invariants](#upstream-runtime-invariants)
 - [Access and Validation](#access-and-validation)
 - [Validation Record](#validation-record)
 - [Updates and Recovery](#updates-and-recovery)
@@ -30,8 +31,9 @@ If mDNS is unavailable, obtain the current DHCP lease from the operator, then
 use it directly for this run only:
 
 ```sh
-PISERV_IP=<operator-supplied-current-dhcp-lease>
-ansible-playbook ansible/playbooks/jackett.yml -e "ansible_host=$PISERV_IP"
+# Export PISERV_IP to the operator-supplied current DHCP lease before this block.
+: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
+ansible-playbook ansible/playbooks/jackett.yml -e "ansible_host=${PISERV_IP}"
 ```
 
 The playbook delegates installation to the local `jackett_search` role. The
@@ -39,9 +41,8 @@ role checks out the upstream project at `/opt/jackett-search` and runs, in
 order, `make install`, `make install-flaresolverr`, and `make install-jackett`.
 It does not maintain a project-owned Compose file or image tag. The generated
 Compose files retain upstream `latest` images.
-PiServ pins the upstream checkout to the `v0.2.1` release tag for reproducible
-deployments. It currently resolves to
-`1053269cbda9bb1d3b69d31f62e48fc100be8d61`.
+PiServ pins the upstream checkout to the published `v0.3.0` release tag for
+reproducible deployments.
 
 PiServ adds the host-specific policy around those generated files: Jackett is
 published on TCP `9117`, FlareSolverr remains loopback-only on TCP `8191`, and
@@ -77,6 +78,30 @@ Configure FlareSolverr-backed trackers in Jackett with
 `http://flaresolverr:8191`. The generated Compose projects share a private
 Docker network, while TCP `8191` remains loopback-bound on PiServ.
 
+## Upstream Runtime Invariants
+
+The upstream 0.3.x Makefile is the source of truth for this installation. It
+creates the shared Docker network, configures Jackett to use the `flaresolverr`
+service name, and removes macOS `._*` metadata sidecars while installing the
+Jackett configuration. Do not reintroduce `host.docker.internal`, which is not
+a Linux Docker DNS name in this stack.
+
+Apply the normal playbook when installing or upgrading an existing host. There
+is no separate PiServ migration playbook for this state. Verify the service DNS
+path and fresh Jackett logs:
+
+```sh
+docker exec jackett-search-jackett-jackett-1 getent hosts flaresolverr
+docker exec jackett-search-jackett-jackett-1 \
+  curl -sS -o /dev/null -w '%{http_code}\n' http://flaresolverr:8191/
+docker logs --since 5m jackett-search-jackett-jackett-1 2>&1 \
+  | grep -E -i 'DataProtection|key.?ring|FlareSolverr|host\.docker\.internal'
+```
+
+The expected result is a Docker-network address, HTTP `200`, and a log line
+using `http://flaresolverr:8191` without DataProtection, XML, crypto, or
+`host.docker.internal` errors.
+
 ## Access and Validation
 
 Run on PiServ after a deployment or Docker restart:
@@ -110,9 +135,48 @@ Then add a non-sensitive test indexer and verify a search through
 remain local to PiServ even if external DNS is unavailable. Remove a test
 tracker that is not part of the intended configuration.
 
+For a secret-safe raw API probe, read the key locally without printing it and
+inspect only result counts:
+
+```sh
+api_key="$(sudo jq -r '.APIKey' /home/admin/.config/jackett-search/jackett-config/Jackett/ServerConfig.json)"
+umask 077
+curl_config="$(mktemp "${TMPDIR:-/tmp}/jackett-api-probe.XXXXXX")"
+cleanup() {
+  rm -f -- "${curl_config}"
+  unset api_key curl_config
+}
+trap cleanup EXIT HUP INT TERM
+printf '%s\n' \
+  'silent' \
+  'show-error' \
+  'get' \
+  'url = "http://127.0.0.1:9117/api/v2.0/indexers/internetarchive/results"' \
+  "data-urlencode = \"apikey=${api_key}\"" \
+  'data-urlencode = "Query=debian"' > "${curl_config}"
+unset api_key
+curl --config "${curl_config}" | jq '
+  def results:
+    if type == "array" then .
+    elif (.Results? | type) == "array" then .Results
+    else []
+    end;
+  def non_empty_string: type == "string" and length > 0;
+  results as $results
+  | {
+      Results: ($results | length),
+      Links: ([$results[] | select(.Link? | non_empty_string)] | length),
+      Magnets: ([$results[] | select(.MagnetUri? | non_empty_string)] | length)
+    }
+'
+```
+
+Do not log, echo, commit, or paste the API key or tracker credentials.
+
 ## Validation Record
 
-On 2026-07-28, a converged apply and subsequent `--check` both returned
+Before the 0.3.x migration, on 2026-07-28, a converged apply and subsequent
+`--check` both returned
 `changed=0`. The Docker `iptables-save` policy snapshot, excluding timestamp and
 packet-counter noise, was identical before and after the check run. Both upstream
 Compose services were up with their `latest` image tags, and `jackett-search
@@ -125,6 +189,26 @@ Recovery tests covered both `make down` followed by the playbook and
 and preserved the private CLI configuration. End-to-end search validation remains
 dependent on the operator adding tracker credentials outside Git, as tracked in
 [TODO.md](../../TODO.md).
+
+On 2026-07-29, the live host was migrated from the pre-0.3.x state after
+operator diagnosis, then converged with the normal 0.3.x installation path.
+Jackett resolved FlareSolverr through the Docker service name and returned HTTP
+`200`; the fresh
+container log contained no key-ring, XML, crypto, or host-gateway DNS errors.
+Public test searches through Jackett's JSON results endpoint returned:
+
+| Indexer | Query | HTTP | Results | Non-empty `Link` | Non-empty `MagnetUri` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `internetarchive` | `debian` | 200 | 100 | 100 | 100 |
+| `1337x` | `debian` | 200 | 60 | 60 | 0 |
+| `thepiratebay` | `debian` | 200 | 100 | 0 | 100 |
+| `52bt` | `debian` | 200 | 40 | 0 | 40 |
+
+These results confirm that recovered indexers can return torrent-file `Link`
+values, but FlareSolverr recovery does not guarantee them for every indexer. A
+bounded fetch of one `internetarchive` proxy URL returned HTTP `200` with
+`application/x-bittorrent` and 27,846 bytes. The `1337x` proxy URL was
+non-empty, but its bounded fetch timed out before returning content.
 
 ## Updates and Recovery
 
@@ -157,4 +241,5 @@ sudo iptables -S PISERV-JACKETT-SEARCH
 
 Do not delete `/home/admin/.config/jackett-search/jackett-config` unless
 intentionally resetting all Jackett credentials and tracker state. Reapply the
-playbook to restore upstream-generated files and the PiServ ingress policy.
+normal playbook to restore upstream-generated files and the PiServ ingress
+policy.

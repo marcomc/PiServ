@@ -7,9 +7,6 @@
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
-- Create an umbrella bootstrap playbook that orchestrates the existing base,
-  Freenove, pCloud, mail, Home Assistant MQTT Agent, and other workload
-  playbooks after their ordering is final.
 
 ## Propositions
 
@@ -73,20 +70,14 @@
     - Codify credentials, systemd units, health checks, retention, and restore
       procedures in Ansible and runbooks.
 
-- [ ] **Attach and prepare the 4 TB external SSD**
-  - Assessment: Completed the PiServ-owned ext4 path. exFAT remains the
-    removable-media fallback for a future disk that must be connected directly
-    to macOS and Linux. APFS is not a suitable Linux service volume.
-  - Proposal: [Google Drive and external storage](docs/tracks/google-drive-and-external-storage.md)
+- [ ] **Decide whether to encrypt the external SSD**
+  - Assessment: Deferred until backup-data sensitivity, unattended unlock, and
+    recovery requirements are defined.
   - Actions:
-    - Done: verified the ASM246X enclosure, USB 3 link, device identity, and
-      unmounted APFS layout before formatting.
-    - Done: created the UUID-backed journaled ext4 mount at
-      `/mnt/external-data` with group/ACL permissions and recovery docs.
-    - Decide whether the volume needs encryption and Mac access through SMB or
-      SFTP.
-    - Validate reboot, disconnect, reconnect, filesystem checks, and sustained
-      backup writes before placing production backups on it.
+    - Decide whether LUKS2 encryption is required for the PiServ-hosted volume.
+    - Document key storage, boot unlock, recovery, and restore implications.
+    - Keep any encryption or migration path separate from steady-state storage
+      convergence.
 
 - [ ] **Build a complete daily GitHub account disaster backup**
   - Assessment: per-repository bare mirrors provide complete Git branches and
@@ -102,16 +93,11 @@
       artifacts, and repository metadata.
     - Add a systemd timer, failure summary, retention policy, and restore test.
 
-- [ ] **Install Jackett Search and the Jackett service**
-  - Assessment: Jackett documents ARM64 Linux support and a Docker deployment;
-    the existing Jackett Search project should remain the operator-facing CLI.
+- [ ] **Complete Jackett tracker validation**
+  - Assessment: Jackett and the operator-facing Jackett Search CLI are deployed
+    through the pinned upstream release; only tracker-specific validation
+    remains.
   - Actions:
-    - Done: migrate the existing containers and persistent state to the
-      upstream Makefile-managed layout through `ansible/playbooks/jackett.yml`.
-    - Done: enforce TCP `9117` access in Docker's `DOCKER-USER` chain for the
-      current IPv4 LAN and Tailnet.
-    - Done: prepare the reusable `ansible/roles/jackett_search` Makefile-wrapper
-      role, including upstream component lifecycle targets.
     - Configure tracker credentials outside Git, then validate search results
       and restart recovery.
 
@@ -152,6 +138,9 @@
 
 ## Later
 
+- Export the local `journald` role to a standalone public repository and
+  publish the first `marcomc.journald` Galaxy release when that distribution is
+  required.
 - Add Ethernet configuration notes when the server is connected by cable.
 - Add backup and restore runbook.
 - Add disaster recovery playbook.

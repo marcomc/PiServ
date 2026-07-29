@@ -50,7 +50,13 @@
 - name: Assert IPv4 forwarding is enabled for the subnet router
   ansible.builtin.assert:
     that:
-      - piserv_firewall_ipv4_forwarding.stdout == '1'
+      - >-
+        piserv_firewall_ipv4_forwarding.stdout == '1'
+        or (
+          ansible_check_mode
+          and piserv_tailscale_ipv4_forwarding_pending | default(false) | bool
+        )
     fail_msg: >-
       PiServ firewall policy requires IPv4 forwarding. Apply the Tailscale
-      playbook before the firewall playbook.
+      playbook before the firewall playbook. Check mode accepts the pending
+      forwarding change from the preceding Tailscale play.

@@ -12,6 +12,9 @@ jackett_search_force_install: false
 jackett_search_make_command: /usr/bin/make
 jackett_search_install_dir: /usr/local/bin
 jackett_search_command_path: "{{ jackett_search_install_dir }}/jackett-search"
+jackett_search_install_prefix: /usr/local
+jackett_search_install_lib_dir: "{{ jackett_search_install_prefix }}/lib/jackett-search"
+jackett_search_install_script_path: "{{ jackett_search_install_lib_dir }}/jackett-search"
 jackett_search_expected_version: ""
 
 jackett_search_apt_packages:
@@ -28,7 +31,6 @@ jackett_search_component_apt_packages:
   - docker-compose
 jackett_search_force_component_install: false
 jackett_search_component_config_dir: ""
-jackett_search_component_network_name: jackett-search
 jackett_search_timezone: UTC
 jackett_search_jackett_bind_address: 127.0.0.1
 jackett_search_jackett_port: 9117
