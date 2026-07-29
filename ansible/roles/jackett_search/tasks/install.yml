@@ -75,4 +75,4 @@
   when:
     - jackett_search_install_lib_stat.stat.exists
     - jackett_search_install_lib_stat.stat.isdir
-    - jackett_search_install_script_stat.stat.isreg
+    - jackett_search_install_script_stat.stat.isreg | default(false)
