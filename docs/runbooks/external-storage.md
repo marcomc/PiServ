@@ -43,9 +43,9 @@ and mount conflicts. It never formats or automatically adopts a blank disk.
 
 ## Configure Device Identity
 
-Before the first PiServ convergence, run the discovery helper on any Linux host
+Before the first PiServ convergence, run the discovery helper on a Linux host
 with the intended SSD and its USB enclosure attached. It does not need to be
-PiServ; this supports preparing the controller before the Pi is deployed.
+PiServ, so the required identity can be obtained before the Pi is deployed.
 
 ```sh
 scripts/discover-external-storage-identity.sh
@@ -53,13 +53,21 @@ scripts/discover-external-storage-identity.sh
 
 The helper discovers exactly one USB disk, reads its Linux udev `ID_MODEL` and
 `ID_SERIAL_SHORT` values, and prints the corresponding YAML. It writes nothing
-unless explicitly requested. After reviewing the printed disk and values,
-create the ignored controller-local file:
+unless explicitly requested. When this Linux host is also the Ansible
+controller, review the printed disk and values, then create the ignored local
+file there:
 
 ```sh
 scripts/discover-external-storage-identity.sh \
   --write ansible/vars/external-storage.yml
 ```
+
+`--write` always creates the file on the host running the helper. If the helper
+runs on a separate Linux machine while the Ansible controller is macOS, use the
+default read-only command and copy the printed YAML into the controller's
+ignored `ansible/vars/external-storage.yml` file. PiServ's read-only preflight
+will reject a value that does not match the later Linux udev identity before it
+changes the host.
 
 If multiple USB disks are attached, select the intended disk from a read-only
 inventory and pass it explicitly:

@@ -14,7 +14,7 @@ provided.
 
 Options:
   --device PATH  USB disk to inspect, for example /dev/sda
-  --write PATH   Create the ignored identity file at PATH; refuse if it exists
+  --write PATH   Create the ignored identity file on this host; refuse if it exists
   -h, --help     Show this help
 EOF
 }
@@ -122,3 +122,4 @@ umask 077
 install -m 0600 /dev/null "${WRITE_PATH}"
 printf '%s\n' "${identity_yaml}" > "${WRITE_PATH}"
 printf 'identity_file=%s\n' "${WRITE_PATH}"
+exit 0
