@@ -35,6 +35,15 @@
   when: base_manage_smartmontools | bool
   ansible.builtin.include_tasks: smartmontools.yml
 
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  when: base_packages | length > 0
+
 - name: Validate root storage health
   when:
     - base_manage_smartmontools | bool

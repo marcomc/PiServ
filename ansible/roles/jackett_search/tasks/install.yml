@@ -5,6 +5,12 @@
     follow: false
   register: jackett_search_command_stat
 
+- name: Read installed standalone jackett-search runtime
+  ansible.builtin.stat:
+    path: "{{ jackett_search_install_script_path }}"
+    follow: false
+  register: jackett_search_install_script_preinstall_stat
+
 - name: Decide whether jackett-search needs Makefile installation
   ansible.builtin.set_fact:
     jackett_search_install_required: >-
@@ -14,14 +20,19 @@
         or not jackett_search_command_stat.stat.exists
         or not jackett_search_command_stat.stat.islnk
         or (jackett_search_command_stat.stat.lnk_target | default(''))
-           != jackett_search_source_dir ~ '/jackett-search'
+           != jackett_search_install_script_path
+        or not jackett_search_install_script_preinstall_stat.stat.exists
+        or not jackett_search_install_script_preinstall_stat.stat.isreg
+        or not jackett_search_install_script_preinstall_stat.stat.executable
       }}
 
 - name: Install jackett-search through the upstream Makefile
   ansible.builtin.command:
     argv:
       - "{{ jackett_search_make_command }}"
+      - "INSTALL_PREFIX={{ jackett_search_install_prefix }}"
       - "INSTALL_DIR={{ jackett_search_install_dir }}"
+      - "INSTALL_LIB_DIR={{ jackett_search_install_lib_dir }}"
       - install
   args:
     chdir: "{{ jackett_search_source_dir }}"
@@ -32,3 +43,36 @@
   register: jackett_search_make_install
   changed_when: true
   when: jackett_search_install_required | bool
+
+- name: Read the standalone jackett-search runtime directory
+  ansible.builtin.stat:
+    path: "{{ jackett_search_install_lib_dir }}"
+  register: jackett_search_install_lib_stat
+
+- name: Make the standalone jackett-search runtime traversable
+  ansible.builtin.file:
+    path: "{{ jackett_search_install_lib_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  register: jackett_search_install_lib_permissions
+  when:
+    - jackett_search_install_lib_stat.stat.exists
+    - jackett_search_install_lib_stat.stat.isdir
+
+- name: Read the standalone jackett-search executable
+  ansible.builtin.stat:
+    path: "{{ jackett_search_install_script_path }}"
+    follow: true
+  register: jackett_search_install_script_stat
+
+- name: Make the standalone jackett-search executable runnable
+  ansible.builtin.file:
+    path: "{{ jackett_search_install_script_path }}"
+    mode: "0755"
+  become: true
+  register: jackett_search_install_script_permissions
+  when:
+    - jackett_search_install_lib_stat.stat.exists
+    - jackett_search_install_lib_stat.stat.isdir
+    - jackett_search_install_script_stat.stat.isreg | default(false)

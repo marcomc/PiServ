@@ -52,7 +52,9 @@ scripts/discover-external-storage-identity.sh
 ```
 
 The helper discovers exactly one USB disk, reads its Linux udev `ID_MODEL` and
-`ID_SERIAL_SHORT` values, and prints the corresponding YAML. It writes nothing
+`ID_SERIAL_SHORT` values, and prints only the corresponding YAML to stdout.
+Operator guidance and the selected device are written to stderr, so the
+read-only output can be redirected directly to a file. It writes nothing
 unless explicitly requested. When this Linux host is also the Ansible
 controller, review the printed disk and values, then create the ignored local
 file there:
@@ -139,11 +141,12 @@ The live 2026-07-29 test used a uniquely named 4 GiB file under
 15-minute command timeout.
 
 ```sh
+TEST_FILE="/mnt/external-data/backups/piserv-storage-test-$(date +%s)-$$.bin"
+trap 'rm -f -- "$TEST_FILE" "$TEST_FILE.sha256"' EXIT
 dd if=/dev/zero of="$TEST_FILE" bs=16M count=256 conv=fsync status=progress
 sha256sum "$TEST_FILE" > "$TEST_FILE.sha256"
 sha256sum -c "$TEST_FILE.sha256"
 dd if="$TEST_FILE" of=/dev/null bs=16M iflag=direct status=progress
-rm -f "$TEST_FILE" "$TEST_FILE.sha256"
 ```
 
 Observed results:

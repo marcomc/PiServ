@@ -2,6 +2,16 @@
 - name: Test base role syntax
   hosts: localhost
   gather_facts: true
+  pre_tasks:
+    - name: Load base role defaults for package assertions
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir | dirname }}/defaults/main.yml"
+        name: base_test_defaults
+
+    - name: Assert the base package defaults include jq
+      ansible.builtin.assert:
+        that:
+          - "'jq' in base_test_defaults.base_packages"
   roles:
     - role: base
       vars:
@@ -15,4 +25,5 @@
         base_manage_journald: false
         base_manage_smartmontools: false
         base_validate_root_storage: false
+        base_packages: []
         base_manage_cloud_init: false

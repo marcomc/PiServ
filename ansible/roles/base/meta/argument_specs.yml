@@ -252,6 +252,10 @@ argument_specs:
         type: bool
         default: true
         description: Whether to validate the dynamically discovered root NVMe health.
+      base_packages:
+        type: list
+        elements: str
+        description: Debian packages required for the PiServ base host.
       base_manage_cloud_init:
         type: bool
         default: true

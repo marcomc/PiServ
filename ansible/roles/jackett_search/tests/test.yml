@@ -32,25 +32,47 @@
         dest: "{{ jackett_search_test_directory.path }}/source/jackett-search"
         mode: "0700"
 
-    - name: Create isolated jackett-search uninstall Makefile fixture
+    - name: Create isolated jackett-search install command fixture
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          set -eu
+          for argument in "$@"; do
+            case "$argument" in
+              INSTALL_DIR=*) install_dir=${argument#INSTALL_DIR=} ;;
+              INSTALL_LIB_DIR=*) install_lib_dir=${argument#INSTALL_LIB_DIR=} ;;
+            esac
+          done
+          mkdir -p "$install_dir" "$install_lib_dir"
+          install -m 0755 jackett-search "$install_lib_dir/jackett-search"
+          ln -sfn "$install_lib_dir/jackett-search" "$install_dir/jackett-search"
+        dest: "{{ jackett_search_test_directory.path }}/source/install"
+        mode: "0700"
+
+    - name: Create isolated jackett-search Makefile fixture
       ansible.builtin.copy:
         content: |
           .RECIPEPREFIX := >
-          .PHONY: down-flaresolverr down-jackett uninstall
+          .PHONY: down-flaresolverr down-jackett up-jackett uninstall
           down-flaresolverr:
           >@test -n "$(CONFIG_DIR)"
           down-jackett:
           >@test -n "$(CONFIG_DIR)"
+          up-jackett:
+          >@test -n "$(CONFIG_DIR)"
           uninstall:
           >@rm -f "$(INSTALL_DIR)/jackett-search"
+          >@rm -rf "$(INSTALL_LIB_DIR)"
         dest: "{{ jackett_search_test_directory.path }}/source/Makefile"
         mode: "0600"
 
-    - name: Create isolated installed jackett-search command fixture
+    - name: Create isolated installed jackett-search launcher fixture
       ansible.builtin.file:
-        src: "{{ jackett_search_test_directory.path }}/source/jackett-search"
         dest: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
+        # Match the upstream Makefile's absolute launcher target.
+        src: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
         state: link
+        force: true
 
     - name: Create existing jackett-search configuration fixture
       ansible.builtin.copy:
@@ -96,9 +118,6 @@
               - >-
                 'docker-compose' in
                 jackett_search_test_defaults.jackett_search_component_apt_packages
-              - >-
-                jackett_search_test_defaults.jackett_search_component_network_name
-                == 'jackett-search'
 
         - name: Assert Compose layout patterns accept custom host ports
           ansible.builtin.assert:
@@ -113,6 +132,31 @@
                   'services:\n  jackett:\n    ports:\n      - "127.0.0.1:9000:9117"\n'
                   | regex_search('(?m)^\\s*- "(?:[^"]+:)?(?:[0-9]+:)?9117"$')
                 ) is not none
+
+        - name: Assert expected shared Docker network declarations are detected
+          ansible.builtin.assert:
+            that:
+              - >-
+                (
+                  'services:\n  flaresolverr:\n    networks:\n      - jackett-search\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  | regex_search(
+                      '(?m)^networks:\n  jackett-search:\n    external: true\n    name: jackett-search\\s*$'
+                    )
+                ) is not none
+              - >-
+                (
+                  'services:\n  flaresolverr:\n    networks:\n      - jackett-search\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  | regex_search(
+                      '(?ms)^  flaresolverr:\n.*?^    networks:\n      - jackett-search\\s*$'
+                    )
+                ) is not none
+              - >-
+                (
+                  'services:\n  flaresolverr:\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  | regex_search(
+                      '(?ms)^  flaresolverr:\n.*?^    networks:\n      - jackett-search\\s*$'
+                    )
+                ) is none
 
         - name: Create an existing private jackett-search source parent fixture
           ansible.builtin.file:
@@ -136,6 +180,121 @@
             that:
               - jackett_search_test_source_parent_stat.stat.mode == '0700'
 
+        - name: Create a standalone runtime directory without its executable
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+            state: directory
+            mode: "0755"
+
+        - name: Check a missing standalone runtime through installation tasks
+          ansible.builtin.include_tasks:
+            file: ../tasks/install.yml
+            apply:
+              check_mode: true
+          vars:
+            jackett_search_force_install: false
+            jackett_search_git_checkout:
+              changed: false
+            jackett_search_runtime_user_home: "{{ jackett_search_test_directory.path }}"
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_make_command: >-
+              {{ jackett_search_test_directory.path }}/source/install
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+            jackett_search_install_lib_dir: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search
+            jackett_search_install_script_path: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+
+        - name: Assert missing standalone runtime is safely deferred in check mode
+          ansible.builtin.assert:
+            that:
+              - jackett_search_install_required | bool
+
+        - name: Restore a missing standalone runtime through installation tasks
+          ansible.builtin.include_tasks: ../tasks/install.yml
+          vars:
+            jackett_search_force_install: false
+            jackett_search_git_checkout:
+              changed: false
+            jackett_search_runtime_user_home: "{{ jackett_search_test_directory.path }}"
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_make_command: >-
+              {{ jackett_search_test_directory.path }}/source/install
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+            jackett_search_install_lib_dir: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search
+            jackett_search_install_script_path: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+
+        - name: Read restored standalone runtime fixture
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
+            follow: false
+          register: jackett_search_test_runtime_stat
+
+        - name: Assert missing standalone runtime triggered installation
+          ansible.builtin.assert:
+            that:
+              - jackett_search_make_install.changed
+              - jackett_search_test_runtime_stat.stat.isreg
+              - jackett_search_test_runtime_stat.stat.executable
+
+        - name: Damage standalone runtime fixture permissions
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
+            mode: "0600"
+          become: true
+
+        - name: Restore a non-executable standalone runtime through installation tasks
+          ansible.builtin.include_tasks: ../tasks/install.yml
+          vars:
+            jackett_search_force_install: false
+            jackett_search_git_checkout:
+              changed: false
+            jackett_search_runtime_user_home: "{{ jackett_search_test_directory.path }}"
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_make_command: >-
+              {{ jackett_search_test_directory.path }}/source/install
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+            jackett_search_install_lib_dir: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search
+            jackett_search_install_script_path: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+
+        - name: Read restored executable runtime fixture
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
+            follow: false
+          register: jackett_search_test_repaired_runtime_stat
+
+        - name: Assert non-executable standalone runtime triggered installation
+          ansible.builtin.assert:
+            that:
+              - jackett_search_make_install.changed
+              - jackett_search_test_repaired_runtime_stat.stat.isreg
+              - jackett_search_test_repaired_runtime_stat.stat.executable
+
+        - name: Remove privileged runtime fixture after installation checks
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib"
+            state: absent
+          become: true
+
+        - name: Restore unprivileged runtime fixture parent
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+            state: directory
+            mode: "0700"
+
         - name: Validate Linux jackett-search removal
           when: ansible_facts.system == 'Linux'
           block:
@@ -147,6 +306,11 @@
                 jackett_search_runtime_user: "{{ ansible_user_id }}"
                 jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
                 jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+                jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+                jackett_search_install_lib_dir: >-
+                  {{ jackett_search_test_directory.path }}/lib/jackett-search
+                jackett_search_install_script_path: >-
+                  {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
                 jackett_search_command_path: >-
                   {{ jackett_search_test_directory.path }}/bin/jackett-search
                 jackett_search_manage_components: true
@@ -166,6 +330,123 @@
               ansible.builtin.assert:
                 that:
                   - not jackett_search_test_command_stat.stat.exists
+
+            - name: Read isolated jackett-search runtime after removal
+              ansible.builtin.stat:
+                path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+              register: jackett_search_test_runtime_stat
+
+            - name: Assert isolated jackett-search runtime was removed
+              ansible.builtin.assert:
+                that:
+                  - not jackett_search_test_runtime_stat.stat.exists
+
+        - name: Remove standalone launcher fixture for runtime-only removal coverage
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
+            state: absent
+          become: true
+
+        - name: Create standalone runtime directory for removal coverage
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+            state: directory
+            mode: "0755"
+          become: true
+
+        - name: Create standalone runtime fixture without its launcher
+          ansible.builtin.copy:
+            content: |
+              #!/bin/sh
+              exit 0
+            dest: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
+            mode: "0700"
+
+        - name: Create standalone uninstall command fixture
+          ansible.builtin.copy:
+            content: |
+              #!/bin/sh
+              set -eu
+              for argument in "$@"; do
+                case "$argument" in
+                  INSTALL_DIR=*) install_dir=${argument#INSTALL_DIR=} ;;
+                  INSTALL_LIB_DIR=*) install_lib_dir=${argument#INSTALL_LIB_DIR=} ;;
+                esac
+              done
+              rm -f "$install_dir/jackett-search"
+              rm -rf "$install_lib_dir"
+            dest: "{{ jackett_search_test_directory.path }}/source/uninstall"
+            mode: "0700"
+
+        - name: Remove standalone runtime fixture through role uninstall tasks
+          ansible.builtin.include_tasks: ../tasks/uninstall.yml
+          vars:
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+            jackett_search_install_lib_dir: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search
+            jackett_search_install_script_path: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
+            jackett_search_make_command: >-
+              {{ jackett_search_test_directory.path }}/source/uninstall
+            jackett_search_manage_components: false
+            jackett_search_remove_config: false
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+
+        - name: Read standalone runtime fixture after removal
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+          register: jackett_search_standalone_runtime_after_removal
+
+        - name: Assert standalone runtime fixture was removed
+          ansible.builtin.assert:
+            that:
+              - not jackett_search_standalone_runtime_after_removal.stat.exists
+
+        - name: Create an unrelated standalone runtime directory without its executable
+          ansible.builtin.file:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search"
+            state: directory
+            mode: "0700"
+
+        - name: Create an unrelated runtime sentinel
+          ansible.builtin.copy:
+            content: unrelated runtime data
+            dest: "{{ jackett_search_test_directory.path }}/lib/jackett-search/sentinel"
+            mode: "0600"
+
+        - name: Preserve an unrelated runtime directory through role uninstall tasks
+          ansible.builtin.include_tasks: ../tasks/uninstall.yml
+          vars:
+            jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
+            jackett_search_command_path: >-
+              {{ jackett_search_test_directory.path }}/bin/jackett-search
+            jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+            jackett_search_install_prefix: "{{ jackett_search_test_directory.path }}"
+            jackett_search_install_lib_dir: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search
+            jackett_search_install_script_path: >-
+              {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
+            jackett_search_make_command: >-
+              {{ jackett_search_test_directory.path }}/source/uninstall
+            jackett_search_manage_components: false
+            jackett_search_remove_config: false
+            jackett_search_effective_config_path: >-
+              {{ jackett_search_test_directory.path }}/config.toml
+
+        - name: Read unrelated runtime sentinel after role uninstall tasks
+          ansible.builtin.stat:
+            path: "{{ jackett_search_test_directory.path }}/lib/jackett-search/sentinel"
+          register: jackett_search_unrelated_runtime_sentinel_stat
+
+        - name: Assert unrelated runtime directory was preserved
+          ansible.builtin.assert:
+            that:
+              - jackett_search_unrelated_runtime_sentinel_stat.stat.exists
 
         - name: Preserve existing create-only config with API validation disabled
           ansible.builtin.include_tasks: ../tasks/config.yml
@@ -250,3 +531,4 @@
           ansible.builtin.file:
             path: "{{ jackett_search_test_directory.path }}"
             state: absent
+          become: true

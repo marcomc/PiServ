@@ -6,9 +6,10 @@ All notable project changes are documented here.
 
 ### PiServ Installation
 
-- Added the repeatable `ansible/playbooks/piserv-install.yml` entry point for
-  ordered full-host convergence after manual Tailscale and pCloud bootstrap,
-  while keeping destructive migration and operator-only health checks separate.
+- Added the repeatable `scripts/run-piserv-install.sh` wrapper for ordered
+  full-host convergence through `ansible/playbooks/piserv-install.yml` after
+  manual Tailscale and pCloud bootstrap, while keeping destructive migration
+  and operator-only health checks separate.
 - Made the Tailscale wrapper safe in check mode by skipping an upstream role
   that parses command output Ansible does not produce in that mode, while
   retaining PiServ's read-only runtime probes.
@@ -34,6 +35,28 @@ All notable project changes are documented here.
 - Captured the full read-only SMART baseline for the root NVMe and dynamically
   discovered external NVMe, including health, wear, temperature, power, and
   error-log fields.
+
+### Jackett Search
+
+- Pin PiServ's Jackett deployment to the published upstream `v0.3.0` release
+  tag, whose Makefile manages the Linux-Docker FlareSolverr service URL and
+  removes macOS `._*` metadata sidecars during Jackett installation.
+- Adapt the role to the upstream standalone CLI runtime and leave Compose
+  network declarations under upstream ownership.
+- Re-run the applicable upstream component installation when its generated
+  Compose file loses the required shared-network membership or declaration.
+- Reinstall a missing or non-executable standalone runtime even when its
+  launcher remains correct, and remove the runtime after partial launcher
+  cleanup.
+- Refuse recursive standalone-runtime cleanup without the expected managed
+  executable, preserving unrelated directories at an overridden install path.
+- Install `jq` through the base role's standard host-package step for JSON
+  inspection and diagnostics.
+- Reject tag, task-start, and Ansible tag-environment partial-execution
+  controls through the full-install wrapper, and make its check-mode forwarding
+  state flow into the firewall preflight.
+- Make external-storage identity discovery emit redirectable YAML and install
+  it with an atomic, mode-restricted write.
 
 ## 0.2.0 - 2026-07-28
 
