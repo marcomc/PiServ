@@ -35,6 +35,16 @@ All notable project changes are documented here.
   discovered external NVMe, including health, wear, temperature, power, and
   error-log fields.
 
+### Jackett Search
+
+- Pin PiServ's Jackett deployment to the published upstream `v0.3.0` release
+  tag, whose Makefile manages the Linux-Docker FlareSolverr service URL and
+  removes macOS `._*` metadata sidecars during Jackett installation.
+- Adapt the role to the upstream standalone CLI runtime and leave Compose
+  network declarations under upstream ownership.
+- Install `jq` through the base role's standard host-package step for JSON
+  inspection and diagnostics.
+
 ## 0.2.0 - 2026-07-28
 
 ### Ansible Maintainability

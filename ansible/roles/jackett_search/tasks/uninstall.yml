@@ -72,18 +72,25 @@
       ansible.builtin.assert:
         that:
           - jackett_search_remove_command_stat.stat.islnk
+            or jackett_search_remove_command_stat.stat.isreg
           - >-
-            jackett_search_remove_command_stat.stat.lnk_target
-            == jackett_search_source_dir ~ '/jackett-search'
+            jackett_search_remove_command_stat.stat.isreg
+            or (
+              jackett_search_remove_command_stat.stat.islnk
+              and jackett_search_remove_command_stat.stat.lnk_target
+                  == jackett_search_install_script_path
+            )
         fail_msg: >-
           Refusing to remove {{ jackett_search_command_path }} because it is not
-          the jackett-search command installed from {{ jackett_search_source_dir }}.
+          the standalone jackett-search command managed by this role.
 
     - name: Remove jackett-search through the upstream Makefile
       ansible.builtin.command:
         argv:
           - "{{ jackett_search_make_command }}"
+          - "INSTALL_PREFIX={{ jackett_search_install_prefix }}"
           - "INSTALL_DIR={{ jackett_search_install_dir }}"
+          - "INSTALL_LIB_DIR={{ jackett_search_install_lib_dir }}"
           - uninstall
       args:
         chdir: "{{ jackett_search_source_dir }}"

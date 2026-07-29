@@ -51,6 +51,18 @@ argument_specs:
         type: path
         default: /usr/local/bin
         description: Destination passed to the upstream Makefile INSTALL_DIR variable.
+      jackett_search_install_prefix:
+        type: path
+        default: /usr/local
+        description: System prefix passed to the upstream standalone installer.
+      jackett_search_install_lib_dir:
+        type: path
+        default: /usr/local/lib/jackett-search
+        description: Standalone runtime directory passed to the upstream installer.
+      jackett_search_install_script_path:
+        type: path
+        default: /usr/local/lib/jackett-search/jackett-search
+        description: Expected standalone runtime executable path when the launcher is a symlink.
       jackett_search_expected_version:
         type: str
         default: ""
