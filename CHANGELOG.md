@@ -22,9 +22,9 @@ All notable project changes are documented here.
   previous-boot power, USB, and filesystem evidence survives a reboot.
 - Installed `smartmontools` in the base role and validated the dynamically
   discovered root NVMe SMART health.
-- Removed host-specific external model, serial, and by-id inputs; the external
-  storage playbook now discovers the unique `external-data` filesystem and
-  validates the resolved parent disk with bridge-aware SMART health checks.
+- Added label-based external-storage discovery while retaining an ignored local
+  model-and-serial identity check before the playbook mutates the resolved disk;
+  bridge-aware SMART checks validate the verified parent disk.
 - Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
   cleanup, and fresh kernel-log validation with no new transport or filesystem
   errors.

@@ -19,7 +19,7 @@ shared service access and restricted backup storage.
 
 | Item | Value |
 | --- | --- |
-| Device identity | Runtime discovery from the unique `external-data` filesystem label and udev metadata |
+| Device identity | Runtime label discovery verified against ignored local udev model and serial values |
 | Partition layout | One GPT partition spanning 3.64 TiB |
 | Filesystem | Journaled ext4 |
 | Label | `external-data` |
@@ -32,10 +32,13 @@ shared service access and restricted backup storage.
 
 The disk is attached through a USB 3 port and currently negotiates at 5 Gbps.
 The external-storage playbook discovers the unique partition labeled
-`external-data`, resolves its parent disk, and reads the current udev model and
-serial for diagnostics. It refuses zero or multiple label matches, non-USB
-parents, unexpected filesystem layouts, and mount conflicts. It never formats
-or automatically adopts a blank disk.
+`external-data`, resolves its parent disk, and compares its udev model and
+serial to the ignored local identity values in
+`ansible/vars/external-storage.yml`. Copy
+`ansible/vars/external-storage.yml.example` to that ignored file and replace
+both placeholders before applying. The playbook refuses zero or multiple label
+matches, an identity mismatch, non-USB parents, unexpected filesystem layouts,
+and mount conflicts. It never formats or automatically adopts a blank disk.
 
 ## Provisioning History
 

@@ -1,4 +1,7 @@
 ---
-# External storage is discovered at runtime from the managed filesystem label.
-# The playbook requires exactly one candidate and derives its parent disk and
-# udev identity without formatting or adopting an unrelated disk.
+# Copy to external-storage.yml and replace the placeholders with the verified
+# local disk identity. This file stays ignored because the serial is host
+# specific. Runtime discovery finds the managed filesystem label, then compares
+# its parent disk to these values before changing the host.
+piserv_external_storage_expected_model: <model>
+piserv_external_storage_expected_serial: <serial>

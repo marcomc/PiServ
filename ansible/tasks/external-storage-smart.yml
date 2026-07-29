@@ -30,8 +30,8 @@
   ansible.builtin.set_fact:
     piserv_external_storage_smart_result: >-
       {{ piserv_external_storage_smart_bridge
-         if (piserv_external_storage_smart_bridge is defined and
-             piserv_external_storage_smart_bridge.rc == 0)
+         if (not (piserv_external_storage_smart_bridge.skipped | default(false)) and
+             (piserv_external_storage_smart_bridge.rc | default(1)) == 0)
          else piserv_external_storage_smart_auto }}
 
 - name: Report unavailable external storage SMART health
@@ -40,9 +40,9 @@
       External storage SMART health is unavailable through the discovered USB
       bridge. Autodetection returned {{ piserv_external_storage_smart_auto.rc }}:
       {{ piserv_external_storage_smart_auto.stdout | trim }}
-      {% if piserv_external_storage_smart_bridge is defined %}
-      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc }}:
-      {{ piserv_external_storage_smart_bridge.stdout | trim }}
+      {% if not (piserv_external_storage_smart_bridge.skipped | default(false)) %}
+      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc | default(1) }}:
+      {{ piserv_external_storage_smart_bridge.stdout | default('') | trim }}
       {% endif %}
   when: >-
     piserv_external_storage_smart_result.rc != 0 or
@@ -60,8 +60,8 @@
       External storage SMART health validation failed. Autodetection returned
       {{ piserv_external_storage_smart_auto.rc }}:
       {{ piserv_external_storage_smart_auto.stdout | trim }}
-      {% if piserv_external_storage_smart_bridge is defined %}
-      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc }}:
-      {{ piserv_external_storage_smart_bridge.stdout | trim }}
+      {% if not (piserv_external_storage_smart_bridge.skipped | default(false)) %}
+      ASMedia pass-through returned {{ piserv_external_storage_smart_bridge.rc | default(1) }}:
+      {{ piserv_external_storage_smart_bridge.stdout | default('') | trim }}
       {% endif %}
   when: piserv_external_storage_smart_required | bool

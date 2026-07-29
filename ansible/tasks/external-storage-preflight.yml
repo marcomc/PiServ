@@ -1,4 +1,16 @@
 ---
+- name: Assert external storage identity inputs are concrete
+  ansible.builtin.assert:
+    that:
+      - piserv_external_storage_expected_model | trim | length > 0
+      - piserv_external_storage_expected_serial | trim | length > 0
+      - piserv_external_storage_expected_model is not search('<|>')
+      - piserv_external_storage_expected_serial is not search('<|>')
+    fail_msg: >-
+      External storage requires a concrete expected model and serial. Copy
+      ansible/vars/external-storage.yml.example to the ignored
+      external-storage.yml file and replace every placeholder before applying.
+
 - name: Discover external storage partitions by filesystem label
   ansible.builtin.command:
     argv:
@@ -94,14 +106,20 @@
   changed_when: false
   check_mode: false
 
-- name: Assert the discovered external storage device is a USB disk
+- name: Assert the discovered external storage device matches the configured identity
   ansible.builtin.assert:
     that:
       - "'ID_TYPE=disk' in piserv_external_storage_udev.stdout_lines"
       - "'ID_BUS=usb' in piserv_external_storage_udev.stdout_lines"
+      - >-
+        ('ID_MODEL=' ~ (piserv_external_storage_expected_model | trim))
+        in piserv_external_storage_udev.stdout_lines
+      - >-
+        ('ID_SERIAL_SHORT=' ~ (piserv_external_storage_expected_serial | trim))
+        in piserv_external_storage_udev.stdout_lines
     fail_msg: >-
-      The discovered external storage is not a USB disk. Refusing to manage
-      an unexpected storage device.
+      The discovered external storage does not match the configured USB disk
+      identity. Refusing to manage an unexpected storage device.
 
 - name: Select the discovered external USB bridge SMART mode
   ansible.builtin.set_fact:

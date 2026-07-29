@@ -32,7 +32,9 @@ PiServ; direct macOS access is not a requirement for this volume.
 - Mount it at `/mnt/external-data` using the filesystem UUID in an `/etc/fstab`
   entry. The steady-state playbook discovers the partition by its unique
   `external-data` filesystem label and resolves the parent disk at runtime.
-  Stable by-id paths are not configuration inputs.
+  It compares that disk's udev model and serial with the ignored local
+  `ansible/vars/external-storage.yml` identity before any mutation. Stable by-id
+  paths are not configuration inputs.
 - Use `nodev` and `nosuid` mount options. `nofail` allows PiServ to boot when
   the removable disk is absent; services using the disk must declare their
   mount dependency explicitly.
@@ -41,7 +43,7 @@ The current disk identity is:
 
 | Property | Value |
 | --- | --- |
-| Device identity | Runtime filesystem-label discovery with udev model and serial evidence |
+| Device identity | Runtime filesystem-label discovery plus ignored local udev model and serial verification |
 | Filesystem UUID | Read at convergence and written to fstab |
 | Mountpoint | `/mnt/external-data` |
 
@@ -73,8 +75,9 @@ create mode `0600` files still require service-specific handling.
   `RequiresMountsFor=/mnt/external-data` or an equivalent mount dependency to
   avoid writing into an unmounted fallback directory.
 - Runtime discovery refuses zero or multiple `external-data` label matches,
-  non-USB parent disks, unexpected filesystem layouts, and mount conflicts. It
-  never formats or silently adopts a blank disk.
+  a model or serial mismatch, non-USB parent disks, unexpected filesystem
+  layouts, and mount conflicts. It never formats or silently adopts a blank
+  disk.
 - `smartmontools` is installed by the base role. The base role validates the
   root NVMe health; the external-storage playbook validates the discovered
   external disk and uses a bridge-specific pass-through mode only when the
