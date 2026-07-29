@@ -20,7 +20,7 @@
 
     - name: Create a firmware configuration that requires I2C enablement
       ansible.builtin.copy:
-        content: "# I2C disabled in this test fixture\\n"
+        content: "# I2C disabled in this test fixture\n"
         dest: "{{ freenove_case_test_directory.path }}/config.txt"
         mode: "0600"
       check_mode: false
