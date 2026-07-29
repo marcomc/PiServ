@@ -2,7 +2,7 @@
 
 All notable project changes are documented here.
 
-## 0.3.0 - 2026-07-29
+## [0.3.0] - 2026-07-29
 
 ### PiServ Installation
 
