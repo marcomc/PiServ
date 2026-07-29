@@ -27,8 +27,9 @@ flushes journald so the active boot is written to the configured storage.
 
 | Requirement | Value |
 | --- | --- |
-| Target OS | Debian-family Linux |
-| Tested OS | Raspberry Pi OS Trixie |
+| Runtime precondition | Debian-family Linux (enforced by the role) |
+| Declared Galaxy platform | Debian Trixie |
+| Live-tested OS | Raspberry Pi OS Trixie |
 | Ansible | `ansible-core >= 2.15` |
 | Privilege escalation | Required |
 | Facts | `gather_facts: true` |
@@ -83,7 +84,7 @@ ansible-galaxy role install marcomc.journald,0.1.0
 | Platform | Status |
 | --- | --- |
 | Raspberry Pi OS Trixie | Tested live |
-| Debian 13 Trixie | Metadata-supported and tested through Raspberry Pi OS |
+| Debian 13 Trixie | Declared in Galaxy metadata; independent live validation pending |
 
 ## Behavior
 
