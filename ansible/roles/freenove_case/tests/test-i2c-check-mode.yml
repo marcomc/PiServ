@@ -37,6 +37,7 @@
       ansible.builtin.assert:
         that:
           - freenove_case_i2c_config.changed
+          - freenove_case_i2c_reboot.skipped | default(false) | bool
 
   post_tasks:
     - name: Remove the isolated I2C firmware configuration fixture
