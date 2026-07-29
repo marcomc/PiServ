@@ -48,6 +48,8 @@ All notable project changes are documented here.
 - Reinstall a missing or non-executable standalone runtime even when its
   launcher remains correct, and remove the runtime after partial launcher
   cleanup.
+- Refuse recursive standalone-runtime cleanup without the expected managed
+  executable, preserving unrelated directories at an overridden install path.
 - Install `jq` through the base role's standard host-package step for JSON
   inspection and diagnostics.
 - Reject tag, task-start, and Ansible tag-environment partial-execution
