@@ -46,6 +46,7 @@
     state: directory
     mode: "0755"
   become: true
+  register: jackett_search_install_lib_permissions
   when:
     - jackett_search_install_lib_stat.stat.exists
     - jackett_search_install_lib_stat.stat.isdir
@@ -61,6 +62,7 @@
     path: "{{ jackett_search_install_script_path }}"
     mode: "0755"
   become: true
+  register: jackett_search_install_script_permissions
   when:
     - jackett_search_install_lib_stat.stat.exists
     - jackett_search_install_lib_stat.stat.isdir

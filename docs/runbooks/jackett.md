@@ -31,8 +31,9 @@ If mDNS is unavailable, obtain the current DHCP lease from the operator, then
 use it directly for this run only:
 
 ```sh
-PISERV_IP=<operator-supplied-current-dhcp-lease>
-ansible-playbook ansible/playbooks/jackett.yml -e "ansible_host=$PISERV_IP"
+# Export PISERV_IP to the operator-supplied current DHCP lease before this block.
+: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
+ansible-playbook ansible/playbooks/jackett.yml -e "ansible_host=${PISERV_IP}"
 ```
 
 The playbook delegates installation to the local `jackett_search` role. The

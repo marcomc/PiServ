@@ -148,7 +148,7 @@ configuration failure. To repeat the full validation after an mDNS failure, use
 the current DHCP lease supplied by the operator directly:
 
 ```sh
-export PISERV_IP="192.0.2.123" # replace with the current DHCP lease
+# Export PISERV_IP to the operator-supplied current DHCP lease before this block.
 : "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "admin@${PISERV_IP}" 'sudo -n true'
 ansible-playbook -e "ansible_host=${PISERV_IP}" \
