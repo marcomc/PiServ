@@ -4,6 +4,7 @@
 
 - [Purpose](#purpose)
 - [Current State](#current-state)
+- [Configure Device Identity](#configure-device-identity)
 - [Provisioning History](#provisioning-history)
 - [Verification](#verification)
 - [Previous-Boot Diagnostics](#previous-boot-diagnostics)
@@ -39,6 +40,41 @@ serial to the ignored local identity values in
 both placeholders before applying. The playbook refuses zero or multiple label
 matches, an identity mismatch, non-USB parents, unexpected filesystem layouts,
 and mount conflicts. It never formats or automatically adopts a blank disk.
+
+## Configure Device Identity
+
+Before the first PiServ convergence, run the discovery helper on any Linux host
+with the intended SSD and its USB enclosure attached. It does not need to be
+PiServ; this supports preparing the controller before the Pi is deployed.
+
+```sh
+scripts/discover-external-storage-identity.sh
+```
+
+The helper discovers exactly one USB disk, reads its Linux udev `ID_MODEL` and
+`ID_SERIAL_SHORT` values, and prints the corresponding YAML. It writes nothing
+unless explicitly requested. After reviewing the printed disk and values,
+create the ignored controller-local file:
+
+```sh
+scripts/discover-external-storage-identity.sh \
+  --write ansible/vars/external-storage.yml
+```
+
+If multiple USB disks are attached, select the intended disk from a read-only
+inventory and pass it explicitly:
+
+```sh
+lsblk -d -o NAME,TRAN,MODEL,SERIAL,SIZE,TYPE
+scripts/discover-external-storage-identity.sh \
+  --device /dev/sdX \
+  --write ansible/vars/external-storage.yml
+```
+
+The helper refuses to overwrite an existing identity file. Inspect and update
+an existing file manually if the physical enclosure is intentionally replaced.
+Do not derive these values from macOS `diskutil`; Linux udev formatting is the
+value that the preflight compares.
 
 ## Provisioning History
 

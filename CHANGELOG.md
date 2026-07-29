@@ -25,6 +25,9 @@ All notable project changes are documented here.
 - Added label-based external-storage discovery while retaining an ignored local
   model-and-serial identity check before the playbook mutates the resolved disk;
   bridge-aware SMART checks validate the verified parent disk.
+- Added a read-only Linux helper that discovers the external USB disk identity
+  and creates the ignored model-and-serial file only after explicit operator
+  approval.
 - Completed a bounded 4 GiB backup-directory write, checksum, direct-readback,
   cleanup, and fresh kernel-log validation with no new transport or filesystem
   errors.
