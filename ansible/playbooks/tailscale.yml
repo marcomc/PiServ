@@ -30,6 +30,23 @@
         tailscale_args: "{{ piserv_tailscale_up_args }}"
 
   tasks:
+    - name: Read current IPv4 forwarding state for check-mode modeling
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sysctl
+          - -n
+          - net.ipv4.ip_forward
+      register: piserv_tailscale_ipv4_forwarding
+      changed_when: false
+      check_mode: false
+      become: true
+
+    - name: Record pending IPv4 forwarding change
+      ansible.builtin.set_fact:
+        piserv_tailscale_ipv4_forwarding_pending: >-
+          {{ ansible_check_mode and
+             (piserv_tailscale_ipv4_forwarding.stdout | trim) != '1' }}
+
     - name: Enable IPv4 forwarding for the PiServ subnet router
       ansible.posix.sysctl:
         name: net.ipv4.ip_forward

@@ -134,6 +134,20 @@ Then add a non-sensitive test indexer and verify a search through
 remain local to PiServ even if external DNS is unavailable. Remove a test
 tracker that is not part of the intended configuration.
 
+For a secret-safe raw API probe, read the key locally without printing it and
+inspect only result counts:
+
+```sh
+api_key="$(sudo jq -r '.APIKey' /home/admin/.config/jackett-search/jackett-config/Jackett/ServerConfig.json)"
+curl -sS -G http://127.0.0.1:9117/api/v2.0/indexers/internetarchive/results \
+  --data-urlencode "apikey=${api_key}" \
+  --data-urlencode 'Query=debian' \
+  | jq '{Results: (.Results | length), Links: ([.Results[] | select(.Link != null and .Link != "")] | length), Magnets: ([.Results[] | select(.MagnetUri != null and .MagnetUri != "")] | length)}'
+unset api_key
+```
+
+Do not log, echo, commit, or paste the API key or tracker credentials.
+
 ## Validation Record
 
 Before the 0.3.x migration, on 2026-07-28, a converged apply and subsequent
@@ -153,16 +167,17 @@ dependent on the operator adding tracker credentials outside Git, as tracked in
 
 On 2026-07-29, the live host was migrated from the pre-0.3.x state after
 operator diagnosis, then converged with the normal 0.3.x installation path.
-Jackett resolved FlareSolverr at `172.29.0.3` and returned HTTP `200`; the fresh
+Jackett resolved FlareSolverr through the Docker service name and returned HTTP
+`200`; the fresh
 container log contained no key-ring, XML, crypto, or host-gateway DNS errors.
 Public test searches through Jackett's JSON results endpoint returned:
 
 | Indexer | Query | HTTP | Results | Non-empty `Link` | Non-empty `MagnetUri` |
 | --- | --- | ---: | ---: | ---: | ---: |
 | `internetarchive` | `debian` | 200 | 100 | 100 | 100 |
-| `1337x` | `debian` | 200 | 80 | 80 | 0 |
+| `1337x` | `debian` | 200 | 60 | 60 | 0 |
 | `thepiratebay` | `debian` | 200 | 100 | 0 | 100 |
-| `52bt` | `debian` | 200 | 0 | 0 | 0 |
+| `52bt` | `debian` | 200 | 40 | 0 | 40 |
 
 These results confirm that recovered indexers can return torrent-file `Link`
 values, but FlareSolverr recovery does not guarantee them for every indexer. A

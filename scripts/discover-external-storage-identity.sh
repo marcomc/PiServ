@@ -103,23 +103,33 @@ identity_yaml=$(printf '%s\n' \
   "piserv_external_storage_expected_model: ${quoted_model}" \
   "piserv_external_storage_expected_serial: ${quoted_serial}")
 
-printf 'device=%s\n' "${DEVICE}"
 printf '%s\n' "${identity_yaml}"
 
 if [[ -z "${WRITE_PATH}" ]]; then
   printf '%s\n' \
     'No file was written. Review the values, then rerun with:' \
-    "  scripts/discover-external-storage-identity.sh --device ${DEVICE} --write ansible/vars/external-storage.yml"
+    "  scripts/discover-external-storage-identity.sh --device ${DEVICE} --write ansible/vars/external-storage.yml" >&2
+  printf 'device=%s\n' "${DEVICE}" >&2
   exit 0
 fi
 
-[[ ! -e "${WRITE_PATH}" ]] || fail "refusing to overwrite existing file: ${WRITE_PATH}"
+[[ ! -e "${WRITE_PATH}" && ! -L "${WRITE_PATH}" ]] \
+  || fail "refusing to overwrite existing file: ${WRITE_PATH}"
 
 write_parent=$(dirname -- "${WRITE_PATH}")
 [[ -d "${write_parent}" ]] || fail "parent directory does not exist: ${write_parent}"
 
 umask 077
-install -m 0600 /dev/null "${WRITE_PATH}"
-printf '%s\n' "${identity_yaml}" > "${WRITE_PATH}"
-printf 'identity_file=%s\n' "${WRITE_PATH}"
+temp_path=$(mktemp "${write_parent}/.external-storage-identity.XXXXXX") \
+  || fail "could not create temporary identity file in ${write_parent}"
+trap 'rm -f -- "${temp_path}"' EXIT HUP INT TERM
+printf '%s\n' "${identity_yaml}" > "${temp_path}" \
+  || fail "could not write temporary identity file in ${write_parent}"
+chmod 0600 "${temp_path}" \
+  || fail "could not secure temporary identity file in ${write_parent}"
+mv -- "${temp_path}" "${WRITE_PATH}" \
+  || fail "could not install identity file at ${WRITE_PATH}"
+trap - EXIT HUP INT TERM
+printf 'device=%s\n' "${DEVICE}" >&2
+printf 'identity_file=%s\n' "${WRITE_PATH}" >&2
 exit 0

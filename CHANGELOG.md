@@ -44,6 +44,10 @@ All notable project changes are documented here.
   network declarations under upstream ownership.
 - Install `jq` through the base role's standard host-package step for JSON
   inspection and diagnostics.
+- Guard the full installation entrypoint against unsafe targeted-tag runs and
+  make its check-mode forwarding state flow into the firewall preflight.
+- Make external-storage identity discovery emit redirectable YAML and install
+  it with an atomic, mode-restricted write.
 
 ## 0.2.0 - 2026-07-28
 

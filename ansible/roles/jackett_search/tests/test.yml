@@ -48,12 +48,13 @@
         dest: "{{ jackett_search_test_directory.path }}/source/Makefile"
         mode: "0600"
 
-    - name: Create isolated installed jackett-search command fixture
-      ansible.builtin.copy:
-        src: "{{ jackett_search_test_directory.path }}/source/jackett-search"
+    - name: Create isolated installed jackett-search launcher fixture
+      ansible.builtin.file:
         dest: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
-        remote_src: true
-        mode: "0700"
+        # Match the upstream Makefile's absolute launcher target.
+        src: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
+        state: link
+        force: true
 
     - name: Create existing jackett-search configuration fixture
       ansible.builtin.copy:
@@ -99,9 +100,6 @@
               - >-
                 'docker-compose' in
                 jackett_search_test_defaults.jackett_search_component_apt_packages
-              - >-
-                jackett_search_test_defaults.jackett_search_component_network_name
-                == 'jackett-search'
 
         - name: Assert Compose layout patterns accept custom host ports
           ansible.builtin.assert:
@@ -150,6 +148,8 @@
                 jackett_search_runtime_user: "{{ ansible_user_id }}"
                 jackett_search_source_dir: "{{ jackett_search_test_directory.path }}/source"
                 jackett_search_install_dir: "{{ jackett_search_test_directory.path }}/bin"
+                jackett_search_install_script_path: >-
+                  {{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search
                 jackett_search_command_path: >-
                   {{ jackett_search_test_directory.path }}/bin/jackett-search
                 jackett_search_manage_components: true
@@ -170,12 +170,12 @@
                 that:
                   - not jackett_search_test_command_stat.stat.exists
 
-        - name: Recreate standalone command fixture for removal-guard coverage
-          ansible.builtin.copy:
-            src: "{{ jackett_search_test_directory.path }}/source/jackett-search"
+        - name: Recreate standalone launcher fixture for removal-guard coverage
+          ansible.builtin.file:
+            src: "{{ jackett_search_test_directory.path }}/lib/jackett-search/jackett-search"
             dest: "{{ jackett_search_test_directory.path }}/bin/jackett-search"
-            remote_src: true
-            mode: "0700"
+            state: link
+            force: true
 
         - name: Create standalone uninstall command fixture
           ansible.builtin.copy:

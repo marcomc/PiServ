@@ -62,7 +62,7 @@ argument_specs:
       jackett_search_install_script_path:
         type: path
         default: /usr/local/lib/jackett-search/jackett-search
-        description: Expected standalone runtime executable path when the launcher is a symlink.
+        description: Standalone runtime executable path installed by the upstream Makefile.
       jackett_search_expected_version:
         type: str
         default: ""
@@ -87,10 +87,6 @@ argument_specs:
         type: path
         default: ""
         description: Optional location for upstream-generated component Compose and data files.
-      jackett_search_component_network_name:
-        type: str
-        default: jackett-search
-        description: Docker network shared by the upstream-generated component Compose projects.
       jackett_search_timezone:
         type: str
         default: UTC

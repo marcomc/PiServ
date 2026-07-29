@@ -1,0 +1,17 @@
+---
+- name: Validate PiServ installation entrypoint invocation
+  hosts: piserv
+  gather_facts: false
+  tasks:
+    - name: Require the complete PiServ installation entrypoint
+      ansible.builtin.assert:
+        that:
+          - >-
+            (ansible_run_tags | default([]) | difference(['all']) | length) == 0
+        fail_msg: >-
+          Targeted tags are unsupported for piserv-install.yml because they can
+          bypass storage, networking, firewall, and service safety ordering.
+          Run the complete entrypoint without --tags, or invoke the specific
+          playbook directly after completing its documented prerequisites.
+      tags:
+        - always

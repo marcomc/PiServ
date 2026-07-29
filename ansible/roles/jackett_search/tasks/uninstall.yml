@@ -72,14 +72,9 @@
       ansible.builtin.assert:
         that:
           - jackett_search_remove_command_stat.stat.islnk
-            or jackett_search_remove_command_stat.stat.isreg
           - >-
-            jackett_search_remove_command_stat.stat.isreg
-            or (
-              jackett_search_remove_command_stat.stat.islnk
-              and jackett_search_remove_command_stat.stat.lnk_target
-                  == jackett_search_install_script_path
-            )
+            jackett_search_remove_command_stat.stat.lnk_target
+            == jackett_search_install_script_path
         fail_msg: >-
           Refusing to remove {{ jackett_search_command_path }} because it is not
           the standalone jackett-search command managed by this role.

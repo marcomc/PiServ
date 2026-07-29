@@ -31,7 +31,6 @@ jackett_search_component_apt_packages:
   - docker-compose
 jackett_search_force_component_install: false
 jackett_search_component_config_dir: ""
-jackett_search_component_network_name: jackett-search
 jackett_search_timezone: UTC
 jackett_search_jackett_bind_address: 127.0.0.1
 jackett_search_jackett_port: 9117

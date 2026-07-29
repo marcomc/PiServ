@@ -93,9 +93,10 @@
       artifacts, and repository metadata.
     - Add a systemd timer, failure summary, retention policy, and restore test.
 
-- [ ] **Install Jackett Search and the Jackett service**
-  - Assessment: Jackett documents ARM64 Linux support and a Docker deployment;
-    the existing Jackett Search project should remain the operator-facing CLI.
+- [ ] **Complete Jackett tracker validation**
+  - Assessment: Jackett and the operator-facing Jackett Search CLI are deployed
+    through the pinned upstream release; only tracker-specific validation
+    remains.
   - Actions:
     - Configure tracker credentials outside Git, then validate search results
       and restart recovery.

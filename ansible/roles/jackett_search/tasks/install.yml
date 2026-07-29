@@ -12,14 +12,9 @@
         jackett_search_force_install | bool
         or jackett_search_git_checkout.changed
         or not jackett_search_command_stat.stat.exists
-        or (
-          not jackett_search_command_stat.stat.isreg
-          and not (
-            jackett_search_command_stat.stat.islnk
-            and (jackett_search_command_stat.stat.lnk_target | default(''))
-                == jackett_search_install_script_path
-          )
-        )
+        or not jackett_search_command_stat.stat.islnk
+        or (jackett_search_command_stat.stat.lnk_target | default(''))
+           != jackett_search_install_script_path
       }}
 
 - name: Install jackett-search through the upstream Makefile

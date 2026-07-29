@@ -76,10 +76,10 @@ ansible-galaxy role install marcomc.jackett_search,0.1.0
 | `jackett_search_install_dir` | `/usr/local/bin` | Makefile `INSTALL_DIR` value |
 | `jackett_search_install_prefix` | `/usr/local` | System prefix for the standalone runtime |
 | `jackett_search_install_lib_dir` | `/usr/local/lib/jackett-search` | Standalone runtime directory |
-| `jackett_search_install_script_path` | `/usr/local/lib/jackett-search/jackett-search` | Expected runtime target when the launcher is a symlink |
+| `jackett_search_install_script_path` | `/usr/local/lib/jackett-search/jackett-search` | Standalone runtime target installed by the upstream Makefile |
 | `jackett_search_manage_components` | `true` | Run both upstream component targets |
 | `jackett_search_component_config_dir` | User config directory | Component Compose and data location |
-| `jackett_search_component_network_name` | `jackett-search` | Shared Docker network for the components |
+| Upstream Docker network | `jackett-search` | Fixed network name used by both generated Compose projects |
 | `jackett_search_jackett_bind_address` | `127.0.0.1` | Generated Jackett host binding |
 | `jackett_search_jackett_port` | `9117` | Generated Jackett host port |
 | `jackett_search_flaresolverr_bind_address` | `127.0.0.1` | Generated FlareSolverr host binding |
@@ -139,8 +139,8 @@ corresponding upstream `make up-*` target when those settings change.
 
 `state: absent` runs `make down-flaresolverr`, `make down-jackett`, and
 `make uninstall` for role-managed components and the standalone CLI runtime.
-The role refuses to remove a command that is not a regular standalone
-executable or the upstream launcher's runtime target. The
+The role refuses to remove a command that is not the upstream launcher's
+symlink to the managed standalone runtime. The
 upstream removal target does not delete Compose files, Jackett data, tracker
 credentials, or the private CLI config unless
 `jackett_search_remove_config: true` is selected.
@@ -172,7 +172,8 @@ ansible-playbook -i tests/inventory tests/test.yml
 ansible-lint .
 ```
 
-The role verifies the Makefile-created CLI symlink and version, validates both
+The role verifies the Makefile-created launcher symlink and standalone runtime
+version, validates both
 generated Compose files, checks the upstream Compose services, and validates
 authenticated API access without logging the API key when one is available.
 

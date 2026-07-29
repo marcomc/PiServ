@@ -9,14 +9,9 @@
           and not jackett_search_runtime_packages.changed
           and not jackett_search_git_checkout.changed
           and jackett_search_command_stat.stat.exists
-          and (
-            jackett_search_command_stat.stat.isreg
-            or (
-              jackett_search_command_stat.stat.islnk
-              and jackett_search_command_stat.stat.lnk_target
-                  == jackett_search_install_script_path
-            )
-          )
+          and jackett_search_command_stat.stat.islnk
+          and jackett_search_command_stat.stat.lnk_target
+              == jackett_search_install_script_path
           and not (jackett_search_components_changed | default(false))
           and not (jackett_search_config.changed | default(false))
         )

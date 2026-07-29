@@ -49,7 +49,9 @@ complete the required manual bootstrap before running the full entry point:
    [pCloud storage runbook](pcloudcc-storage.md), then rerun
    `ansible/playbooks/piserv-install.yml`.
 
-Tailscale and pCloud credentials are never stored in Git or Ansible variables.
+Tailscale and pCloud credentials are never stored in Git or tracked Ansible
+variables. Tailscale may receive a private runtime auth key when required;
+pCloud credential bootstrap remains manual.
 
 ## Apply
 
@@ -146,7 +148,7 @@ configuration failure. To repeat the full validation after an mDNS failure, use
 the current DHCP lease supplied by the operator directly:
 
 ```sh
-export PISERV_IP=<current-dhcp-lease>
+export PISERV_IP="192.0.2.123" # replace with the current DHCP lease
 : "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "admin@${PISERV_IP}" 'sudo -n true'
 ansible-playbook -e "ansible_host=${PISERV_IP}" \

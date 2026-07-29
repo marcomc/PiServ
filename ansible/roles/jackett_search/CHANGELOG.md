@@ -6,8 +6,9 @@ All notable changes for the jackett_search Ansible role are documented here.
 
 ### Fixed
 
-- Adapted installation and validation to the upstream standalone runtime layout
-  instead of requiring a symlink back to the source checkout.
+- Adapted installation and validation to the upstream standalone runtime layout,
+  requiring the launcher symlink to target the managed runtime rather than the
+  source checkout.
 - Bind Jackett before its first upstream-managed start.
 - Preserve existing source-parent ownership and permissions.
 - Declare Docker Compose v2 support on Debian 13 or later and report missing

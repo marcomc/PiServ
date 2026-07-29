@@ -5,7 +5,7 @@
       - docker
       - network
       - inspect
-      - "{{ jackett_search_component_network_name }}"
+      - jackett-search
   become: true
   register: jackett_search_component_network
   changed_when: false
@@ -23,7 +23,7 @@
       - docker
       - network
       - create
-      - "{{ jackett_search_component_network_name }}"
+      - jackett-search
   become: true
   changed_when: true
   when:
