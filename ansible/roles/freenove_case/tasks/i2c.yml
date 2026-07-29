@@ -25,9 +25,11 @@
   become: true
 
 - name: Reboot after changing I2C firmware config
+  register: freenove_case_i2c_reboot
   when:
     - freenove_case_reboot_on_i2c_config_change | bool
     - freenove_case_i2c_config.changed
+    - not ansible_check_mode
   ansible.builtin.reboot:
     msg: "Rebooting after enabling I2C for Freenove FNK0100K"
     reboot_timeout: "{{ freenove_case_reboot_timeout }}"

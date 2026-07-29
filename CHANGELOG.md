@@ -6,6 +6,8 @@ All notable project changes are documented here.
 
 ### PiServ Installation
 
+- Prevent the Freenove I2C reboot task from executing during check-mode
+  validation.
 - Added the repeatable `scripts/run-piserv-install.sh` wrapper for ordered
   full-host convergence through `ansible/playbooks/piserv-install.yml` after
   manual Tailscale and pCloud bootstrap, while keeping destructive migration

@@ -85,7 +85,7 @@ ansible-playbook --syntax-check tests/test.yml
 | `freenove_case_manage_desktop_launcher` | `true` | Create FNK0100 desktop/menu launchers |
 | `freenove_case_app_name` | `FNK0100` | Launcher name and icon basename |
 | `freenove_case_app_comment` | Freenove case description | Launcher comment |
-| `freenove_case_reboot_on_i2c_config_change` | `true` | Reboot after changing I2C firmware config |
+| `freenove_case_reboot_on_i2c_config_change` | `true` | Reboot after changing I2C firmware config; skip reboot in check mode |
 | `freenove_case_reboot_timeout` | `600` | Reboot timeout in seconds |
 | `freenove_case_i2c_device` | `/dev/i2c-1` | Expected I2C device |
 | `freenove_case_manage_background_service` | `false` | Manage Freenove background task service |
@@ -254,6 +254,16 @@ Role validation:
 ansible-playbook --syntax-check tests/test.yml
 ansible-lint .
 ```
+
+Focused I2C check-mode regression validation on a Debian target:
+
+```sh
+ansible-playbook --check -i <inventory> --limit <target> \
+  tests/test-i2c-check-mode.yml
+```
+
+The test creates and removes an isolated temporary firmware-config fixture. It
+must report the pending I2C change while skipping the reboot task.
 
 Role validation after Galaxy-style export:
 
