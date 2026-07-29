@@ -85,7 +85,7 @@ ansible-playbook --syntax-check tests/test.yml
 | `freenove_case_manage_desktop_launcher` | `true` | Create FNK0100 desktop/menu launchers |
 | `freenove_case_app_name` | `FNK0100` | Launcher name and icon basename |
 | `freenove_case_app_comment` | Freenove case description | Launcher comment |
-| `freenove_case_reboot_on_i2c_config_change` | `true` | Reboot after changing I2C firmware config |
+| `freenove_case_reboot_on_i2c_config_change` | `true` | Reboot after changing I2C firmware config; report only in check mode |
 | `freenove_case_reboot_timeout` | `600` | Reboot timeout in seconds |
 | `freenove_case_i2c_device` | `/dev/i2c-1` | Expected I2C device |
 | `freenove_case_manage_background_service` | `false` | Manage Freenove background task service |

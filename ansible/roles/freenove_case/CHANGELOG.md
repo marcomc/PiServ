@@ -40,3 +40,6 @@ All notable changes for the Freenove Case Ansible role are documented here.
   module.
 - Generalized role defaults and documentation so project-specific values live
   outside the Galaxy-ready role.
+
+- Skip the I2C firmware-change reboot in Ansible check mode while preserving
+  normal-mode reboot behavior.
