@@ -24,7 +24,7 @@ fi
 
 for argument in "$@"; do
   case "${argument}" in
-    --start-at-task | --start-at-task=* | --skip-tags | --skip-tags=* | --tags | --tags=* | -t | -t?*)
+    --start-at-task | --start-at-task=* | --step | --step=* | --skip-tags | --skip-tags=* | --tags | --tags=* | -t | -t?*)
       fail "partial-execution option is unsupported for full PiServ convergence: ${argument}"
       ;;
     -h | --help)

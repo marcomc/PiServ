@@ -49,10 +49,10 @@ narrow maintenance and recovery work.
   credentials are never stored in Git.
 - A failed mDNS lookup must use an operator-supplied `PISERV_IP` override for
   direct-IP recovery rather than a hard-coded address.
-- The wrapper rejects tags, task-start controls, and Ansible tag environment
-  controls. Direct `ansible-playbook` use of the full entrypoint is an
-  unsupported bypass; individual playbooks remain available for documented
-  narrow maintenance and recovery work.
+- The wrapper rejects tags, task-start and interactive-step controls, and
+  Ansible tag environment controls. Direct `ansible-playbook` use of the full
+  entrypoint is an unsupported bypass; individual playbooks remain available
+  for documented narrow maintenance and recovery work.
 
 ## Validation
 

@@ -164,16 +164,16 @@ ansible-galaxy collection install -r ansible/requirements.yml --force
 scripts/run-piserv-install.sh
 ```
 
-The wrapper invokes the complete playbook and rejects tags, task-start controls,
-and Ansible tag environment controls that could bypass safety ordering. It
-passes safe full-run options such as `--check`, `--diff`, `--limit`, and `-e`
-through unchanged. Direct `ansible-playbook` use of the full entrypoint is an
-unsupported bypass. The entry point first preflights external storage without
-mutation, then imports the steady-state configuration playbooks in dependency
-order: Tailscale, firewall, base host policy, external storage, Freenove,
-pCloud, Home Assistant MQTT Agent, Jackett, and RaiPlaySound. It is designed to
-be rerun; a converged second run should report `changed=0` apart from live state
-that has drifted.
+The wrapper invokes the complete playbook and rejects tags, task-start and
+interactive-step controls, and Ansible tag environment controls that could
+bypass safety ordering. It passes safe full-run options such as `--check`,
+`--diff`, `--limit`, and `-e` through unchanged. Direct `ansible-playbook` use
+of the full entrypoint is an unsupported bypass. The entry point first
+preflights external storage without mutation, then imports the steady-state
+configuration playbooks in dependency order: Tailscale, firewall, base host
+policy, external storage, Freenove, pCloud, Home Assistant MQTT Agent, Jackett,
+and RaiPlaySound. It is designed to be rerun; a converged second run should
+report `changed=0` apart from live state that has drifted.
 
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is

@@ -56,9 +56,9 @@ All notable project changes are documented here.
   executable, preserving unrelated directories at an overridden install path.
 - Install `jq` through the base role's standard host-package step for JSON
   inspection and diagnostics.
-- Reject tag, task-start, and Ansible tag-environment partial-execution
-  controls through the full-install wrapper, and make its check-mode forwarding
-  state flow into the firewall preflight.
+- Reject tag, task-start, interactive-step, and Ansible tag-environment
+  partial-execution controls through the full-install wrapper, and make its
+  check-mode forwarding state flow into the firewall preflight.
 - Make external-storage identity discovery emit redirectable YAML and install
   it with an atomic, mode-restricted write.
 

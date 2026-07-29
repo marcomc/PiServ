@@ -134,25 +134,44 @@
                 ) is not none
 
         - name: Assert expected shared Docker network declarations are detected
+          vars:
+            jackett_search_test_shared_network_compose: |-
+              services:
+                flaresolverr:
+                  networks:
+                    - jackett-search
+
+              networks:
+                jackett-search:
+                  external: true
+                  name: jackett-search
+            jackett_search_test_missing_service_network_compose: |-
+              services:
+                flaresolverr:
+
+              networks:
+                jackett-search:
+                  external: true
+                  name: jackett-search
           ansible.builtin.assert:
             that:
               - >-
                 (
-                  'services:\n  flaresolverr:\n    networks:\n      - jackett-search\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  jackett_search_test_shared_network_compose
                   | regex_search(
                       '(?m)^networks:\n  jackett-search:\n    external: true\n    name: jackett-search\\s*$'
                     )
                 ) is not none
               - >-
                 (
-                  'services:\n  flaresolverr:\n    networks:\n      - jackett-search\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  jackett_search_test_shared_network_compose
                   | regex_search(
                       '(?ms)^  flaresolverr:\n.*?^    networks:\n      - jackett-search\\s*$'
                     )
                 ) is not none
               - >-
                 (
-                  'services:\n  flaresolverr:\n\nnetworks:\n  jackett-search:\n    external: true\n    name: jackett-search\n'
+                  jackett_search_test_missing_service_network_compose
                   | regex_search(
                       '(?ms)^  flaresolverr:\n.*?^    networks:\n      - jackett-search\\s*$'
                     )

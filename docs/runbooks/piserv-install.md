@@ -61,7 +61,7 @@ Run the full installation and convergence entry point:
 scripts/run-piserv-install.sh
 ```
 
-The wrapper rejects `--tags`, `-t`, `--skip-tags`, `--start-at-task`,
+The wrapper rejects `--tags`, `-t`, `--skip-tags`, `--start-at-task`, `--step`,
 `ANSIBLE_RUN_TAGS`, and `ANSIBLE_SKIP_TAGS`, because each can bypass required
 storage, networking, and firewall ordering. It forwards safe full-run options
 such as `--check`, `--diff`, `--limit`, and `-e`. Direct `ansible-playbook` use
