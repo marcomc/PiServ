@@ -39,6 +39,9 @@
   when:
     - base_manage_smartmontools | bool
     - base_validate_root_storage | bool
+    - >-
+      not ansible_check_mode or
+      not (base_smartmontools_package.changed | default(false))
   ansible.builtin.include_tasks: storage-health.yml
 
 - name: Configure base cloud-init policy
