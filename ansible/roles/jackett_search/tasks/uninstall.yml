@@ -10,6 +10,11 @@
     follow: false
   register: jackett_search_remove_command_stat
 
+- name: Read installed jackett-search runtime before removal
+  ansible.builtin.stat:
+    path: "{{ jackett_search_install_lib_dir }}"
+  register: jackett_search_remove_runtime_stat
+
 - name: Stop upstream components before jackett-search removal
   when:
     - jackett_search_manage_components | bool
@@ -58,7 +63,9 @@
       changed_when: item.stdout | trim | length > 0
 
 - name: Remove an installed jackett-search command
-  when: jackett_search_remove_command_stat.stat.exists
+  when: >-
+    jackett_search_remove_command_stat.stat.exists
+    or jackett_search_remove_runtime_stat.stat.exists
   block:
     - name: Assert the upstream Makefile is available for removal
       ansible.builtin.assert:
@@ -78,6 +85,7 @@
         fail_msg: >-
           Refusing to remove {{ jackett_search_command_path }} because it is not
           the standalone jackett-search command managed by this role.
+      when: jackett_search_remove_command_stat.stat.exists
 
     - name: Remove jackett-search through the upstream Makefile
       ansible.builtin.command:
@@ -89,7 +97,6 @@
           - uninstall
       args:
         chdir: "{{ jackett_search_source_dir }}"
-        removes: "{{ jackett_search_command_path }}"
       become: true
       changed_when: true
 

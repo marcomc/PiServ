@@ -5,6 +5,12 @@
     follow: false
   register: jackett_search_command_stat
 
+- name: Read installed standalone jackett-search runtime
+  ansible.builtin.stat:
+    path: "{{ jackett_search_install_script_path }}"
+    follow: false
+  register: jackett_search_install_script_preinstall_stat
+
 - name: Decide whether jackett-search needs Makefile installation
   ansible.builtin.set_fact:
     jackett_search_install_required: >-
@@ -15,6 +21,9 @@
         or not jackett_search_command_stat.stat.islnk
         or (jackett_search_command_stat.stat.lnk_target | default(''))
            != jackett_search_install_script_path
+        or not jackett_search_install_script_preinstall_stat.stat.exists
+        or not jackett_search_install_script_preinstall_stat.stat.isreg
+        or not jackett_search_install_script_preinstall_stat.stat.executable
       }}
 
 - name: Install jackett-search through the upstream Makefile
