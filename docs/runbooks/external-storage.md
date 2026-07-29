@@ -197,10 +197,12 @@ ssh admin@PiServ.local \
   'sudo journalctl -b -1 -k --no-pager | grep -Ei "under.?volt|throttl|usb|uas|reset|I/O error|Buffer I/O|EXT4-fs|sda|sda1"'
 ```
 
-The journal is bounded to 1 GiB with a 5 GiB root-filesystem reserve, 128 MiB
-per file, and 14-day retention. Persistent journald improves diagnosis but
-cannot guarantee the final seconds of an abrupt power loss; compare the
-previous-boot log with the current mount, USB link, and filesystem state.
+The local reusable `journald` role receives PiServ's policy from
+`ansible/playbooks/piserv-base.yml`: a 1 GiB cap, 5 GiB root-filesystem
+reserve, 128 MiB per-file cap, and 14-day retention. Persistent journald
+improves diagnosis but cannot guarantee the final seconds of an abrupt power
+loss; compare the previous-boot log with the current mount, USB link, and
+filesystem state.
 
 ## Service Access
 

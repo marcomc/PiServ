@@ -1,0 +1,16 @@
+---
+- name: Restart systemd-journald
+  ansible.builtin.systemd_service:
+    name: systemd-journald.service
+    state: restarted
+  become: true
+  listen: Restart and flush systemd-journald
+
+- name: Flush system journal
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/journalctl
+      - --flush
+  changed_when: false
+  become: true
+  listen: Restart and flush systemd-journald

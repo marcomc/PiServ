@@ -27,10 +27,6 @@
   when: base_manage_reboot_notification | bool
   ansible.builtin.include_tasks: reboot-notification.yml
 
-- name: Configure persistent system journal
-  when: base_manage_journald | bool
-  ansible.builtin.include_tasks: journald.yml
-
 - name: Install storage health tooling
   when: base_manage_smartmontools | bool
   ansible.builtin.include_tasks: smartmontools.yml

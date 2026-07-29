@@ -138,6 +138,9 @@
 
 ## Later
 
+- Export the local `journald` role to a standalone public repository and
+  publish the first `marcomc.journald` Galaxy release when that distribution is
+  required.
 - Add Ethernet configuration notes when the server is connected by cable.
 - Add backup and restore runbook.
 - Add disaster recovery playbook.

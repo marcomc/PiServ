@@ -1,0 +1,6 @@
+---
+- name: Test journald role syntax
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: journald

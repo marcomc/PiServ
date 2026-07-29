@@ -21,19 +21,3 @@
     state: restarted
     daemon_reload: true
   become: true
-
-- name: Restart systemd-journald
-  ansible.builtin.systemd_service:
-    name: systemd-journald.service
-    state: restarted
-  become: true
-  listen: Restart and flush systemd-journald
-
-- name: Flush system journal to persistent storage
-  ansible.builtin.command:
-    argv:
-      - journalctl
-      - --flush
-  changed_when: false
-  become: true
-  listen: Restart and flush systemd-journald

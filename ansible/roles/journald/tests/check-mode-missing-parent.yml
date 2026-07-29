@@ -1,0 +1,13 @@
+---
+- name: Verify check mode with a missing journald drop-in parent
+  hosts: all
+  gather_facts: true
+  pre_tasks:
+    - name: Require check mode for the missing-parent scenario
+      ansible.builtin.assert:
+        that: ansible_check_mode
+        fail_msg: Run this scenario with ansible-playbook --check.
+  roles:
+    - role: journald
+      vars:
+        journald_dropin_path: /etc/systemd/journald.conf.d/ansible-role-check-mode/99-journald.conf

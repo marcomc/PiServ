@@ -1,25 +1,26 @@
 ---
 - name: Inspect the journald drop-in parent
   ansible.builtin.stat:
-    path: "{{ base_journald_dropin_path | dirname }}"
-  register: base_journald_dropin_parent
+    path: "{{ journald_dropin_path | dirname }}"
+  register: journald_dropin_parent
 
 - name: Create a missing journald drop-in parent
   ansible.builtin.file:
-    path: "{{ base_journald_dropin_path | dirname }}"
+    path: "{{ journald_dropin_path | dirname }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
-  when: not base_journald_dropin_parent.stat.exists
+  when: not journald_dropin_parent.stat.exists
 
-- name: Configure persistent journald storage
+- name: Configure journald policy
   ansible.builtin.template:
-    src: journald.conf.d-piserv.conf.j2
-    dest: "{{ base_journald_dropin_path }}"
+    src: journald.conf.j2
+    dest: "{{ journald_dropin_path }}"
     owner: root
     group: root
     mode: "0644"
   become: true
+  when: not ansible_check_mode or journald_dropin_parent.stat.exists
   notify: Restart and flush systemd-journald

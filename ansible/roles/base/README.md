@@ -21,7 +21,6 @@ This project-local role codifies live PiServ baseline hardening:
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
 - boot notification service
-- persistent, bounded systemd journal retention on the root filesystem
 - SMART health inspection tooling for local storage validation
 - base host packages, including `jq` for JSON inspection
 - cloud-init disabled state
@@ -69,12 +68,6 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
 | `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
 | `base_reboot_notification_condition_path` | `/etc/msmtprc` | Path required before boot notification runs |
-| `base_manage_journald` | `true` | Retain systemd journals across reboots |
-| `base_journald_dropin_path` | `/etc/systemd/journald.conf.d/99-piserv-persistent.conf` | Journald drop-in path |
-| `base_journald_system_max_use` | `1G` | Maximum persistent journal disk usage |
-| `base_journald_system_keep_free` | `5G` | Root-filesystem space reserved outside journald |
-| `base_journald_system_max_file_size` | `128M` | Maximum individual journal file size |
-| `base_journald_max_retention_sec` | `14day` | Maximum journal retention period |
 | `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
 | `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
 | `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
@@ -116,11 +109,6 @@ recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. Configure a mail transport
 with a separate role before expecting delivery.
-
-Journald is configured to keep compressed logs on the root NVMe filesystem,
-with a 1 GiB cap, 5 GiB free-space reserve, 128 MiB per-file cap, and 14-day
-retention. The role flushes the runtime journal after changing this policy so
-the current boot is available through `/var/log/journal` immediately.
 
 The role installs `smartmontools` and derives the physical parent disk from the
 root filesystem. It validates that PiServ is booted from NVMe and that the root

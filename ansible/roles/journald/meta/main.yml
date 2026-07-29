@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: journald
+  author: Role maintainers
+  description: Configure systemd-journald storage, retention, and disk-use policy on Debian-family hosts.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - systemd
+    - journald
+    - logging
+    - logs
+    - debian
+dependencies: []
