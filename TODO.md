@@ -69,19 +69,27 @@
     - Package the app as a systemd service and codify deployment in Ansible.
     - Document operator workflows in a runbook.
 
-- [ ] **Set up Hermes AI agent for Home Assistant integration**
-  - Assessment: Hermes should be treated as a local-network service first, with
-    explicit network exposure, authentication, and Home Assistant integration
-    boundaries before it controls or observes home automations.
+- [ ] **Set up Hermes Agent on PiServ with Codex and Home Assistant**
+  - Assessment: Nous Hermes Agent is the sole primary agent. It runs as a
+    PiServ-resident, unprivileged service that retains its learning data while
+    Codex, authenticated through ChatGPT Pro, is the initial model provider.
+  - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Identify the Hermes runtime, deployment model, and hardware requirements
-      suitable for PiServ.
-    - Decide whether Hermes should run directly on PiServ or as an isolated
-      service with a dedicated system user and systemd unit.
+    - Install Hermes under a dedicated system user with a private, backed-up
+      persistent data directory for memory, skills, sessions, and audit data.
+    - Install and smoke-test Codex CLI on PiServ `arm64`, then authenticate it
+      through the operator's ChatGPT Pro account without an API key.
+    - Start with only the Codex provider, no generic terminal, filesystem,
+      browser, code-execution, or SSH toolset.
+    - Implement an auditable, per-request disclosure confirmation before Cloud
+      Corpus content or Home Assistant state is sent to Codex.
     - Define the Home Assistant connection method for an instance on the same
-      network, including API endpoint, token storage, and allowed capabilities.
+      network, including a capability gateway, token storage, and allowed
+      entities and operations.
+    - Prove that memory and reviewed skills survive restart, backup/restore,
+      and a future provider change to a 64K-capable LAN model.
     - Document firewall, Tailscale, and local-network access expectations before
-      exposing the service.
+      exposing Direct Hermes Chat.
     - Codify the final install, configuration, and service health checks in
       Ansible after live validation.
 
