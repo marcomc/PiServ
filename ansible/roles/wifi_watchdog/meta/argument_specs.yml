@@ -19,7 +19,7 @@ argument_specs:
       wifi_watchdog_script_path:
         type: path
         default: /usr/local/sbin/wifi-connectivity-watchdog
-        description: Managed watchdog script path.
+        description: Managed watchdog script path directly under /usr/local/sbin.
       wifi_watchdog_interface:
         type: str
         default: wlan0

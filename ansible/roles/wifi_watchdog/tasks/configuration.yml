@@ -1,4 +1,26 @@
 ---
+- name: Inspect Wi-Fi watchdog script ancestors
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr
+    - /usr/local
+  register: wifi_watchdog_script_ancestors
+  become: true
+
+- name: Require trusted Wi-Fi watchdog script ancestors
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+      - item.stat.uid == 0
+      - item.stat.mode[-2] not in ['2', '3', '6', '7']
+      - item.stat.mode[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      The existing {{ item.item }} ancestor must be root-owned and not writable
+      by its group or other users before installing a root-executed watchdog.
+  loop: "{{ wifi_watchdog_script_ancestors.results }}"
+
 - name: Inspect Wi-Fi watchdog script parent
   ansible.builtin.stat:
     path: "{{ wifi_watchdog_script_path | dirname }}"

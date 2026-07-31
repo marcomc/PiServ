@@ -22,6 +22,8 @@
 - Made a DNS resolver failure fail the watchdog health check explicitly.
 - Preserved fresh check-mode convergence for missing parent directories and
   constrained watchdog unit paths to systemd's system unit directory.
+- Restricted the root-executed watchdog script to a validated trusted system
+  path.
 
 All notable project changes are documented here.
 

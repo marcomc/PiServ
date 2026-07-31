@@ -7,6 +7,7 @@
       - (wifi_watchdog_service_path | basename) == wifi_watchdog_service_name
       - (wifi_watchdog_service_path | dirname) == '/etc/systemd/system'
       - wifi_watchdog_script_path is match('^/')
+      - (wifi_watchdog_script_path | dirname) == '/usr/local/sbin'
       - wifi_watchdog_monotonic_clock_path is match('^/')
       - wifi_watchdog_interface | length > 0
       - wifi_watchdog_check_interval_seconds | string is match('^[1-9][0-9]*$')
@@ -27,7 +28,7 @@
       Configure positive integer check and recovery intervals, with connection
       recovery no shorter than the check interval, NetworkManager recovery
       after connection recovery, and reboot disabled or no earlier than the
-      NetworkManager recovery threshold. Service and script paths must be
-      absolute, the monotonic clock path must be absolute, the service path
-      filename must equal the service name and live directly in
-      /etc/systemd/system, and the service name must end in .service.
+      NetworkManager recovery threshold. The script path must be a direct child
+      of /usr/local/sbin, the service path filename must equal the service name
+      and live directly in /etc/systemd/system, the monotonic clock path must be
+      absolute, and the service name must end in .service.

@@ -31,3 +31,5 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Skipped template and service lifecycle work in fresh check mode when required
   parent directories are only predicted, and restricted unit paths to
   `/etc/systemd/system`.
+- Restricted the root-executed script to `/usr/local/sbin` and validated its
+  system-directory ancestors.

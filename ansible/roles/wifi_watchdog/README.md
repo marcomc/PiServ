@@ -29,10 +29,11 @@ The role installs a root-owned service that continuously verifies:
 
 After a continuous offline period it restarts the NetworkManager connection,
 then NetworkManager itself. Host reboot is deliberately disabled by default.
-When a configured script or service parent does not exist, the role creates it
-as `root:root` mode `0755`; existing parent directories are left unchanged.
-Existing parents must already be root-owned and not writable by group or other
-users because the service executes as root.
+When `/usr/local/sbin` does not exist, the role creates it as `root:root` mode
+`0755`; existing script and service directories are left unchanged. The role
+requires `/usr`, `/usr/local`, `/usr/local/sbin`, and the system unit directory
+to be root-owned and not writable by group or other users because the service
+executes as root.
 
 ## Requirements
 
@@ -65,7 +66,7 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | --- | --- | --- |
 | `wifi_watchdog_service_name` | `wifi-connectivity-watchdog.service` | Managed systemd service name |
 | `wifi_watchdog_service_path` | `/etc/systemd/system/{{ wifi_watchdog_service_name }}` | Managed unit path directly under `/etc/systemd/system`; filename must equal `wifi_watchdog_service_name` |
-| `wifi_watchdog_script_path` | `/usr/local/sbin/wifi-connectivity-watchdog` | Managed script path |
+| `wifi_watchdog_script_path` | `/usr/local/sbin/wifi-connectivity-watchdog` | Managed script path directly under `/usr/local/sbin` |
 | `wifi_watchdog_interface` | `wlan0` | Wi-Fi interface monitored through NetworkManager |
 | `wifi_watchdog_connection` | `""` | Connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile |
 | `wifi_watchdog_gateway_probe` | `""` | Gateway to ping through the Wi-Fi interface; empty uses that interface's IPv4 default route |
@@ -104,9 +105,10 @@ automatic activation and have usable saved credentials. Set the variable only
 when a host must always reconnect to one named profile.
 
 To preserve an existing local service identity during migration, override the
-service name and script path in the consumer playbook. The service unit path
-must remain directly under `/etc/systemd/system`. Those consumer-specific values
-are not required by the role.
+service name and script filename in the consumer playbook. The script must
+remain directly under `/usr/local/sbin` and the service unit path must remain
+directly under `/etc/systemd/system`. Those consumer-specific values are not
+required by the role.
 
 ## Recovery Policy
 
