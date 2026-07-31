@@ -27,7 +27,7 @@ argument_specs:
       wifi_watchdog_connection:
         type: str
         default: ""
-        description: Optional connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile.
+        description: Optional required active connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile.
       wifi_watchdog_gateway_probe:
         type: str
         default: ""

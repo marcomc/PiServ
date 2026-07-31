@@ -101,8 +101,9 @@ problem and can interrupt work running on the host.
 
 To let NetworkManager select any available saved Wi-Fi profile, omit
 `wifi_watchdog_connection` as shown above. A profile must remain eligible for
-automatic activation and have usable saved credentials. Set the variable only
-when a host must always reconnect to one named profile.
+automatic activation and have usable saved credentials. When the variable is
+set, link health requires that exact profile to be active on the monitored
+interface before the watchdog resets its offline timer.
 
 To preserve an existing local service identity during migration, override the
 service name and script filename in the consumer playbook. The script must

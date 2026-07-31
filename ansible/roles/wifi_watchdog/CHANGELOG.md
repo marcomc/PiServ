@@ -18,6 +18,8 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
   interface so another interface cannot mask a Wi-Fi outage.
 - Forced the C locale for parsed `nmcli` interface state and replaced the
   wall-clock offline timer with Linux kernel monotonic uptime.
+- Required a configured Wi-Fi profile to be active before reporting the link
+  healthy.
 - Rejected unit paths whose filename differs from the configured service name.
 - Required the DNS probe's resolved IPv4 address to respond through the
   monitored Wi-Fi interface.

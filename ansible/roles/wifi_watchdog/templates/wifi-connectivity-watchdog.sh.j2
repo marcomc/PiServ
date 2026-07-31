@@ -21,9 +21,13 @@ log() {
 }
 
 wifi_link_ok() {
+    local active_connection
     local device_status
     device_status=$(LC_ALL=C nmcli -t -f DEVICE,STATE device status) || return 1
-    grep -Fq "${interface}:connected" <<<"${device_status}"
+    grep -Fq "${interface}:connected" <<<"${device_status}" || return 1
+    [[ -z "${connection}" ]] && return 0
+    active_connection=$(LC_ALL=C nmcli -g GENERAL.CONNECTION device show "${interface}") || return 1
+    [[ "${active_connection}" == "${connection}" ]]
 }
 
 monotonic_seconds() {
