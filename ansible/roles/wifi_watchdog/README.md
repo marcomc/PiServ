@@ -150,6 +150,10 @@ tests/test-watchdog.sh
 ansible-lint .
 ```
 
+On a fresh target, check mode predicts the script and unit files without
+attempting to enable a unit that does not exist yet. A converged target still
+checks the systemd enablement and startup state.
+
 Render the script with representative variables before running ShellCheck:
 
 ```sh

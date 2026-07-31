@@ -3,6 +3,7 @@
   ansible.builtin.stat:
     path: "{{ wifi_watchdog_script_path | dirname }}"
   register: wifi_watchdog_script_parent
+  become: true
 
 - name: Create missing Wi-Fi watchdog script parent
   ansible.builtin.file:
@@ -18,6 +19,7 @@
   ansible.builtin.stat:
     path: "{{ wifi_watchdog_service_path | dirname }}"
   register: wifi_watchdog_service_parent
+  become: true
 
 - name: Require a trusted existing Wi-Fi watchdog script parent
   ansible.builtin.assert:
@@ -51,6 +53,12 @@
   when: not wifi_watchdog_service_parent.stat.exists
   become: true
 
+- name: Inspect Wi-Fi watchdog service unit
+  ansible.builtin.stat:
+    path: "{{ wifi_watchdog_service_path }}"
+  register: wifi_watchdog_service_unit
+  become: true
+
 - name: Install Wi-Fi watchdog
   become: true
   block:
@@ -80,3 +88,4 @@
         daemon_reload: true
         enabled: true
         state: started
+      when: not ansible_check_mode or wifi_watchdog_service_unit.stat.exists

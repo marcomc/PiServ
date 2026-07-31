@@ -14,6 +14,9 @@
 - Hardened the reusable watchdog against localized `nmcli` state, wall-clock
   changes during recovery, mismatched systemd service-path overrides, and DNS
   success delivered through another network interface.
+- Made privileged path inspection authoritative and preserved fresh-host
+  check-mode convergence when the watchdog unit is not created yet, including
+  handler execution.
 
 All notable project changes are documented here.
 
