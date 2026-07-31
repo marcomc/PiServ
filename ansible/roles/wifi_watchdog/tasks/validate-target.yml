@@ -16,6 +16,7 @@
       - "command -v {{ item }}"
   loop:
     - awk
+    - bash
     - getent
     - ip
     - logger

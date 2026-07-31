@@ -39,7 +39,7 @@ users because the service executes as root.
 | --- | --- |
 | Service manager | systemd |
 | Network stack | NetworkManager and `nmcli` |
-| Runtime commands | `awk`, `getent`, `ip`, `logger`, `ping`, `systemctl` |
+| Runtime commands | `awk`, `bash`, `getent`, `ip`, `logger`, `ping`, `systemctl` |
 | Ansible | `ansible-core >= 2.15` |
 | Privilege escalation | Required |
 | Facts | `gather_facts: true` |
@@ -63,7 +63,7 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | Variable | Default | Description |
 | --- | --- | --- |
 | `wifi_watchdog_service_name` | `wifi-connectivity-watchdog.service` | Managed systemd service name |
-| `wifi_watchdog_service_path` | `/etc/systemd/system/{{ wifi_watchdog_service_name }}` | Managed unit path |
+| `wifi_watchdog_service_path` | `/etc/systemd/system/{{ wifi_watchdog_service_name }}` | Managed unit path; filename must equal `wifi_watchdog_service_name` |
 | `wifi_watchdog_script_path` | `/usr/local/sbin/wifi-connectivity-watchdog` | Managed script path |
 | `wifi_watchdog_interface` | `wlan0` | Wi-Fi interface monitored through NetworkManager |
 | `wifi_watchdog_connection` | `""` | Connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile |
@@ -124,6 +124,10 @@ offline for configured duration
 
 The timer resets only when all enabled checks succeed. Recovery messages are
 logged with the `wifi-connectivity-watchdog` journal identifier.
+
+The `nmcli` status command uses the C locale before its output is parsed. The
+offline timer uses Bash's monotonic `SECONDS` counter, so wall-clock corrections
+cannot skip or delay an escalation level.
 
 ## Supported Platforms
 

@@ -11,6 +11,8 @@
   Galaxy-ready metadata, standalone documentation, tests, and release guidance.
 - Included the Wi-Fi watchdog in the canonical full-host convergence entry
   point and bound its default gateway probe to the monitored Wi-Fi interface.
+- Hardened the reusable watchdog against localized `nmcli` state, wall-clock
+  changes during recovery, and mismatched systemd service-path overrides.
 
 All notable project changes are documented here.
 

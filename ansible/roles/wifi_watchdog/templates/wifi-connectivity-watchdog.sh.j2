@@ -11,7 +11,7 @@ networkmanager_recovery_after={{ wifi_watchdog_networkmanager_recovery_after_sec
 reboot_after={{ wifi_watchdog_reboot_after_seconds | int }}
 networkmanager_service={{ wifi_watchdog_networkmanager_service_name | quote }}
 
-offline_since=0
+offline_since=-1
 connection_restarted=0
 networkmanager_restarted=0
 
@@ -21,7 +21,7 @@ log() {
 
 wifi_link_ok() {
     local device_status
-    device_status=$(nmcli -t -f DEVICE,STATE device status) || return 1
+    device_status=$(LC_ALL=C nmcli -t -f DEVICE,STATE device status) || return 1
     grep -Fq "${interface}:connected" <<<"${device_status}"
 }
 
@@ -70,18 +70,18 @@ recover_host() {
 
 while :; do
     if wifi_link_ok && gateway_ok && dns_ok; then
-        if (( offline_since > 0 )); then
+        if (( offline_since >= 0 )); then
             log "connectivity restored"
         fi
-        offline_since=0
+        offline_since=-1
         connection_restarted=0
         networkmanager_restarted=0
         sleep "${check_interval}"
         continue
     fi
 
-    now=$(date +%s)
-    if (( offline_since == 0 )); then
+    now=${SECONDS}
+    if (( offline_since < 0 )); then
         offline_since=${now}
         log "connectivity check failed; starting recovery timer"
     fi

@@ -15,7 +15,7 @@ argument_specs:
       wifi_watchdog_service_path:
         type: path
         default: /etc/systemd/system/{{ wifi_watchdog_service_name }}
-        description: Managed systemd service-unit path.
+        description: Managed systemd service-unit path whose filename matches the service name.
       wifi_watchdog_script_path:
         type: path
         default: /usr/local/sbin/wifi-connectivity-watchdog
@@ -31,7 +31,7 @@ argument_specs:
       wifi_watchdog_gateway_probe:
         type: str
         default: ""
-        description: Optional IPv4 gateway to ping; empty uses the active default route.
+        description: Optional IPv4 gateway to ping through the Wi-Fi interface; empty uses that interface's default route.
       wifi_watchdog_dns_probe:
         type: str
         default: example.com

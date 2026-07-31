@@ -6,6 +6,7 @@ role_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 test_dir=$(mktemp -d)
 rendered_script="${test_dir}/wifi-connectivity-watchdog"
 test_log="${test_dir}/calls.log"
+invalid_service_path_output="${test_dir}/invalid-service-path.log"
 watchdog_pid=""
 
 cleanup() {
@@ -16,6 +17,14 @@ cleanup() {
     rm -rf "${test_dir}"
 }
 trap cleanup EXIT
+
+if ansible-playbook "${role_root}/tests/test-invalid-service-path.yml" \
+    > "${invalid_service_path_output}" 2>&1; then
+    printf 'invalid service-path configuration unexpectedly passed\n' >&2
+    exit 1
+fi
+
+grep -Fq 'service path filename must equal the service name' "${invalid_service_path_output}"
 
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${rendered_script} mode=0750" \
@@ -33,7 +42,8 @@ run_watchdog() {
     local watchdog_status
 
     : > "${test_log}"
-    PATH="${role_root}/tests/fixtures/bin:${PATH}" \
+    LC_ALL=POSIX \
+        PATH="${role_root}/tests/fixtures/bin:${PATH}" \
         WIFI_WATCHDOG_TEST_LOG="${test_log}" \
         WIFI_WATCHDOG_TEST_DEVICE_STATUS="${device_status}" \
         "${rendered_script}" &
@@ -55,10 +65,15 @@ run_watchdog() {
 
 run_watchdog 'wlan0:disconnected' 2
 
+grep -Fxq 'device status locale=C' "${test_log}"
 grep -Fxq 'device disconnect wlan0' "${test_log}"
 grep -Fxq 'device connect wlan0' "${test_log}"
 if grep -Fq 'connection ' "${test_log}"; then
     printf 'watchdog selected a named connection despite an empty configuration\n' >&2
+    exit 1
+fi
+if grep -Fq 'date ' "${test_log}"; then
+    printf 'watchdog used the wall clock for its offline timer\n' >&2
     exit 1
 fi
 

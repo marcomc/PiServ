@@ -16,3 +16,6 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Added a regression test for reconnecting without a configured Wi-Fi profile.
 - Bound the automatic gateway lookup and gateway ping to the monitored Wi-Fi
   interface so another interface cannot mask a Wi-Fi outage.
+- Forced the C locale for parsed `nmcli` interface state and replaced the
+  wall-clock offline timer with Bash's monotonic `SECONDS` counter.
+- Rejected unit paths whose filename differs from the configured service name.

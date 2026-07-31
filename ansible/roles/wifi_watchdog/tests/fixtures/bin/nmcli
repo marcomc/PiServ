@@ -4,6 +4,7 @@
 
 case "$*" in
     '-t -f DEVICE,STATE device status')
+        printf '%s\n' "device status locale=${LC_ALL:-unset}" >> "${WIFI_WATCHDOG_TEST_LOG}"
         printf '%s\n' "${WIFI_WATCHDOG_TEST_DEVICE_STATUS:-wlan0:disconnected}"
         ;;
     'device disconnect wlan0'|'device connect wlan0')
