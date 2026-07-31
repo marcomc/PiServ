@@ -166,5 +166,9 @@ ansible localhost -c local -m ansible.builtin.template \
 run_watchdog "${named_connection_script}" 'wlan0:connected' 2 0 'fallback-wifi'
 
 grep -Fxq 'active connection locale=C' "${test_log}"
-grep -Fxq 'connection down office:5g' "${test_log}"
-grep -Fxq 'connection up office:5g' "${test_log}"
+grep -Fxq 'device disconnect wlan0' "${test_log}"
+grep -Fxq 'connection up office:5g ifname wlan0' "${test_log}"
+if grep -Fq 'connection down office:5g' "${test_log}"; then
+    printf 'named connection recovery deactivated the profile without an interface scope\n' >&2
+    exit 1
+fi

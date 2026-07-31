@@ -66,8 +66,8 @@ dns_ok() {
 recover_connection() {
     if [[ -n "${connection}" ]]; then
         log "connectivity offline for ${connection_recovery_after}s; restarting connection ${connection}"
-        nmcli connection down "${connection}" || true
-        nmcli connection up "${connection}" || true
+        nmcli device disconnect "${interface}" || true
+        nmcli connection up "${connection}" ifname "${interface}" || true
     else
         log "connectivity offline for ${connection_recovery_after}s; asking NetworkManager to reconnect ${interface}"
         nmcli device disconnect "${interface}" || true
