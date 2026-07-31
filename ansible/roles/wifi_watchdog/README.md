@@ -131,6 +131,10 @@ offline for configured duration
 The timer resets only when all enabled checks succeed. Recovery messages are
 logged with the `wifi-connectivity-watchdog` journal identifier.
 
+A connection activation or NetworkManager restart marks its recovery level
+complete only after it succeeds. Failed commands retry on later checks while
+the outage continues.
+
 The `nmcli` status command uses the C locale before its output is parsed. The
 offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so
 wall-clock corrections cannot skip or delay an escalation level. The DNS probe

@@ -67,19 +67,29 @@ recover_connection() {
     if [[ -n "${connection}" ]]; then
         log "connectivity offline for ${connection_recovery_after}s; restarting connection ${connection}"
         nmcli device disconnect "${interface}" || true
-        nmcli connection up "${connection}" ifname "${interface}" || true
+        if nmcli connection up "${connection}" ifname "${interface}"; then
+            connection_restarted=1
+        else
+            log "failed to activate connection ${connection}; recovery will retry"
+        fi
     else
         log "connectivity offline for ${connection_recovery_after}s; asking NetworkManager to reconnect ${interface}"
         nmcli device disconnect "${interface}" || true
-        nmcli device connect "${interface}" || true
+        if nmcli device connect "${interface}"; then
+            connection_restarted=1
+        else
+            log "failed to reconnect ${interface}; recovery will retry"
+        fi
     fi
-    connection_restarted=1
 }
 
 recover_networkmanager() {
     log "connectivity offline for ${networkmanager_recovery_after}s; restarting ${networkmanager_service}"
-    systemctl restart "${networkmanager_service}"
-    networkmanager_restarted=1
+    if systemctl restart "${networkmanager_service}"; then
+        networkmanager_restarted=1
+    else
+        log "failed to restart ${networkmanager_service}; recovery will retry"
+    fi
 }
 
 recover_host() {

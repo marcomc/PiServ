@@ -11,8 +11,16 @@ case "$*" in
         printf '%s\n' "active connection locale=${LC_ALL:-unset}" >> "${WIFI_WATCHDOG_TEST_LOG}"
         printf '%s\n' "${WIFI_WATCHDOG_TEST_ACTIVE_CONNECTION:-}"
         ;;
-    'device disconnect wlan0'|'device connect wlan0'|'connection down '*|'connection up '*)
+    'device disconnect wlan0')
         printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        ;;
+    'device connect wlan0')
+        printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        test "${WIFI_WATCHDOG_TEST_DEVICE_CONNECT_FAILURE:-0}" = 0
+        ;;
+    'connection down '*|'connection up '*)
+        printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        test "${WIFI_WATCHDOG_TEST_CONNECTION_UP_FAILURE:-0}" = 0
         ;;
     *)
         printf 'unexpected nmcli invocation: %s\n' "$*" >&2

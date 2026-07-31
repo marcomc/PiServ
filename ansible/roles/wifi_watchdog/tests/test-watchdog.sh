@@ -6,6 +6,7 @@ role_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 test_dir=$(mktemp -d)
 rendered_script="${test_dir}/wifi-connectivity-watchdog"
 named_connection_script="${test_dir}/wifi-connectivity-watchdog-named"
+recovery_retry_script="${test_dir}/wifi-connectivity-watchdog-recovery-retry"
 test_log="${test_dir}/calls.log"
 invalid_service_path_output="${test_dir}/invalid-service-path.log"
 invalid_recovery_range_output="${test_dir}/invalid-recovery-range.log"
@@ -95,6 +96,8 @@ run_watchdog() {
     local runtime_seconds="$3"
     local getent_failure="${4:-0}"
     local active_connection="${5:-}"
+    local device_connect_failure="${6:-0}"
+    local networkmanager_restart_failure="${7:-0}"
     local watchdog_status
 
     : > "${test_log}"
@@ -104,6 +107,8 @@ run_watchdog() {
         WIFI_WATCHDOG_TEST_DEVICE_STATUS="${device_status}" \
         WIFI_WATCHDOG_TEST_GETENT_FAILURE="${getent_failure}" \
         WIFI_WATCHDOG_TEST_ACTIVE_CONNECTION="${active_connection}" \
+        WIFI_WATCHDOG_TEST_DEVICE_CONNECT_FAILURE="${device_connect_failure}" \
+        WIFI_WATCHDOG_TEST_NETWORKMANAGER_RESTART_FAILURE="${networkmanager_restart_failure}" \
         "${watchdog_script}" &
     watchdog_pid=$!
 
@@ -175,5 +180,32 @@ grep -Fxq 'device disconnect wlan0' "${test_log}"
 grep -Fxq 'connection up office:5g ifname wlan0' "${test_log}"
 if grep -Fq 'connection down office:5g' "${test_log}"; then
     printf 'named connection recovery deactivated the profile without an interface scope\n' >&2
+    exit 1
+fi
+
+run_watchdog "${rendered_script}" 'wlan0:disconnected' 4 0 '' 1
+
+connection_retries=$(grep -Fxc 'device connect wlan0' "${test_log}" || true)
+if (( connection_retries < 2 )); then
+    printf 'watchdog did not retry a failed connection recovery\n' >&2
+    exit 1
+fi
+
+ansible localhost -c local -m ansible.builtin.template \
+    -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${recovery_retry_script} mode=0750" \
+    -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \
+    -e 'wifi_watchdog_gateway_probe="" wifi_watchdog_dns_probe=example.com' \
+    -e 'wifi_watchdog_check_interval_seconds=1' \
+    -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
+    -e 'wifi_watchdog_networkmanager_recovery_after_seconds=2' \
+    -e 'wifi_watchdog_reboot_after_seconds=0' \
+    -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+
+run_watchdog "${recovery_retry_script}" 'wlan0:disconnected' 4 0 '' 0 1
+
+networkmanager_retries=$(grep -Fxc 'restart NetworkManager.service' "${test_log}" || true)
+if (( networkmanager_retries < 2 )); then
+    printf 'watchdog did not retry a failed NetworkManager restart\n' >&2
     exit 1
 fi

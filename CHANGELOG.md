@@ -15,6 +15,8 @@
   profile fallback, wall-clock changes during recovery, mismatched systemd
   service-path overrides, and DNS success delivered through another network
   interface.
+- Retried failed connection activations and NetworkManager restarts while an
+  outage continues.
 - Made privileged path inspection authoritative and preserved fresh-host
   check-mode convergence when the watchdog unit is not created yet, including
   handler execution.
