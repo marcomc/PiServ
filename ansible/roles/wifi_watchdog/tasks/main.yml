@@ -2,5 +2,8 @@
 - name: Validate Wi-Fi watchdog target
   ansible.builtin.include_tasks: validate-target.yml
 
+- name: Validate Wi-Fi watchdog input
+  ansible.builtin.include_tasks: validate-input.yml
+
 - name: Configure Wi-Fi watchdog
   ansible.builtin.include_tasks: configuration.yml

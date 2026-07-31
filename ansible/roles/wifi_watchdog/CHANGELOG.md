@@ -12,3 +12,5 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Added Galaxy-ready metadata, standalone documentation, validation guidance,
   and publication instructions.
 - Added safe handling for missing configurable script and service parent paths.
+- Added input-range and trusted-parent validation before root-managed rendering.
+- Added a regression test for reconnecting without a configured Wi-Fi profile.

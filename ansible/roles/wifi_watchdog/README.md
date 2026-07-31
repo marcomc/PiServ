@@ -30,6 +30,8 @@ After a continuous offline period it restarts the NetworkManager connection,
 then NetworkManager itself. Host reboot is deliberately disabled by default.
 When a configured script or service parent does not exist, the role creates it
 as `root:root` mode `0755`; existing parent directories are left unchanged.
+Existing parents must already be root-owned and not writable by group or other
+users because the service executes as root.
 
 ## Requirements
 
@@ -136,6 +138,7 @@ Run from the standalone role root:
 
 ```sh
 ansible-playbook --syntax-check tests/test.yml
+tests/test-watchdog.sh
 ansible-lint .
 ```
 
@@ -165,5 +168,6 @@ MIT. See [LICENSE](LICENSE).
 
 ## Support
 
-The role is maintained by Marco Massari. Until it is exported to a standalone
-repository, report issues in the consumer project that carries the role.
+The role is maintained by Marco Massari Calderone <marco@marcomc.com>. Until
+it is exported to a standalone repository, report issues in the consumer
+project that carries the role.

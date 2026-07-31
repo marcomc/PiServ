@@ -150,6 +150,7 @@ Active implementation tracks:
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 | [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
+| [Wi-Fi connectivity watchdog](docs/runbooks/wifi-connectivity-watchdog.md) | Recover Wi-Fi after access-point or mesh outages |
 
 ## Automation
 
@@ -201,6 +202,17 @@ notifications are skipped until `/etc/msmtprc` exists and is non-empty.
 Unattended upgrades send a mobile-readable routine digest with package version
 transitions; full logs remain on PiServ and native error alerts remain enabled
 as a fallback.
+
+Configure the Wi-Fi connectivity watchdog:
+
+```sh
+ansible-playbook ansible/playbooks/wifi-watchdog.yml
+```
+
+The watchdog checks Wi-Fi link state, default-gateway reachability, and DNS.
+It lets NetworkManager select any suitable saved Wi-Fi profile during recovery,
+then escalates to a NetworkManager restart. Automatic host reboot is disabled
+by default.
 
 Configure the Freenove FNK0100K post-OS setup:
 

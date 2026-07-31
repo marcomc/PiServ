@@ -12,7 +12,7 @@ gateway, and DNS before starting recovery.
 2. After ten minutes offline, restart NetworkManager if the connection restart
    did not restore connectivity.
 3. Host reboot is disabled by default. Set
-   `base_wifi_watchdog_reboot_after_seconds` to a positive value only after the
+   `wifi_watchdog_reboot_after_seconds` to a positive value only after the
    lower escalation levels have been observed in production.
 
 The watchdog resets its timer as soon as all three checks pass. Recovery events
@@ -34,12 +34,16 @@ PiServ configures the reusable role in
 
 ## Validation
 
-After applying the base playbook:
+Apply and verify the dedicated playbook:
 
 ```bash
+ansible-playbook ansible/playbooks/wifi-watchdog.yml
 systemctl status piserv-wifi-watchdog.service
 journalctl -u piserv-wifi-watchdog.service -f
 ```
+
+Observed on PiServ: the service is enabled and active after application. A
+converged `ansible-playbook --check` reports `changed=0`.
 
 Do not simulate a failure by disconnecting the production host until an
 operator has confirmed an alternate access path.

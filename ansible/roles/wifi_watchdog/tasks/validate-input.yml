@@ -1,0 +1,28 @@
+---
+- name: Require valid Wi-Fi watchdog configuration
+  ansible.builtin.assert:
+    that:
+      - wifi_watchdog_service_name is match('^[A-Za-z0-9_.@-]+\\.service$')
+      - wifi_watchdog_service_path is match('^/')
+      - wifi_watchdog_script_path is match('^/')
+      - wifi_watchdog_interface | length > 0
+      - wifi_watchdog_check_interval_seconds | string is match('^[1-9][0-9]*$')
+      - wifi_watchdog_connection_recovery_after_seconds | string is match('^[1-9][0-9]*$')
+      - wifi_watchdog_networkmanager_recovery_after_seconds | string is match('^[1-9][0-9]*$')
+      - wifi_watchdog_reboot_after_seconds | string is match('^(0|[1-9][0-9]*)$')
+      - >-
+        (wifi_watchdog_connection_recovery_after_seconds | int) >=
+        (wifi_watchdog_check_interval_seconds | int)
+      - >-
+        (wifi_watchdog_networkmanager_recovery_after_seconds | int) >
+        (wifi_watchdog_connection_recovery_after_seconds | int)
+      - >-
+        (wifi_watchdog_reboot_after_seconds | int) == 0 or
+        (wifi_watchdog_reboot_after_seconds | int) >=
+        (wifi_watchdog_networkmanager_recovery_after_seconds | int)
+    fail_msg: >-
+      Configure positive integer check and recovery intervals, with connection
+      recovery no shorter than the check interval, NetworkManager recovery
+      after connection recovery, and reboot disabled or no earlier than the
+      NetworkManager recovery threshold. Service and script paths must be
+      absolute, and the service name must end in .service.

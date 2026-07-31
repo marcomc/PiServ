@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+: "${WIFI_WATCHDOG_TEST_LOG:?WIFI_WATCHDOG_TEST_LOG must be set}"
+
+case "$*" in
+    '-t -f DEVICE,STATE device status')
+        printf '%s\n' 'wlan0:disconnected'
+        ;;
+    'device disconnect wlan0'|'device connect wlan0')
+        printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        ;;
+    *)
+        printf 'unexpected nmcli invocation: %s\n' "$*" >&2
+        exit 1
+        ;;
+esac

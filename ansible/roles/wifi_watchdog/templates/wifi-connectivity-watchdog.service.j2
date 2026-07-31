@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={{ wifi_watchdog_script_path }}
+ExecStart={{ wifi_watchdog_script_path | quote }}
 Restart=always
 RestartSec=10s
 User=root

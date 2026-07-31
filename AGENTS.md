@@ -80,6 +80,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   directory before creating it. Create missing private parents, but do not
   change ownership or mode of an existing system directory such as `/tmp` or
   `/etc` unless the role explicitly owns that directory.
+- For numeric role settings rendered into timeout, retry, or recovery logic,
+  validate the uncast value and cross-setting ordering before applying an
+  `int` filter; invalid input must not silently become zero.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
 - Before describing a wildcard listener as LAN-only, account for interface-wide

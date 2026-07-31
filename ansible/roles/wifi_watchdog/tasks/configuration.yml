@@ -19,6 +19,28 @@
     path: "{{ wifi_watchdog_service_path | dirname }}"
   register: wifi_watchdog_service_parent
 
+- name: Require a trusted existing Wi-Fi watchdog script parent
+  ansible.builtin.assert:
+    that:
+      - wifi_watchdog_script_parent.stat.uid == 0
+      - wifi_watchdog_script_parent.stat.mode[-2] not in ['2', '3', '6', '7']
+      - wifi_watchdog_script_parent.stat.mode[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      The existing {{ wifi_watchdog_script_path | dirname }} parent must be root-owned and not writable
+      by its group or other users before installing a root-executed watchdog.
+  when: wifi_watchdog_script_parent.stat.exists
+
+- name: Require a trusted existing Wi-Fi watchdog service parent
+  ansible.builtin.assert:
+    that:
+      - wifi_watchdog_service_parent.stat.uid == 0
+      - wifi_watchdog_service_parent.stat.mode[-2] not in ['2', '3', '6', '7']
+      - wifi_watchdog_service_parent.stat.mode[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      The existing {{ wifi_watchdog_service_path | dirname }} parent must be root-owned and not writable
+      by its group or other users before installing a root-executed watchdog.
+  when: wifi_watchdog_service_parent.stat.exists
+
 - name: Create missing Wi-Fi watchdog service parent
   ansible.builtin.file:
     path: "{{ wifi_watchdog_service_path | dirname }}"
