@@ -104,8 +104,15 @@ tokens of `reasoning_content` before its five-token visible response. The
 benchmark now uses 128 completion tokens, records the completion reason and
 reasoning-channel metadata without storing that reasoning, and fails when a
 model finishes without visible content. Both models are provider-migration
-candidates; neither is selected as Hermes' provider. Granite's remaining
-memory is tight.
+candidates for endpoint-only transport; neither is selected as Hermes'
+provider. A full Hermes capability test with Granite at 64K required about
+2.7 GiB resident memory, left about 440 MiB available while consuming swap,
+and made the host unreachable over SSH. The 4 GiB address-space cap therefore
+remains in place and rejects Granite's full 64K KV-cache allocation before that
+operationally unsafe state. Do not repeat a full local-provider test or start a
+resident local provider until the cgroup memory controller is enabled and a
+bounded resource policy has been validated. Gemma has not passed the full
+capability test.
 
 Llama 3.2 1B remains a possible lower-memory comparison but is not included in
 the automated download because Meta gates the official GGUF repository behind

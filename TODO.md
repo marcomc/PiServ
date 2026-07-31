@@ -76,8 +76,10 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Run capability and provider-migration tests against the 64K Granite 3.3
-      2B and Gemma 4 E2B endpoints before selecting a local provider.
+    - Enable the cgroup v2 memory controller and validate bounded resource
+      policy before repeating full 64K local-provider capability tests. Granite
+      3.3 2B made PiServ unreachable during the initial full test; Gemma 4 E2B
+      has not yet received a full capability test.
     - Add Llama 3.2 1B only after accepting Meta's upstream model terms and
       recording a checksum-pinned official GGUF source.
     - Implement pre-authorized Codex routing with a per-response inference
