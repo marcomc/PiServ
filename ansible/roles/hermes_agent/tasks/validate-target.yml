@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - ansible_facts["os_family"] == "Debian"
-      - ansible_facts["architecture"] in ["aarch64", "arm64"]
+      - ansible_facts["architecture"] in hermes_agent_supported_architectures
       - hermes_agent_dashboard_host == "127.0.0.1"
       - hermes_agent_provider == "openai-codex"
       - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
@@ -14,6 +14,7 @@
       - "'homeassistant' in hermes_agent_disabled_toolsets"
       - not hermes_agent_manage_backup or hermes_agent_backup_group | length > 0
     fail_msg: >-
-      This role currently supports only Debian arm64, a loopback dashboard,
-      the openai-codex provider, memory/skills-only access, and an explicit
-      backup group when backups are enabled.
+      This role currently supports Debian architectures declared in
+      hermes_agent_supported_architectures, a loopback dashboard,
+      the openai-codex provider, memory/skills-only access, an explicit backup
+      group when backups are enabled.

@@ -2,7 +2,7 @@
 - name: Read Hermes Agent version
   ansible.builtin.command:
     argv:
-      - /usr/local/bin/hermes
+      - "{{ hermes_agent_binary_path }}"
       - --version
   environment:
     HOME: "{{ hermes_agent_home }}"
@@ -30,7 +30,7 @@
 - name: Read enabled Hermes CLI toolsets
   ansible.builtin.command:
     argv:
-      - /usr/local/bin/hermes
+      - "{{ hermes_agent_binary_path }}"
       - tools
       - list
       - --platform
@@ -62,7 +62,7 @@
 - name: Read Codex CLI version
   ansible.builtin.command:
     argv:
-      - /usr/local/bin/codex
+      - "{{ hermes_agent_codex_binary_path }}"
       - --version
   register: hermes_agent_codex_version_output
   changed_when: false

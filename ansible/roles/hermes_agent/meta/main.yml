@@ -1,11 +1,24 @@
 ---
 galaxy_info:
-  author: Marco Massari Calderone <marco@marcomc.com>
-  description: Install a locked-down Nous Hermes Agent service with Codex.
+  namespace: marcomc
+  role_name: hermes_agent
+  author: Marco Massari
+  company: marcomc
+  description: Install a locked-down Nous Hermes Agent service with Codex CLI.
   license: MIT
   min_ansible_version: "2.16"
   platforms:
     - name: Debian
       versions:
-        - all
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - ai
+    - agent
+    - arm64
+    - codex
+    - debian
+    - hermes
+    - openai
+    - systemd
 dependencies: []

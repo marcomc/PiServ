@@ -11,7 +11,7 @@ Environment=HOME={{ hermes_agent_home }}
 Environment=HERMES_HOME={{ hermes_agent_home }}
 Environment=CODEX_HOME={{ hermes_agent_codex_home }}
 WorkingDirectory={{ hermes_agent_home }}
-ExecStart=/usr/local/bin/hermes backup --output {{ hermes_agent_backup_dir }}
+ExecStart={{ hermes_agent_binary_path }} backup --output {{ hermes_agent_backup_dir }}
 ExecStartPost=/usr/bin/find {{ hermes_agent_backup_dir }} -type f -name hermes-backup-*.zip -mtime +{{ hermes_agent_backup_retention_days }} -delete
 NoNewPrivileges=true
 PrivateTmp=true

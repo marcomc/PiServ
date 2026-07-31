@@ -1,0 +1,94 @@
+#!/bin/sh
+set -eu
+
+install_dir=""
+commit=""
+hermes_home=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dir)
+      install_dir="$2"
+      shift 2
+      ;;
+    --commit)
+      commit="$2"
+      shift 2
+      ;;
+    --hermes-home)
+      hermes_home="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+[ -n "${install_dir}" ]
+[ -n "${commit}" ]
+[ -n "${hermes_home}" ]
+
+rm -rf "${install_dir}"
+git clone /usr/local/src/hermes-agent-fixture/upstream "${install_dir}"
+git -C "${install_dir}" checkout --detach "${commit}"
+mkdir -p "${hermes_home}/node/bin"
+
+cat > "${hermes_home}/node/bin/npm" <<'EOF'
+#!/bin/sh
+set -eu
+mkdir -p "$PWD/hermes_cli/web_dist"
+printf '%s\n' '<!doctype html><title>Hermes fixture</title>' \
+  > "$PWD/hermes_cli/web_dist/index.html"
+EOF
+chmod 0755 "${hermes_home}/node/bin/npm"
+
+cat > /usr/local/bin/hermes <<'EOF'
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+  --version)
+    printf '%s\n' 'Hermes Agent v0.19.0'
+    ;;
+  tools)
+    printf '\342\234\223 enabled  memory\n'
+    printf '\342\234\223 enabled  skills\n'
+    printf '\342\234\227 disabled  terminal\n'
+    printf '\342\234\227 disabled  file\n'
+    printf '\342\234\227 disabled  homeassistant\n'
+    ;;
+  dashboard)
+    host=127.0.0.1
+    port=9119
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --host)
+          host="$2"
+          shift 2
+          ;;
+        --port)
+          port="$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    exec /usr/bin/python3 -m http.server "$port" --bind "$host"
+    ;;
+  backup)
+    shift
+    [ "${1:-}" = "--output" ]
+    output_dir="$2"
+    mkdir -p "$output_dir"
+    : > "$output_dir/hermes-backup-fixture.zip"
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF
+chmod 0755 /usr/local/bin/hermes

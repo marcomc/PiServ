@@ -1,7 +1,7 @@
 ---
 - name: Create Codex download cache
   ansible.builtin.file:
-    path: /var/cache/hermes-agent
+    path: "{{ hermes_agent_download_cache_dir }}"
     state: directory
     owner: root
     group: root
@@ -11,7 +11,7 @@
   ansible.builtin.get_url:
     url: "{{ hermes_agent_codex_archive_url }}"
     dest: >-
-      /var/cache/hermes-agent/codex-{{
+      {{ hermes_agent_download_cache_dir }}/codex-{{
       hermes_agent_codex_version }}-aarch64-linux.tar.gz
     checksum: "{{ hermes_agent_codex_archive_checksum }}"
     owner: root
@@ -34,7 +34,7 @@
 - name: Extract Codex CLI archive
   ansible.builtin.unarchive:
     src: >-
-      /var/cache/hermes-agent/codex-{{
+      {{ hermes_agent_download_cache_dir }}/codex-{{
       hermes_agent_codex_version }}-aarch64-linux.tar.gz
     dest: "{{ hermes_agent_codex_install_dir }}"
     remote_src: true
@@ -49,7 +49,7 @@
   ansible.builtin.copy:
     src: >-
       {{ hermes_agent_codex_install_dir
-      }}/codex-aarch64-unknown-linux-musl
+      }}/{{ hermes_agent_codex_archive_binary_name }}
     dest: "{{ hermes_agent_codex_install_dir }}/codex"
     remote_src: true
     owner: root
@@ -63,13 +63,13 @@
   ansible.builtin.file:
     path: >-
       {{ hermes_agent_codex_install_dir
-      }}/codex-aarch64-unknown-linux-musl
+      }}/{{ hermes_agent_codex_archive_binary_name }}
     state: absent
 
 - name: Link active Codex CLI
   ansible.builtin.file:
     src: "{{ hermes_agent_codex_install_dir }}/codex"
-    dest: /usr/local/bin/codex
+    dest: "{{ hermes_agent_codex_binary_path }}"
     state: link
     owner: root
     group: root

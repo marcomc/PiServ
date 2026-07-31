@@ -3,7 +3,7 @@ hermes_agent_user: hermes-agent
 hermes_agent_group: hermes-agent
 hermes_agent_home: /var/lib/hermes-agent
 hermes_agent_install_dir: /usr/local/lib/hermes-agent
-hermes_agent_repo_url: https://github.com/NousResearch/hermes-agent.git
+hermes_agent_binary_path: /usr/local/bin/hermes
 hermes_agent_repo_version: 240afd0b70a016ba17568d597e0f2c32f94f4cfd
 hermes_agent_version: "0.19.0"
 hermes_agent_installer_url: >-
@@ -12,6 +12,9 @@ hermes_agent_installer_url: >-
 hermes_agent_installer_path: /usr/local/libexec/hermes-agent-installer
 hermes_agent_installer_checksum: >-
   sha256:ab3e6ae1a1bda828941df8911ae44ed5de68412805124f338f157aa0360eb660
+hermes_agent_supported_architectures:
+  - aarch64
+  - arm64
 hermes_agent_packages:
   - build-essential
   - ca-certificates
@@ -60,17 +63,22 @@ hermes_agent_dashboard_port: 9119
 hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
 hermes_agent_manage_dashboard: true
 hermes_agent_codex_version: "0.145.0"
+hermes_agent_download_cache_dir: /var/cache/hermes-agent
 hermes_agent_codex_archive_url: >-
   https://github.com/openai/codex/releases/download/rust-v{{
   hermes_agent_codex_version }}/codex-aarch64-unknown-linux-musl.tar.gz
 hermes_agent_codex_archive_checksum: >-
   sha256:d384f90bc842450b42bd675feef06a12a46a3b1ca97efcb22566b270e4a11227
+hermes_agent_codex_archive_binary_name: codex-aarch64-unknown-linux-musl
 hermes_agent_codex_install_dir: >-
   /usr/local/lib/codex/{{ hermes_agent_codex_version }}
+hermes_agent_codex_binary_path: /usr/local/bin/codex
 hermes_agent_codex_home: "{{ hermes_agent_home }}/codex"
 hermes_agent_manage_backup: false
 hermes_agent_backup_group: ""
 hermes_agent_backup_dir: /var/backups/hermes-agent
+hermes_agent_backup_service_name: hermes-agent-backup.service
+hermes_agent_backup_timer_name: hermes-agent-backup.timer
 hermes_agent_backup_retention_days: 30
 hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
 hermes_agent_backup_timezone: UTC

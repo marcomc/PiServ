@@ -1,11 +1,11 @@
 ---
 argument_specs:
   main:
-    short_description: Install and configure Nous Hermes Agent.
+    short_description: Install and configure a locked-down Nous Hermes Agent.
     description:
-      - Installs a pinned Hermes Agent revision under a root-owned code path.
+      - Installs a checksum-pinned Hermes Agent revision under a root-owned path.
+      - Installs a checksum-pinned ARM64 Codex CLI release.
       - Runs Hermes under a dedicated unprivileged system identity.
-      - Installs a checksum-pinned Codex CLI ARM64 release.
       - Manages a loopback-only dashboard and optional state backups.
       - Does not perform provider login or store operator credentials.
     options:
@@ -21,9 +21,43 @@ argument_specs:
         type: path
         default: /var/lib/hermes-agent
         description: Private persistent Hermes data directory.
+      hermes_agent_install_dir:
+        type: path
+        default: /usr/local/lib/hermes-agent
+        description: Root-owned Hermes source and runtime directory.
+      hermes_agent_binary_path:
+        type: path
+        default: /usr/local/bin/hermes
+        description: Hermes CLI path created by the upstream installer.
       hermes_agent_repo_version:
         type: str
+        default: 240afd0b70a016ba17568d597e0f2c32f94f4cfd
         description: Full upstream Hermes Git commit to install.
+      hermes_agent_version:
+        type: str
+        default: "0.19.0"
+        description: Expected Hermes version reported by the CLI.
+      hermes_agent_installer_url:
+        type: str
+        description: Checksum-pinned upstream Hermes installer URL.
+      hermes_agent_installer_path:
+        type: path
+        default: /usr/local/libexec/hermes-agent-installer
+        description: Root-owned local Hermes installer path.
+      hermes_agent_installer_checksum:
+        type: str
+        description: SHA-256 checksum for the Hermes installer.
+      hermes_agent_supported_architectures:
+        type: list
+        elements: str
+        default:
+          - aarch64
+          - arm64
+        description: Target CPU architectures allowed to install the ARM64 Codex CLI.
+      hermes_agent_packages:
+        type: list
+        elements: str
+        description: Debian packages installed before Hermes.
       hermes_agent_model:
         type: str
         default: gpt-5.5
@@ -31,27 +65,63 @@ argument_specs:
       hermes_agent_provider:
         type: str
         default: openai-codex
-        description: Initial Hermes model provider.
+        choices:
+          - openai-codex
+        description: Hermes provider configured by this locked-down role.
       hermes_agent_enabled_toolsets:
         type: list
         elements: str
-        description: Explicit CLI toolset allowlist.
+        description: Explicit Hermes CLI toolset allowlist.
       hermes_agent_disabled_toolsets:
         type: list
         elements: str
-        description: Toolsets suppressed after all other resolution.
+        description: Hermes toolsets explicitly disabled by policy.
       hermes_agent_dashboard_host:
         type: str
         default: 127.0.0.1
-        description: Dashboard bind address.
+        choices:
+          - 127.0.0.1
+        description: Loopback address used by the private dashboard.
       hermes_agent_dashboard_port:
         type: int
         default: 9119
         description: Dashboard TCP port.
+      hermes_agent_dashboard_service_name:
+        type: str
+        default: hermes-agent-dashboard.service
+        description: Systemd unit name for the dashboard.
       hermes_agent_manage_dashboard:
         type: bool
         default: true
-        description: Whether to build and run the dashboard.
+        description: Whether to build and run the loopback dashboard.
+      hermes_agent_codex_version:
+        type: str
+        default: "0.145.0"
+        description: Codex CLI release version.
+      hermes_agent_download_cache_dir:
+        type: path
+        default: /var/cache/hermes-agent
+        description: Root-owned cache for verified download artifacts.
+      hermes_agent_codex_archive_url:
+        type: str
+        description: Checksum-pinned ARM64 Codex archive URL.
+      hermes_agent_codex_archive_checksum:
+        type: str
+        description: SHA-256 checksum for the Codex archive.
+      hermes_agent_codex_archive_binary_name:
+        type: str
+        default: codex-aarch64-unknown-linux-musl
+        description: Codex executable name inside the downloaded archive.
+      hermes_agent_codex_install_dir:
+        type: path
+        description: Versioned root-owned Codex installation directory.
+      hermes_agent_codex_binary_path:
+        type: path
+        default: /usr/local/bin/codex
+        description: Symlink path for the active Codex CLI.
+      hermes_agent_codex_home:
+        type: path
+        description: Private Codex state directory for the Hermes runtime user.
       hermes_agent_manage_backup:
         type: bool
         default: false
@@ -59,8 +129,110 @@ argument_specs:
       hermes_agent_backup_group:
         type: str
         default: ""
-        description: Existing group that grants access to the backup parent.
+        description: Existing group that grants the runtime user backup-path access.
       hermes_agent_backup_dir:
         type: path
         default: /var/backups/hermes-agent
         description: Private directory for full Hermes backup archives.
+      hermes_agent_manage_local_models:
+        type: bool
+        default: false
+        description: Install local llama.cpp benchmark services and model files.
+      hermes_agent_local_model_packages:
+        type: list
+        elements: str
+        description: Debian packages required by the local-model benchmark helper.
+      hermes_agent_local_model_runtime_version:
+        type: str
+        default: b9637
+        description: llama.cpp release identifier.
+      hermes_agent_local_model_runtime_archive_url:
+        type: str
+        description: Checksum-pinned ARM64 llama.cpp archive URL.
+      hermes_agent_local_model_runtime_archive_checksum:
+        type: str
+        description: SHA-256 checksum for the llama.cpp archive.
+      hermes_agent_local_model_runtime_dir:
+        type: path
+        description: Versioned root-owned llama.cpp installation directory.
+      hermes_agent_local_model_llama_cli_path:
+        type: path
+        default: /usr/local/bin/llama-cli
+        description: Symlink path for the active llama-cli binary.
+      hermes_agent_local_model_llama_server_path:
+        type: path
+        default: /usr/local/bin/llama-server
+        description: Symlink path for the active llama-server binary.
+      hermes_agent_local_models_dir:
+        type: path
+        description: Directory for checksum-pinned local model files.
+      hermes_agent_local_models_results_dir:
+        type: path
+        description: Directory for local-model benchmark results.
+      hermes_agent_local_models_storage_path:
+        type: path
+        description: Existing path used to check free capacity before downloads.
+      hermes_agent_local_models_min_free_bytes:
+        type: int
+        default: 10737418240
+        description: Free-space reserve required after model downloads.
+      hermes_agent_local_models_host:
+        type: str
+        default: 127.0.0.1
+        choices:
+          - 127.0.0.1
+        description: Loopback address used by local llama.cpp services.
+      hermes_agent_local_models_context_size:
+        type: int
+        default: 65536
+        description: Server context size used to meet Hermes local-model policy.
+      hermes_agent_local_models_threads:
+        type: int
+        default: 3
+        description: Inference and batch thread count for each local model service.
+      hermes_agent_local_models_memory_high:
+        type: str
+        default: 2500M
+        description: systemd MemoryHigh limit for each local model service.
+      hermes_agent_local_models_memory_max:
+        type: str
+        default: 3200M
+        description: systemd MemoryMax limit for each local model service.
+      hermes_agent_local_models_memory_swap_max:
+        type: str
+        default: 512M
+        description: systemd MemorySwapMax limit for each local model service.
+      hermes_agent_local_model_benchmark_helper_path:
+        type: path
+        default: /usr/local/libexec/hermes-agent/benchmark-local-model
+        description: Installed helper used to benchmark one local model service.
+      hermes_agent_local_models:
+        type: list
+        elements: dict
+        description: >-
+          Model records with id, display_name, repository, revision, filename,
+          sha256, size_bytes, and port fields.
+      hermes_agent_backup_service_name:
+        type: str
+        default: hermes-agent-backup.service
+        description: Systemd unit name for the backup service.
+      hermes_agent_backup_timer_name:
+        type: str
+        default: hermes-agent-backup.timer
+        description: Systemd unit name for the backup timer.
+      hermes_agent_backup_retention_days:
+        type: int
+        default: 30
+        description: Number of days to retain backup archives.
+      hermes_agent_backup_on_calendar:
+        type: str
+        default: "*-*-* 03:20:00"
+        description: systemd.time calendar expression for scheduled backups.
+      hermes_agent_backup_timezone:
+        type: str
+        default: UTC
+        description: Time zone appended to the backup schedule.
+      hermes_agent_backup_randomized_delay:
+        type: str
+        default: 30m
+        description: Maximum randomized backup start delay.

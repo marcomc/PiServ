@@ -25,9 +25,12 @@
 - name: Restrict Hermes environment file
   ansible.builtin.file:
     path: "{{ hermes_agent_home }}/.env"
+    state: touch
     owner: "{{ hermes_agent_user }}"
     group: "{{ hermes_agent_group }}"
     mode: "0600"
+    access_time: preserve
+    modification_time: preserve
   when:
     - hermes_agent_runtime_user_available
     - not ansible_check_mode or hermes_agent_checkout.stat.exists
@@ -51,6 +54,7 @@
     HOME: /root
     HERMES_HOME: "{{ hermes_agent_home }}"
     PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  changed_when: true
   when:
     - hermes_agent_manage_dashboard
     - not ansible_check_mode
@@ -100,7 +104,7 @@
     - name: Install Hermes Agent backup service
       ansible.builtin.template:
         src: hermes-agent-backup.service.j2
-        dest: /etc/systemd/system/hermes-agent-backup.service
+        dest: "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
         owner: root
         group: root
         mode: "0644"
@@ -108,14 +112,14 @@
     - name: Install Hermes Agent backup timer
       ansible.builtin.template:
         src: hermes-agent-backup.timer.j2
-        dest: /etc/systemd/system/hermes-agent-backup.timer
+        dest: "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
         owner: root
         group: root
         mode: "0644"
 
     - name: Enable Hermes Agent backup timer
       ansible.builtin.systemd_service:
-        name: hermes-agent-backup.timer
+        name: "{{ hermes_agent_backup_timer_name }}"
         enabled: true
         state: started
         daemon_reload: true

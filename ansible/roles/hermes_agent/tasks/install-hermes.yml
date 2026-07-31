@@ -53,6 +53,7 @@
     HOME: /root
     HERMES_HOME: "{{ hermes_agent_home }}"
   register: hermes_agent_install
+  changed_when: true
   when:
     - not ansible_check_mode
     - >-

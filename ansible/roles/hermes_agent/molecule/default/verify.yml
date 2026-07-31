@@ -1,0 +1,68 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  tasks:
+    - name: Read Hermes Agent service state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - hermes-agent-dashboard.service
+      changed_when: false
+      register: hermes_agent_dashboard_state
+
+    - name: Read Hermes Agent backup timer state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-agent-backup.timer
+      changed_when: false
+      register: hermes_agent_backup_timer_state
+
+    - name: Verify loopback dashboard response
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9119/
+        status_code: 200
+        return_content: false
+
+    - name: Run scheduled backup service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - start
+          - hermes-agent-backup.service
+      changed_when: true
+
+    - name: Find Hermes Agent backup archive
+      ansible.builtin.find:
+        paths: /var/backups/hermes-agent
+        patterns: hermes-backup-*.zip
+        file_type: file
+      register: hermes_agent_backup_archives
+
+    - name: Read Hermes Agent version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/hermes
+          - --version
+      changed_when: false
+      register: hermes_agent_version
+
+    - name: Read Codex CLI version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/codex
+          - --version
+      changed_when: false
+      register: hermes_agent_codex_version
+
+    - name: Assert installed role behavior
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_dashboard_state.stdout | trim == 'active'
+          - hermes_agent_backup_timer_state.stdout | trim == 'enabled'
+          - hermes_agent_backup_archives.matched | int == 1
+          - hermes_agent_version.stdout | trim == 'Hermes Agent v0.19.0'
+          - hermes_agent_codex_version.stdout | trim == 'codex-cli 0.145.0'

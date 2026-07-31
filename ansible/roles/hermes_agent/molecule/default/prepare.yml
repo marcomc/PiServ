@@ -1,0 +1,123 @@
+---
+- name: Prepare Hermes Agent fixture
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install fixture prerequisites
+      ansible.builtin.apt:
+        name:
+          - git
+          - tar
+        state: present
+        update_cache: true
+
+    - name: Create fixture root
+      ansible.builtin.file:
+        path: /usr/local/src/hermes-agent-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy fixture source tree
+      ansible.builtin.copy:
+        src: ../resources/upstream/
+        dest: /usr/local/src/hermes-agent-fixture/upstream/
+        owner: root
+        group: root
+        mode: preserve
+
+    - name: Initialize fixture source repository
+      ansible.builtin.command:
+        argv:
+          - git
+          - init
+          - --initial-branch=main
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture/upstream
+      changed_when: true
+
+    - name: Configure fixture Git identity
+      ansible.builtin.command:
+        argv:
+          - git
+          - config
+          - "{{ item.key }}"
+          - "{{ item.value }}"
+      loop:
+        - key: user.email
+          value: fixture@example.invalid
+        - key: user.name
+          value: Molecule fixture
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture/upstream
+      changed_when: true
+
+    - name: Stage fixture source
+      ansible.builtin.command:
+        argv:
+          - git
+          - add
+          - .
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture/upstream
+      changed_when: true
+
+    - name: Commit fixture source
+      ansible.builtin.command:
+        argv:
+          - git
+          - commit
+          - -m
+          - Fixture
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture/upstream
+      changed_when: true
+
+    - name: Read fixture source revision
+      ansible.builtin.command:
+        argv:
+          - git
+          - rev-parse
+          - HEAD
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture/upstream
+      changed_when: false
+      register: hermes_agent_fixture_revision
+
+    - name: Record fixture source revision
+      ansible.builtin.copy:
+        content: "{{ hermes_agent_fixture_revision.stdout }}\n"
+        dest: /usr/local/src/hermes-agent-fixture/revision
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install mock Hermes installer
+      ansible.builtin.copy:
+        src: ../resources/hermes-agent-installer
+        dest: /usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install mock Codex CLI source
+      ansible.builtin.copy:
+        src: ../resources/codex-aarch64-unknown-linux-musl
+        dest: >-
+          /usr/local/src/hermes-agent-fixture/codex-aarch64-unknown-linux-musl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create mock Codex CLI archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - /usr/local/src/hermes-agent-fixture/codex.tar.gz
+          - codex-aarch64-unknown-linux-musl
+      args:
+        chdir: /usr/local/src/hermes-agent-fixture
+      changed_when: true
