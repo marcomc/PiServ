@@ -57,8 +57,7 @@ The following observations are current as of 2026-07-31:
 
 ## Implementation Status
 
-The pre-authentication runtime was implemented and validated live on
-2026-07-30:
+The runtime and authenticated provider flow were validated live on 2026-07-31:
 
 - Hermes `0.19.0` is pinned to upstream commit
   `240afd0b70a016ba17568d597e0f2c32f94f4cfd`.
@@ -66,6 +65,10 @@ The pre-authentication runtime was implemented and validated live on
   state under `/var/lib/hermes-agent`.
 - Codex CLI `0.145.0` was installed from the official Linux ARM64 release
   archive after SHA-256 verification and passed its version smoke test.
+- ChatGPT device authorization completed separately for Codex CLI and Hermes.
+  Hermes returned a minimal `openai-codex` response in 10 seconds; direct Codex
+  CLI returned an equivalent read-only response in 22 seconds without an API
+  key.
 - The Hermes CLI policy exposes only memory and skills. Both write paths
   require review; terminal, file, browser, code execution, and Home Assistant
   are explicitly disabled.
@@ -83,11 +86,10 @@ The pre-authentication runtime was implemented and validated live on
   and 1.3 GiB for Gemma. Both returned visible content and stopped cleanly;
   Gemma requires 128 completion tokens because it emits reasoning first.
 
-ChatGPT device login and authenticated inference remain intentionally pending
-for the operator. The full upstream web dependency installation reported eight
-high severity npm audit findings; a production-only audit reported three high
-severity findings. The dashboard remains loopback-only while those upstream
-dependencies are reviewed.
+The full upstream web dependency installation reported eight high severity npm
+audit findings; a production-only audit reported three high severity findings.
+The dashboard remains loopback-only while those upstream dependencies are
+reviewed.
 
 ## Selected Architecture
 
@@ -260,33 +262,32 @@ mount, OAuth, storage, backup, and restore decisions.
 
 ## Implementation Gates
 
-The runtime installation, ARM64 binary smoke test, loopback dashboard, toolset
-allowlist, and first backup are complete. The remaining gates are:
+The runtime installation, ARM64 binary smoke test, authenticated provider
+response, loopback dashboard, toolset allowlist, and first backup are complete.
+The remaining gates are:
 
-1. **Hermes runtime:** record authenticated response latency. Idle RSS,
-   persistent-data permissions, and restart recovery are already recorded.
-2. **Learning persistence:** prove that a curated memory entry and a reviewed
+1. **Learning persistence:** prove that a curated memory entry and a reviewed
    skill survive a Hermes restart and a provider change. Back up and restore the
    service data, then verify audit continuity and rollback of a changed skill.
-3. **Codex:** complete subscription login and prove pre-authorized route
-   selection, sandbox isolation, provenance notice, content-free audit capture,
-   result redaction, and graceful handling of plan usage limits.
-4. **Local-provider selection:** run a representative capability and coexistence
+2. **Codex:** prove pre-authorized route selection, sandbox isolation,
+   provenance notice, content-free audit capture, result redaction, and
+   graceful handling of plan usage limits.
+3. **Local-provider selection:** run a representative capability and coexistence
    suite against Granite and Gemma. Add Llama 3.2 1B only after upstream license
    acceptance.
-5. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
+4. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
    switch Hermes from Codex to it, and rerun a fixed suite of conversations and
    read-only tools. The future model must offer at least 64K context.
-6. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
+5. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-7. **Home Assistant:** expose a small entity set, verify MCP authentication and
+6. **Home Assistant:** expose a small entity set, verify MCP authentication and
    state reads, then test one reversible service call with a confirmation.
-8. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
+7. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
-9. **Network and identity:** retain loopback plus SSH tunneling until an
+8. **Network and identity:** retain loopback plus SSH tunneling until an
    authenticated LAN/Tailnet policy is implemented and tested.
-10. **Dashboard dependencies:** review the three production and eight total high
+9. **Dashboard dependencies:** review the three production and eight total high
    severity npm audit findings from the pinned upstream web dependency tree
    before widening the dashboard listener.
 

@@ -29,7 +29,7 @@ Live state observed on 2026-07-31:
 | Runtime identity | `hermes-agent`, system account with no login shell |
 | Persistent data | `/var/lib/hermes-agent`, mode `0700` |
 | Codex CLI | `0.145.0`, official ARM64 archive with SHA-256 verification |
-| Provider | `openai-codex`, awaiting operator device login |
+| Provider | `openai-codex`, authenticated through ChatGPT device authorization |
 | Enabled toolsets | `memory`, `skills` |
 | Write gates | Memory and skill writes require approval |
 | Disabled toolsets | Terminal, file, browser, code execution, Home Assistant, and all other bundled toolsets |
@@ -42,6 +42,9 @@ After the Ansible convergence restart, the idle dashboard process used about
 135 MiB RSS; the host retained about 2.7 GiB available memory.
 A forced process failure restarted automatically and returned HTTP `200` with a
 new PID after 13 seconds.
+On 2026-07-31, Hermes returned a minimal authenticated `openai-codex` response
+in 10 seconds. The direct Codex CLI returned an equivalent read-only response
+in 22 seconds without an API key.
 
 The pinned upstream revision contains a tracked, process-specific
 `.lazy-refresh-incomplete` marker. The role removes it after installation so
@@ -150,9 +153,11 @@ Run the prepared operator helper:
 scripts/hermes-chatgpt-login.sh
 ```
 
-Open the displayed URL, enter the device code, and authorize the ChatGPT Pro
-account. The helper then imports that session into Hermes, restarts the
-dashboard, and prints the Codex, Hermes, and tool-policy states.
+Open each displayed URL, enter its device code, and authorize the ChatGPT Pro
+account. Codex CLI and Hermes each maintain their own ChatGPT device session;
+the helper runs the Hermes flow only when its provider session is absent. It
+then restarts the dashboard and prints the Codex, Hermes, and tool-policy
+states.
 
 The underlying first login command is:
 
@@ -163,8 +168,8 @@ ssh -t admin@PiServ.local \
   codex login --device-auth'
 ```
 
-Hermes creates its own refresh session after the import so routine Codex CLI
-use does not rotate the token underneath Hermes.
+Hermes creates its own refresh session. Routine Codex CLI use does not rotate
+the Hermes provider token.
 
 ## Open the Private Dashboard
 

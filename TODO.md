@@ -72,11 +72,9 @@
 - [ ] **Complete Hermes Agent provider and capability integration**
   - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
     dashboard, persistent state, daily backup, and Ansible deployment are live.
-    Codex authentication and external capabilities remain incomplete.
+    Codex authentication is complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Complete the one-time ChatGPT device login and verify an authenticated
-      Hermes turn plus direct Codex CLI use without an API key.
     - Run capability and provider-migration tests against the 64K Granite 3.3
       2B and Gemma 4 E2B endpoints before selecting a local provider.
     - Add Llama 3.2 1B only after accepting Meta's upstream model terms and

@@ -23,8 +23,8 @@ hermes_status=$(
 )
 
 if [[ ${hermes_status} == *"logged out"* ]]; then
-  printf 'Importing the Codex CLI session into Hermes...\n'
-  printf 'y\n' | ssh -o BatchMode=yes "${target}" \
+  printf 'Authenticating Hermes with its own ChatGPT device session...\n'
+  ssh -t "${target}" \
     "sudo -u hermes-agent -H ${hermes_env} hermes auth add openai-codex --no-browser"
 else
   printf 'Hermes is already authenticated.\n'

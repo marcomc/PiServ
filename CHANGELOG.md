@@ -71,8 +71,8 @@
 - Installed Nous Hermes Agent `0.19.0` at a pinned upstream revision under a
   root-owned code path and an unprivileged `hermes-agent` runtime identity.
 - Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
-  release and prepared its private authentication home for ChatGPT device
-  login.
+  release, completed ChatGPT device authorization for both Codex CLI and
+  Hermes, and validated direct and Hermes-mediated responses without an API key.
 - Limited Hermes to memory and skill tools with write approval while explicitly
   disabling terminal, filesystem, browser, code execution, Home Assistant, and
   all other bundled toolsets.
