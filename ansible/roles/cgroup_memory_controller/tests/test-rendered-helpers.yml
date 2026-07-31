@@ -1,0 +1,94 @@
+---
+- name: Test cgroup_memory_controller helper rendering
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+    cgroup_memory_controller_config_path: /boot/firmware/config.txt
+    cgroup_memory_controller_overlay_path: >-
+      /boot/firmware/overlays/ansible-enable-cgroup-memory.dtbo
+    cgroup_memory_controller_disabled_argument: cgroup_disable=memory
+    cgroup_memory_controller_helper_path: >-
+      /usr/local/libexec/cgroup-memory-controller/enable-cgroup-memory-overlay
+    cgroup_memory_controller_config_marker: "ANSIBLE MANAGED: cgroup v2 memory controller"
+    cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+  tasks:
+    - name: Create temporary cgroup memory-controller test directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: cgroup-memory-controller
+      register: cgroup_memory_controller_test_directory
+
+    - name: Test cgroup memory-controller helper rendering
+      block:
+        - name: Render cgroup memory-controller helper
+          ansible.builtin.template:
+            src: >-
+              {{ cgroup_memory_controller_test_role_path }}/templates/enable-cgroup-memory-overlay.sh.j2
+            dest: "{{ cgroup_memory_controller_test_directory.path }}/helper"
+            mode: "0700"
+
+        - name: Read rendered cgroup memory-controller helper
+          ansible.builtin.slurp:
+            src: "{{ cgroup_memory_controller_test_directory.path }}/helper"
+          register: cgroup_memory_controller_rendered_helper
+
+        - name: Assert cgroup memory-controller helper contract
+          ansible.builtin.assert:
+            that:
+              - >-
+                'source_dtb=/boot/firmware/example.dtb'
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+              - >-
+                "begin_marker='# BEGIN ANSIBLE MANAGED: cgroup v2 memory controller'"
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+              - >-
+                "controller_status='vendor-enabled'"
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+              - >-
+                'offline Device Tree merge retained'
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+              - >-
+                'Usage: %s --check|--apply|--disable'
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+
+        - name: Render cgroup memory-controller kernel refresh hook
+          ansible.builtin.template:
+            src: >-
+              {{ cgroup_memory_controller_test_role_path }}/templates/cgroup-memory-controller-kernel-hook.sh.j2
+            dest: "{{ cgroup_memory_controller_test_directory.path }}/kernel-hook"
+            mode: "0700"
+
+        - name: Read rendered cgroup memory-controller kernel refresh hook
+          ansible.builtin.slurp:
+            src: "{{ cgroup_memory_controller_test_directory.path }}/kernel-hook"
+          register: cgroup_memory_controller_rendered_hook
+
+        - name: Assert cgroup memory-controller kernel refresh contract
+          ansible.builtin.assert:
+            that:
+              - >-
+                'helper_path=/usr/local/libexec/cgroup-memory-controller/enable-cgroup-memory-overlay'
+                in (cgroup_memory_controller_rendered_hook.content | b64decode)
+              - >-
+                '"${helper_path}" --apply'
+                in (cgroup_memory_controller_rendered_hook.content | b64decode)
+              - >-
+                '"${helper_path}" --disable'
+                in (cgroup_memory_controller_rendered_hook.content | b64decode)
+
+        - name: Lint rendered cgroup memory-controller shell helpers
+          ansible.builtin.command:
+            argv:
+              - shellcheck
+              - --enable=all
+              - "{{ cgroup_memory_controller_test_directory.path }}/helper"
+              - "{{ cgroup_memory_controller_test_directory.path }}/kernel-hook"
+          changed_when: false
+          check_mode: false
+      always:
+        - name: Remove temporary cgroup memory-controller test directory
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_directory.path }}"
+            state: absent

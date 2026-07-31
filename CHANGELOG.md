@@ -42,7 +42,38 @@
 - Restricted the root-executed watchdog script to a validated trusted system
   path.
 
-All notable project changes are documented here.
+### Cgroup Memory Controller
+
+- Extracted the managed cgroup-memory overlay into a Galaxy-ready local
+  `cgroup_memory_controller` role, keeping PiServ artifact identities and
+  runtime policy exclusively in the consumer configuration.
+- Added a managed Raspberry Pi Device Tree overlay that removes only the
+  vendor `cgroup_disable=memory` boot argument after an offline merge check,
+  with initial boot-artifact backups, explicit rollback, and a post-kernel
+  refresh hook; activation remains pending an operator-approved reboot.
+- Installed Nous Hermes Agent `0.19.0` at a pinned upstream revision under a
+  root-owned code path and an unprivileged `hermes-agent` runtime identity.
+- Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
+  release, completed ChatGPT device authorization for both Codex CLI and
+  Hermes, and validated direct and Hermes-mediated responses without an API key.
+- Limited Hermes to memory and skill tools with write approval while explicitly
+  disabling terminal, filesystem, browser, code execution, Home Assistant, and
+  all other bundled toolsets.
+- Added a loopback-only Hermes dashboard, SSH-tunnel operator workflow, and
+  hardened systemd service.
+- Added daily full Hermes state backups to the external SSD with 30-day
+  retention and validated the first live archive.
+- Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health
+  assertions, one-command provider-login helper, runbook, and updated
+  architecture track.
+- Added checksum-pinned Gemma 4 E2B and Granite 3.3 2B local-model benchmarks
+  through loopback-only llama.cpp systemd services, with 64K context,
+  constrained KV cache, memory limits, integrity checks, and result capture.
+- Moved reproducible local-model weights outside Hermes state backups and added
+  an address-space cap that remains effective when a host disables cgroup memory.
+- Added an isolated persistence verifier for a dashboard restart, Hermes
+  backup/restore, reviewed local-skill discovery, and provider-transport
+  migration to a bounded Granite loopback endpoint.
 
 ## [0.3.0] - 2026-07-29
 

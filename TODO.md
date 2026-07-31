@@ -2,6 +2,20 @@
 
 ## Current
 
+- [ ] **Enable the cgroup v2 memory controller**
+  - Assessment: The PiServ-managed overlay, `config.txt` entry, initial boot
+    artifact backup, and kernel post-install refresh hook are deployed and
+    passed their offline DTB merge validation. They will take effect only after
+    an operator-approved reboot. The current kernel still exposes
+    `cgroup_disable=memory`, so systemd and Docker cannot yet enforce their
+    configured memory controls. Hermes retains its `LimitAS` fallback.
+  - Actions:
+    - Schedule an operator-approved reboot, then verify `memory` appears in
+      `cgroup.controllers`, Docker exposes `memory.events`, and all managed
+      services recover normally.
+    - Keep the Hermes `LimitAS` guard in place and record the observed memory
+      overhead and service limits after the change.
+
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the

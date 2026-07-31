@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly helper_path={{ cgroup_memory_controller_helper_path | quote }}
+
+if [[ ! -x "${helper_path}" ]]; then
+  exit 0
+fi
+
+if ! result="$("${helper_path}" --apply 2>&1)"; then
+  printf '%s\n' "${result}" >&2
+  "${helper_path}" --disable >&2 || true
+  printf '%s\n' \
+    'The managed cgroup memory overlay was disabled after regeneration failed.' >&2
+  exit 1
+fi
+
+printf '%s\n' "${result}" >&2
+if [[ "${result}" == *$'status=vendor-enabled'* ]]; then
+  "${helper_path}" --disable >&2
+fi

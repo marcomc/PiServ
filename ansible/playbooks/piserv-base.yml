@@ -65,6 +65,32 @@
         journald_system_keep_free: 5G
         journald_system_max_file_size: 128M
         journald_max_retention_sec: 14day
+    - role: cgroup_memory_controller
+      vars:
+        cgroup_memory_controller_vendor_dtb: >-
+          {{ piserv_cgroup_memory_controller_vendor_dtb }}
+        cgroup_memory_controller_config_path: >-
+          {{ piserv_cgroup_memory_controller_config_path }}
+        cgroup_memory_controller_overlay_name: >-
+          {{ piserv_cgroup_memory_controller_overlay_name }}
+        cgroup_memory_controller_overlay_path: >-
+          {{ piserv_cgroup_memory_controller_overlay_path }}
+        cgroup_memory_controller_helper_path: >-
+          {{ piserv_cgroup_memory_controller_helper_path }}
+        cgroup_memory_controller_kernel_hook_path: >-
+          {{ piserv_cgroup_memory_controller_kernel_hook_path }}
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          {{ piserv_cgroup_memory_controller_kernel_refresh_dependency_path }}
+        cgroup_memory_controller_backup_dir: >-
+          {{ piserv_cgroup_memory_controller_backup_dir }}
+        cgroup_memory_controller_config_backup_filename: >-
+          {{ piserv_cgroup_memory_controller_config_backup_filename }}
+        cgroup_memory_controller_vendor_dtb_backup_filename: >-
+          {{ piserv_cgroup_memory_controller_vendor_dtb_backup_filename }}
+        cgroup_memory_controller_config_marker: >-
+          {{ piserv_cgroup_memory_controller_config_marker }}
+        cgroup_memory_controller_runtime_systemd_service: >-
+          {{ piserv_cgroup_memory_controller_runtime_systemd_service }}
     - role: base
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."

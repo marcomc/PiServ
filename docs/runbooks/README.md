@@ -17,6 +17,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Server access](server-access.md) | Verify SSH and sudo access |
 | [Base security hardening](base-security-hardening.md) | Track applied SSH, service, and unattended-upgrades hardening |
 | [Cockpit web console and extensions](cockpit-web-console.md) | Operate the Cockpit HTTPS administration console and extensions |
+| [Cgroup memory controller](cgroup-memory-controller.md) | Manage the reversible cgroup v2 memory-controller boot overlay |
 | [Glances observability](glances-observability.md) | Operate the LAN-accessible Glances JSON API |
 | [Jackett search](jackett.md) | Deploy and operate trusted-network Jackett search |
 | [PiServ installation and convergence](piserv-install.md) | Apply the ordered full-host installation entry point |
