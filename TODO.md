@@ -71,6 +71,24 @@
     - Codify the final install, configuration, and service health checks in
       Ansible after live validation.
 
+- [ ] **Define service-level cgroup v2 memory policy**
+  - Assessment: Enabling the memory controller only makes memory accounting,
+    pressure signals, and enforcement available. PiServ needs evidence-based
+    policies for Hermes, local model servers, Docker workloads, and core
+    services before `MemoryHigh`, `MemoryMax`, or swap limits are applied.
+  - Actions:
+    - After the controller is active, record baseline `memory.current`,
+      `memory.events`, memory pressure, and restart behavior for each managed
+      service under representative load.
+    - Classify services into protected core services, bounded workloads, and
+      burstable workloads; document the proposed `MemoryHigh`, `MemoryMax`,
+      `MemorySwapMax`, and any required systemd slice hierarchy.
+    - Implement approved systemd unit drop-ins and Docker/container limits in
+      their owning Ansible roles, retaining `LimitAS` only where it remains a
+      justified complementary guard.
+    - Validate limit enforcement, OOM behavior, recovery, and continued SSH
+      reachability before applying policies to additional services.
+
 - [ ] **Evaluate and deploy Google Drive access and synchronization**
   - Assessment: Google Drive for Desktop is unavailable on Linux. `rclone`
     provides the best current combination of ARM64 CLI access, FUSE mounting,
