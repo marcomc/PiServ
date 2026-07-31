@@ -72,7 +72,8 @@
 - [ ] **Complete Hermes Agent provider and capability integration**
   - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
     dashboard, persistent state, daily backup, and Ansible deployment are live.
-    Codex authentication is complete; external capabilities remain incomplete.
+    Codex authentication and isolated state/provider-transport persistence
+    validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
     - Run capability and provider-migration tests against the 64K Granite 3.3
@@ -85,8 +86,6 @@
     - Define the Home Assistant connection method for an instance on the same
       network, including a capability gateway, token storage, and allowed
       entities and operations.
-    - Prove that memory and reviewed skills survive restart, backup/restore,
-      and a future provider change to a 64K-capable LAN model.
     - Review the pinned dashboard's three production and eight total high
       severity npm audit findings before exposing it beyond loopback and its
       SSH tunnel.

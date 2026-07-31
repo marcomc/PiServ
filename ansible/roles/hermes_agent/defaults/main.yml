@@ -100,7 +100,7 @@ hermes_agent_local_model_runtime_dir: >-
   /usr/local/lib/llama.cpp/{{ hermes_agent_local_model_runtime_version }}
 hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli
 hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server
-hermes_agent_local_models_dir: "{{ hermes_agent_home }}/models"
+hermes_agent_local_models_dir: "{{ hermes_agent_home | dirname }}/hermes-models"
 hermes_agent_local_models_results_dir: >-
   {{ hermes_agent_local_models_dir }}/benchmark-results
 hermes_agent_local_models_min_free_bytes: 10737418240
@@ -110,6 +110,7 @@ hermes_agent_local_models_threads: 3
 hermes_agent_local_models_benchmark_max_tokens: 128
 hermes_agent_local_models_cache_type_k: q4_0
 hermes_agent_local_models_cache_type_v: q4_0
+hermes_agent_local_models_address_space_limit: 4G
 hermes_agent_local_models_memory_high: 2500M
 hermes_agent_local_models_memory_max: 3200M
 hermes_agent_local_models_memory_swap_max: 512M

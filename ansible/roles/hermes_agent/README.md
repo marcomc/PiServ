@@ -119,7 +119,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_model_runtime_dir` | versioned path | Root-owned llama.cpp installation directory. |
 | `hermes_agent_local_model_llama_cli_path` | `/usr/local/bin/llama-cli` | Active llama.cpp CLI. |
 | `hermes_agent_local_model_llama_server_path` | `/usr/local/bin/llama-server` | Active llama.cpp server. |
-| `hermes_agent_local_models_dir` | `{{ hermes_agent_home }}/models` | Model storage directory. |
+| `hermes_agent_local_models_dir` | sibling `hermes-models` directory | Model storage directory, kept outside Hermes state backups. |
 | `hermes_agent_local_models_results_dir` | `benchmark-results` child | Benchmark result directory. |
 | `hermes_agent_local_models_min_free_bytes` | `10737418240` | Required remaining free space after download. |
 | `hermes_agent_local_models_host` | `127.0.0.1` | Local-model service bind address. |
@@ -128,6 +128,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_models_benchmark_max_tokens` | `128` | Completion-token budget for the synthetic probe. |
 | `hermes_agent_local_models_cache_type_k` | `q4_0` | Key-cache quantization for memory control. |
 | `hermes_agent_local_models_cache_type_v` | `q4_0` | Value-cache quantization for memory control. |
+| `hermes_agent_local_models_address_space_limit` | `4G` | Process address-space hard limit, independent of cgroup memory support. |
 | `hermes_agent_local_models_memory_high` | `2500M` | systemd memory pressure threshold. |
 | `hermes_agent_local_models_memory_max` | `3200M` | systemd memory hard limit. |
 | `hermes_agent_local_models_memory_swap_max` | `512M` | systemd swap limit. |

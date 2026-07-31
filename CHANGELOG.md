@@ -86,6 +86,11 @@
 - Added checksum-pinned Gemma 4 E2B and Granite 3.3 2B local-model benchmarks
   through loopback-only llama.cpp systemd services, with 64K context,
   constrained KV cache, memory limits, integrity checks, and result capture.
+- Moved reproducible local-model weights outside Hermes state backups and added
+  an address-space cap that remains effective when a host disables cgroup memory.
+- Added an isolated persistence verifier for a dashboard restart, Hermes
+  backup/restore, reviewed local-skill discovery, and provider-transport
+  migration to a bounded Granite loopback endpoint.
 
 ## [0.3.0] - 2026-07-29
 

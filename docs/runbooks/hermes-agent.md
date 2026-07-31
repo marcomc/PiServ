@@ -6,6 +6,7 @@
 - [Current State](#current-state)
 - [Planned Inference Routing](#planned-inference-routing)
 - [Local Model Benchmarks](#local-model-benchmarks)
+- [Verify Persistence](#verify-persistence)
 - [Deploy](#deploy)
 - [Complete ChatGPT Login](#complete-chatgpt-login)
 - [Open the Private Dashboard](#open-the-private-dashboard)
@@ -69,8 +70,8 @@ toolset disabled. This is a planned policy, not an active routing feature.
 ## Local Model Benchmarks
 
 The Hermes deployment also manages a loopback-only `llama.cpp` benchmark
-runtime. It stores checksum-pinned model files on the filesystem containing
-`/var/lib/hermes-agent/models`, and the benchmark starts exactly one service
+runtime. It stores checksum-pinned model files outside Hermes state, on the
+filesystem containing `/var/lib/hermes-models`, and the benchmark starts exactly one service
 before stopping it on completion. No local model is configured as the Hermes
 provider until it passes the benchmark and a separate provider-migration test.
 
@@ -82,12 +83,14 @@ provider until it passes the benchmark and a separate provider-migration test.
 The model files consume about 4.1 GiB. Deployment checks the filesystem that
 contains the configured model directory and refuses to download unless it has
 at least 10 GiB beyond the configured files. With the default PiServ path,
-this is the root filesystem, currently on the NVMe device; the external
-`/dev/sda1` SSD is not used for model files. Both server units bind only to
-`127.0.0.1`, use a `q4_0` KV cache for the 64K benchmark, and have a 3.2 GiB cgroup
-memory limit, and conflict with each other. A failed 64K Gemma start therefore
-fails inside its service cgroup instead of enabling a fallback or keeping a
-model resident.
+this is the root filesystem; the external `/dev/sda1` SSD is not used for
+model files. Keeping the weights outside `HERMES_HOME` prevents Hermes state
+backups from archiving reproducible, checksum-pinned model files. Both server units bind only to
+`127.0.0.1`, use a `q4_0` KV cache for the 64K benchmark, set a 4 GiB process
+address-space cap, and conflict with each other. The configured cgroup memory
+values are not currently enforced on PiServ because its boot arguments disable
+the memory controller; `LimitAS` remains active. A failed 64K Gemma start must
+therefore stop rather than enable a fallback or keep a model resident.
 
 Live benchmarks on 2026-07-31 used a synthetic non-sensitive response check:
 
@@ -120,10 +123,39 @@ ssh admin@PiServ.local \
 ```
 
 Each command writes a synthetic, non-sensitive JSON result under
-`/var/lib/hermes-agent/models/benchmark-results/`. It records actual configured
+`/var/lib/hermes-models/benchmark-results/`. It records actual configured
 server properties, response timings, memory availability before and after the
 response, and cgroup memory figures. The test does not query Cloud Corpus, Home
 Assistant, or Hermes tools.
+
+## Verify Persistence
+
+Run the controller-side verifier to test built-in memory and a reviewed local
+skill across a dashboard restart, a private Hermes backup, restoration into an
+isolated home, and a temporary switch of that restored home to a bounded,
+loopback Granite OpenAI-compatible endpoint:
+
+```sh
+scripts/verify-hermes-persistence.sh
+```
+
+The verifier uses only a generated non-sensitive marker. It restarts the
+production dashboard without modifying its state, then imports a temporary
+clone below `/run` before creating the memory and skill fixtures. Both backup
+archives, cloned homes, dashboard, and local model are removed during cleanup;
+a power cycle also clears the temporary clone. The backup contains Hermes state,
+including built-in memory and local skills, but not checksum-pinned model
+weights stored outside `HERMES_HOME`.
+
+The restored clone declares the managed 64K minimum context required by Hermes.
+Its temporary Granite server is capped at 8K, two CPU threads, 32 output
+tokens, and an address-space limit. The verifier reads its generated marker
+from restored built-in memory, resolves the named provider through Hermes, and
+sends a minimal Chat Completions request to the resolved endpoint. The reviewed
+local skill is asserted after both restart and restore. This proves the state
+and provider-transport migration boundaries, not full-agent performance at 8K
+or 64K. It avoids an unbounded inference request during a state-persistence
+test.
 
 ## Deploy
 

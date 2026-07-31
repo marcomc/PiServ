@@ -199,6 +199,10 @@ argument_specs:
         type: str
         default: q4_0
         description: Value-cache quantization used to constrain local-model memory.
+      hermes_agent_local_models_address_space_limit:
+        type: str
+        default: 4G
+        description: Process address-space hard limit for each local model service.
       hermes_agent_local_models_memory_high:
         type: str
         default: 2500M
