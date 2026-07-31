@@ -69,6 +69,7 @@
         owner: root
         group: root
         mode: "0750"
+      when: not ansible_check_mode or wifi_watchdog_script_parent.stat.exists
       notify: Restart Wi-Fi watchdog
 
     - name: Install Wi-Fi watchdog service
@@ -78,6 +79,7 @@
         owner: root
         group: root
         mode: "0644"
+      when: not ansible_check_mode or wifi_watchdog_service_parent.stat.exists
       notify:
         - Reload systemd
         - Restart Wi-Fi watchdog

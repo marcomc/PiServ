@@ -1,0 +1,12 @@
+---
+- name: Reject a Wi-Fi watchdog unit outside systemd's system directory
+  hosts: localhost
+  gather_facts: false
+  vars:
+    wifi_watchdog_service_name: wifi-connectivity-watchdog.service
+    wifi_watchdog_service_path: /opt/wifi-connectivity-watchdog.service
+  tasks:
+    - name: Validate role input
+      ansible.builtin.include_role:
+        name: wifi_watchdog
+        tasks_from: validate-input.yml

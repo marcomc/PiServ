@@ -28,3 +28,6 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
   variable.
 - Made DNS lookup failures explicit before testing resolved addresses.
 - Added a regression for a failed DNS lookup during watchdog recovery.
+- Skipped template and service lifecycle work in fresh check mode when required
+  parent directories are only predicted, and restricted unit paths to
+  `/etc/systemd/system`.

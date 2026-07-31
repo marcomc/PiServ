@@ -32,6 +32,14 @@ fi
 
 grep -Fq 'service path filename must equal the service name' "${invalid_service_path_output}"
 
+if ansible-playbook "${role_root}/tests/test-invalid-service-directory.yml" \
+    > "${invalid_service_path_output}" 2>&1; then
+    printf 'invalid service-directory configuration unexpectedly passed\n' >&2
+    exit 1
+fi
+
+grep -Fq '/etc/systemd/system' "${invalid_service_path_output}"
+
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${rendered_script} mode=0750" \
     -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \

@@ -20,6 +20,8 @@
 - Corrected the PiServ watchdog runbook to verify service state on PiServ
   rather than the Ansible controller.
 - Made a DNS resolver failure fail the watchdog health check explicitly.
+- Preserved fresh check-mode convergence for missing parent directories and
+  constrained watchdog unit paths to systemd's system unit directory.
 
 All notable project changes are documented here.
 

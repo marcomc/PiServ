@@ -64,7 +64,7 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | Variable | Default | Description |
 | --- | --- | --- |
 | `wifi_watchdog_service_name` | `wifi-connectivity-watchdog.service` | Managed systemd service name |
-| `wifi_watchdog_service_path` | `/etc/systemd/system/{{ wifi_watchdog_service_name }}` | Managed unit path; filename must equal `wifi_watchdog_service_name` |
+| `wifi_watchdog_service_path` | `/etc/systemd/system/{{ wifi_watchdog_service_name }}` | Managed unit path directly under `/etc/systemd/system`; filename must equal `wifi_watchdog_service_name` |
 | `wifi_watchdog_script_path` | `/usr/local/sbin/wifi-connectivity-watchdog` | Managed script path |
 | `wifi_watchdog_interface` | `wlan0` | Wi-Fi interface monitored through NetworkManager |
 | `wifi_watchdog_connection` | `""` | Connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile |
@@ -104,8 +104,9 @@ automatic activation and have usable saved credentials. Set the variable only
 when a host must always reconnect to one named profile.
 
 To preserve an existing local service identity during migration, override the
-service and script paths in the consumer playbook. Those consumer-specific
-values are not required by the role.
+service name and script path in the consumer playbook. The service unit path
+must remain directly under `/etc/systemd/system`. Those consumer-specific values
+are not required by the role.
 
 ## Recovery Policy
 
@@ -150,9 +151,10 @@ tests/test-watchdog.sh
 ansible-lint .
 ```
 
-On a fresh target, check mode predicts the script and unit files without
-attempting to enable a unit that does not exist yet. A converged target still
-checks the systemd enablement and startup state.
+On a fresh target, check mode predicts missing parent directories and skips
+template, startup, and restart work that would require those directories or a
+unit to exist. A converged target still checks the systemd enablement and
+startup state.
 
 Render the script with representative variables before running ShellCheck:
 
