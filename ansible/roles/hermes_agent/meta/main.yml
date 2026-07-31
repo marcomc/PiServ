@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  author: Marco Massari
+  author: Marco Massari Calderone <marco@marcomc.com>
   description: Install a locked-down Nous Hermes Agent service with Codex.
   license: MIT
   min_ansible_version: "2.16"
