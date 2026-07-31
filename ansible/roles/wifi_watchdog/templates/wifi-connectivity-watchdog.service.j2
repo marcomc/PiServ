@@ -1,0 +1,18 @@
+[Unit]
+Description=Wi-Fi connectivity watchdog
+After={{ wifi_watchdog_networkmanager_service_name }} network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ wifi_watchdog_script_path }}
+Restart=always
+RestartSec=10s
+User=root
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/run
+
+[Install]
+WantedBy=multi-user.target

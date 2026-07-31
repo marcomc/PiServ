@@ -1,0 +1,98 @@
+#!/bin/bash
+set -u
+
+interface={{ wifi_watchdog_interface | quote }}
+connection={{ wifi_watchdog_connection | quote }}
+gateway_probe={{ wifi_watchdog_gateway_probe | quote }}
+dns_probe={{ wifi_watchdog_dns_probe | quote }}
+check_interval={{ wifi_watchdog_check_interval_seconds | int }}
+connection_recovery_after={{ wifi_watchdog_connection_recovery_after_seconds | int }}
+networkmanager_recovery_after={{ wifi_watchdog_networkmanager_recovery_after_seconds | int }}
+reboot_after={{ wifi_watchdog_reboot_after_seconds | int }}
+networkmanager_service={{ wifi_watchdog_networkmanager_service_name | quote }}
+
+offline_since=0
+connection_restarted=0
+networkmanager_restarted=0
+
+log() {
+    logger -t wifi-connectivity-watchdog -- "$*"
+}
+
+wifi_link_ok() {
+    local device_status
+    device_status=$(nmcli -t -f DEVICE,STATE device status) || return 1
+    grep -Fq "${interface}:connected" <<<"${device_status}"
+}
+
+gateway_ok() {
+    local active_gateway
+    local default_routes
+    active_gateway=${gateway_probe}
+    if [[ -z "${active_gateway}" ]]; then
+        default_routes=$(ip -4 route show default) || return 1
+        active_gateway=$(awk '/default/ { print $3; exit }' <<<"${default_routes}") || return 1
+    fi
+    [[ -n "${active_gateway}" ]] && ping -c 1 -W 2 "${active_gateway}" >/dev/null 2>&1
+}
+
+dns_ok() {
+    [[ -z "${dns_probe}" ]] || getent ahostsv4 "${dns_probe}" >/dev/null 2>&1
+}
+
+recover_connection() {
+    if [[ -n "${connection}" ]]; then
+        log "connectivity offline for ${connection_recovery_after}s; restarting connection ${connection}"
+        nmcli connection down "${connection}" || true
+        nmcli connection up "${connection}" || true
+    else
+        log "connectivity offline for ${connection_recovery_after}s; asking NetworkManager to reconnect ${interface}"
+        nmcli device disconnect "${interface}" || true
+        nmcli device connect "${interface}" || true
+    fi
+    connection_restarted=1
+}
+
+recover_networkmanager() {
+    log "connectivity offline for ${networkmanager_recovery_after}s; restarting ${networkmanager_service}"
+    systemctl restart "${networkmanager_service}"
+    networkmanager_restarted=1
+}
+
+recover_host() {
+    if (( reboot_after > 0 )); then
+        log "connectivity offline for ${reboot_after}s; rebooting host"
+        systemctl reboot
+    else
+        log "connectivity remains offline; host reboot escalation is disabled"
+    fi
+}
+
+while :; do
+    if wifi_link_ok && gateway_ok && dns_ok; then
+        if (( offline_since > 0 )); then
+            log "connectivity restored"
+        fi
+        offline_since=0
+        connection_restarted=0
+        networkmanager_restarted=0
+        sleep "${check_interval}"
+        continue
+    fi
+
+    now=$(date +%s)
+    if (( offline_since == 0 )); then
+        offline_since=${now}
+        log "connectivity check failed; starting recovery timer"
+    fi
+    offline_for=$((now - offline_since))
+
+    if (( connection_restarted == 0 && offline_for >= connection_recovery_after )); then
+        recover_connection
+    elif (( networkmanager_restarted == 0 && offline_for >= networkmanager_recovery_after )); then
+        recover_networkmanager
+    elif (( offline_for >= reboot_after && reboot_after > 0 )); then
+        recover_host
+    fi
+    sleep "${check_interval}"
+done

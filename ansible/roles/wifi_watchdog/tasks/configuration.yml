@@ -1,0 +1,60 @@
+---
+- name: Inspect Wi-Fi watchdog script parent
+  ansible.builtin.stat:
+    path: "{{ wifi_watchdog_script_path | dirname }}"
+  register: wifi_watchdog_script_parent
+
+- name: Create missing Wi-Fi watchdog script parent
+  ansible.builtin.file:
+    path: "{{ wifi_watchdog_script_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not wifi_watchdog_script_parent.stat.exists
+  become: true
+
+- name: Inspect Wi-Fi watchdog service parent
+  ansible.builtin.stat:
+    path: "{{ wifi_watchdog_service_path | dirname }}"
+  register: wifi_watchdog_service_parent
+
+- name: Create missing Wi-Fi watchdog service parent
+  ansible.builtin.file:
+    path: "{{ wifi_watchdog_service_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not wifi_watchdog_service_parent.stat.exists
+  become: true
+
+- name: Install Wi-Fi watchdog
+  become: true
+  block:
+    - name: Install Wi-Fi watchdog script
+      ansible.builtin.template:
+        src: wifi-connectivity-watchdog.sh.j2
+        dest: "{{ wifi_watchdog_script_path }}"
+        owner: root
+        group: root
+        mode: "0750"
+      notify: Restart Wi-Fi watchdog
+
+    - name: Install Wi-Fi watchdog service
+      ansible.builtin.template:
+        src: wifi-connectivity-watchdog.service.j2
+        dest: "{{ wifi_watchdog_service_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart Wi-Fi watchdog
+
+    - name: Enable Wi-Fi watchdog service
+      ansible.builtin.systemd:
+        name: "{{ wifi_watchdog_service_name }}"
+        daemon_reload: true
+        enabled: true
+        state: started

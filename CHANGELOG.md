@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Reliability
+
+- Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
+  link, gateway, and DNS, then escalates from connection restart to
+  NetworkManager restart. Host reboot escalation is opt-in.
+- Extracted the watchdog into the reusable `wifi_watchdog` role with
+  Galaxy-ready metadata, standalone documentation, tests, and release guidance.
+
 All notable project changes are documented here.
 
 ## [0.3.0] - 2026-07-29
