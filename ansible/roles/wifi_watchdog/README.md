@@ -134,7 +134,8 @@ logged with the `wifi-connectivity-watchdog` journal identifier.
 A connection activation or NetworkManager restart marks its recovery level
 complete only after it succeeds. Failed commands retry on later checks while
 the outage continues, without blocking higher recovery levels whose thresholds
-have elapsed.
+have elapsed. A successful NetworkManager restart re-enables connection recovery
+until the health checks succeed.
 
 The `nmcli` status command uses the C locale before its output is parsed. The
 offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so

@@ -87,6 +87,7 @@ recover_networkmanager() {
     log "connectivity offline for ${networkmanager_recovery_after}s; restarting ${networkmanager_service}"
     if systemctl restart "${networkmanager_service}"; then
         networkmanager_restarted=1
+        connection_restarted=0
     else
         log "failed to restart ${networkmanager_service}; recovery will retry"
     fi

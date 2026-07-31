@@ -215,6 +215,14 @@ if (( networkmanager_retries < 2 )); then
     exit 1
 fi
 
+run_watchdog "${recovery_retry_script}" 'wlan0:disconnected' 5
+
+connection_retries=$(grep -Fxc 'device connect wlan0' "${test_log}" || true)
+if (( connection_retries < 2 )); then
+    printf 'watchdog did not retry the connection after NetworkManager restart\n' >&2
+    exit 1
+fi
+
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${escalation_retry_script} mode=0750" \
     -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \

@@ -19,7 +19,8 @@ The watchdog resets its timer as soon as all three checks pass. Recovery events
 are written to the system journal with the `wifi-connectivity-watchdog`
 identifier. A failed connection activation or NetworkManager restart is retried
 on later checks while the outage continues, without blocking a higher recovery
-level whose threshold has elapsed.
+level whose threshold has elapsed. A successful NetworkManager restart enables
+another connection recovery attempt until health checks pass.
 
 ## Configuration
 
