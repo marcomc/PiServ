@@ -81,6 +81,8 @@ ansible-playbook --syntax-check tests/test.yml
 | `freenove_case_archive_extra_opts` | `[]` | Extra options passed to `unarchive` |
 | `freenove_case_archive_creates` | `{{ freenove_case_install_dir }}/Code/app_ui.py` | Archive idempotence marker |
 | `freenove_case_boot_config_path` | `/boot/firmware/config.txt` | Firmware config path |
+| `freenove_case_manage_sigterm_cleanup_fix` | `false` | Patch upstream task-manager SIGTERM cleanup defect |
+| `freenove_case_task_manager_path` | `{{ freenove_case_install_dir }}/Code/task_manager.py` | Installed Freenove task-manager path |
 | `freenove_case_apt_packages` | See `defaults/main.yml` | Debian packages to install |
 | `freenove_case_manage_desktop_launcher` | `true` | Create FNK0100 desktop/menu launchers |
 | `freenove_case_app_name` | `FNK0100` | Launcher name and icon basename |
@@ -177,6 +179,11 @@ Raspberry Pi:
 The role intentionally does not apply Freenove's permissive
 `chmod 777 ~/Desktop/Freenove.desktop` suggestion. Launchers are installed with
 mode `0755`.
+
+Set `freenove_case_manage_sigterm_cleanup_fix: true` for the affected
+Freenove task manager. The upstream signal handler calls a non-existent method
+during system shutdown. The role replaces that path with task cleanup and a
+successful process exit, then validates the resulting Python AST.
 
 PCIe Gen3 is disabled by default because Freenove documents it as experimental
 and recommends PCIe Gen2 for stability.

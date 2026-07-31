@@ -11,6 +11,8 @@ freenove_case_archive_url: ""
 freenove_case_archive_extra_opts: []
 freenove_case_archive_creates: "{{ freenove_case_install_dir }}/Code/app_ui.py"
 freenove_case_boot_config_path: /boot/firmware/config.txt
+freenove_case_manage_sigterm_cleanup_fix: false
+freenove_case_task_manager_path: "{{ freenove_case_install_dir }}/Code/task_manager.py"
 
 freenove_case_apt_packages:
   - git

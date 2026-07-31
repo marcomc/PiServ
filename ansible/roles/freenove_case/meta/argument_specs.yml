@@ -58,6 +58,15 @@ argument_specs:
         type: path
         default: /boot/firmware/config.txt
         description: Raspberry Pi firmware config path.
+      freenove_case_manage_sigterm_cleanup_fix:
+        type: bool
+        default: false
+        description: >-
+          Patch the known upstream task-manager SIGTERM cleanup defect.
+      freenove_case_task_manager_path:
+        type: path
+        default: "{{ freenove_case_install_dir }}/Code/task_manager.py"
+        description: Path to the installed Freenove task manager.
       freenove_case_apt_packages:
         type: list
         elements: str

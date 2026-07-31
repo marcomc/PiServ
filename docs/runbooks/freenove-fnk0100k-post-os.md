@@ -70,6 +70,7 @@ The playbook performs the required post-OS setup:
 | Expansion preflight | Requires Freenove controller detection before enabling the background service |
 | Background service | Enables and starts `my_app_running.service` under the `admin` user |
 | Hardware apply | Applies LED and fan config directly through Freenove's expansion-board API |
+| Shutdown cleanup | Patches the upstream task-manager SIGTERM defect before the service is managed |
 | Launchers | Creates application-menu and desktop launchers for `FNK0100` |
 | Validation | Checks `/dev/i2c-1`, Python imports, Freenove Python syntax, JSON config, and service state |
 
@@ -85,7 +86,15 @@ Optional Freenove tutorial operations are exposed as explicit variables:
 | `freenove_case_controller_src` | repo-local vendor path in PiServ playbook | Source tree copied to the Pi |
 | `freenove_case_install_dir` | `/opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi` in PiServ playbook | Target runtime path on PiServ |
 | `freenove_case_manage_background_service` | `true` in PiServ playbook | Creates and manages `my_app_running.service` |
+| `freenove_case_manage_sigterm_cleanup_fix` | `true` in PiServ playbook | Makes the upstream task manager clean up and exit on `SIGTERM` |
 | `freenove_case_validate_expansion_controller` | `true` in PiServ playbook | Fails closed when the Freenove I2C controller is not detected |
+
+The upstream task manager calls a non-existent `stop_all_tasks()` method from
+its `SIGTERM` handler. This was observed during a shutdown that did not return
+PiServ to an online state. The managed patch uses its existing
+`stop_monitoring()` cleanup method and exits normally. Stopping the service
+validates this path; a separate, operator-approved reboot is required to
+validate the firmware-level reset outcome.
 | `freenove_case_manage_app_config` | `true` in PiServ playbook | Manages `Code/app_config.json` |
 | `freenove_case_apply_hardware_config` | `true` in PiServ playbook | Applies managed LED and fan values directly to the case controller |
 | `freenove_case_led_task_enabled` | `false` in PiServ playbook | Keeps `task_led.py` from overriding Ansible-managed LED state |

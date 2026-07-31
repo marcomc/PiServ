@@ -43,5 +43,8 @@ All notable changes for the Freenove Case Ansible role are documented here.
 
 ### Fixed
 
+- Added an opt-in patch for the upstream task-manager SIGTERM handler so it
+  stops managed tasks and exits cleanly during system shutdown.
+
 - Skip the I2C firmware-change reboot in Ansible check mode while preserving
   normal-mode reboot behavior.

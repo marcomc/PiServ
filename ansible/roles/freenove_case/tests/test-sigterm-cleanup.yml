@@ -1,0 +1,64 @@
+---
+- name: Verify Freenove task-manager SIGTERM cleanup patch
+  hosts: localhost
+  gather_facts: false
+  vars:
+    freenove_case_manage_sigterm_cleanup_fix: true
+  tasks:
+    - name: Create an isolated Freenove task-manager fixture
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: freenove-case
+      register: freenove_case_test_directory
+
+    - name: Write the upstream SIGTERM-defect fixture
+      ansible.builtin.copy:
+        dest: "{{ freenove_case_test_directory.path }}/task_manager.py"
+        mode: "0644"
+        content: |
+          import atexit
+          import signal
+
+          class TaskManager:
+              def __init__(self):
+                  atexit.register(self.handle_signal)
+                  signal.signal(signal.SIGTERM, self.handle_signal)
+
+              def handle_signal(self, signum=None, frame=None):
+                  self.stop_all_tasks()
+
+              def stop_monitoring(self):
+                  pass
+
+    - name: Apply the SIGTERM cleanup task
+      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+      vars:
+        freenove_case_task_manager_path: >-
+          {{ freenove_case_test_directory.path }}/task_manager.py
+
+    - name: Verify the patched task manager exits cleanly
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import pathlib
+            import signal
+            import sys
+
+            source_path = pathlib.Path(sys.argv[1])
+            namespace = {}
+            exec(source_path.read_text(encoding="utf-8"), namespace)
+            manager = namespace["TaskManager"]()
+            try:
+                manager.handle_signal(signal.SIGTERM, None)
+            except SystemExit as error:
+                raise SystemExit(error.code)
+            raise SystemExit(1)
+          - "{{ freenove_case_test_directory.path }}/task_manager.py"
+      changed_when: false
+  post_tasks:
+    - name: Remove isolated Freenove task manager fixture
+      ansible.builtin.file:
+        path: "{{ freenove_case_test_directory.path }}"
+        state: absent

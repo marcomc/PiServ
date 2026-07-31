@@ -9,6 +9,7 @@
         freenove_case_source_mode: controller_copy
         freenove_case_controller_src: "{{ playbook_dir }}/../../vendor/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi-main"
         freenove_case_install_dir: /opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi
+        freenove_case_manage_sigterm_cleanup_fix: true
         freenove_case_manage_background_service: true
         freenove_case_manage_app_config: true
         freenove_case_apply_hardware_config: true

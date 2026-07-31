@@ -11,6 +11,9 @@
 - name: Install Freenove case software
   ansible.builtin.import_tasks: freenove-code.yml
 
+- name: Configure Freenove signal cleanup
+  ansible.builtin.import_tasks: sigterm-cleanup.yml
+
 - name: Configure Freenove runtime config
   ansible.builtin.import_tasks: app-config.yml
 

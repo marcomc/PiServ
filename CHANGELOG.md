@@ -4,6 +4,9 @@
 
 ### Reliability
 
+- Patched the Freenove background task manager's upstream SIGTERM handler so
+  it cleans up managed tasks and exits successfully during system shutdown.
+
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.
