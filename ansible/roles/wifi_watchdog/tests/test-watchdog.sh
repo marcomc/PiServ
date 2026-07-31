@@ -135,6 +135,11 @@ if grep -Fq 'date ' "${test_log}"; then
     exit 1
 fi
 
+run_watchdog "${rendered_script}" $'p2p-dev-wlan0:connected\nwlan0:disconnected' 2
+
+grep -Fxq 'device disconnect wlan0' "${test_log}"
+grep -Fxq 'device connect wlan0' "${test_log}"
+
 run_watchdog "${rendered_script}" 'wlan0:connected' 1
 
 grep -Fxq 'ip -4 route show default dev wlan0' "${test_log}"
