@@ -35,7 +35,7 @@ argument_specs:
       wifi_watchdog_dns_probe:
         type: str
         default: example.com
-        description: DNS name resolved through the system resolver; empty disables DNS probing.
+        description: DNS name resolved through the system resolver and reached through the Wi-Fi interface; empty disables DNS probing.
       wifi_watchdog_check_interval_seconds:
         type: int
         default: 30
@@ -56,3 +56,7 @@ argument_specs:
         type: str
         default: NetworkManager.service
         description: NetworkManager systemd service to restart during recovery.
+      wifi_watchdog_monotonic_clock_path:
+        type: path
+        default: /proc/uptime
+        description: Linux kernel monotonic-uptime file used for recovery timing.

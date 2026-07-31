@@ -24,7 +24,8 @@ The role installs a root-owned service that continuously verifies:
 - NetworkManager reports the configured Wi-Fi interface as connected.
 - The IPv4 default gateway for the configured Wi-Fi interface, or an explicitly
   configured gateway, responds to an interface-bound ping.
-- A configured DNS name resolves through the system resolver.
+- A configured DNS name resolves through the system resolver and an IPv4 result
+  responds to an interface-bound ping.
 
 After a continuous offline period it restarts the NetworkManager connection,
 then NetworkManager itself. Host reboot is deliberately disabled by default.
@@ -68,12 +69,13 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | `wifi_watchdog_interface` | `wlan0` | Wi-Fi interface monitored through NetworkManager |
 | `wifi_watchdog_connection` | `""` | Connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile |
 | `wifi_watchdog_gateway_probe` | `""` | Gateway to ping through the Wi-Fi interface; empty uses that interface's IPv4 default route |
-| `wifi_watchdog_dns_probe` | `example.com` | Name resolved through the system resolver; empty disables this check |
+| `wifi_watchdog_dns_probe` | `example.com` | Name resolved through the system resolver and reached through the Wi-Fi interface; empty disables this check |
 | `wifi_watchdog_check_interval_seconds` | `30` | Check interval while connectivity is healthy |
 | `wifi_watchdog_connection_recovery_after_seconds` | `300` | Offline duration before connection restart |
 | `wifi_watchdog_networkmanager_recovery_after_seconds` | `600` | Offline duration before NetworkManager restart |
 | `wifi_watchdog_reboot_after_seconds` | `0` | Offline duration before reboot; `0` disables it |
 | `wifi_watchdog_networkmanager_service_name` | `NetworkManager.service` | Service restarted at the second escalation level |
+| `wifi_watchdog_monotonic_clock_path` | `/proc/uptime` | Linux kernel monotonic-uptime file used for recovery timing |
 
 Set `wifi_watchdog_reboot_after_seconds` only after observing the lower
 recovery levels on the target network. A reboot can hide a router or mesh
@@ -126,8 +128,10 @@ The timer resets only when all enabled checks succeed. Recovery messages are
 logged with the `wifi-connectivity-watchdog` journal identifier.
 
 The `nmcli` status command uses the C locale before its output is parsed. The
-offline timer uses Bash's monotonic `SECONDS` counter, so wall-clock corrections
-cannot skip or delay an escalation level.
+offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so
+wall-clock corrections cannot skip or delay an escalation level. The DNS probe
+requires an IPv4 response through the monitored interface; use a hostname whose
+resolved addresses allow ICMP echo replies.
 
 ## Supported Platforms
 

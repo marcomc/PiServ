@@ -10,6 +10,7 @@ connection_recovery_after={{ wifi_watchdog_connection_recovery_after_seconds | i
 networkmanager_recovery_after={{ wifi_watchdog_networkmanager_recovery_after_seconds | int }}
 reboot_after={{ wifi_watchdog_reboot_after_seconds | int }}
 networkmanager_service={{ wifi_watchdog_networkmanager_service_name | quote }}
+monotonic_clock_path={{ wifi_watchdog_monotonic_clock_path | quote }}
 
 offline_since=-1
 connection_restarted=0
@@ -25,6 +26,14 @@ wifi_link_ok() {
     grep -Fq "${interface}:connected" <<<"${device_status}"
 }
 
+monotonic_seconds() {
+    local uptime_seconds
+    read -r uptime_seconds _ < "${monotonic_clock_path}" || return 1
+    uptime_seconds=${uptime_seconds%%.*}
+    [[ "${uptime_seconds}" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "${uptime_seconds}"
+}
+
 gateway_ok() {
     local active_gateway
     local default_routes
@@ -37,7 +46,14 @@ gateway_ok() {
 }
 
 dns_ok() {
-    [[ -z "${dns_probe}" ]] || getent ahostsv4 "${dns_probe}" >/dev/null 2>&1
+    local dns_address
+    [[ -z "${dns_probe}" ]] && return 0
+    while IFS= read -r dns_address; do
+        if ping -I "${interface}" -c 1 -W 2 "${dns_address}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done < <(getent ahostsv4 "${dns_probe}" | awk '!seen[$1]++ { print $1 }')
+    return 1
 }
 
 recover_connection() {
@@ -80,7 +96,11 @@ while :; do
         continue
     fi
 
-    now=${SECONDS}
+    now=$(monotonic_seconds) || {
+        log "unable to read the kernel monotonic clock; deferring recovery"
+        sleep "${check_interval}"
+        continue
+    }
     if (( offline_since < 0 )); then
         offline_since=${now}
         log "connectivity check failed; starting recovery timer"

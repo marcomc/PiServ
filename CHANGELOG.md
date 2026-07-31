@@ -12,7 +12,8 @@
 - Included the Wi-Fi watchdog in the canonical full-host convergence entry
   point and bound its default gateway probe to the monitored Wi-Fi interface.
 - Hardened the reusable watchdog against localized `nmcli` state, wall-clock
-  changes during recovery, and mismatched systemd service-path overrides.
+  changes during recovery, mismatched systemd service-path overrides, and DNS
+  success delivered through another network interface.
 
 All notable project changes are documented here.
 
