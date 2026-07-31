@@ -135,7 +135,9 @@ The `nmcli` status command uses the C locale before its output is parsed. The
 offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so
 wall-clock corrections cannot skip or delay an escalation level. The DNS probe
 requires an IPv4 response through the monitored interface; use a hostname whose
-resolved addresses allow ICMP echo replies.
+resolved addresses allow ICMP echo replies. Recovery durations are limited to
+`2147483647` seconds so they remain valid for Bash arithmetic on supported
+hosts.
 
 ## Supported Platforms
 

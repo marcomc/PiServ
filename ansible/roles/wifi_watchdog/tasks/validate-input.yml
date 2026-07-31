@@ -14,6 +14,10 @@
       - wifi_watchdog_connection_recovery_after_seconds | string is match('^[1-9][0-9]*$')
       - wifi_watchdog_networkmanager_recovery_after_seconds | string is match('^[1-9][0-9]*$')
       - wifi_watchdog_reboot_after_seconds | string is match('^(0|[1-9][0-9]*)$')
+      - (wifi_watchdog_check_interval_seconds | int) <= 2147483647
+      - (wifi_watchdog_connection_recovery_after_seconds | int) <= 2147483647
+      - (wifi_watchdog_networkmanager_recovery_after_seconds | int) <= 2147483647
+      - (wifi_watchdog_reboot_after_seconds | int) <= 2147483647
       - >-
         (wifi_watchdog_connection_recovery_after_seconds | int) >=
         (wifi_watchdog_check_interval_seconds | int)
@@ -28,7 +32,8 @@
       Configure positive integer check and recovery intervals, with connection
       recovery no shorter than the check interval, NetworkManager recovery
       after connection recovery, and reboot disabled or no earlier than the
-      NetworkManager recovery threshold. The script path must be a direct child
-      of /usr/local/sbin, the service path filename must equal the service name
-      and live directly in /etc/systemd/system, the monotonic clock path must be
-      absolute, and the service name must end in .service.
+      NetworkManager recovery threshold. Durations must not exceed 2147483647
+      seconds. The script path must be a direct child of /usr/local/sbin, the
+      service path filename must equal the service name and live directly in
+      /etc/systemd/system, the monotonic clock path must be absolute, and the
+      service name must end in .service.

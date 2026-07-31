@@ -8,6 +8,7 @@ rendered_script="${test_dir}/wifi-connectivity-watchdog"
 named_connection_script="${test_dir}/wifi-connectivity-watchdog-named"
 test_log="${test_dir}/calls.log"
 invalid_service_path_output="${test_dir}/invalid-service-path.log"
+invalid_recovery_range_output="${test_dir}/invalid-recovery-range.log"
 monotonic_clock_file="${test_dir}/uptime"
 watchdog_pid=""
 monotonic_clock_writer_pid=""
@@ -48,6 +49,14 @@ if ansible-playbook "${role_root}/tests/test-invalid-script-directory.yml" \
 fi
 
 grep -Fq '/usr/local/sbin' "${invalid_service_path_output}"
+
+if ansible-playbook "${role_root}/tests/test-invalid-recovery-range.yml" \
+    > "${invalid_recovery_range_output}" 2>&1; then
+    printf 'out-of-range recovery configuration unexpectedly passed\n' >&2
+    exit 1
+fi
+
+grep -Fq '2147483647' "${invalid_recovery_range_output}"
 
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${rendered_script} mode=0750" \
@@ -145,7 +154,7 @@ fi
 
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${named_connection_script} mode=0750" \
-    -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=preferred-wifi' \
+    -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=office:5g' \
     -e 'wifi_watchdog_gateway_probe="" wifi_watchdog_dns_probe=example.com' \
     -e 'wifi_watchdog_check_interval_seconds=1' \
     -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
@@ -157,5 +166,5 @@ ansible localhost -c local -m ansible.builtin.template \
 run_watchdog "${named_connection_script}" 'wlan0:connected' 2 0 'fallback-wifi'
 
 grep -Fxq 'active connection locale=C' "${test_log}"
-grep -Fxq 'connection down preferred-wifi' "${test_log}"
-grep -Fxq 'connection up preferred-wifi' "${test_log}"
+grep -Fxq 'connection down office:5g' "${test_log}"
+grep -Fxq 'connection up office:5g' "${test_log}"
