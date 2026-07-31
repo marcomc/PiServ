@@ -13,5 +13,7 @@ documented here.
   backups, explicit rollback, and optional runtime assertions.
 - Added a kernel post-install hook that refreshes the overlay after a declared
   firmware-refresh hook.
+- Added consumer input checks for overlay-name/file consistency, atomic boot
+  arguments, and trusted root-owned paths used by privileged helpers.
 - Added Galaxy-ready metadata, role documentation, validation, and release
   instructions.

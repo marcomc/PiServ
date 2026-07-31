@@ -44,6 +44,7 @@ tmp_dir=$(mktemp -d)
 mkdir -p "$tmp_dir/roles"
 ln -s "$role_root" "$tmp_dir/roles/cgroup_memory_controller"
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook --syntax-check tests/test.yml
+ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook tests/test-input-validation.yml
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook tests/test-rendered-helpers.yml
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-lint .
 rm -rf "$tmp_dir"

@@ -1,0 +1,50 @@
+---
+- name: Read cgroup memory-controller helper execution ancestors
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr
+    - /usr/local
+    - /usr/local/libexec
+  register: cgroup_memory_controller_helper_ancestors
+  changed_when: false
+  become: true
+
+- name: Require trusted cgroup memory-controller helper execution ancestors
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+      - not item.stat.islnk
+      - item.stat.uid == 0
+      - item.stat.mode[-2] not in ['2', '3', '6', '7']
+      - item.stat.mode[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      The existing {{ item.item }} ancestor must be root-owned and not writable
+      by its group or other users before executing or installing the
+      root-executed cgroup memory-controller helper.
+  loop: "{{ cgroup_memory_controller_helper_ancestors.results }}"
+
+- name: Read cgroup memory-controller helper parent directory
+  ansible.builtin.stat:
+    path: "{{ cgroup_memory_controller_helper_path | dirname }}"
+  register: cgroup_memory_controller_helper_parent
+  changed_when: false
+  become: true
+
+- name: Require a safe existing cgroup helper parent directory
+  when: cgroup_memory_controller_helper_parent.stat.exists
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_helper_parent.stat.isdir
+      - not cgroup_memory_controller_helper_parent.stat.islnk
+      - cgroup_memory_controller_helper_parent.stat.uid == 0
+      - >-
+        cgroup_memory_controller_helper_parent.stat.mode[-2]
+        not in ['2', '3', '6', '7']
+      - >-
+        cgroup_memory_controller_helper_parent.stat.mode[-1]
+        not in ['2', '3', '6', '7']
+    fail_msg: >-
+      Refusing to execute or install the cgroup memory-controller helper in an
+      unsafe parent directory.

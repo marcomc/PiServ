@@ -12,8 +12,16 @@
       - cgroup_memory_controller_overlay_name is match('^[A-Za-z0-9._-]+$')
       - cgroup_memory_controller_overlay_path is match('^/[A-Za-z0-9_./-]+\\.dtbo$')
       - "'..' not in cgroup_memory_controller_overlay_path"
+      - >-
+        (cgroup_memory_controller_overlay_path | basename)
+        == (cgroup_memory_controller_overlay_name ~ '.dtbo')
       - cgroup_memory_controller_disabled_argument | length > 0
-      - cgroup_memory_controller_helper_path is match('^/usr/local/libexec/[A-Za-z0-9_./-]+$')
+      - >-
+        cgroup_memory_controller_disabled_argument
+        is match('^[A-Za-z0-9_.-]+=[A-Za-z0-9_.-]+$')
+      - >-
+        cgroup_memory_controller_helper_path
+        is match('^/usr/local/libexec/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
       - "'..' not in cgroup_memory_controller_helper_path"
       - >-
         cgroup_memory_controller_kernel_hook_path
@@ -41,48 +49,12 @@
       non-empty vendor DTB, an exact disabled boot argument, and valid optional
       kernel-hook and systemd-service declarations.
 
+- name: Validate cgroup memory-controller helper path
+  ansible.builtin.import_tasks: validate-helper-path.yml
+
 - name: Configure enabled cgroup memory-controller boot policy
   when: cgroup_memory_controller_enabled | bool
   block:
-    - name: Install cgroup memory-controller Device Tree tooling
-      ansible.builtin.apt:
-        name: "{{ cgroup_memory_controller_packages }}"
-        state: present
-        install_recommends: false
-        update_cache: true
-        cache_valid_time: 3600
-      register: cgroup_memory_controller_packages_install
-      become: true
-
-    - name: Read cgroup memory-controller helper parent directory
-      ansible.builtin.stat:
-        path: "{{ cgroup_memory_controller_helper_path | dirname }}"
-      register: cgroup_memory_controller_helper_parent
-      become: true
-
-    - name: Require a safe existing cgroup helper parent directory
-      when: cgroup_memory_controller_helper_parent.stat.exists
-      ansible.builtin.assert:
-        that:
-          - cgroup_memory_controller_helper_parent.stat.isdir
-          - cgroup_memory_controller_helper_parent.stat.pw_name == 'root'
-          - >-
-            cgroup_memory_controller_helper_parent.stat.mode
-            is match('^0?[0-7][0-5][0-5]$')
-        fail_msg: >-
-          Refusing to install the cgroup memory-controller helper in an unsafe
-          parent directory.
-
-    - name: Create missing cgroup memory-controller helper parent directory
-      when: not cgroup_memory_controller_helper_parent.stat.exists
-      ansible.builtin.file:
-        path: "{{ cgroup_memory_controller_helper_path | dirname }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      become: true
-
     - name: Read cgroup memory-controller boot artifacts
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -99,10 +71,31 @@
         that:
           - cgroup_memory_controller_boot_artifacts.results[0].stat.isreg
           - not cgroup_memory_controller_boot_artifacts.results[0].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[0].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[0].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[0].stat.mode[-1]
+            not in ['2', '3', '6', '7']
           - cgroup_memory_controller_boot_artifacts.results[1].stat.isreg
           - not cgroup_memory_controller_boot_artifacts.results[1].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[1].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[1].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[1].stat.mode[-1]
+            not in ['2', '3', '6', '7']
           - cgroup_memory_controller_boot_artifacts.results[2].stat.isdir
           - not cgroup_memory_controller_boot_artifacts.results[2].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[2].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[2].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[2].stat.mode[-1]
+            not in ['2', '3', '6', '7']
         fail_msg: >-
           The vendor DTB, firmware configuration, and overlay directory must
           exist before the cgroup memory-controller overlay is managed.
@@ -114,6 +107,32 @@
       register: cgroup_memory_controller_kernel_refresh_dependency
       changed_when: false
       become: true
+
+    - name: Read cgroup memory-controller kernel hook ancestors
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc
+        - /etc/kernel
+        - /etc/kernel/postinst.d
+      register: cgroup_memory_controller_kernel_hook_ancestors
+      changed_when: false
+      become: true
+
+    - name: Require trusted cgroup memory-controller kernel hook ancestors
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+          - not item.stat.islnk
+          - item.stat.uid == 0
+          - item.stat.mode[-2] not in ['2', '3', '6', '7']
+          - item.stat.mode[-1] not in ['2', '3', '6', '7']
+        fail_msg: >-
+          The existing {{ item.item }} ancestor must be root-owned and not
+          writable by its group or other users before installing a root-executed
+          cgroup memory-controller kernel hook.
+      loop: "{{ cgroup_memory_controller_kernel_hook_ancestors.results }}"
 
     - name: Require the declared firmware-refresh hook to run before this role hook
       when: cgroup_memory_controller_kernel_refresh_dependency_path | length > 0
@@ -127,6 +146,16 @@
           The declared firmware-refresh hook must exist and sort before the
           managed cgroup memory-controller kernel hook.
 
+    - name: Create missing cgroup memory-controller helper parent directory
+      when: not cgroup_memory_controller_helper_parent.stat.exists
+      ansible.builtin.file:
+        path: "{{ cgroup_memory_controller_helper_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
     - name: Create cgroup memory-controller backup directory
       ansible.builtin.file:
         path: "{{ cgroup_memory_controller_backup_dir }}"
@@ -134,6 +163,16 @@
         owner: root
         group: root
         mode: "0700"
+      become: true
+
+    - name: Install cgroup memory-controller Device Tree tooling
+      ansible.builtin.apt:
+        name: "{{ cgroup_memory_controller_packages }}"
+        state: present
+        install_recommends: false
+        update_cache: true
+        cache_valid_time: 3600
+      register: cgroup_memory_controller_packages_install
       become: true
 
     - name: Install cgroup memory-controller overlay helper

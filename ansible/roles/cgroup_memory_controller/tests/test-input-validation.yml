@@ -1,0 +1,50 @@
+---
+- name: Test cgroup_memory_controller input validation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+  tasks:
+    - name: Reject an overlay path that does not match its configured name
+      block:
+        - name: Validate inconsistent cgroup memory-controller overlay input
+          ansible.builtin.include_role:
+            name: "{{ cgroup_memory_controller_test_role_path }}"
+            tasks_from: configuration.yml
+          vars:
+            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+            cgroup_memory_controller_overlay_name: expected-overlay
+            cgroup_memory_controller_overlay_path: >-
+              /boot/firmware/overlays/different-overlay.dtbo
+
+        - name: Require inconsistent overlay input to fail validation
+          ansible.builtin.fail:
+            msg: The inconsistent overlay input unexpectedly passed validation.
+      rescue:
+        - name: Assert inconsistent overlay input failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                'policy requires safe absolute paths'
+                in ansible_failed_result.msg
+
+    - name: Reject a non-atomic disabled boot argument
+      block:
+        - name: Validate malformed cgroup memory-controller boot argument
+          ansible.builtin.include_role:
+            name: "{{ cgroup_memory_controller_test_role_path }}"
+            tasks_from: configuration.yml
+          vars:
+            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+            cgroup_memory_controller_disabled_argument: cgroup_disable memory
+
+        - name: Require malformed boot argument to fail validation
+          ansible.builtin.fail:
+            msg: The malformed boot argument unexpectedly passed validation.
+      rescue:
+        - name: Assert malformed boot argument failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                'policy requires safe absolute paths'
+                in ansible_failed_result.msg
