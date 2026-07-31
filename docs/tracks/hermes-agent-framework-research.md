@@ -20,11 +20,11 @@ plane. The framework's memory, user profile, sessions, skills, provider
 configuration, and capability policy are service data held on PiServ; they are
 not model weights. Direct Hermes Chat is this service's browser interface.
 
-PiServ cannot be assumed to host a compatible local inference model. Hermes
+PiServ cannot be assumed to host a suitable local inference provider. Hermes
 requires a 64K context window for its agentic workflow, which excludes the
 compact 32K models that were plausible candidates for PiServ's 4 GB memory
-budget. Gemma 4 E2B and E4B have a native 128K context window, but their
-actual 64K memory use on this Debian ARM64 host remains a benchmark gate. This
+budget. The live 64K benchmark shows both Granite 3.3 2B and Gemma 4 E2B can
+serve a visible response, although Granite leaves tight memory headroom. This
 does not prevent Hermes itself from running on PiServ while the model provider
 runs elsewhere.
 
@@ -38,17 +38,20 @@ terminal and filesystem tools must remain isolated.
 | Component | Role | Decision |
 | --- | --- | --- |
 | Nous Hermes Agent + Codex | PiServ's persistent control plane and first provider | Validate as a sandboxed integration |
-| Gemma 4 E2B mobile text-only endpoint | Candidate PiServ local provider | Switch only after a 64K memory and latency benchmark |
+| Gemma 4 E2B mobile text-only endpoint | PiServ provider-migration candidate | Test against Hermes capabilities before selection |
+| Granite 3.3 2B Instruct endpoint | PiServ provider-migration candidate | Test against Hermes capabilities before selection |
+| Llama 3.2 1B Instruct endpoint | Lower-memory comparison provider | Defer until the operator accepts Meta's upstream model terms |
 | Custom 64K local endpoint | Future Mac or dedicated inference-host provider | Switch only after model and tool benchmarks |
 
 ## Evidence
 
-The following observations are current as of 2026-07-30:
+The following observations are current as of 2026-07-31:
 
 | Area | Evidence | Implication |
 | --- | --- | --- |
 | PiServ | The recorded 2026-07-08 baseline is Debian 13 `trixie`, `arm64`, with 4.0 GiB RAM and 2.0 GiB zram. | There is no realistic headroom for a general 3B+ model beside existing services. |
-| Hermes local models | Hermes documents a 64K minimum context for agentic use; Gemma 4 E2B and E4B document a native 128K context window. | The compact 32K starting models are excluded, while Gemma 4 E2B mobile text-only remains a PiServ benchmark candidate. |
+| Hermes local models | Both models completed a live 64K loopback benchmark with a 3.2 GiB cgroup limit and q4_0 KV cache. | Granite returned visible content with about 650 MiB available; Gemma required a 128-token completion budget because it emits a reasoning channel before its visible response. |
+| Local alternatives | Granite 3.3 2B Instruct has 128K context and function-calling support; Llama 3.2 1B has 128K native context but needs license acceptance. | Test Granite provider migration; keep Llama as a separately authorized low-memory baseline. |
 | Hermes learning | Hermes persists curated memory and skills independently of its provider selection. | Retain Hermes service data on PiServ while switching backends. |
 | Hermes providers | Hermes supports OpenAI Codex, custom OpenAI-compatible endpoints, and configured fallbacks. | Codex can be the initial provider and a future LAN model can replace it. |
 
@@ -75,6 +78,10 @@ The pre-authentication runtime was implemented and validated live on
   completed successfully.
 - The deployment is codified in `ansible/roles/hermes_agent` and
   `ansible/playbooks/hermes-agent.yml`.
+- llama.cpp b9637 serves checksum-pinned Gemma 4 E2B and Granite 3.3 2B only
+  on loopback. The 2026-07-31 64K test left about 650 MiB available for Granite
+  and 1.3 GiB for Gemma. Both returned visible content and stopped cleanly;
+  Gemma requires 128 completion tokens because it emits reasoning first.
 
 ChatGPT device login and authenticated inference remain intentionally pending
 for the operator. The full upstream web dependency installation reported eight
@@ -93,11 +100,11 @@ model calls; it supports OpenAI Codex and saved custom OpenAI-compatible
 endpoints. It also supports a fallback-provider chain.
 
 The first provider can be Codex authenticated by ChatGPT Pro. Later, point the
-same Hermes installation at a 64K-capable Gemma 4 E2B mobile text-only endpoint
-on PiServ if it passes the benchmark, or at a model hosted on the Mac or a
-dedicated machine. The persistent memory, user profile, skills, sessions, and
-audit trail stay on PiServ as long as the managed Hermes data directory is
-preserved and backed up.
+same Hermes installation at either local candidate endpoint on PiServ only after
+a provider-migration test, or at a model hosted on the Mac or a dedicated
+machine. The persistent memory, user profile, skills, sessions, and audit trail
+stay on PiServ as long as the managed Hermes data directory is preserved and
+backed up.
 
 This is not model training. Hermes' self-learning loop records facts and
 procedures; model quality affects what it proposes, so new or changed skills
@@ -134,8 +141,8 @@ Nous Hermes Agent on PiServ (unprivileged)
         |                                Home Assistant MCP / Assist API
         |                                approved maintenance operations
         |
-        +-- candidate local provider --> Gemma 4 E2B mobile text-only on PiServ
-        |                                after a 64K benchmark
+        +-- candidate local providers --> Granite 3.3 2B or Gemma 4 E2B on PiServ
+        |                                 after provider-migration tests
         |
         +-- later provider --> Mac or future LAN 64K local-model endpoint
 ```
@@ -264,9 +271,9 @@ allowlist, and first backup are complete. The remaining gates are:
 3. **Codex:** complete subscription login and prove pre-authorized route
    selection, sandbox isolation, provenance notice, content-free audit capture,
    result redaction, and graceful handling of plan usage limits.
-4. **Gemma benchmark:** run Gemma 4 E2B mobile text-only with an actual 64K
-   context on PiServ, measuring memory, latency, service stability, and the
-   effect on existing workloads.
+4. **Local-provider selection:** run a representative capability and coexistence
+   suite against Granite and Gemma. Add Llama 3.2 1B only after upstream license
+   acceptance.
 5. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
    switch Hermes from Codex to it, and rerun a fixed suite of conversations and
    read-only tools. The future model must offer at least 64K context.
@@ -293,6 +300,8 @@ firewall policy, and authenticated health checks in Ansible.
 - [Hermes Agent provider runtime and fallbacks](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/provider-runtime.md)
 - [Hermes Agent vision](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/vision.md)
 - [Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4)
+- [IBM Granite 3.3 2B Instruct model card](https://huggingface.co/ibm-granite/granite-3.3-2b-instruct)
+- [Llama 3.2 1B Instruct model card](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)
 - [Hermes Agent Home Assistant integration](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/messaging/homeassistant.md)
 - [Hermes Agent Codex App-Server runtime](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/codex-app-server-runtime.md)
 - [Hermes Agent security guidance](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/security.md)

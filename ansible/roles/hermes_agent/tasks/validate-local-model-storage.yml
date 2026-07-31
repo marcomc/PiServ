@@ -1,0 +1,44 @@
+---
+- name: Assert local-model storage configuration
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_models_dir is match('^/')
+      - hermes_agent_local_models_context_size >= 64000
+      - hermes_agent_local_models_host == '127.0.0.1'
+      - >-
+        hermes_agent_local_models | map(attribute='id') | unique | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='port') | unique | length ==
+        hermes_agent_local_models | length
+  when: hermes_agent_manage_local_models
+
+- name: Read available local-model storage capacity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/df
+      - --block-size=1
+      - --output=avail
+      - "{{ hermes_agent_local_models_dir | dirname }}"
+  register: hermes_agent_local_models_capacity
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_local_models
+
+- name: Record available local-model storage capacity
+  ansible.builtin.set_fact:
+    hermes_agent_local_models_available_bytes: >-
+      {{ hermes_agent_local_models_capacity.stdout_lines[-1] | trim | int }}
+  when: hermes_agent_manage_local_models
+
+- name: Assert local-model storage capacity
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_local_models_available_bytes >=
+        ((hermes_agent_local_models | map(attribute='size_bytes') | sum) +
+        hermes_agent_local_models_min_free_bytes)
+    fail_msg: >-
+      Local-model storage needs the configured model files plus the configured
+      free-space reserve before this deployment can download anything.
+  when: hermes_agent_manage_local_models

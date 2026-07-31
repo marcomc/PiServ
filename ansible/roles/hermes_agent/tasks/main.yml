@@ -12,11 +12,19 @@
 - name: Configure Hermes Agent runtime identity
   ansible.builtin.import_tasks: runtime-user.yml
 
+- name: Validate Hermes Agent local-model storage
+  ansible.builtin.import_tasks: validate-local-model-storage.yml
+  when: hermes_agent_manage_local_models
+
 - name: Install pinned Hermes Agent runtime
   ansible.builtin.import_tasks: install-hermes.yml
 
 - name: Install pinned Codex CLI
   ansible.builtin.import_tasks: install-codex.yml
+
+- name: Install local-model benchmark runtime
+  ansible.builtin.import_tasks: local-models.yml
+  when: hermes_agent_manage_local_models
 
 - name: Configure Hermes Agent state and services
   ansible.builtin.import_tasks: configure.yml

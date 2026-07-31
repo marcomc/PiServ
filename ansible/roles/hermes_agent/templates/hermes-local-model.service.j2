@@ -1,0 +1,54 @@
+[Unit]
+Description=Hermes local model: {{ item.display_name }}
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor={{ hermes_agent_local_models_dir }}
+{% set conflicting_units = [] %}
+{% for candidate in hermes_agent_local_models if candidate.id != item.id %}
+{% set _ = conflicting_units.append('hermes-local-model-' ~ candidate.id ~ '.service') %}
+{% endfor %}
+{% if conflicting_units | length > 0 %}
+Conflicts={{ conflicting_units | join(' ') }}
+{% endif %}
+ConditionPathExists={{ hermes_agent_local_models_dir }}/{{ item.filename }}
+
+[Service]
+Type=simple
+User={{ hermes_agent_user }}
+Group={{ hermes_agent_group }}
+WorkingDirectory={{ hermes_agent_home }}
+ExecStart={{ hermes_agent_local_model_llama_server_path }} --model {{ hermes_agent_local_models_dir }}/{{ item.filename }} --alias {{ item.id }} --host {{ hermes_agent_local_models_host }} --port {{ item.port }} --ctx-size {{ hermes_agent_local_models_context_size }} --parallel 1 --threads {{ hermes_agent_local_models_threads }} --threads-batch {{ hermes_agent_local_models_threads }} --cache-type-k {{ hermes_agent_local_models_cache_type_k }} --cache-type-v {{ hermes_agent_local_models_cache_type_v }} --jinja --no-mmproj --no-webui
+Restart=no
+TimeoutStartSec=10min
+TimeoutStopSec=30s
+KillSignal=SIGINT
+MemoryHigh={{ hermes_agent_local_models_memory_high }}
+MemoryMax={{ hermes_agent_local_models_memory_max }}
+MemorySwapMax={{ hermes_agent_local_models_memory_swap_max }}
+CPUQuota=300%
+TasksMax=64
+OOMPolicy=stop
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadOnlyPaths={{ hermes_agent_local_models_dir }}
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -77,6 +77,10 @@
   - Actions:
     - Complete the one-time ChatGPT device login and verify an authenticated
       Hermes turn plus direct Codex CLI use without an API key.
+    - Run capability and provider-migration tests against the 64K Granite 3.3
+      2B and Gemma 4 E2B endpoints before selecting a local provider.
+    - Add Llama 3.2 1B only after accepting Meta's upstream model terms and
+      recording a checksum-pinned official GGUF source.
     - Implement pre-authorized Codex routing with a per-response inference
       provenance notice and audit records that exclude request and response
       contents.

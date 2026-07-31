@@ -121,11 +121,13 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_model_llama_server_path` | `/usr/local/bin/llama-server` | Active llama.cpp server. |
 | `hermes_agent_local_models_dir` | `{{ hermes_agent_home }}/models` | Model storage directory. |
 | `hermes_agent_local_models_results_dir` | `benchmark-results` child | Benchmark result directory. |
-| `hermes_agent_local_models_storage_path` | model-directory parent | Existing path checked for capacity. |
 | `hermes_agent_local_models_min_free_bytes` | `10737418240` | Required remaining free space after download. |
 | `hermes_agent_local_models_host` | `127.0.0.1` | Local-model service bind address. |
 | `hermes_agent_local_models_context_size` | `65536` | Context window used by services. |
 | `hermes_agent_local_models_threads` | `3` | Inference and batch thread count. |
+| `hermes_agent_local_models_benchmark_max_tokens` | `128` | Completion-token budget for the synthetic probe. |
+| `hermes_agent_local_models_cache_type_k` | `q4_0` | Key-cache quantization for memory control. |
+| `hermes_agent_local_models_cache_type_v` | `q4_0` | Value-cache quantization for memory control. |
 | `hermes_agent_local_models_memory_high` | `2500M` | systemd memory pressure threshold. |
 | `hermes_agent_local_models_memory_max` | `3200M` | systemd memory hard limit. |
 | `hermes_agent_local_models_memory_swap_max` | `512M` | systemd swap limit. |
@@ -181,10 +183,10 @@ role installs a pinned ARM64 llama.cpp release and checksum-pinned model files,
 then provides one loopback-only systemd service per configured model. It does
 not create, format, mount, or otherwise adopt storage.
 
-Set `hermes_agent_local_models_dir` and
-`hermes_agent_local_models_storage_path` in the consuming playbook when models
-belong on a dedicated volume. The role checks that the storage path has enough
-space for the configured files plus `hermes_agent_local_models_min_free_bytes`.
+Set `hermes_agent_local_models_dir` in the consuming playbook when models belong
+on a dedicated volume. The role checks the filesystem containing that directory
+for enough space for the configured files plus
+`hermes_agent_local_models_min_free_bytes`.
 
 ## Testing
 

@@ -83,3 +83,52 @@ hermes_agent_backup_retention_days: 30
 hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
 hermes_agent_backup_timezone: UTC
 hermes_agent_backup_randomized_delay: 30m
+hermes_agent_manage_local_models: false
+hermes_agent_local_model_packages:
+  - aria2
+  - ca-certificates
+  - curl
+  - jq
+hermes_agent_local_model_runtime_version: b9637
+hermes_agent_local_model_runtime_archive_url: >-
+  https://github.com/ggml-org/llama.cpp/releases/download/{{
+  hermes_agent_local_model_runtime_version
+  }}/llama-{{ hermes_agent_local_model_runtime_version }}-bin-ubuntu-arm64.tar.gz
+hermes_agent_local_model_runtime_archive_checksum: >-
+  sha256:211d9e9ee738698beb7ca271be82661ae2b5da3fbb489cf7d9e4e6ed601be106
+hermes_agent_local_model_runtime_dir: >-
+  /usr/local/lib/llama.cpp/{{ hermes_agent_local_model_runtime_version }}
+hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli
+hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server
+hermes_agent_local_models_dir: "{{ hermes_agent_home }}/models"
+hermes_agent_local_models_results_dir: >-
+  {{ hermes_agent_local_models_dir }}/benchmark-results
+hermes_agent_local_models_min_free_bytes: 10737418240
+hermes_agent_local_models_host: 127.0.0.1
+hermes_agent_local_models_context_size: 65536
+hermes_agent_local_models_threads: 3
+hermes_agent_local_models_benchmark_max_tokens: 128
+hermes_agent_local_models_cache_type_k: q4_0
+hermes_agent_local_models_cache_type_v: q4_0
+hermes_agent_local_models_memory_high: 2500M
+hermes_agent_local_models_memory_max: 3200M
+hermes_agent_local_models_memory_swap_max: 512M
+hermes_agent_local_model_benchmark_helper_path: >-
+  /usr/local/libexec/hermes-agent/benchmark-local-model
+hermes_agent_local_models:
+  - id: gemma-4-e2b
+    display_name: Gemma 4 E2B text-only Q4_0
+    repository: ggml-org/gemma-4-E2B-it-GGUF
+    revision: b4243c156154b6dca9324415f8c7ccc098b4aed1
+    filename: gemma-4-E2B-it-Q4_0.gguf
+    sha256: 8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52
+    size_bytes: 2841481184
+    port: 18081
+  - id: granite-3-3-2b
+    display_name: Granite 3.3 2B Instruct Q4_K_M
+    repository: ibm-granite/granite-3.3-2b-instruct-GGUF
+    revision: 7cdf86ccd1f1bb3491c9b7017b033f2e51367397
+    filename: granite-3.3-2b-instruct-Q4_K_M.gguf
+    sha256: ac71e9e32c0bea919b409c5918f69ca74339854b0319c5065e4e9fb6d95c4852
+    size_bytes: 1545303328
+    port: 18082

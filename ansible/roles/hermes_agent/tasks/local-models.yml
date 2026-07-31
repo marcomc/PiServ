@@ -1,0 +1,253 @@
+---
+- name: Install local-model benchmark packages
+  ansible.builtin.apt:
+    name: "{{ hermes_agent_local_model_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create llama.cpp download cache
+  ansible.builtin.file:
+    path: "{{ hermes_agent_download_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download checksum-pinned llama.cpp ARM64 archive
+  ansible.builtin.get_url:
+    url: "{{ hermes_agent_local_model_runtime_archive_url }}"
+    dest: >-
+      {{ hermes_agent_download_cache_dir }}/llama-{{
+      hermes_agent_local_model_runtime_version }}-ubuntu-arm64.tar.gz
+    checksum: "{{ hermes_agent_local_model_runtime_archive_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create versioned llama.cpp installation directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_local_model_runtime_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect versioned llama-server binary
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_model_runtime_dir }}/llama-server"
+  register: hermes_agent_llama_server_binary
+
+- name: Extract llama.cpp ARM64 archive
+  ansible.builtin.unarchive:
+    src: >-
+      {{ hermes_agent_download_cache_dir }}/llama-{{
+      hermes_agent_local_model_runtime_version }}-ubuntu-arm64.tar.gz
+    dest: "{{ hermes_agent_local_model_runtime_dir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_llama_server_binary.stat.exists
+
+- name: Link active llama.cpp binaries
+  ansible.builtin.file:
+    src: "{{ hermes_agent_local_model_runtime_dir }}/{{ item }}"
+    dest: >-
+      {{ hermes_agent_local_model_llama_cli_path
+      if item == 'llama-cli' else hermes_agent_local_model_llama_server_path }}
+    state: link
+    owner: root
+    group: root
+    force: true
+  loop:
+    - llama-cli
+    - llama-server
+  when: not ansible_check_mode or hermes_agent_llama_server_binary.stat.exists
+
+- name: Create local model directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: "{{ hermes_agent_group }}"
+    mode: "0750"
+  loop:
+    - "{{ hermes_agent_local_models_dir }}"
+    - "{{ hermes_agent_local_models_results_dir }}"
+
+- name: Inspect downloaded local benchmark models
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_local_model_files
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  check_mode: false
+
+- name: Assert existing local benchmark models match their pinned checksums
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        item.stat.checksum == model.sha256
+    fail_msg: >-
+      {{ hermes_agent_local_models_dir }}/{{ model.filename }} exists but does
+      not match its configured SHA-256.
+      Remove or replace it explicitly before this role can proceed.
+  loop: "{{ hermes_agent_local_model_files.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+    loop_var: item
+  vars:
+    model: "{{ item.item }}"
+
+- name: Download resumable local benchmark model parts
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/aria2c
+      - --continue=true
+      - --file-allocation=none
+      - --max-connection-per-server=8
+      - --min-split-size=16M
+      - --split=8
+      - --dir={{ hermes_agent_local_models_dir }}
+      - --out={{ item.filename }}.partial
+      - >-
+        https://huggingface.co/{{ item.repository }}/resolve/{{ item.revision }}/{{
+        item.filename }}
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - >-
+      not (
+        hermes_agent_local_model_files.results
+        | selectattr('item.id', 'equalto', item.id)
+        | map(attribute='stat.exists')
+        | first
+      )
+
+- name: Inspect resumable local benchmark model parts
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}.partial"
+    checksum_algorithm: sha256
+  register: hermes_agent_local_model_parts
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  check_mode: false
+
+- name: Assert resumable local benchmark model checksums
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.checksum == model.sha256
+    fail_msg: >-
+      {{ hermes_agent_local_models_dir }}/{{ model.filename }}.partial does not
+      match its configured SHA-256 after
+      download. Keep the partial file only if it can be resumed safely.
+  loop: "{{ hermes_agent_local_model_parts.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+    loop_var: item
+  vars:
+    model: "{{ item.item }}"
+  when:
+    - not ansible_check_mode
+    - >-
+      not (
+        hermes_agent_local_model_files.results
+        | selectattr('item.id', 'equalto', item.item.id)
+        | map(attribute='stat.exists')
+        | first
+      )
+
+- name: Activate checksum-verified local benchmark models
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --
+      - "{{ item.filename }}.partial"
+      - "{{ item.filename }}"
+    chdir: "{{ hermes_agent_local_models_dir }}"
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - >-
+      not (
+        hermes_agent_local_model_files.results
+        | selectattr('item.id', 'equalto', item.id)
+        | map(attribute='stat.exists')
+        | first
+      )
+
+- name: Restrict activated local benchmark model files
+  ansible.builtin.file:
+    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}"
+    owner: root
+    group: "{{ hermes_agent_group }}"
+    mode: "0640"
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: not ansible_check_mode
+
+- name: Install loopback local-model service units
+  ansible.builtin.template:
+    src: hermes-local-model.service.j2
+    dest: "/etc/systemd/system/hermes-local-model-{{ item.id }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  notify: Reload systemd daemon
+
+- name: Create local-model benchmark helper directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_local_model_benchmark_helper_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install local-model benchmark helper
+  ansible.builtin.template:
+    src: benchmark-hermes-local-model.sh.j2
+    dest: "{{ hermes_agent_local_model_benchmark_helper_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+  notify: Reload systemd daemon
+
+- name: Flush local-model unit changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Read installed llama-server version
+  ansible.builtin.command:
+    argv:
+      - "{{ hermes_agent_local_model_llama_server_path }}"
+      - --version
+  register: hermes_agent_llama_server_version
+  changed_when: false
+  check_mode: false
+
+- name: Assert installed llama-server runs
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_llama_server_version.rc == 0
+    fail_msg: >-
+      llama-server failed to execute from
+      {{ hermes_agent_local_model_llama_server_path }}.

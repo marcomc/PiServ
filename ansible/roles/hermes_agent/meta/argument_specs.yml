@@ -169,9 +169,6 @@ argument_specs:
       hermes_agent_local_models_results_dir:
         type: path
         description: Directory for local-model benchmark results.
-      hermes_agent_local_models_storage_path:
-        type: path
-        description: Existing path used to check free capacity before downloads.
       hermes_agent_local_models_min_free_bytes:
         type: int
         default: 10737418240
@@ -190,6 +187,18 @@ argument_specs:
         type: int
         default: 3
         description: Inference and batch thread count for each local model service.
+      hermes_agent_local_models_benchmark_max_tokens:
+        type: int
+        default: 128
+        description: Completion-token budget for the synthetic local-model probe.
+      hermes_agent_local_models_cache_type_k:
+        type: str
+        default: q4_0
+        description: Key-cache quantization used to constrain local-model memory.
+      hermes_agent_local_models_cache_type_v:
+        type: str
+        default: q4_0
+        description: Value-cache quantization used to constrain local-model memory.
       hermes_agent_local_models_memory_high:
         type: str
         default: 2500M

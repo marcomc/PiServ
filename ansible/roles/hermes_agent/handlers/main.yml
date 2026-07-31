@@ -7,3 +7,8 @@
   when:
     - hermes_agent_manage_dashboard
     - not ansible_check_mode
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: not ansible_check_mode

@@ -83,6 +83,9 @@
 - Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health
   assertions, one-command provider-login helper, runbook, and updated
   architecture track.
+- Added checksum-pinned Gemma 4 E2B and Granite 3.3 2B local-model benchmarks
+  through loopback-only llama.cpp systemd services, with 64K context,
+  constrained KV cache, memory limits, integrity checks, and result capture.
 
 ## [0.3.0] - 2026-07-29
 

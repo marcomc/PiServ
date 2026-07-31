@@ -5,6 +5,7 @@
 - [Purpose](#purpose)
 - [Current State](#current-state)
 - [Planned Inference Routing](#planned-inference-routing)
+- [Local Model Benchmarks](#local-model-benchmarks)
 - [Deploy](#deploy)
 - [Complete ChatGPT Login](#complete-chatgpt-login)
 - [Open the Private Dashboard](#open-the-private-dashboard)
@@ -20,7 +21,7 @@ sessions, and audit data; Codex is the initial inference provider.
 
 ## Current State
 
-Live state observed on 2026-07-30:
+Live state observed on 2026-07-31:
 
 | Item | State |
 | --- | --- |
@@ -62,9 +63,70 @@ enable any currently disabled toolset.
 The current deployment has no automatic route selection and keeps the vision
 toolset disabled. This is a planned policy, not an active routing feature.
 
+## Local Model Benchmarks
+
+The Hermes deployment also manages a loopback-only `llama.cpp` benchmark
+runtime. It stores checksum-pinned model files on the filesystem containing
+`/var/lib/hermes-agent/models`, and the benchmark starts exactly one service
+before stopping it on completion. No local model is configured as the Hermes
+provider until it passes the benchmark and a separate provider-migration test.
+
+| Model ID | Model | Context | Purpose |
+| --- | --- | ---: | --- |
+| `gemma-4-e2b` | Gemma 4 E2B text-only Q4_0 | 64K configured | Primary PiServ candidate |
+| `granite-3-3-2b` | Granite 3.3 2B Instruct Q4_K_M | 64K configured | Direct open-license comparison |
+
+The model files consume about 4.1 GiB. Deployment checks the filesystem that
+contains the configured model directory and refuses to download unless it has
+at least 10 GiB beyond the configured files. With the default PiServ path,
+this is the root filesystem, currently on the NVMe device; the external
+`/dev/sda1` SSD is not used for model files. Both server units bind only to
+`127.0.0.1`, use a `q4_0` KV cache for the 64K benchmark, and have a 3.2 GiB cgroup
+memory limit, and conflict with each other. A failed 64K Gemma start therefore
+fails inside its service cgroup instead of enabling a fallback or keeping a
+model resident.
+
+Live benchmarks on 2026-07-31 used a synthetic non-sensitive response check:
+
+| Model | Result | Available memory after response | Throughput |
+| --- | --- | ---: | --- |
+| Granite 3.3 2B | Visible response; clean shutdown | 650 MiB | 19.2 prompt tok/s; 5.9 generation tok/s |
+| Gemma 4 E2B | Visible response; clean shutdown | 1.3 GiB | 19.1 prompt tok/s; 3.7 generation tok/s |
+
+Gemma's initial 64-token probe was truncated because it generated about 102
+tokens of `reasoning_content` before its five-token visible response. The
+benchmark now uses 128 completion tokens, records the completion reason and
+reasoning-channel metadata without storing that reasoning, and fails when a
+model finishes without visible content. Both models are provider-migration
+candidates; neither is selected as Hermes' provider. Granite's remaining
+memory is tight.
+
+Llama 3.2 1B remains a possible lower-memory comparison but is not included in
+the automated download because Meta gates the official GGUF repository behind
+its license acceptance. Do not substitute an unverified community conversion;
+add it only after the operator accepts the upstream terms and provides an
+independently checksum-pinned source.
+
+Run one benchmark at a time:
+
+```sh
+ssh admin@PiServ.local \
+  'sudo /usr/local/libexec/hermes-agent/benchmark-local-model granite-3-3-2b'
+ssh admin@PiServ.local \
+  'sudo /usr/local/libexec/hermes-agent/benchmark-local-model gemma-4-e2b'
+```
+
+Each command writes a synthetic, non-sensitive JSON result under
+`/var/lib/hermes-agent/models/benchmark-results/`. It records actual configured
+server properties, response timings, memory availability before and after the
+response, and cgroup memory figures. The test does not query Cloud Corpus, Home
+Assistant, or Hermes tools.
+
 ## Deploy
 
-The external SSD must be mounted and the `external-data` group must exist:
+The Hermes backup policy requires the external SSD and the `external-data`
+group. Local-model files do not: they use the filesystem containing the
+configured model directory, which is the root filesystem on PiServ today.
 
 ```sh
 findmnt /mnt/external-data

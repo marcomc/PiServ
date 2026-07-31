@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ne 1 ]]; then
+  printf 'Usage: %s MODEL_ID\n' "$0" >&2
+  exit 64
+fi
+
+model_id="$1"
+if [[ ! "${model_id}" =~ ^[a-z0-9-]+$ ]]; then
+  printf 'Invalid local model identifier: %s\n' "${model_id}" >&2
+  exit 64
+fi
+
+service_name="hermes-local-model-${model_id}.service"
+if ! systemctl cat "${service_name}" >/dev/null; then
+  printf 'Unknown configured local model: %s\n' "${model_id}" >&2
+  exit 64
+fi
+
+model_port="$(systemctl show "${service_name}" --property=ExecStart --value \
+  | sed -n 's/.*--port \([0-9][0-9]*\).*/\1/p')"
+if [[ ! "${model_port}" =~ ^[0-9]+$ ]]; then
+  printf 'Unable to determine local model port: %s\n' "${model_id}" >&2
+  exit 70
+fi
+
+service_url="http://{{ hermes_agent_local_models_host }}:${model_port}"
+timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
+result_path="{{ hermes_agent_local_models_results_dir }}/${model_id}-${timestamp}.json"
+memory_before="$(awk '/MemAvailable:/ { print $2 * 1024 }' /proc/meminfo)"
+
+cleanup() {
+  systemctl stop "${service_name}" || true
+}
+trap cleanup EXIT
+
+systemctl reset-failed "${service_name}" 2>/dev/null || true
+systemctl start "${service_name}"
+
+for _ in $(seq 1 120); do
+  if curl --fail --silent "${service_url}/health" >/dev/null 2>&1; then
+    break
+  fi
+  service_active_state="$(systemctl show "${service_name}" --property=ActiveState --value || true)"
+  if [[ "${service_active_state}" == "failed" ]]; then
+    printf 'Local model service failed before becoming healthy: %s\n' \
+      "${service_name}" >&2
+    exit 70
+  fi
+  sleep 5
+done
+
+curl --fail --silent --show-error "${service_url}/health" >/dev/null
+properties="$(curl --fail --silent --show-error "${service_url}/props")"
+response="$(curl --fail --silent --show-error \
+  --header 'Content-Type: application/json' \
+  --data '{"model":"'"${model_id}"'","messages":[{"role":"user","content":"Reply with exactly: HERMES_LOCAL_MODEL_OK"}],"temperature":0,"max_tokens":{{ hermes_agent_local_models_benchmark_max_tokens }},"stream":false}' \
+  "${service_url}/v1/chat/completions")"
+memory_after="$(awk '/MemAvailable:/ { print $2 * 1024 }' /proc/meminfo)"
+service_state="$(systemctl show "${service_name}" --property=MemoryCurrent --property=MemoryPeak --property=ExecMainStatus)"
+response_finish_reason="$(jq --raw-output '.choices[0].finish_reason // empty' <<<"${response}")"
+response_content="$(jq --raw-output '.choices[0].message.content // empty' <<<"${response}")"
+
+jq --null-input \
+  --arg model_id "${model_id}" \
+  --arg timestamp "${timestamp}" \
+  --arg service_name "${service_name}" \
+  --arg service_url "${service_url}" \
+  --arg service_state "${service_state}" \
+  --argjson properties "${properties}" \
+  --argjson response "${response}" \
+  --argjson memory_before "${memory_before}" \
+  --argjson memory_after "${memory_after}" \
+  '{
+    model_id: $model_id,
+    timestamp_utc: $timestamp,
+    service_name: $service_name,
+    service_url: $service_url,
+    memory_available_bytes: {
+      before: $memory_before,
+      after: $memory_after
+    },
+    service_state: $service_state,
+    server_properties: $properties,
+    response: {
+      finish_reason: $response.choices[0].finish_reason,
+      usage: $response.usage,
+      timings: $response.timings,
+      content: $response.choices[0].message.content,
+      content_length: ($response.choices[0].message.content // "" | length),
+      reasoning_content_present: (($response.choices[0].message.reasoning_content // "" | length) > 0),
+      reasoning_content_length: ($response.choices[0].message.reasoning_content // "" | length)
+    }
+  }' > "${result_path}"
+
+printf '%s\n' "${result_path}"
+
+if [[ "${response_finish_reason}" != "stop" || -z "${response_content}" ]]; then
+  printf 'Synthetic local-model probe did not return visible completed content: %s\n' \
+    "${model_id}" >&2
+  exit 65
+fi
