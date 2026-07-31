@@ -1,0 +1,10 @@
+---
+- name: Configure PiServ Wi-Fi connectivity watchdog
+  hosts: piserv
+  gather_facts: true
+  roles:
+    - role: wifi_watchdog
+      vars:
+        wifi_watchdog_interface: wlan0
+        wifi_watchdog_service_name: piserv-wifi-watchdog.service
+        wifi_watchdog_script_path: /usr/local/sbin/piserv-wifi-watchdog

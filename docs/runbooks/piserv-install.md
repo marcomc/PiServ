@@ -102,17 +102,19 @@ The entry point imports these playbooks in order:
 2. `tailscale.yml`
 3. `firewall.yml`
 4. `piserv-base.yml`
-5. `external-storage.yml`
-6. `freenove-post-os.yml`
-7. `pcloudcc-install.yml`
-8. `ha-mqtt-agent.yml`
-9. `jackett.yml`
-10. `raiplaysound-cli-daily-sync.yml`
+5. `wifi-watchdog.yml`
+6. `external-storage.yml`
+7. `freenove-post-os.yml`
+8. `pcloudcc-install.yml`
+9. `ha-mqtt-agent.yml`
+10. `jackett.yml`
+11. `raiplaysound-cli-daily-sync.yml`
 
 The storage preflight rejects an invalid identity before any host mutation.
 The remaining order keeps Tailscale and the firewall ready before the base
-playbook's listener preconditions, and installs pCloud before the RaiPlaySound
-workload that depends on its mount health.
+playbook's listener preconditions, configures Wi-Fi recovery with the base host
+policy, and installs pCloud before the RaiPlaySound workload that depends on
+its mount health.
 
 ## Excluded Playbooks
 

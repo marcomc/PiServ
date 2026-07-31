@@ -28,6 +28,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Home Assistant MQTT Agent](ha-mqtt-agent.md) | Install and validate MQTT discovery telemetry |
 | [System baseline and inventory](system-baseline-inventory.md) | Capture live OS, storage, network, service, and socket state |
 | [System mail notifications](system-mail-notifications.md) | Configure host mail delivery and notification checks |
+| [Wi-Fi connectivity watchdog](wifi-connectivity-watchdog.md) | Recover NetworkManager Wi-Fi connectivity progressively |
 | [Tailscale access](tailscale-access.md) | Install, login, route, verify, and debug Tailscale access |
 | [Tailscale HA subnet routing](tailscale-ha-subnet-routing.md) | Approve, verify, and recover PiServ subnet-router participation |
 | [UFW firewall policy](ufw-firewall-policy.md) | Apply, verify, modify, and recover the host firewall |

@@ -1,0 +1,27 @@
+---
+- name: Require a systemd-managed target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.service_mgr == 'systemd'
+    fail_msg: >-
+      The wifi_watchdog role requires systemd. Detected service manager:
+      {{ ansible_facts.service_mgr | default('unknown') }}.
+
+- name: Require Wi-Fi watchdog runtime commands
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - sh
+      - -c
+      - "command -v {{ item }}"
+  loop:
+    - awk
+    - bash
+    - getent
+    - ip
+    - logger
+    - nmcli
+    - ping
+    - systemctl
+  changed_when: false
+  check_mode: false

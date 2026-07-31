@@ -1,0 +1,62 @@
+---
+argument_specs:
+  main:
+    short_description: Recover NetworkManager Wi-Fi connectivity progressively.
+    description:
+      - Installs a systemd watchdog for a NetworkManager Wi-Fi interface.
+      - Checks link state, gateway reachability, and optional DNS resolution.
+      - Escalates from connection restart to NetworkManager restart.
+      - Leaves host reboot disabled unless explicitly configured.
+    options:
+      wifi_watchdog_service_name:
+        type: str
+        default: wifi-connectivity-watchdog.service
+        description: Managed systemd service name.
+      wifi_watchdog_service_path:
+        type: path
+        default: /etc/systemd/system/{{ wifi_watchdog_service_name }}
+        description: Managed systemd service-unit path directly under /etc/systemd/system whose filename matches the service name.
+      wifi_watchdog_script_path:
+        type: path
+        default: /usr/local/sbin/wifi-connectivity-watchdog
+        description: Managed watchdog script path directly under /usr/local/sbin.
+      wifi_watchdog_interface:
+        type: str
+        default: wlan0
+        description: NetworkManager Wi-Fi interface to monitor.
+      wifi_watchdog_connection:
+        type: str
+        default: ""
+        description: Optional required active connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile.
+      wifi_watchdog_gateway_probe:
+        type: str
+        default: ""
+        description: Optional IPv4 gateway to ping through the Wi-Fi interface; empty uses that interface's default route.
+      wifi_watchdog_dns_probe:
+        type: str
+        default: example.com
+        description: DNS name resolved through the system resolver and reached through the Wi-Fi interface; empty disables DNS probing.
+      wifi_watchdog_check_interval_seconds:
+        type: int
+        default: 30
+        description: Seconds between successful connectivity checks.
+      wifi_watchdog_connection_recovery_after_seconds:
+        type: int
+        default: 300
+        description: Offline duration before restarting the connection.
+      wifi_watchdog_networkmanager_recovery_after_seconds:
+        type: int
+        default: 600
+        description: Offline duration before restarting NetworkManager.
+      wifi_watchdog_reboot_after_seconds:
+        type: int
+        default: 0
+        description: Offline duration before reboot; zero disables reboot escalation.
+      wifi_watchdog_networkmanager_service_name:
+        type: str
+        default: NetworkManager.service
+        description: NetworkManager systemd service to restart during recovery.
+      wifi_watchdog_monotonic_clock_path:
+        type: path
+        default: /proc/uptime
+        description: Linux kernel monotonic-uptime file used for recovery timing.

@@ -150,6 +150,7 @@ Active implementation tracks:
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 | [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
+| [Wi-Fi connectivity watchdog](docs/runbooks/wifi-connectivity-watchdog.md) | Recover Wi-Fi after access-point or mesh outages |
 
 ## Automation
 
@@ -171,9 +172,10 @@ bypass safety ordering. It passes safe full-run options such as `--check`,
 of the full entrypoint is an unsupported bypass. The entry point first
 preflights external storage without mutation, then imports the steady-state
 configuration playbooks in dependency order: Tailscale, firewall, base host
-policy, external storage, Freenove, pCloud, Home Assistant MQTT Agent, Jackett,
-and RaiPlaySound. It is designed to be rerun; a converged second run should
-report `changed=0` apart from live state that has drifted.
+policy, Wi-Fi connectivity watchdog, external storage, Freenove, pCloud, Home
+Assistant MQTT Agent, Jackett, and RaiPlaySound. It is designed to be rerun; a
+converged second run should report `changed=0` apart from live state that has
+drifted.
 
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is
@@ -201,6 +203,17 @@ notifications are skipped until `/etc/msmtprc` exists and is non-empty.
 Unattended upgrades send a mobile-readable routine digest with package version
 transitions; full logs remain on PiServ and native error alerts remain enabled
 as a fallback.
+
+For narrow Wi-Fi watchdog maintenance or recovery, run its dedicated playbook:
+
+```sh
+ansible-playbook ansible/playbooks/wifi-watchdog.yml
+```
+
+The watchdog checks Wi-Fi link state, default-gateway reachability, and DNS.
+It lets NetworkManager select any suitable saved Wi-Fi profile during recovery,
+then escalates to a NetworkManager restart. Automatic host reboot is disabled
+by default.
 
 Configure the Freenove FNK0100K post-OS setup:
 

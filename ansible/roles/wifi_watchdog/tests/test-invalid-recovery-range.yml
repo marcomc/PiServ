@@ -1,0 +1,11 @@
+---
+- name: Reject Wi-Fi watchdog recovery values outside Bash arithmetic range
+  hosts: localhost
+  gather_facts: false
+  vars:
+    wifi_watchdog_connection_recovery_after_seconds: 2147483648
+  tasks:
+    - name: Validate role input
+      ansible.builtin.include_role:
+        name: wifi_watchdog
+        tasks_from: validate-input.yml

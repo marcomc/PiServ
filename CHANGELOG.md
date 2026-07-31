@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Reliability
+
+- Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
+  link, gateway, and DNS, then escalates from connection restart to
+  NetworkManager restart. Host reboot escalation is opt-in.
+- Extracted the watchdog into the reusable `wifi_watchdog` role with
+  Galaxy-ready metadata, standalone documentation, tests, and release guidance.
+- Included the Wi-Fi watchdog in the canonical full-host convergence entry
+  point and bound its default gateway probe to the monitored Wi-Fi interface.
+- Hardened the reusable watchdog against localized `nmcli` state, configured
+  profile fallback, wall-clock changes during recovery, mismatched systemd
+  service-path overrides, and DNS success delivered through another network
+  interface.
+- Retried failed connection activations and NetworkManager restarts while an
+  outage continues without blocking higher recovery levels, and retried the
+  connection after a successful NetworkManager restart.
+- Made privileged path inspection authoritative and preserved fresh-host
+  check-mode convergence when the watchdog unit is not created yet, including
+  handler execution.
+- Corrected the PiServ watchdog runbook to verify service state on PiServ
+  rather than the Ansible controller.
+- Made a DNS resolver failure fail the watchdog health check explicitly.
+- Preserved fresh check-mode convergence for missing parent directories and
+  constrained watchdog unit paths to systemd's system unit directory.
+- Restricted the root-executed watchdog script to a validated trusted system
+  path.
+
 All notable project changes are documented here.
 
 ## [0.3.0] - 2026-07-29

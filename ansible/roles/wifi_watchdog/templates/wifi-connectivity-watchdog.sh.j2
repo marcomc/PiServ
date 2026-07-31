@@ -1,0 +1,138 @@
+#!/bin/bash
+set -u
+
+interface={{ wifi_watchdog_interface | quote }}
+connection={{ wifi_watchdog_connection | quote }}
+gateway_probe={{ wifi_watchdog_gateway_probe | quote }}
+dns_probe={{ wifi_watchdog_dns_probe | quote }}
+check_interval={{ wifi_watchdog_check_interval_seconds | int }}
+connection_recovery_after={{ wifi_watchdog_connection_recovery_after_seconds | int }}
+networkmanager_recovery_after={{ wifi_watchdog_networkmanager_recovery_after_seconds | int }}
+reboot_after={{ wifi_watchdog_reboot_after_seconds | int }}
+networkmanager_service={{ wifi_watchdog_networkmanager_service_name | quote }}
+monotonic_clock_path={{ wifi_watchdog_monotonic_clock_path | quote }}
+
+offline_since=-1
+connection_restarted=0
+networkmanager_restarted=0
+
+log() {
+    logger -t wifi-connectivity-watchdog -- "$*"
+}
+
+wifi_link_ok() {
+    local active_connection
+    local device_status
+    device_status=$(LC_ALL=C nmcli -t -f DEVICE,STATE device status) || return 1
+    grep -Fxq "${interface}:connected" <<<"${device_status}" || return 1
+    [[ -z "${connection}" ]] && return 0
+    active_connection=$(LC_ALL=C nmcli --escape no -g GENERAL.CONNECTION device show "${interface}") || return 1
+    [[ "${active_connection}" == "${connection}" ]]
+}
+
+monotonic_seconds() {
+    local uptime_seconds
+    read -r uptime_seconds _ < "${monotonic_clock_path}" || return 1
+    uptime_seconds=${uptime_seconds%%.*}
+    [[ "${uptime_seconds}" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "${uptime_seconds}"
+}
+
+gateway_ok() {
+    local active_gateway
+    local default_routes
+    active_gateway=${gateway_probe}
+    if [[ -z "${active_gateway}" ]]; then
+        default_routes=$(ip -4 route show default dev "${interface}") || return 1
+        active_gateway=$(awk '/default/ { print $3; exit }' <<<"${default_routes}") || return 1
+    fi
+    [[ -n "${active_gateway}" ]] && ping -I "${interface}" -c 1 -W 2 "${active_gateway}" >/dev/null 2>&1
+}
+
+dns_ok() {
+    local dns_address
+    local dns_records
+    [[ -z "${dns_probe}" ]] && return 0
+    dns_records=$(getent ahostsv4 "${dns_probe}") || return 1
+    while read -r dns_address _; do
+        [[ -n "${dns_address}" ]] || continue
+        if ping -I "${interface}" -c 1 -W 2 "${dns_address}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done <<<"${dns_records}"
+    return 1
+}
+
+recover_connection() {
+    if [[ -n "${connection}" ]]; then
+        log "connectivity offline for ${connection_recovery_after}s; restarting connection ${connection}"
+        nmcli device disconnect "${interface}" || true
+        if nmcli connection up "${connection}" ifname "${interface}"; then
+            connection_restarted=1
+        else
+            log "failed to activate connection ${connection}; recovery will retry"
+        fi
+    else
+        log "connectivity offline for ${connection_recovery_after}s; asking NetworkManager to reconnect ${interface}"
+        nmcli device disconnect "${interface}" || true
+        if nmcli device connect "${interface}"; then
+            connection_restarted=1
+        else
+            log "failed to reconnect ${interface}; recovery will retry"
+        fi
+    fi
+}
+
+recover_networkmanager() {
+    log "connectivity offline for ${networkmanager_recovery_after}s; restarting ${networkmanager_service}"
+    if systemctl restart "${networkmanager_service}"; then
+        networkmanager_restarted=1
+        connection_restarted=0
+    else
+        log "failed to restart ${networkmanager_service}; recovery will retry"
+    fi
+}
+
+recover_host() {
+    if (( reboot_after > 0 )); then
+        log "connectivity offline for ${reboot_after}s; rebooting host"
+        systemctl reboot
+    else
+        log "connectivity remains offline; host reboot escalation is disabled"
+    fi
+}
+
+while :; do
+    if wifi_link_ok && gateway_ok && dns_ok; then
+        if (( offline_since >= 0 )); then
+            log "connectivity restored"
+        fi
+        offline_since=-1
+        connection_restarted=0
+        networkmanager_restarted=0
+        sleep "${check_interval}"
+        continue
+    fi
+
+    now=$(monotonic_seconds) || {
+        log "unable to read the kernel monotonic clock; deferring recovery"
+        sleep "${check_interval}"
+        continue
+    }
+    if (( offline_since < 0 )); then
+        offline_since=${now}
+        log "connectivity check failed; starting recovery timer"
+    fi
+    offline_for=$((now - offline_since))
+
+    if (( connection_restarted == 0 && offline_for >= connection_recovery_after )); then
+        recover_connection
+    fi
+    if (( networkmanager_restarted == 0 && offline_for >= networkmanager_recovery_after )); then
+        recover_networkmanager
+    fi
+    if (( offline_for >= reboot_after && reboot_after > 0 )); then
+        recover_host
+    fi
+    sleep "${check_interval}"
+done
