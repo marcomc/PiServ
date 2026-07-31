@@ -7,6 +7,7 @@ test_dir=$(mktemp -d)
 rendered_script="${test_dir}/wifi-connectivity-watchdog"
 named_connection_script="${test_dir}/wifi-connectivity-watchdog-named"
 recovery_retry_script="${test_dir}/wifi-connectivity-watchdog-recovery-retry"
+escalation_retry_script="${test_dir}/wifi-connectivity-watchdog-escalation-retry"
 test_log="${test_dir}/calls.log"
 invalid_service_path_output="${test_dir}/invalid-service-path.log"
 invalid_recovery_range_output="${test_dir}/invalid-recovery-range.log"
@@ -202,6 +203,10 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
     -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
 
+run_watchdog "${recovery_retry_script}" 'wlan0:disconnected' 4 0 '' 1
+
+grep -Fxq 'restart NetworkManager.service' "${test_log}"
+
 run_watchdog "${recovery_retry_script}" 'wlan0:disconnected' 4 0 '' 0 1
 
 networkmanager_retries=$(grep -Fxc 'restart NetworkManager.service' "${test_log}" || true)
@@ -209,3 +214,19 @@ if (( networkmanager_retries < 2 )); then
     printf 'watchdog did not retry a failed NetworkManager restart\n' >&2
     exit 1
 fi
+
+ansible localhost -c local -m ansible.builtin.template \
+    -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${escalation_retry_script} mode=0750" \
+    -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \
+    -e 'wifi_watchdog_gateway_probe="" wifi_watchdog_dns_probe=example.com' \
+    -e 'wifi_watchdog_check_interval_seconds=1' \
+    -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
+    -e 'wifi_watchdog_networkmanager_recovery_after_seconds=2' \
+    -e 'wifi_watchdog_reboot_after_seconds=3' \
+    -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+
+run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1
+
+grep -Fxq 'restart NetworkManager.service' "${test_log}"
+grep -Fxq reboot "${test_log}"

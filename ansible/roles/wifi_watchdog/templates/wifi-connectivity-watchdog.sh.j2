@@ -126,9 +126,11 @@ while :; do
 
     if (( connection_restarted == 0 && offline_for >= connection_recovery_after )); then
         recover_connection
-    elif (( networkmanager_restarted == 0 && offline_for >= networkmanager_recovery_after )); then
+    fi
+    if (( networkmanager_restarted == 0 && offline_for >= networkmanager_recovery_after )); then
         recover_networkmanager
-    elif (( offline_for >= reboot_after && reboot_after > 0 )); then
+    fi
+    if (( offline_for >= reboot_after && reboot_after > 0 )); then
         recover_host
     fi
     sleep "${check_interval}"

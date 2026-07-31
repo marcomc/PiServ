@@ -24,7 +24,7 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Required the DNS probe's resolved IPv4 address to respond through the
   monitored Wi-Fi interface.
 - Retried failed connection activations and NetworkManager restarts on later
-  health checks.
+  health checks without blocking higher recovery levels.
 - Performed configurable parent and unit inspection with privilege escalation,
   and skipped systemd startup and restart only when fresh check mode predicts a
   new unit.
