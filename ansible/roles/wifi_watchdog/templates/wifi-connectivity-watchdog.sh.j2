@@ -30,10 +30,10 @@ gateway_ok() {
     local default_routes
     active_gateway=${gateway_probe}
     if [[ -z "${active_gateway}" ]]; then
-        default_routes=$(ip -4 route show default) || return 1
+        default_routes=$(ip -4 route show default dev "${interface}") || return 1
         active_gateway=$(awk '/default/ { print $3; exit }' <<<"${default_routes}") || return 1
     fi
-    [[ -n "${active_gateway}" ]] && ping -c 1 -W 2 "${active_gateway}" >/dev/null 2>&1
+    [[ -n "${active_gateway}" ]] && ping -I "${interface}" -c 1 -W 2 "${active_gateway}" >/dev/null 2>&1
 }
 
 dns_ok() {

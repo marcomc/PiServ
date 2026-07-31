@@ -27,23 +27,33 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_reboot_after_seconds=0' \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' >/dev/null
 
-PATH="${role_root}/tests/fixtures/bin:${PATH}" \
-    WIFI_WATCHDOG_TEST_LOG="${test_log}" \
-    "${rendered_script}" &
-watchdog_pid=$!
+run_watchdog() {
+    local device_status="$1"
+    local runtime_seconds="$2"
+    local watchdog_status
 
-/bin/sleep 2
-kill -TERM "${watchdog_pid}"
-set +e
-wait "${watchdog_pid}" 2>/dev/null
-watchdog_status=$?
-set -e
-watchdog_pid=""
+    : > "${test_log}"
+    PATH="${role_root}/tests/fixtures/bin:${PATH}" \
+        WIFI_WATCHDOG_TEST_LOG="${test_log}" \
+        WIFI_WATCHDOG_TEST_DEVICE_STATUS="${device_status}" \
+        "${rendered_script}" &
+    watchdog_pid=$!
 
-if [[ "${watchdog_status}" -ne 143 ]]; then
-    printf 'unexpected watchdog exit status: %s\n' "${watchdog_status}" >&2
-    exit 1
-fi
+    /bin/sleep "${runtime_seconds}"
+    kill -TERM "${watchdog_pid}"
+    set +e
+    wait "${watchdog_pid}" 2>/dev/null
+    watchdog_status=$?
+    set -e
+    watchdog_pid=""
+
+    if [[ "${watchdog_status}" -ne 143 ]]; then
+        printf 'unexpected watchdog exit status: %s\n' "${watchdog_status}" >&2
+        exit 1
+    fi
+}
+
+run_watchdog 'wlan0:disconnected' 2
 
 grep -Fxq 'device disconnect wlan0' "${test_log}"
 grep -Fxq 'device connect wlan0' "${test_log}"
@@ -51,3 +61,8 @@ if grep -Fq 'connection ' "${test_log}"; then
     printf 'watchdog selected a named connection despite an empty configuration\n' >&2
     exit 1
 fi
+
+run_watchdog 'wlan0:connected' 1
+
+grep -Fxq 'ip -4 route show default dev wlan0' "${test_log}"
+grep -Fxq 'ping -I wlan0 -c 1 -W 2 192.0.2.1' "${test_log}"

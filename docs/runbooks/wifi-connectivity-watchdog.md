@@ -28,7 +28,7 @@ PiServ configures the reusable role in
 | --- | --- |
 | `wifi_watchdog_interface` | `wlan0` |
 | `wifi_watchdog_connection` | empty; NetworkManager selects an eligible saved profile |
-| `wifi_watchdog_gateway_probe` | active IPv4 default gateway |
+| `wifi_watchdog_gateway_probe` | IPv4 default gateway on `wifi_watchdog_interface` |
 | `wifi_watchdog_dns_probe` | `example.com` |
 | `wifi_watchdog_reboot_after_seconds` | `0` |
 

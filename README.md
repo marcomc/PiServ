@@ -172,9 +172,10 @@ bypass safety ordering. It passes safe full-run options such as `--check`,
 of the full entrypoint is an unsupported bypass. The entry point first
 preflights external storage without mutation, then imports the steady-state
 configuration playbooks in dependency order: Tailscale, firewall, base host
-policy, external storage, Freenove, pCloud, Home Assistant MQTT Agent, Jackett,
-and RaiPlaySound. It is designed to be rerun; a converged second run should
-report `changed=0` apart from live state that has drifted.
+policy, Wi-Fi connectivity watchdog, external storage, Freenove, pCloud, Home
+Assistant MQTT Agent, Jackett, and RaiPlaySound. It is designed to be rerun; a
+converged second run should report `changed=0` apart from live state that has
+drifted.
 
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is
@@ -203,7 +204,7 @@ Unattended upgrades send a mobile-readable routine digest with package version
 transitions; full logs remain on PiServ and native error alerts remain enabled
 as a fallback.
 
-Configure the Wi-Fi connectivity watchdog:
+For narrow Wi-Fi watchdog maintenance or recovery, run its dedicated playbook:
 
 ```sh
 ansible-playbook ansible/playbooks/wifi-watchdog.yml

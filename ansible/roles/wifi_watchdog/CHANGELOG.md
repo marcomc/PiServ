@@ -14,3 +14,5 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Added safe handling for missing configurable script and service parent paths.
 - Added input-range and trusted-parent validation before root-managed rendering.
 - Added a regression test for reconnecting without a configured Wi-Fi profile.
+- Bound the automatic gateway lookup and gateway ping to the monitored Wi-Fi
+  interface so another interface cannot mask a Wi-Fi outage.

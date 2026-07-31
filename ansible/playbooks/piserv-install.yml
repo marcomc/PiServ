@@ -13,6 +13,8 @@
   import_playbook: firewall.yml
 - name: Configure base host policy
   import_playbook: piserv-base.yml
+- name: Configure Wi-Fi connectivity watchdog
+  import_playbook: wifi-watchdog.yml
 - name: Configure external storage
   import_playbook: external-storage.yml
 - name: Configure Freenove hardware

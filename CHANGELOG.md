@@ -9,6 +9,8 @@
   NetworkManager restart. Host reboot escalation is opt-in.
 - Extracted the watchdog into the reusable `wifi_watchdog` role with
   Galaxy-ready metadata, standalone documentation, tests, and release guidance.
+- Included the Wi-Fi watchdog in the canonical full-host convergence entry
+  point and bound its default gateway probe to the monitored Wi-Fi interface.
 
 All notable project changes are documented here.
 

@@ -22,8 +22,8 @@ recovers it progressively when a network becomes unavailable.
 The role installs a root-owned service that continuously verifies:
 
 - NetworkManager reports the configured Wi-Fi interface as connected.
-- The active IPv4 default gateway, or an explicitly configured gateway,
-  responds to a ping.
+- The IPv4 default gateway for the configured Wi-Fi interface, or an explicitly
+  configured gateway, responds to an interface-bound ping.
 - A configured DNS name resolves through the system resolver.
 
 After a continuous offline period it restarts the NetworkManager connection,
@@ -67,7 +67,7 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | `wifi_watchdog_script_path` | `/usr/local/sbin/wifi-connectivity-watchdog` | Managed script path |
 | `wifi_watchdog_interface` | `wlan0` | Wi-Fi interface monitored through NetworkManager |
 | `wifi_watchdog_connection` | `""` | Connection name; empty lets NetworkManager choose an eligible saved Wi-Fi profile |
-| `wifi_watchdog_gateway_probe` | `""` | Gateway to ping; empty uses the active default route |
+| `wifi_watchdog_gateway_probe` | `""` | Gateway to ping through the Wi-Fi interface; empty uses that interface's IPv4 default route |
 | `wifi_watchdog_dns_probe` | `example.com` | Name resolved through the system resolver; empty disables this check |
 | `wifi_watchdog_check_interval_seconds` | `30` | Check interval while connectivity is healthy |
 | `wifi_watchdog_connection_recovery_after_seconds` | `300` | Offline duration before connection restart |
