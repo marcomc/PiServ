@@ -16,7 +16,8 @@ gateway, and DNS before starting recovery.
    lower escalation levels have been observed in production.
 
 The watchdog resets its timer as soon as all three checks pass. Recovery events
-are written to the system journal with the `piserv-wifi-watchdog` identifier.
+are written to the system journal with the `wifi-connectivity-watchdog`
+identifier.
 
 ## Configuration
 
