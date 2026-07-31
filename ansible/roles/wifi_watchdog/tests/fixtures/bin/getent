@@ -5,6 +5,9 @@
 case "$*" in
     'ahostsv4 example.com')
         printf '%s\n' "getent $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        if [ "${WIFI_WATCHDOG_TEST_GETENT_FAILURE:-0}" = '1' ]; then
+            exit 1
+        fi
         printf '%s\n' '203.0.113.1 STREAM example.com'
         ;;
     *)

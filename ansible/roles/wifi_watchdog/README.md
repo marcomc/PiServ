@@ -165,7 +165,8 @@ ansible localhost -c local -m ansible.builtin.template \
   -e 'wifi_watchdog_connection_recovery_after_seconds=300' \
   -e 'wifi_watchdog_networkmanager_recovery_after_seconds=600' \
   -e 'wifi_watchdog_reboot_after_seconds=0' \
-  -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service'
+  -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
+  -e 'wifi_watchdog_monotonic_clock_path=/proc/uptime'
 shellcheck --enable=all /tmp/wifi-watchdog.sh
 ```
 

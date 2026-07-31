@@ -66,6 +66,7 @@ monotonic_clock_writer_pid=$!
 run_watchdog() {
     local device_status="$1"
     local runtime_seconds="$2"
+    local getent_failure="${3:-0}"
     local watchdog_status
 
     : > "${test_log}"
@@ -73,6 +74,7 @@ run_watchdog() {
         PATH="${role_root}/tests/fixtures/bin:${PATH}" \
         WIFI_WATCHDOG_TEST_LOG="${test_log}" \
         WIFI_WATCHDOG_TEST_DEVICE_STATUS="${device_status}" \
+        WIFI_WATCHDOG_TEST_GETENT_FAILURE="${getent_failure}" \
         "${rendered_script}" &
     watchdog_pid=$!
 
@@ -110,3 +112,13 @@ grep -Fxq 'ip -4 route show default dev wlan0' "${test_log}"
 grep -Fxq 'ping -I wlan0 -c 1 -W 2 192.0.2.1' "${test_log}"
 grep -Fxq 'getent ahostsv4 example.com' "${test_log}"
 grep -Fxq 'ping -I wlan0 -c 1 -W 2 203.0.113.1' "${test_log}"
+
+run_watchdog 'wlan0:connected' 2 1
+
+grep -Fxq 'getent ahostsv4 example.com' "${test_log}"
+grep -Fxq 'device disconnect wlan0' "${test_log}"
+grep -Fxq 'device connect wlan0' "${test_log}"
+if grep -Fq 'ping -I wlan0 -c 1 -W 2 203.0.113.1' "${test_log}"; then
+    printf 'watchdog pinged a DNS address after its lookup failed\n' >&2
+    exit 1
+fi

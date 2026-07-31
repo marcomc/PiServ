@@ -17,6 +17,9 @@
 - Made privileged path inspection authoritative and preserved fresh-host
   check-mode convergence when the watchdog unit is not created yet, including
   handler execution.
+- Corrected the PiServ watchdog runbook to verify service state on PiServ
+  rather than the Ansible controller.
+- Made a DNS resolver failure fail the watchdog health check explicitly.
 
 All notable project changes are documented here.
 

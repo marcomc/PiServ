@@ -24,3 +24,7 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
 - Performed configurable parent and unit inspection with privilege escalation,
   and skipped systemd startup and restart only when fresh check mode predicts a
   new unit.
+- Corrected the standalone rendering validation command to pass every template
+  variable.
+- Made DNS lookup failures explicit before testing resolved addresses.
+- Added a regression for a failed DNS lookup during watchdog recovery.

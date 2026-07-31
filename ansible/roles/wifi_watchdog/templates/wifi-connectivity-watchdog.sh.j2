@@ -47,12 +47,15 @@ gateway_ok() {
 
 dns_ok() {
     local dns_address
+    local dns_records
     [[ -z "${dns_probe}" ]] && return 0
-    while IFS= read -r dns_address; do
+    dns_records=$(getent ahostsv4 "${dns_probe}") || return 1
+    while read -r dns_address _; do
+        [[ -n "${dns_address}" ]] || continue
         if ping -I "${interface}" -c 1 -W 2 "${dns_address}" >/dev/null 2>&1; then
             return 0
         fi
-    done < <(getent ahostsv4 "${dns_probe}" | awk '!seen[$1]++ { print $1 }')
+    done <<<"${dns_records}"
     return 1
 }
 

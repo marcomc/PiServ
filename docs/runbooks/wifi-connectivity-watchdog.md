@@ -38,8 +38,8 @@ Apply and verify the dedicated playbook:
 
 ```bash
 ansible-playbook ansible/playbooks/wifi-watchdog.yml
-systemctl status piserv-wifi-watchdog.service
-journalctl -u piserv-wifi-watchdog.service -f
+ssh -o BatchMode=yes admin@PiServ.local 'sudo -n systemctl status piserv-wifi-watchdog.service'
+ssh -t -o BatchMode=yes admin@PiServ.local 'sudo -n journalctl -u piserv-wifi-watchdog.service -f'
 ```
 
 Observed on PiServ: the service is enabled and active after application. A
