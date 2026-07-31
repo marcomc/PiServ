@@ -1,0 +1,122 @@
+---
+- name: Create private Hermes runtime directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  loop:
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_home }}/workspace"
+  when: hermes_agent_runtime_user_available
+
+- name: Install locked-down Hermes configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ hermes_agent_home }}/config.yaml"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  when: hermes_agent_runtime_user_available
+  notify: Restart Hermes Agent dashboard
+
+- name: Restrict Hermes environment file
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home }}/.env"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Inspect built Hermes dashboard
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/hermes_cli/web_dist/index.html"
+  register: hermes_agent_dashboard_dist
+  when: hermes_agent_manage_dashboard
+
+- name: Build pinned Hermes dashboard assets
+  ansible.builtin.command:
+    argv:
+      - npm
+      - run
+      - build
+      - -w
+      - web
+    chdir: "{{ hermes_agent_install_dir }}"
+  environment:
+    HOME: /root
+    HERMES_HOME: "{{ hermes_agent_home }}"
+    PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_dist.stat.exists or
+      hermes_agent_install is changed
+
+- name: Refresh built Hermes dashboard state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/hermes_cli/web_dist/index.html"
+  register: hermes_agent_dashboard_dist
+  when: hermes_agent_manage_dashboard
+
+- name: Configure Hermes Agent dashboard service
+  ansible.builtin.template:
+    src: hermes-agent-dashboard.service.j2
+    dest: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: hermes_agent_manage_dashboard
+  notify: Restart Hermes Agent dashboard
+
+- name: Enable Hermes Agent dashboard
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_dashboard_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode or hermes_agent_dashboard_dist.stat.exists
+
+- name: Configure Hermes Agent backups
+  when:
+    - hermes_agent_manage_backup
+    - hermes_agent_runtime_user_available
+  block:
+    - name: Create private Hermes Agent backup directory
+      ansible.builtin.file:
+        path: "{{ hermes_agent_backup_dir }}"
+        state: directory
+        owner: "{{ hermes_agent_user }}"
+        group: "{{ hermes_agent_group }}"
+        mode: "0700"
+
+    - name: Install Hermes Agent backup service
+      ansible.builtin.template:
+        src: hermes-agent-backup.service.j2
+        dest: /etc/systemd/system/hermes-agent-backup.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install Hermes Agent backup timer
+      ansible.builtin.template:
+        src: hermes-agent-backup.timer.j2
+        dest: /etc/systemd/system/hermes-agent-backup.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable Hermes Agent backup timer
+      ansible.builtin.systemd_service:
+        name: hermes-agent-backup.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode

@@ -69,29 +69,27 @@
     - Package the app as a systemd service and codify deployment in Ansible.
     - Document operator workflows in a runbook.
 
-- [ ] **Set up Hermes Agent on PiServ with Codex and Home Assistant**
-  - Assessment: Nous Hermes Agent is the sole primary agent. It runs as a
-    PiServ-resident, unprivileged service that retains its learning data while
-    Codex, authenticated through ChatGPT Pro, is the initial model provider.
+- [ ] **Complete Hermes Agent provider and capability integration**
+  - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
+    dashboard, persistent state, daily backup, and Ansible deployment are live.
+    Codex authentication and external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Install Hermes under a dedicated system user with a private, backed-up
-      persistent data directory for memory, skills, sessions, and audit data.
-    - Install and smoke-test Codex CLI on PiServ `arm64`, then authenticate it
-      through the operator's ChatGPT Pro account without an API key.
-    - Start with only the Codex provider, no generic terminal, filesystem,
-      browser, code-execution, or SSH toolset.
-    - Implement an auditable, per-request disclosure confirmation before Cloud
-      Corpus content or Home Assistant state is sent to Codex.
+    - Complete the one-time ChatGPT device login and verify an authenticated
+      Hermes turn plus direct Codex CLI use without an API key.
+    - Implement pre-authorized Codex routing with a per-response inference
+      provenance notice and audit records that exclude request and response
+      contents.
     - Define the Home Assistant connection method for an instance on the same
       network, including a capability gateway, token storage, and allowed
       entities and operations.
     - Prove that memory and reviewed skills survive restart, backup/restore,
       and a future provider change to a 64K-capable LAN model.
-    - Document firewall, Tailscale, and local-network access expectations before
-      exposing Direct Hermes Chat.
-    - Codify the final install, configuration, and service health checks in
-      Ansible after live validation.
+    - Review the pinned dashboard's three production and eight total high
+      severity npm audit findings before exposing it beyond loopback and its
+      SSH tunnel.
+    - Add authenticated Tailnet access only after defining the identity and
+      firewall policy.
 
 - [ ] **Define service-level cgroup v2 memory policy**
   - Assessment: Enabling the memory controller only makes memory accounting,

@@ -1,0 +1,90 @@
+---
+- name: Read Hermes Agent version
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/hermes
+      - --version
+  environment:
+    HOME: "{{ hermes_agent_home }}"
+    HERMES_HOME: "{{ hermes_agent_home }}"
+    CODEX_HOME: "{{ hermes_agent_codex_home }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
+  register: hermes_agent_version_output
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+
+- name: Assert Hermes Agent version
+  ansible.builtin.assert:
+    that:
+      - >-
+        'Hermes Agent v' + hermes_agent_version in
+        hermes_agent_version_output.stdout
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+
+- name: Read enabled Hermes CLI toolsets
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/hermes
+      - tools
+      - list
+      - --platform
+      - cli
+  environment:
+    HOME: "{{ hermes_agent_home }}"
+    HERMES_HOME: "{{ hermes_agent_home }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
+  register: hermes_agent_toolsets_output
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+
+- name: Assert locked-down Hermes CLI toolsets
+  ansible.builtin.assert:
+    that:
+      - "'✓ enabled  memory' in hermes_agent_toolsets_output.stdout"
+      - "'✓ enabled  skills' in hermes_agent_toolsets_output.stdout"
+      - "'✗ disabled  terminal' in hermes_agent_toolsets_output.stdout"
+      - "'✗ disabled  file' in hermes_agent_toolsets_output.stdout"
+      - "'✗ disabled  homeassistant' in hermes_agent_toolsets_output.stdout"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+
+- name: Read Codex CLI version
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/codex
+      - --version
+  register: hermes_agent_codex_version_output
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_codex_binary.stat.exists
+
+- name: Assert Codex CLI version
+  ansible.builtin.assert:
+    that:
+      - >-
+        'codex-cli ' + hermes_agent_codex_version in
+        hermes_agent_codex_version_output.stdout
+  when: hermes_agent_codex_binary.stat.exists
+
+- name: Validate loopback Hermes Agent dashboard
+  ansible.builtin.uri:
+    url: >-
+      http://{{ hermes_agent_dashboard_host }}:{{
+      hermes_agent_dashboard_port }}/
+    status_code: 200
+    return_content: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard
+    - hermes_agent_dashboard_dist.stat.exists

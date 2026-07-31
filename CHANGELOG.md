@@ -64,6 +64,26 @@
   explicit rollback, and refresh after vendor DTB updates; activation remains
   pending an operator-approved reboot.
 
+## [0.4.0] - Unreleased
+
+### Hermes Agent
+
+- Installed Nous Hermes Agent `0.19.0` at a pinned upstream revision under a
+  root-owned code path and an unprivileged `hermes-agent` runtime identity.
+- Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
+  release and prepared its private authentication home for ChatGPT device
+  login.
+- Limited Hermes to memory and skill tools with write approval while explicitly
+  disabling terminal, filesystem, browser, code execution, Home Assistant, and
+  all other bundled toolsets.
+- Added a loopback-only Hermes dashboard, SSH-tunnel operator workflow, and
+  hardened systemd service.
+- Added daily full Hermes state backups to the external SSD with 30-day
+  retention and validated the first live archive.
+- Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health
+  assertions, one-command provider-login helper, runbook, and updated
+  architecture track.
+
 ## [0.3.0] - 2026-07-29
 
 ### PiServ Installation

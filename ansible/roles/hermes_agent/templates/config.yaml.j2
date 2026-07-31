@@ -1,0 +1,39 @@
+---
+model:
+  default: "{{ hermes_agent_model }}"
+  provider: "{{ hermes_agent_provider }}"
+
+platform_toolsets:
+  cli:
+{% for toolset in hermes_agent_enabled_toolsets %}
+    - "{{ toolset }}"
+{% endfor %}
+
+agent:
+  max_turns: 90
+  disabled_toolsets:
+{% for toolset in hermes_agent_disabled_toolsets %}
+    - "{{ toolset }}"
+{% endfor %}
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  write_approval: true
+
+skills:
+  write_approval: true
+  guard_agent_created: true
+
+compression:
+  enabled: true
+  in_place: true
+
+checkpoints:
+  enabled: false
+
+smart_model_routing:
+  enabled: false
+
+session_reset:
+  mode: none

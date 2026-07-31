@@ -1,0 +1,13 @@
+---
+- name: Install locked-down Hermes Agent
+  hosts: piserv
+  gather_facts: true
+  become: true
+  roles:
+    - role: hermes_agent
+      vars:
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: external-data
+        hermes_agent_backup_dir: /mnt/external-data/backups/hermes-agent
+        hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
+        hermes_agent_backup_timezone: Europe/Rome

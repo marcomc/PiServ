@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Hermes Agent backup daily
+
+[Timer]
+OnCalendar={{ hermes_agent_backup_on_calendar }} {{ hermes_agent_backup_timezone }}
+Persistent=true
+RandomizedDelaySec={{ hermes_agent_backup_randomized_delay }}
+Unit=hermes-agent-backup.service
+
+[Install]
+WantedBy=timers.target

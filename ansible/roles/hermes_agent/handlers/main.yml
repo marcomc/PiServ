@@ -1,0 +1,9 @@
+---
+- name: Restart Hermes Agent dashboard
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_dashboard_service_name }}"
+    state: restarted
+    daemon_reload: true
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode

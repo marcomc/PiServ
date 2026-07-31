@@ -1,0 +1,32 @@
+---
+- name: Create Hermes Agent system group
+  ansible.builtin.group:
+    name: "{{ hermes_agent_group }}"
+    system: true
+    state: present
+
+- name: Create Hermes Agent system user
+  ansible.builtin.user:
+    name: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    groups: >-
+      {{ [hermes_agent_backup_group]
+      if hermes_agent_manage_backup else omit }}
+    append: true
+    home: "{{ hermes_agent_home }}"
+    create_home: true
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+
+- name: Read Hermes Agent runtime account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_agent_user }}"
+    fail_key: false
+  check_mode: false
+
+- name: Record whether the Hermes runtime account is available
+  ansible.builtin.set_fact:
+    hermes_agent_runtime_user_available: >-
+      {{ hermes_agent_user in (ansible_facts.getent_passwd | default({})) }}

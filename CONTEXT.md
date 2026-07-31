@@ -46,15 +46,16 @@ The complete pCloud and Google Drive account content that Hermes is authorized
 to retrieve and analyze for the operator.
 _Avoid_: selected-folder source, public knowledge base
 
-**External Inference Escalation**:
-The future explicit routing of a Hermes request from its selected provider to a
-different remote provider when the selected provider is insufficient.
-_Avoid_: silent fallback, default remote model
+**Pre-authorized Codex Routing**:
+The automatic routing of an eligible Hermes request or non-text attachment to
+the operator-authorized Codex provider. It does not wait for a per-request
+confirmation.
+_Avoid_: per-request disclosure gate, unrecorded provider fallback
 
-**Escalation Confirmation**:
-The operator's per-request approval before Hermes sends Cloud Corpus content or
-Home Assistant state to an external provider, initially Codex.
-_Avoid_: implied consent, blanket cloud-data approval
+**Inference Provenance Notice**:
+The compact response note and structured response metadata that state when
+Codex analyzed a request or attachment.
+_Avoid_: blocking notification, undisclosed provider use
 
 **Preferred LAN Inference**:
 The future 64K-capable local model hosted on a reachable LAN machine, initially

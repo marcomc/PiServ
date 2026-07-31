@@ -4,10 +4,11 @@
 
 - [Result](#result)
 - [Evidence](#evidence)
+- [Implementation Status](#implementation-status)
 - [Selected Architecture](#selected-architecture)
 - [Recommended Architecture](#recommended-architecture)
 - [Home Assistant and Apple Home Roadmap](#home-assistant-and-apple-home-roadmap)
-- [Codex CLI Boundary](#codex-cli-boundary)
+- [Codex CLI Routing](#codex-cli-routing)
 - [Cloud Corpus Design](#cloud-corpus-design)
 - [Implementation Gates](#implementation-gates)
 - [Sources](#sources)
@@ -19,11 +20,13 @@ plane. The framework's memory, user profile, sessions, skills, provider
 configuration, and capability policy are service data held on PiServ; they are
 not model weights. Direct Hermes Chat is this service's browser interface.
 
-PiServ cannot be assumed to host a compatible local inference model: Hermes
+PiServ cannot be assumed to host a compatible local inference model. Hermes
 requires a 64K context window for its agentic workflow, which excludes the
-compact 32K models that are plausible candidates for PiServ's 4 GB memory
-budget. This does not prevent Hermes itself from running on PiServ while the
-model provider runs elsewhere.
+compact 32K models that were plausible candidates for PiServ's 4 GB memory
+budget. Gemma 4 E2B and E4B have a native 128K context window, but their
+actual 64K memory use on this Debian ARM64 host remains a benchmark gate. This
+does not prevent Hermes itself from running on PiServ while the model provider
+runs elsewhere.
 
 The recommended first deployment is therefore **Nous Hermes Agent on PiServ
 with Codex authenticated through ChatGPT Pro as its provider**. It gives the
@@ -35,6 +38,7 @@ terminal and filesystem tools must remain isolated.
 | Component | Role | Decision |
 | --- | --- | --- |
 | Nous Hermes Agent + Codex | PiServ's persistent control plane and first provider | Validate as a sandboxed integration |
+| Gemma 4 E2B mobile text-only endpoint | Candidate PiServ local provider | Switch only after a 64K memory and latency benchmark |
 | Custom 64K local endpoint | Future Mac or dedicated inference-host provider | Switch only after model and tool benchmarks |
 
 ## Evidence
@@ -44,9 +48,39 @@ The following observations are current as of 2026-07-30:
 | Area | Evidence | Implication |
 | --- | --- | --- |
 | PiServ | The recorded 2026-07-08 baseline is Debian 13 `trixie`, `arm64`, with 4.0 GiB RAM and 2.0 GiB zram. | There is no realistic headroom for a general 3B+ model beside existing services. |
-| Hermes local models | Hermes documents a 64K minimum context for agentic use. | Its standard local profile is incompatible with the compact 32K starting models under consideration. |
+| Hermes local models | Hermes documents a 64K minimum context for agentic use; Gemma 4 E2B and E4B document a native 128K context window. | The compact 32K starting models are excluded, while Gemma 4 E2B mobile text-only remains a PiServ benchmark candidate. |
 | Hermes learning | Hermes persists curated memory and skills independently of its provider selection. | Retain Hermes service data on PiServ while switching backends. |
 | Hermes providers | Hermes supports OpenAI Codex, custom OpenAI-compatible endpoints, and configured fallbacks. | Codex can be the initial provider and a future LAN model can replace it. |
+
+## Implementation Status
+
+The pre-authentication runtime was implemented and validated live on
+2026-07-30:
+
+- Hermes `0.19.0` is pinned to upstream commit
+  `240afd0b70a016ba17568d597e0f2c32f94f4cfd`.
+- The service runs as the unprivileged `hermes-agent` identity with private
+  state under `/var/lib/hermes-agent`.
+- Codex CLI `0.145.0` was installed from the official Linux ARM64 release
+  archive after SHA-256 verification and passed its version smoke test.
+- The Hermes CLI policy exposes only memory and skills. Both write paths
+  require review; terminal, file, browser, code execution, and Home Assistant
+  are explicitly disabled.
+- The browser dashboard is active only on `127.0.0.1:9119` and returned HTTP
+  `200`. Operator access uses an SSH tunnel. Its post-convergence idle process
+  used about 135 MiB RSS while the host retained about 2.7 GiB available
+  memory. A forced process failure recovered to HTTP `200` in 13 seconds.
+- A daily systemd timer creates full state archives in the private
+  `/mnt/external-data/backups/hermes-agent` directory. The first live backup
+  completed successfully.
+- The deployment is codified in `ansible/roles/hermes_agent` and
+  `ansible/playbooks/hermes-agent.yml`.
+
+ChatGPT device login and authenticated inference remain intentionally pending
+for the operator. The full upstream web dependency installation reported eight
+high severity npm audit findings; a production-only audit reported three high
+severity findings. The dashboard remains loopback-only while those upstream
+dependencies are reviewed.
 
 ## Selected Architecture
 
@@ -59,7 +93,8 @@ model calls; it supports OpenAI Codex and saved custom OpenAI-compatible
 endpoints. It also supports a fallback-provider chain.
 
 The first provider can be Codex authenticated by ChatGPT Pro. Later, point the
-same Hermes installation at a 64K-capable model hosted on the Mac or a
+same Hermes installation at a 64K-capable Gemma 4 E2B mobile text-only endpoint
+on PiServ if it passes the benchmark, or at a model hosted on the Mac or a
 dedicated machine. The persistent memory, user profile, skills, sessions, and
 audit trail stay on PiServ as long as the managed Hermes data directory is
 preserved and backed up.
@@ -78,8 +113,9 @@ The initial service still needs these constraints:
 - Use the Codex provider rather than enabling the optional Codex App-Server
   shell and patch toolset. Reconsider the App-Server only in an isolated
   sandbox when a capability requires it.
-- Use a per-request confirmation before Cloud Corpus or Home Assistant state
-  is sent to Codex.
+- Route eligible requests and non-text attachments to Codex without a
+  per-request confirmation. Return a compact provenance notice and retain an
+  audit record without request or response contents.
 
 ## Recommended Architecture
 
@@ -97,6 +133,9 @@ Nous Hermes Agent on PiServ (unprivileged)
         +-- shared capability gateway --> Cloud Corpus read tools
         |                                Home Assistant MCP / Assist API
         |                                approved maintenance operations
+        |
+        +-- candidate local provider --> Gemma 4 E2B mobile text-only on PiServ
+        |                                after a 64K benchmark
         |
         +-- later provider --> Mac or future LAN 64K local-model endpoint
 ```
@@ -119,8 +158,8 @@ Initial tools should be limited to:
 - Cloud-file metadata search and bounded content reads.
 - PiServ service and storage status.
 - Home Assistant state queries through the Assist API.
-- An escalation-request tool that produces a reviewable package but does not
-  invoke Codex before the user confirms the external data disclosure.
+- A route-selection capability that sends eligible requests to Codex under the
+  pre-authorized policy and returns the selected-provider provenance.
 
 Approved Operations can be added without redesigning the agent. Each one becomes
 another gateway capability, first requiring confirmation and later eligible for
@@ -162,7 +201,7 @@ user-managed Shortcut that calls a protected PiServ endpoint. Apple documents
 App Intents as the supported route for actions exposed to Siri and Shortcuts.
 Treat that as a separate client project after the first two phases are stable.
 
-## Codex CLI Boundary
+## Codex CLI Routing
 
 The requested subscription path is a supported provider route, subject to the
 normal ChatGPT plan terms and limits.
@@ -177,16 +216,21 @@ programmatically extracting Output. The implementation must use the supported
 Codex integration path, retain normal plan usage limits, and never share the
 operator's account credentials.
 
-The initial policy is an in-chat confirmed handoff:
+The initial policy is pre-authorized routing:
 
 1. PiServ prepares a redacted, bounded escalation package.
-2. Direct Hermes Chat identifies the destination as Codex and asks the
-   operator to approve the external disclosure for that request.
-3. After approval, Hermes invokes Codex directly and returns the
-   normalized result to the same conversation.
+2. Hermes routes an eligible request, attachment, or modality to Codex without
+   a per-request confirmation.
+3. The normalized result returns to the same conversation with a compact note
+   that Codex analyzed the relevant context. This note must not block text,
+   audio, or structured results.
+4. The audit record retains the provider, route reason, data classification,
+   timestamp, request ID, and outcome, but never raw request or response
+   contents.
 
-Background or policy-based Codex escalation remains deferred until the audit
-trail supports a separate approval decision.
+This authorization changes only the selected inference provider. It does not
+authorize an Approved Operation, enable a disabled toolset, or bypass a
+write-operation policy.
 
 ## Cloud Corpus Design
 
@@ -209,39 +253,46 @@ mount, OAuth, storage, backup, and restore decisions.
 
 ## Implementation Gates
 
-No component should be installed until these gates pass on PiServ:
+The runtime installation, ARM64 binary smoke test, loopback dashboard, toolset
+allowlist, and first backup are complete. The remaining gates are:
 
-1. **Hermes runtime:** benchmark an unprivileged Hermes service on PiServ with
-   no local model loaded. Record RSS, swap, response latency, restart recovery,
-   and permissions on its persistent service data.
+1. **Hermes runtime:** record authenticated response latency. Idle RSS,
+   persistent-data permissions, and restart recovery are already recorded.
 2. **Learning persistence:** prove that a curated memory entry and a reviewed
    skill survive a Hermes restart and a provider change. Back up and restore the
    service data, then verify audit continuity and rollback of a changed skill.
-3. **Codex:** prove Linux `arm64` CLI installation, subscription login,
-   per-request disclosure confirmation, sandbox isolation, result redaction,
-   audit capture, and graceful handling of plan usage limits. Historical
-   Raspberry Pi ARM64 crash reports make a live smoke test mandatory.
-4. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
+3. **Codex:** complete subscription login and prove pre-authorized route
+   selection, sandbox isolation, provenance notice, content-free audit capture,
+   result redaction, and graceful handling of plan usage limits.
+4. **Gemma benchmark:** run Gemma 4 E2B mobile text-only with an actual 64K
+   context on PiServ, measuring memory, latency, service stability, and the
+   effect on existing workloads.
+5. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
    switch Hermes from Codex to it, and rerun a fixed suite of conversations and
    read-only tools. The future model must offer at least 64K context.
-5. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
+6. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-6. **Home Assistant:** expose a small entity set, verify MCP authentication and
+7. **Home Assistant:** expose a small entity set, verify MCP authentication and
    state reads, then test one reversible service call with a confirmation.
-7. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
+8. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
-8. **Network and identity:** bind Direct Hermes Chat only to the LAN/Tailnet
-   policy and authenticate it with the initial PiServ administrator identity.
+9. **Network and identity:** retain loopback plus SSH tunneling until an
+   authenticated LAN/Tailnet policy is implemented and tested.
+10. **Dashboard dependencies:** review the three production and eight total high
+   severity npm audit findings from the pinned upstream web dependency tree
+   before widening the dashboard listener.
 
-After the gates pass, codify the selected service, capability gateway,
-credentials, firewall policy, health checks, and runbook in Ansible.
+After the gates pass, codify the capability gateway, credential references,
+firewall policy, and authenticated health checks in Ansible.
 
 ## Sources
 
 - [Hermes Agent quickstart and model requirements](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/getting-started/quickstart.md)
 - [Hermes Agent persistent memory](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/memory.md)
 - [Hermes Agent provider runtime and fallbacks](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/provider-runtime.md)
+- [Hermes Agent vision](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/vision.md)
+- [Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4)
 - [Hermes Agent Home Assistant integration](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/messaging/homeassistant.md)
 - [Hermes Agent Codex App-Server runtime](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/codex-app-server-runtime.md)
 - [Hermes Agent security guidance](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/security.md)

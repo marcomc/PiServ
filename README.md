@@ -151,6 +151,7 @@ Active implementation tracks:
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 | [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
 | [Wi-Fi connectivity watchdog](docs/runbooks/wifi-connectivity-watchdog.md) | Recover Wi-Fi after access-point or mesh outages |
+| [Hermes Agent](docs/tracks/hermes-agent-framework-research.md) | Run the persistent agent with Codex and bounded capabilities |
 
 ## Automation
 
@@ -173,9 +174,9 @@ of the full entrypoint is an unsupported bypass. The entry point first
 preflights external storage without mutation, then imports the steady-state
 configuration playbooks in dependency order: Tailscale, firewall, base host
 policy, Wi-Fi connectivity watchdog, external storage, Freenove, pCloud, Home
-Assistant MQTT Agent, Jackett, and RaiPlaySound. It is designed to be rerun; a
-converged second run should report `changed=0` apart from live state that has
-drifted.
+Assistant MQTT Agent, Hermes Agent, Jackett, and RaiPlaySound. It is designed
+to be rerun; a converged second run should report `changed=0` apart from live
+state that has drifted.
 
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is

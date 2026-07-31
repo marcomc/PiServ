@@ -1,0 +1,83 @@
+---
+- name: Create Codex download cache
+  ansible.builtin.file:
+    path: /var/cache/hermes-agent
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download checksum-pinned Codex CLI archive
+  ansible.builtin.get_url:
+    url: "{{ hermes_agent_codex_archive_url }}"
+    dest: >-
+      /var/cache/hermes-agent/codex-{{
+      hermes_agent_codex_version }}-aarch64-linux.tar.gz
+    checksum: "{{ hermes_agent_codex_archive_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create versioned Codex installation directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect versioned Codex binary
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir }}/codex"
+  register: hermes_agent_codex_binary
+
+- name: Extract Codex CLI archive
+  ansible.builtin.unarchive:
+    src: >-
+      /var/cache/hermes-agent/codex-{{
+      hermes_agent_codex_version }}-aarch64-linux.tar.gz
+    dest: "{{ hermes_agent_codex_install_dir }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Install normalized Codex binary name
+  ansible.builtin.copy:
+    src: >-
+      {{ hermes_agent_codex_install_dir
+      }}/codex-aarch64-unknown-linux-musl
+    dest: "{{ hermes_agent_codex_install_dir }}/codex"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Remove extracted Codex source filename
+  ansible.builtin.file:
+    path: >-
+      {{ hermes_agent_codex_install_dir
+      }}/codex-aarch64-unknown-linux-musl
+    state: absent
+
+- name: Link active Codex CLI
+  ansible.builtin.file:
+    src: "{{ hermes_agent_codex_install_dir }}/codex"
+    dest: /usr/local/bin/codex
+    state: link
+    owner: root
+    group: root
+    force: true
+  when:
+    - not ansible_check_mode or hermes_agent_codex_binary.stat.exists
+
+- name: Refresh versioned Codex binary state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir }}/codex"
+  register: hermes_agent_codex_binary

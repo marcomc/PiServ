@@ -17,7 +17,7 @@ checklists. Use them for active work that is not yet fully automated.
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
 | [Google Drive and external storage](google-drive-and-external-storage.md) | Proposal |
-| [Hermes Agent framework](hermes-agent-framework-research.md) | Candidate research |
+| [Hermes Agent framework](hermes-agent-framework-research.md) | Pre-auth runtime implemented |
 | [Pi Node on PiServ](pi-node-on-piserv.md) | Investigation: native install blocked |
 | [Ansible Galaxy Wi-Fi watchdog role assessment](ansible-galaxy-wifi-watchdog-role-assessment.md) | Decision: retain a dedicated role |
 

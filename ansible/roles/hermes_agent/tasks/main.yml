@@ -1,0 +1,25 @@
+---
+- name: Validate Hermes Agent target and policy
+  ansible.builtin.import_tasks: validate-target.yml
+
+- name: Install Hermes Agent system packages
+  ansible.builtin.apt:
+    name: "{{ hermes_agent_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Configure Hermes Agent runtime identity
+  ansible.builtin.import_tasks: runtime-user.yml
+
+- name: Install pinned Hermes Agent runtime
+  ansible.builtin.import_tasks: install-hermes.yml
+
+- name: Install pinned Codex CLI
+  ansible.builtin.import_tasks: install-codex.yml
+
+- name: Configure Hermes Agent state and services
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Validate Hermes Agent installation
+  ansible.builtin.import_tasks: validate-install.yml

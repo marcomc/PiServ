@@ -1,0 +1,66 @@
+---
+argument_specs:
+  main:
+    short_description: Install and configure Nous Hermes Agent.
+    description:
+      - Installs a pinned Hermes Agent revision under a root-owned code path.
+      - Runs Hermes under a dedicated unprivileged system identity.
+      - Installs a checksum-pinned Codex CLI ARM64 release.
+      - Manages a loopback-only dashboard and optional state backups.
+      - Does not perform provider login or store operator credentials.
+    options:
+      hermes_agent_user:
+        type: str
+        default: hermes-agent
+        description: Dedicated Hermes runtime user.
+      hermes_agent_group:
+        type: str
+        default: hermes-agent
+        description: Dedicated Hermes runtime group.
+      hermes_agent_home:
+        type: path
+        default: /var/lib/hermes-agent
+        description: Private persistent Hermes data directory.
+      hermes_agent_repo_version:
+        type: str
+        description: Full upstream Hermes Git commit to install.
+      hermes_agent_model:
+        type: str
+        default: gpt-5.5
+        description: Initial provider model identifier.
+      hermes_agent_provider:
+        type: str
+        default: openai-codex
+        description: Initial Hermes model provider.
+      hermes_agent_enabled_toolsets:
+        type: list
+        elements: str
+        description: Explicit CLI toolset allowlist.
+      hermes_agent_disabled_toolsets:
+        type: list
+        elements: str
+        description: Toolsets suppressed after all other resolution.
+      hermes_agent_dashboard_host:
+        type: str
+        default: 127.0.0.1
+        description: Dashboard bind address.
+      hermes_agent_dashboard_port:
+        type: int
+        default: 9119
+        description: Dashboard TCP port.
+      hermes_agent_manage_dashboard:
+        type: bool
+        default: true
+        description: Whether to build and run the dashboard.
+      hermes_agent_manage_backup:
+        type: bool
+        default: false
+        description: Whether to schedule full Hermes state backups.
+      hermes_agent_backup_group:
+        type: str
+        default: ""
+        description: Existing group that grants access to the backup parent.
+      hermes_agent_backup_dir:
+        type: path
+        default: /var/backups/hermes-agent
+        description: Private directory for full Hermes backup archives.
