@@ -58,6 +58,7 @@ def _validate_candidate(source: str) -> None:
         and handler_body[1].exc.func.id == "SystemExit"
         and len(handler_body[1].exc.args) == 1
         and isinstance(handler_body[1].exc.args[0], ast.Constant)
+        and type(handler_body[1].exc.args[0].value) is int
         and handler_body[1].exc.args[0].value == 0
         and not handler_body[1].exc.keywords
     )

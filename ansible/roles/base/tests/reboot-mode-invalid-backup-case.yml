@@ -8,9 +8,18 @@
     mode: "0700"
   become: true
 
+- name: Select the invalid-backup command line
+  ansible.builtin.set_fact:
+    base_test_invalid_backup_cmdline_content: >-
+      {{
+        'console=tty1 systemd.setenv=NOTE="keep reboot=w value"\n'
+        if base_test_invalid_backup_kind == 'quoted'
+        else 'console=tty1 reboot=w\n'
+      }}
+
 - name: Create the invalid-backup command line
   ansible.builtin.copy:
-    content: "console=tty1 reboot=w\n"
+    content: "{{ base_test_invalid_backup_cmdline_content }}"
     dest: >-
       {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/cmdline.txt
     owner: "{{ base_test_root_user.stdout }}"
@@ -156,4 +165,4 @@
       - base_test_invalid_backup_rejected
       - >-
         (base_test_invalid_backup_cmdline.content | b64decode)
-        == 'console=tty1 reboot=w\n'
+        == base_test_invalid_backup_cmdline_content

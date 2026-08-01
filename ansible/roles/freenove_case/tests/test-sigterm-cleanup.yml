@@ -553,6 +553,48 @@
               - freenove_case_handler_arguments_rejected
               - not ((freenove_case_test_directory.path + '/handler-arguments-runtime.py') is exists)
 
+        - name: Write a source with a float signal exit status
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/handler-float-exit.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0.0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize float signal exit rejection state
+          ansible.builtin.set_fact:
+            freenove_case_float_exit_rejected: false
+
+        - name: Reject float signal exit status before writing an artifact
+          block:
+            - name: Attempt to render float signal exit status
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/handler-float-exit.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/handler-float-exit-runtime.py"
+          rescue:
+            - name: Record expected float signal exit rejection
+              ansible.builtin.set_fact:
+                freenove_case_float_exit_rejected: true
+
+        - name: Verify float signal exit leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_float_exit_rejected
+              - not ((freenove_case_test_directory.path + '/handler-float-exit-runtime.py') is exists)
+
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/unknown.py"
@@ -633,6 +675,7 @@
             content: "warm\n"
             dest: "{{ freenove_case_test_directory.path }}/reboot-mode"
             mode: "0600"
+          become: true
 
         - name: Activate cold mode before a simulated automatic reboot
           ansible.builtin.include_tasks: ../tasks/pre-reboot-mode.yml
@@ -644,11 +687,47 @@
           ansible.builtin.slurp:
             path: "{{ freenove_case_test_directory.path }}/reboot-mode"
           register: freenove_case_test_reboot_mode
+          become: true
 
         - name: Verify cold mode is active before reboot
           ansible.builtin.assert:
             that:
               - (freenove_case_test_reboot_mode.content | b64decode) == 'cold\n'
+
+        - name: Create an unsafe pre-reboot mode fixture
+          ansible.builtin.copy:
+            content: "warm\n"
+            dest: "{{ freenove_case_test_directory.path }}/unsafe-reboot-mode"
+            mode: "0622"
+          become: true
+
+        - name: Initialize unsafe pre-reboot control rejection state
+          ansible.builtin.set_fact:
+            freenove_case_unsafe_pre_reboot_rejected: false
+
+        - name: Reject an unsafe pre-reboot control before activation
+          block:
+            - name: Attempt activation through an unsafe pre-reboot control
+              ansible.builtin.include_tasks: ../tasks/pre-reboot-mode.yml
+              vars:
+                freenove_case_pre_reboot_mode: cold
+                freenove_case_reboot_mode_path: "{{ freenove_case_test_directory.path }}/unsafe-reboot-mode"
+          rescue:
+            - name: Record expected unsafe pre-reboot control rejection
+              ansible.builtin.set_fact:
+                freenove_case_unsafe_pre_reboot_rejected: true
+
+        - name: Verify unsafe pre-reboot control remains unchanged
+          ansible.builtin.slurp:
+            path: "{{ freenove_case_test_directory.path }}/unsafe-reboot-mode"
+          register: freenove_case_unsafe_pre_reboot_mode
+          become: true
+
+        - name: Require unsafe pre-reboot control rejection before activation
+          ansible.builtin.assert:
+            that:
+              - freenove_case_unsafe_pre_reboot_rejected
+              - (freenove_case_unsafe_pre_reboot_mode.content | b64decode) == 'warm\n'
 
         - name: Set a string false cleanup flag
           ansible.builtin.set_fact:

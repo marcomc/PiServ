@@ -134,6 +134,7 @@
             - unsafe_mode
             - empty
             - whitespace
+            - quoted
             - runtime_unknown
             - runtime_unsafe_mode
             - runtime_cmdline_alias

@@ -13,9 +13,11 @@
       - freenove_case_reboot_mode_stat.stat.exists
       - freenove_case_reboot_mode_stat.stat.isreg
       - not freenove_case_reboot_mode_stat.stat.islnk
+      - freenove_case_reboot_mode_stat.stat.uid == 0
+      - freenove_case_reboot_mode_stat.stat.mode is match('^0?[0-7][0145][0145]$')
     fail_msg: >-
       Automatic reboot is blocked because {{ freenove_case_reboot_mode_path }}
-      is not a non-symlink regular file.
+      is not a root-owned, non-group/world-writable, non-symlink regular file.
 
 - name: Read the active kernel reboot mode
   ansible.builtin.slurp:

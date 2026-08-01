@@ -75,9 +75,12 @@
     that:
       - base_kernel_cmdline_original is match('^[^\r\n]+\r?\n?$')
       - base_kernel_cmdline_original_tokens | length > 0
+      - not ('"' in base_kernel_cmdline_original)
+      - not ("'" in base_kernel_cmdline_original)
     fail_msg: >-
       {{ base_kernel_cmdline_path }} must contain exactly one non-empty physical
-      line before reboot-mode policy is applied.
+      line with unquoted whitespace-separated tokens before reboot-mode policy
+      is applied.
 
 - name: Select the managed reboot-mode token
   ansible.builtin.set_fact:
