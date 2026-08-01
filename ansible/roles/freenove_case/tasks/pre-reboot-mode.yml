@@ -24,6 +24,16 @@
   become: true
   check_mode: false
 
+- name: Require a recognized active kernel reboot mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        freenove_case_reboot_mode_before.content | b64decode | trim
+        in ['default', 'warm', 'cold']
+    fail_msg: >-
+      Automatic reboot is blocked because {{ freenove_case_reboot_mode_path }}
+      contains an unrecognized reboot mode and will not be overwritten.
+
 - name: Activate the required mode for the pending reboot
   when:
     - freenove_case_reboot_mode_before.content | b64decode | trim != freenove_case_pre_reboot_mode

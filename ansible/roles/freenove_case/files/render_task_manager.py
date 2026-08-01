@@ -58,7 +58,7 @@ def _validate_candidate(source: str) -> None:
         raise UnsupportedSourceError("unsupported SIGTERM cleanup structure")
 
 
-def _replace_handler_cleanup(source: str) -> str:
+def _replace_in_handler(source: str, pattern: str, replacement: str, label: str) -> str:
     tree = ast.parse(source)
     manager = next(
         (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TaskManager"),
@@ -77,29 +77,51 @@ def _replace_handler_cleanup(source: str) -> str:
     lines[handler.lineno - 1 : handler.end_lineno] = [
         _replace_once(
             handler_source,
-            r"^([ \t]*)self\.stop_all_tasks\(\)[ \t]*$",
-            r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
-            "obsolete signal cleanup in handle_signal",
+            pattern,
+            replacement,
+            label,
         )
+    ]
+    return "".join(lines)
+
+
+def _replace_in_task_manager(source: str, pattern: str, replacement: str, label: str) -> str:
+    tree = ast.parse(source)
+    manager = next(
+        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TaskManager"),
+        None,
+    )
+    if manager is None or manager.end_lineno is None:
+        raise UnsupportedSourceError("expected exactly one TaskManager class")
+    lines = source.splitlines(keepends=True)
+    manager_source = "".join(lines[manager.lineno - 1 : manager.end_lineno])
+    lines[manager.lineno - 1 : manager.end_lineno] = [
+        _replace_once(manager_source, pattern, replacement, label)
     ]
     return "".join(lines)
 
 
 def render(source: str) -> str:
     """Build and validate a candidate before any destination write."""
-    rendered = _replace_once(
+    rendered = _replace_in_task_manager(
         source,
         r"^[ \t]*atexit\.register\(self\.(?:handle_signal|stop_monitoring)\)[ \t]*\r?\n",
         "",
-        "atexit registration",
+        "atexit registration in TaskManager",
     )
-    rendered = _replace_once(
+    if not re.search(r"\batexit\.", rendered):
+        rendered = _replace_once(
+            rendered,
+            r"^import atexit[ \t]*\r?\n",
+            "",
+            "atexit import",
+        )
+    rendered = _replace_in_handler(
         rendered,
-        r"^import atexit[ \t]*\r?\n",
-        "",
-        "atexit import",
+        r"^([ \t]*)self\.stop_all_tasks\(\)[ \t]*$",
+        r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
+        "obsolete signal cleanup in handle_signal",
     )
-    rendered = _replace_handler_cleanup(rendered)
     rendered = _replace_once(
         rendered,
         r"^([ \t]*)finally:[ \t]*\r?\n([ \t]+)manager\.stop_monitoring\(\)[ \t]*$",
