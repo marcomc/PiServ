@@ -48,7 +48,7 @@
   ansible.builtin.file:
     path: >-
       {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
-    mode: "0666"
+    mode: "0622"
   become: true
 
 - name: Create an invalid backup symlink
