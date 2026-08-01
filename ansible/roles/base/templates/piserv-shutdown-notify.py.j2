@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import re
+import socket
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+RECIPIENT = {{ base_shutdown_notification_recipient | to_json }}
+SUBJECT_PREFIX = {{ base_shutdown_notification_subject_prefix | to_json }}
+JOURNAL_TIMEOUT_SECONDS = 10
+MAIL_TIMEOUT_SECONDS = 20
+
+SUDO_COMMAND_PATTERN = re.compile(
+    r"^(?P<user>[^\s:]+)\s*:\s.*?\bCOMMAND=(?P<command>.+)$"
+)
+SHUTDOWN_COMMAND_PATTERN = re.compile(
+    r"\b(?:reboot|poweroff|halt|shutdown)\b", re.IGNORECASE
+)
+
+
+@dataclass(frozen=True)
+class ShutdownRequest:
+    requested_at: str
+    requested_by: str
+    command: str
+
+
+def system_state() -> str:
+    try:
+        result = subprocess.run(
+            ["/usr/bin/systemctl", "is-system-running"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=JOURNAL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def shutdown_in_progress() -> bool:
+    return system_state() in {"stopping", "offline"}
+
+
+def journal_records(identifier: str) -> list[dict[str, object]]:
+    try:
+        result = subprocess.run(
+            [
+                "/usr/bin/journalctl",
+                "--boot=0",
+                "--identifier",
+                identifier,
+                "--no-pager",
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=JOURNAL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    records: list[dict[str, object]] = []
+    for line in result.stdout.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def journal_timestamp(record: dict[str, object]) -> str:
+    timestamp = record.get("_SOURCE_REALTIME_TIMESTAMP")
+    try:
+        timestamp_seconds = int(str(timestamp)) / 1_000_000
+    except (TypeError, ValueError):
+        return "unknown"
+    return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(
+        timespec="seconds"
+    )
+
+
+def latest_sudo_shutdown_request(
+    records: list[dict[str, object]],
+) -> ShutdownRequest | None:
+    requests: list[tuple[int, ShutdownRequest]] = []
+    for record in records:
+        message = record.get("MESSAGE")
+        if not isinstance(message, str):
+            continue
+        match = SUDO_COMMAND_PATTERN.match(message)
+        if match is None:
+            continue
+        command = match.group("command").strip()
+        if SHUTDOWN_COMMAND_PATTERN.search(command) is None:
+            continue
+        timestamp = record.get("_SOURCE_REALTIME_TIMESTAMP")
+        try:
+            sequence = int(str(timestamp))
+        except (TypeError, ValueError):
+            sequence = -1
+        requests.append(
+            (
+                sequence,
+                ShutdownRequest(
+                    requested_at=journal_timestamp(record),
+                    requested_by=match.group("user"),
+                    command=command,
+                ),
+            )
+        )
+
+    if not requests:
+        return None
+    return max(requests, key=lambda item: item[0])[1]
+
+
+def shutdown_request() -> ShutdownRequest | None:
+    return latest_sudo_shutdown_request(journal_records("sudo"))
+
+
+def notification_payload(hostname: str, request: ShutdownRequest | None) -> str:
+    notification_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    subject = f"{SUBJECT_PREFIX} shutting down: {hostname}"
+    if request is None:
+        requested_at = "unknown"
+        requested_by = "unknown"
+        command = "unknown"
+        evidence = "No matching sudo shutdown command was retained for this boot."
+    else:
+        requested_at = request.requested_at
+        requested_by = request.requested_by
+        command = request.command
+        evidence = "Latest matching sudo journal record from the current boot."
+
+    return "\n".join(
+        [
+            f"To: {RECIPIENT}",
+            f"Subject: {subject}",
+            "",
+            f"Host: {hostname}",
+            f"Shutdown notification time (UTC): {notification_time}",
+            f"Shutdown request time (UTC): {requested_at}",
+            f"Requested by: {requested_by}",
+            f"Command: {command}",
+            f"Evidence: {evidence}",
+            "",
+        ]
+    )
+
+
+def main() -> int:
+    if not shutdown_in_progress():
+        return 0
+
+    hostname = socket.getfqdn() or socket.gethostname()
+    payload = notification_payload(hostname, shutdown_request())
+    subprocess.run(
+        ["/usr/sbin/sendmail", "-t"],
+        input=payload,
+        text=True,
+        check=True,
+        timeout=MAIL_TIMEOUT_SECONDS,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

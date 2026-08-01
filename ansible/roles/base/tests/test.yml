@@ -25,6 +25,7 @@
         base_manage_unattended_upgrades: false
         base_manage_reboot_notification: false
         base_manage_kernel_reboot_mode: false
+        base_manage_shutdown_notification: false
         base_manage_smartmontools: false
         base_validate_root_storage: false
         base_packages: []

@@ -20,7 +20,7 @@ This project-local role codifies live PiServ baseline hardening:
 - Cockpit HTTPS web console for system administration
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
-- boot notification service
+- boot and shutdown notification services
 - optional managed kernel reboot mode with a stable pre-policy backup
 - SMART health inspection tooling for local storage validation
 - base host packages, including `jq` for JSON inspection
@@ -74,6 +74,9 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_kernel_cmdline_path` | `/boot/firmware/cmdline.txt` | Managed single-line kernel command line |
 | `base_kernel_cmdline_backup_path` | `/var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode` | Stable pre-policy backup |
 | `base_kernel_reboot_runtime_mode_path` | `/sys/kernel/reboot/mode` | Active kernel reboot-mode control |
+| `base_manage_shutdown_notification` | `true` | Install and enable shutdown notification service |
+| `base_shutdown_notification_recipient` | `root` | Local recipient for shutdown notification |
+| `base_shutdown_notification_condition_path` | `/etc/msmtprc` | Path required before shutdown notification runs |
 | `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
 | `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
 | `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
@@ -113,8 +116,14 @@ cannot reach the plugin. Set `base_unattended_mail_to` to the required local
 recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 
 The boot notification service is enabled by default, but systemd skips it until
-`base_reboot_notification_condition_path` exists. Configure a mail transport
-with a separate role before expecting delivery.
+`base_reboot_notification_condition_path` exists. The shutdown notification
+service remains active until `systemd` enters a shutdown transaction and sends
+before the network is stopped when
+`base_shutdown_notification_condition_path` exists. Its message includes the
+latest matching `sudo` command, user, and timestamp retained in the current
+boot journal. A shutdown not initiated through `sudo`, such as a power loss or
+kernel panic, has no attributable command and may not send an email at all.
+Configure a mail transport with a separate role before expecting delivery.
 
 Kernel reboot-mode management is disabled by default. When enabled, the role
 requires a non-empty single-line command file, preserves its first observed

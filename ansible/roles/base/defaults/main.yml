@@ -92,6 +92,13 @@ base_kernel_cmdline_backup_owner: root
 base_kernel_cmdline_backup_group: root
 base_kernel_reboot_runtime_mode_path: /sys/kernel/reboot/mode
 
+base_manage_shutdown_notification: true
+base_shutdown_notification_service_name: piserv-shutdown-notify.service
+base_shutdown_notification_script_path: /usr/local/sbin/piserv-shutdown-notify
+base_shutdown_notification_recipient: root
+base_shutdown_notification_subject_prefix: "[PiServ]"
+base_shutdown_notification_condition_path: /etc/msmtprc
+
 base_manage_smartmontools: true
 base_smartmontools_packages:
   - smartmontools

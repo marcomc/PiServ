@@ -58,6 +58,10 @@ The `base` role configures mail consumers:
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown notification service | `piserv-shutdown-notify.service` |
+| shutdown notification recipient | `root` |
+| shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown attribution | Latest matching `sudo` command, user, and UTC timestamp in the current boot journal |
 
 ## Gmail App Password
 
@@ -179,6 +183,7 @@ Verify:
 
 ```sh
 ssh admin@PiServ.local 'systemctl status piserv-reboot-notify.service --no-pager'
+ssh admin@PiServ.local 'systemctl status piserv-shutdown-notify.service --no-pager'
 ssh admin@PiServ.local 'sudo test -f /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py'
 ssh admin@PiServ.local 'sudo grep -R "^Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
 ```
@@ -207,10 +212,11 @@ The live PiServ config is create-only and already has these keys.
 
 ## Rollback
 
-Disable boot notifications:
+Disable boot and shutdown notifications:
 
 ```sh
 ssh admin@PiServ.local 'sudo systemctl disable --now piserv-reboot-notify.service'
+ssh admin@PiServ.local 'sudo systemctl disable --now piserv-shutdown-notify.service'
 ```
 
 Remove email keys from the RaiPlaySound config to make it skip summaries again.

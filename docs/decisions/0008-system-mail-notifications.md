@@ -54,6 +54,7 @@ and hardens operator-created files when present.
 | External recipient | Operator-managed aliases in `/etc/aliases` |
 | unattended-upgrades | `base_unattended_mail_to` receives the routine digest and native error-only fallback |
 | Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists and is non-empty |
+| Shutdown notice | Persistent systemd service that sends before network stop; reports the latest matching `sudo` command, user, and UTC timestamp from the current boot journal |
 | RaiPlaySound | Uses `/usr/local/bin/msmtp-system` for system-config compatibility |
 
 Do not add an external Galaxy `msmtp` dependency unless PiServ later switches
@@ -82,6 +83,10 @@ standalone role.
 - Error fallback mail remains the upstream raw format because an unexpected
   top-level failure can occur before the plugin callback runs. This prioritizes
   notification delivery over formatting for that exceptional path.
+- Shutdown notifications only report a concrete initiator for commands retained
+  in the current boot's `sudo` journal. Direct root, noninteractive, or
+  hardware-initiated shutdowns report unknown attribution; power loss and
+  kernel panic cannot send a shutdown email.
 
 ## Validation
 
@@ -95,5 +100,6 @@ Current validation:
 | `mail -s ... root` | External notification received through alias |
 | PiServ base playbook | Unmanaged mail config mode validates and remains idempotent |
 | `piserv-reboot-notify.service` | Sends a boot email after reboot when `/etc/msmtprc` is non-empty |
+| `piserv-shutdown-notify.service` | Sends before an orderly shutdown when `/etc/msmtprc` is non-empty; includes available current-boot `sudo` attribution |
 | unattended-upgrades plugin | Sends a version-aware multipart digest through the root alias |
 | RaiPlaySound | Email configuration present; dry-run summary validation passed |

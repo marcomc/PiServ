@@ -236,6 +236,30 @@ argument_specs:
         type: path
         default: /sys/kernel/reboot/mode
         description: Runtime control used to activate the current kernel reboot mode.
+      base_manage_shutdown_notification:
+        type: bool
+        default: true
+        description: Whether to install the shutdown notification systemd service.
+      base_shutdown_notification_service_name:
+        type: str
+        default: piserv-shutdown-notify.service
+        description: Shutdown notification service name.
+      base_shutdown_notification_script_path:
+        type: path
+        default: /usr/local/sbin/piserv-shutdown-notify
+        description: Shutdown notification helper path.
+      base_shutdown_notification_recipient:
+        type: str
+        default: root
+        description: Local recipient used by shutdown notification email.
+      base_shutdown_notification_subject_prefix:
+        type: str
+        default: "[PiServ]"
+        description: Subject prefix used by shutdown notification email.
+      base_shutdown_notification_condition_path:
+        type: path
+        default: /etc/msmtprc
+        description: Path that must exist before the shutdown notification service runs.
       base_manage_smartmontools:
         type: bool
         default: true
