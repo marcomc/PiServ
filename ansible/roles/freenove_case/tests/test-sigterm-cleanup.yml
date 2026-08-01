@@ -18,9 +18,12 @@
         content: |
           import atexit
           import signal
+          import time
+          from pathlib import Path
 
           class TaskManager:
               def __init__(self):
+                  self.monitoring = True
                   atexit.register(self.handle_signal)
                   signal.signal(signal.SIGTERM, self.handle_signal)
 
@@ -28,7 +31,35 @@
                   self.stop_all_tasks()
 
               def stop_monitoring(self):
-                  pass
+                  self.monitoring = False
+                  marker_path = Path("{{ freenove_case_test_directory.path }}/cleanup.log")
+                  previous = marker_path.read_text(encoding="utf-8") if marker_path.exists() else ""
+                  marker_path.write_text(previous + "cleanup\n", encoding="utf-8")
+
+          manager = TaskManager()
+          try:
+              while True:
+                  time.sleep(1)
+          finally:
+              manager.stop_monitoring()
+
+    - name: Verify the disabled cleanup fix leaves upstream source unchanged
+      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+      vars:
+        freenove_case_manage_sigterm_cleanup_fix: false
+        freenove_case_task_manager_path: >-
+          {{ freenove_case_test_directory.path }}/task_manager.py
+
+    - name: Read disabled cleanup-fix fixture
+      ansible.builtin.slurp:
+        src: "{{ freenove_case_test_directory.path }}/task_manager.py"
+      register: freenove_case_disabled_fixture
+
+    - name: Assert disabled cleanup fix does not alter upstream source
+      ansible.builtin.assert:
+        that:
+          - "'self.stop_all_tasks()' in (freenove_case_disabled_fixture.content | b64decode)"
+        quiet: true
 
     - name: Apply the SIGTERM cleanup task
       ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
@@ -36,7 +67,49 @@
         freenove_case_task_manager_path: >-
           {{ freenove_case_test_directory.path }}/task_manager.py
 
-    - name: Verify the patched task manager exits cleanly
+    - name: Apply the cleanup task to the legacy partial-patch fixture
+      ansible.builtin.copy:
+        dest: "{{ freenove_case_test_directory.path }}/legacy_task_manager.py"
+        mode: "0644"
+        content: |
+          import atexit
+
+          class TaskManager:
+              def __init__(self):
+                  self.monitoring = True
+                  atexit.register(self.stop_monitoring)
+
+              def handle_signal(self, signum=None, frame=None):
+                  self.stop_monitoring()
+                  raise SystemExit(0)
+
+              def stop_monitoring(self):
+                  pass
+
+          manager = TaskManager()
+          manager.stop_monitoring()
+
+    - name: Reconcile the legacy partial-patch fixture
+      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+      vars:
+        freenove_case_task_manager_path: >-
+          {{ freenove_case_test_directory.path }}/legacy_task_manager.py
+
+    - name: Assert legacy partial-patch fixture has no atexit callback
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import pathlib
+            import sys
+
+            source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+            raise SystemExit(0 if "atexit.register(" not in source else 1)
+          - "{{ freenove_case_test_directory.path }}/legacy_task_manager.py"
+      changed_when: false
+
+    - name: Verify SIGTERM exits the patched task manager after one cleanup
       ansible.builtin.command:
         argv:
           - /usr/bin/python3
@@ -44,17 +117,23 @@
           - |
             import pathlib
             import signal
+            import subprocess
             import sys
+            import time
 
             source_path = pathlib.Path(sys.argv[1])
-            namespace = {}
-            exec(source_path.read_text(encoding="utf-8"), namespace)
-            manager = namespace["TaskManager"]()
+            marker_path = source_path.with_name("cleanup.log")
+            process = subprocess.Popen([sys.executable, str(source_path)])
+            time.sleep(0.2)
+            process.send_signal(signal.SIGTERM)
             try:
-                manager.handle_signal(signal.SIGTERM, None)
-            except SystemExit as error:
-                raise SystemExit(error.code)
-            raise SystemExit(1)
+                return_code = process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise SystemExit(1)
+            cleanup_lines = marker_path.read_text(encoding="utf-8").splitlines()
+            raise SystemExit(0 if return_code == 0 and cleanup_lines == ["cleanup"] else 1)
           - "{{ freenove_case_test_directory.path }}/task_manager.py"
       changed_when: false
   post_tasks:

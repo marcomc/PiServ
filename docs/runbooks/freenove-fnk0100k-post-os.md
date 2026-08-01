@@ -88,13 +88,6 @@ Optional Freenove tutorial operations are exposed as explicit variables:
 | `freenove_case_manage_background_service` | `true` in PiServ playbook | Creates and manages `my_app_running.service` |
 | `freenove_case_manage_sigterm_cleanup_fix` | `true` in PiServ playbook | Makes the upstream task manager clean up and exit on `SIGTERM` |
 | `freenove_case_validate_expansion_controller` | `true` in PiServ playbook | Fails closed when the Freenove I2C controller is not detected |
-
-The upstream task manager calls a non-existent `stop_all_tasks()` method from
-its `SIGTERM` handler. This was observed during a shutdown that did not return
-PiServ to an online state. The managed patch uses its existing
-`stop_monitoring()` cleanup method and exits normally. Stopping the service
-validates this path; a separate, operator-approved reboot is required to
-validate the firmware-level reset outcome.
 | `freenove_case_manage_app_config` | `true` in PiServ playbook | Manages `Code/app_config.json` |
 | `freenove_case_apply_hardware_config` | `true` in PiServ playbook | Applies managed LED and fan values directly to the case controller |
 | `freenove_case_led_task_enabled` | `false` in PiServ playbook | Keeps `task_led.py` from overriding Ansible-managed LED state |
@@ -117,6 +110,14 @@ validate the firmware-level reset outcome.
 | `freenove_case_run_pibenchmarks` | `false` | Runs the storage benchmark once with a marker file |
 | `freenove_case_manage_pcie_gen3` | `false` | Manages the PCIe Gen3 config line |
 | `freenove_case_enable_pcie_gen3` | `false` | Enables Gen3 when PCIe management is opted in |
+
+The upstream task manager calls a non-existent `stop_all_tasks()` method from
+its `SIGTERM` handler. This was observed during a shutdown that did not return
+PiServ to an online state. The managed patch uses its existing
+`stop_monitoring()` cleanup method, removes the obsolete `atexit` callback,
+and exits normally. Stopping the service validates this path; a separate,
+operator-approved reboot is required to validate the firmware-level reset
+outcome.
 
 Manual upstream steps from the tutorial are retained below for reference.
 
