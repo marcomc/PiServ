@@ -464,6 +464,48 @@
               - freenove_case_conditional_handler_rejected
               - not ((freenove_case_test_directory.path + '/conditional-handler-runtime.py') is exists)
 
+        - name: Write a source with signal-cleanup arguments
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/handler-arguments.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring(unexpected=True)
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize signal-cleanup arguments rejection state
+          ansible.builtin.set_fact:
+            freenove_case_handler_arguments_rejected: false
+
+        - name: Reject signal-cleanup arguments before writing an artifact
+          block:
+            - name: Attempt to render signal-cleanup arguments
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/handler-arguments.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/handler-arguments-runtime.py"
+          rescue:
+            - name: Record expected signal-cleanup arguments rejection
+              ansible.builtin.set_fact:
+                freenove_case_handler_arguments_rejected: true
+
+        - name: Verify signal-cleanup arguments leave no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_handler_arguments_rejected
+              - not ((freenove_case_test_directory.path + '/handler-arguments-runtime.py') is exists)
+
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/unknown.py"

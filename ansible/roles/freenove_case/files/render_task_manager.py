@@ -50,6 +50,8 @@ def _validate_candidate(source: str) -> None:
         and isinstance(handler_body[0].value.func.value, ast.Name)
         and handler_body[0].value.func.value.id == "self"
         and handler_body[0].value.func.attr == "stop_monitoring"
+        and not handler_body[0].value.args
+        and not handler_body[0].value.keywords
         and isinstance(handler_body[1], ast.Raise)
         and isinstance(handler_body[1].exc, ast.Call)
         and isinstance(handler_body[1].exc.func, ast.Name)
