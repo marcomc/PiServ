@@ -107,6 +107,10 @@
             - symlink
             - unsafe_mode
             - empty
+            - runtime_cmdline_alias
+            - runtime_backup_alias
+            - runtime_cmdline_hardlink
+            - runtime_backup_hardlink
           loop_control:
             loop_var: base_test_invalid_backup_kind
       always:

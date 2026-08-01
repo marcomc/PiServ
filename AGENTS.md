@@ -94,8 +94,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   checkout in place. Render a separate validated runtime artifact and prove
   source-copy plus render convergence on a second run.
 - Before changing a boot command line, fail closed unless the stable rollback
-  backup is a distinct private regular file with valid content. Activate and
-  verify any required current-kernel reboot mode before an automatic reboot.
+  backup and any current-kernel reboot control are distinct private regular
+  files with valid content. Reject both path and inode aliases before mutation,
+  then activate and verify any required current-kernel reboot mode before an
+  automatic reboot.
 
 ## pCloud / FUSE Rules
 

@@ -29,7 +29,9 @@ appends one final `reboot=c`. It preserves the first pre-policy command line at:
 Before returning, the role also writes and verifies `cold` in
 `/sys/kernel/reboot/mode`. This protects the first reboot after deployment;
 changing the boot command line alone would affect only the next kernel. Ansible
-never reboots the host automatically.
+never reboots the host automatically. It fails before mutation when that runtime
+control aliases the command line or the rollback backup, including through a
+hard link.
 
 ## Apply
 
@@ -97,7 +99,7 @@ rollback must remain persistent.
 
 | Date | Command | Observed result | Follow-up |
 | --- | --- | --- | --- |
-| 2026-08-01 | `ANSIBLE_ROLES_PATH=.. ansible-playbook tests/test-reboot-mode.yml` | Applied `reboot=c`, removed it for `default`, preserved the original backup, and rejected four unsafe backup states | Retain focused lifecycle and fail-closed regressions |
+| 2026-08-01 | `ANSIBLE_ROLES_PATH=.. ansible-playbook tests/test-reboot-mode.yml` | Applied `reboot=c`, removed it for `default`, preserved the original backup, and rejected unsafe backup plus runtime-path aliases | Retain focused lifecycle and fail-closed regressions |
 | 2026-08-01 | `ANSIBLE_ROLES_PATH=.. ansible-playbook --check tests/test-reboot-mode-check.yml` | Predicted backup and cmdline changes without mutating fixtures | Keep the dedicated global check-mode entrypoint |
 | 2026-08-01 | `printf 'warm\n' \| sudo tee /sys/kernel/reboot/mode`, then `ansible-playbook -i ansible/inventory.ini ansible/playbooks/piserv-base.yml` | Returned active mode to `cold`; recap `ok=133 changed=1 failed=0` | No reboot required for activation proof |
 | 2026-08-01 | `sudo systemctl reboot` during activation and three persistent-policy trials | All returned in 33-40 seconds with mode `cold`, NVMe mounts intact, zero failed units, and Freenove active | Continue cold mode as production mitigation |

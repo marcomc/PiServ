@@ -7,9 +7,11 @@
       - base_kernel_cmdline_backup_path | length > 0
       - base_kernel_cmdline_backup_path != base_kernel_cmdline_path
       - base_kernel_reboot_runtime_mode_path | length > 0
+      - base_kernel_reboot_runtime_mode_path != base_kernel_cmdline_path
+      - base_kernel_reboot_runtime_mode_path != base_kernel_cmdline_backup_path
     fail_msg: >-
       Reboot mode must be default, warm, or cold, and all managed paths must be
-      non-empty with distinct command-line and backup files.
+      non-empty with distinct command-line, backup, and runtime-control files.
 
 - name: Inspect the configured kernel command line
   ansible.builtin.stat:
@@ -28,6 +30,31 @@
     fail_msg: >-
       {{ base_kernel_cmdline_path }} must be an existing non-symlink regular
       file before reboot-mode policy is applied.
+
+- name: Validate the active kernel reboot-mode control before modifying boot configuration
+  when: base_kernel_reboot_mode in ['warm', 'cold']
+  block:
+    - name: Inspect the active kernel reboot-mode control
+      ansible.builtin.stat:
+        path: "{{ base_kernel_reboot_runtime_mode_path }}"
+        follow: false
+      register: base_kernel_reboot_runtime_stat
+      become: true
+      check_mode: false
+
+    - name: Require a distinct active kernel reboot-mode control
+      ansible.builtin.assert:
+        that:
+          - base_kernel_reboot_runtime_stat.stat.exists
+          - base_kernel_reboot_runtime_stat.stat.isreg
+          - not base_kernel_reboot_runtime_stat.stat.islnk
+          - >-
+            base_kernel_reboot_runtime_stat.stat.dev != base_kernel_cmdline_stat.stat.dev
+            or base_kernel_reboot_runtime_stat.stat.inode != base_kernel_cmdline_stat.stat.inode
+        fail_msg: >-
+          {{ base_kernel_reboot_runtime_mode_path }} must be a non-symlink
+          regular file distinct from {{ base_kernel_cmdline_path }} before
+          reboot-mode policy is applied.
 
 - name: Read the current kernel command line
   ansible.builtin.slurp:
@@ -122,6 +149,19 @@
       private 0600 regular file owned by
       {{ base_kernel_cmdline_backup_owner }}:{{ base_kernel_cmdline_backup_group }}.
 
+- name: Require a runtime control distinct from the existing backup
+  when:
+    - base_kernel_reboot_mode in ['warm', 'cold']
+    - base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_kernel_reboot_runtime_stat.stat.dev != base_kernel_cmdline_backup_stat.stat.dev
+        or base_kernel_reboot_runtime_stat.stat.inode != base_kernel_cmdline_backup_stat.stat.inode
+    fail_msg: >-
+      {{ base_kernel_reboot_runtime_mode_path }} must be distinct from the
+      existing rollback backup {{ base_kernel_cmdline_backup_path }}.
+
 - name: Read the existing kernel command-line backup
   when: base_kernel_cmdline_backup_stat.stat.exists
   ansible.builtin.slurp:
@@ -187,24 +227,6 @@
 - name: Activate the current kernel reboot mode
   when: base_kernel_reboot_mode in ['warm', 'cold']
   block:
-    - name: Inspect the active kernel reboot-mode control
-      ansible.builtin.stat:
-        path: "{{ base_kernel_reboot_runtime_mode_path }}"
-        follow: false
-      register: base_kernel_reboot_runtime_stat
-      become: true
-      check_mode: false
-
-    - name: Require an active kernel reboot-mode control
-      ansible.builtin.assert:
-        that:
-          - base_kernel_reboot_runtime_stat.stat.exists
-          - base_kernel_reboot_runtime_stat.stat.isreg
-          - not base_kernel_reboot_runtime_stat.stat.islnk
-        fail_msg: >-
-          {{ base_kernel_reboot_runtime_mode_path }} must be a non-symlink
-          regular file before the active reboot mode can be changed.
-
     - name: Read the active kernel reboot mode
       ansible.builtin.slurp:
         path: "{{ base_kernel_reboot_runtime_mode_path }}"

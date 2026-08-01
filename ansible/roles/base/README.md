@@ -123,7 +123,9 @@ optionally appends one final `reboot=w` or `reboot=c` token. For warm or cold
 mode, it also activates and verifies the running kernel mode so the first reboot
 uses the selected path. Mode `default` removes the managed token and returns
 future boots to the Raspberry Pi device tree; it does not change the current
-kernel mode. The role never initiates a reboot.
+kernel mode. Before any change, the role requires the runtime control, command
+line, and any existing backup to be distinct regular files, including distinct
+filesystem identities. The role never initiates a reboot.
 
 The role installs `smartmontools` and derives the physical parent disk from the
 root filesystem. It validates that PiServ is booted from NVMe and that the root

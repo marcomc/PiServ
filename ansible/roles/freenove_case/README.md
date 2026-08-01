@@ -189,7 +189,9 @@ during system shutdown. The role validates the known source shape and atomically
 renders a separate runtime artifact with task cleanup and a successful process
 exit. It never modifies the upstream checkout, so Git, archive, and
 `controller_copy` source modes remain convergent. A changed artifact restarts an
-already-running managed service; an unchanged artifact does not.
+already-running managed service; an unchanged artifact does not. Disabling the
+fix removes the artifact only while that service unit is managed, so an existing
+unmanaged unit is never left pointing at a missing executable.
 
 Set `freenove_case_pre_reboot_mode: cold` when hardware requires a cold reset.
 Before an I2C configuration change triggers the role's automatic reboot, the

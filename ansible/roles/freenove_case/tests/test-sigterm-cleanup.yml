@@ -4,6 +4,7 @@
   gather_facts: false
   vars:
     freenove_case_manage_sigterm_cleanup_fix: true
+    freenove_case_manage_background_service: true
     freenove_case_install_user: "{{ freenove_case_test_user.stdout }}"
     freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/task_manager.py"
     freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/task_manager_ansible.py"
@@ -150,6 +151,24 @@
           ansible.builtin.assert:
             that:
               - freenove_case_sigterm_render.stdout | trim == 'changed'
+
+        - name: Disable the fix while leaving the existing service unmanaged
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_manage_sigterm_cleanup_fix: false
+            freenove_case_manage_background_service: false
+
+        - name: Inspect the preserved unmanaged runtime artifact
+          ansible.builtin.stat:
+            path: "{{ freenove_case_task_manager_runtime_path }}"
+            follow: false
+          register: freenove_case_unmanaged_runtime
+
+        - name: Require the unmanaged runtime artifact to remain available
+          ansible.builtin.assert:
+            that:
+              - freenove_case_unmanaged_runtime.stat.exists
+              - freenove_case_unmanaged_runtime.stat.isreg
 
         - name: Write a destination-symlink sentinel
           ansible.builtin.copy:
