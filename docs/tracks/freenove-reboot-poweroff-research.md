@@ -35,9 +35,9 @@ partition archive retained for rollback. Nine of ten controlled warm resets
 succeeded; the tenth again completed shutdown and stayed off. The newer kernel
 therefore does not resolve the defect.
 
-The external USB SSD and its ASMedia `174c:2463` bridge were then physically
-disconnected. Five warm resets succeeded and the sixth stayed off. The external
-SSD is therefore not required to reproduce the failure.
+The external USB SSD and its USB bridge were then physically disconnected. Five
+warm resets succeeded and the sixth stayed off. The external SSD is therefore
+not required to reproduce the failure.
 
 `reboot=w` is the Raspberry Pi 5 kernel DTB default, not a PiServ-specific
 workaround. PiServ has no workload that requires retained warm-reset state, and
@@ -61,14 +61,14 @@ observed cold-reset result is nine successes out of nine attempts.
 | Failed shutdown progress | Reached `systemd-shutdown`; storage and swap were unmounted; journal stopped | Failure is later than normal service teardown |
 | Freenove cleanup | One controlled reboot succeeded with cleanup bypassed; another succeeded with patched cleanup | Cleanup is not a deterministic root cause |
 | Plymouth | The same SIGSEGV occurred on successful and failed reboots | SIGSEGV is a defect, but not sufficient to cause this symptom |
-| Software baseline | Successes and failures used kernel `6.18.34`, EEPROM `2026-05-26`, and `reboot=w` | None of these facts alone predicts failure |
+| Historical reproduction baseline | Successes and failures used kernel `6.18.34`, EEPROM `2026-05-26`, and `reboot=w` | None of these facts alone predicted failure |
 | Warm-reset tests | Four of five controlled warm resets succeeded; the fifth completed shutdown but stayed off | Reproduces an intermittent failure without a deterministic userspace correlate |
-| Reset support | PSCI 1.1 reports `SYSTEM_RESET2`; active mode is `warm` | Kernel can request the Pi 5 warm-reset path |
+| Historical reset support | PSCI 1.1 reported `SYSTEM_RESET2`; active test mode was `warm` | Kernel could request the Pi 5 warm-reset path |
 | Cold-reset tests | Five one-shot and four managed-policy cold resets succeeded in 27-40 seconds | Nine of nine observed cold resets returned without physical intervention |
 | Shutdown overlays | No live `gpio-poweroff` or `gpio-shutdown` node/overlay | These overlays are eliminated for the observed configuration |
 | Bootloader policy | No `POWER_OFF_ON_HALT` or `WAIT_FOR_POWER_BUTTON` override | Default halt policy is in use |
 | Kernel update | `6.18.39` booted successfully, but only nine of ten warm resets returned | The newer kernel does not resolve the defect |
-| External USB SSD | Physically absent for six warm-reset attempts; attempt 6 stayed off | The ASMedia bridge and `/dev/sda1` are not the root cause |
+| External USB SSD | Physically absent for six warm-reset attempts; attempt 6 stayed off | The external SSD is not the root cause |
 | Operational policy | PiServ selects a final `reboot=c` token through the base role; repeat convergence reports `changed=0` | Cold reset is deployed as the reversible production mitigation while root cause remains open |
 
 ## Primary-Source Reset Path
@@ -158,11 +158,11 @@ other bootloader changes, not this failure mode.
    [in the Debug Probe UART guide][debug-probe]. This distinguishes "reset
    request never completed" from
    "firmware restarted but PCIe/NVMe/USB boot failed".
-2. **Validate the persistent cold policy.** The initial result is four of five
-   warm resets and five of five cold resets. After applying the managed final
-   `reboot=c` token, record boot ID, kernel, `/sys/kernel/reboot/mode`, EEPROM
-   version, USB/PCIe topology, and timestamp across controlled reboots. Treat a
-   successful series as mitigation evidence, not proof of root cause.
+2. **Continue monitoring the persistent cold policy.** The completed series is
+   four of five initial warm resets and nine of nine cold resets. Preserve boot
+   ID, kernel, `/sys/kernel/reboot/mode`, EEPROM version, USB/PCIe topology, and
+   timestamp for future controlled reboots. Treat continued success as
+   mitigation evidence, not proof of root cause.
 3. **Collect post-boot evidence consistently.** For every return collect
    previous-boot journal, `vclog -m`, boot ID, NVMe identity/link information,
    and USB topology. For a failure, preserve the UART transcript before manual
@@ -209,9 +209,9 @@ the mitigation can be operated independently from the still-open root cause.
 [eeprom-798]: https://github.com/raspberrypi/rpi-eeprom/issues/798
 [eeprom-859]: https://github.com/raspberrypi/rpi-eeprom/issues/859
 [eeprom-notes]: https://github.com/raspberrypi/rpi-eeprom/blob/master/firmware-2712/release-notes.md
-[freenove-api]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/main/Code/api_expansion.py#L50-L75
-[freenove-cleanup]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/main/Code/task_manager.py#L296-L309
-[freenove-handler]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/main/Code/task_manager.py#L68-L72
+[freenove-api]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/cc6851f8911c0cfbab824cefb28604f7268766df/Code/api_expansion.py#L50-L75
+[freenove-cleanup]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/cc6851f8911c0cfbab824cefb28604f7268766df/Code/task_manager.py#L314-L328
+[freenove-handler]: https://github.com/Freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi/blob/cc6851f8911c0cfbab824cefb28604f7268766df/Code/task_manager.py#L73-L76
 [gpio-poweroff]: https://github.com/raspberrypi/firmware/blob/master/boot/overlays/README#L1590-L1617
 [linux-7121]: https://github.com/raspberrypi/linux/issues/7121
 [linux-reboot]: https://github.com/raspberrypi/linux/blob/rpi-6.18.y/kernel/reboot.c#L1031-L1115

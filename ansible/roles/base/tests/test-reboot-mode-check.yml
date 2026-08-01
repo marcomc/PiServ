@@ -1,0 +1,78 @@
+---
+- name: Test kernel reboot policy in check mode
+  hosts: localhost
+  gather_facts: false
+  vars:
+    base_kernel_reboot_mode: cold
+    base_kernel_cmdline_path: "{{ base_test_check_dir.path }}/cmdline.txt"
+    base_kernel_cmdline_backup_path: "{{ base_test_check_dir.path }}/backup/original.txt"
+    base_kernel_cmdline_backup_owner: "{{ base_test_root_user.stdout }}"
+    base_kernel_cmdline_backup_group: "{{ base_test_root_group.stdout }}"
+    base_kernel_reboot_runtime_mode_path: "{{ base_test_check_dir.path }}/runtime-mode"
+  tasks:
+    - name: Read the privileged test owner
+      ansible.builtin.command:
+        argv: [/usr/bin/id, -un, "0"]
+      register: base_test_root_user
+      changed_when: false
+      check_mode: false
+
+    - name: Read the privileged test group
+      ansible.builtin.command:
+        argv: [/usr/bin/id, -gn, "0"]
+      register: base_test_root_group
+      changed_when: false
+      check_mode: false
+
+    - name: Create a check-mode fixture directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: piserv-reboot-check-
+      register: base_test_check_dir
+      check_mode: false
+
+    - name: Exercise the predicted reboot policy
+      block:
+        - name: Create check-mode fixtures
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ base_test_check_dir.path }}/{{ item.path }}"
+            mode: "0600"
+          loop:
+            - path: cmdline.txt
+              content: "console=tty1 reboot=w\n"
+            - path: runtime-mode
+              content: "warm\n"
+          check_mode: false
+
+        - name: Apply the reboot policy in check mode
+          ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+
+        - name: Inspect the predicted backup
+          ansible.builtin.stat:
+            path: "{{ base_kernel_cmdline_backup_path }}"
+          register: base_test_check_backup
+          check_mode: false
+
+        - name: Read fixtures after the predicted run
+          ansible.builtin.slurp:
+            path: "{{ item }}"
+          loop:
+            - "{{ base_kernel_cmdline_path }}"
+            - "{{ base_kernel_reboot_runtime_mode_path }}"
+          register: base_test_check_files
+          check_mode: false
+
+        - name: Verify check mode did not mutate target state
+          ansible.builtin.assert:
+            that:
+              - not base_test_check_backup.stat.exists
+              - (base_test_check_files.results[0].content | b64decode) == 'console=tty1 reboot=w\n'
+              - (base_test_check_files.results[1].content | b64decode) == 'warm\n'
+      always:
+        - name: Remove check-mode fixtures
+          ansible.builtin.file:
+            path: "{{ base_test_check_dir.path }}"
+            state: absent
+          become: true
+          check_mode: false

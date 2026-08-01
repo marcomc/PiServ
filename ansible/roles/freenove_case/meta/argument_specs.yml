@@ -62,11 +62,16 @@ argument_specs:
         type: bool
         default: false
         description: >-
-          Patch the known upstream task-manager SIGTERM cleanup defect.
+          Render a managed runtime artifact that fixes the known upstream
+          task-manager SIGTERM cleanup defect.
       freenove_case_task_manager_path:
         type: path
         default: "{{ freenove_case_install_dir }}/Code/task_manager.py"
-        description: Path to the installed Freenove task manager.
+        description: Path to the installed upstream Freenove task manager.
+      freenove_case_task_manager_runtime_path:
+        type: path
+        default: "{{ freenove_case_install_dir }}/Code/task_manager_ansible.py"
+        description: Path to the atomically rendered SIGTERM-safe runtime copy.
       freenove_case_apt_packages:
         type: list
         elements: str
@@ -91,6 +96,18 @@ argument_specs:
         type: int
         default: 600
         description: Reboot timeout in seconds.
+      freenove_case_pre_reboot_mode:
+        type: str
+        default: ""
+        choices:
+          - ""
+          - cold
+          - warm
+        description: Kernel reboot mode required immediately before an automatic reboot.
+      freenove_case_reboot_mode_path:
+        type: path
+        default: /sys/kernel/reboot/mode
+        description: Runtime kernel reboot-mode control path.
       freenove_case_i2c_device:
         type: path
         default: /dev/i2c-1

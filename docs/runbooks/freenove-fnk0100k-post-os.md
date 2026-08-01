@@ -63,14 +63,14 @@ The playbook performs the required post-OS setup:
 | Package index update | Uses `apt` cache refresh with a one-hour cache window |
 | Freenove runtime packages | Installs Git, I2C tools, Python, OLED, PyQt, psutil, and SMBus packages |
 | I2C enablement | Ensures `dtparam=i2c_arm=on` in `/boot/firmware/config.txt` |
-| Reboot | Reboots only when the I2C firmware setting changes |
+| Reboot | Reboots only when I2C firmware changes, after verifying active cold mode |
 | Freenove code | Copies the local vendored Freenove tree from the Ansible controller into `/opt/freenove/` |
 | Freenove updates | Uses the pinned local vendor copy for PiServ; Git refreshes remain opt-in for the public role |
 | Runtime config | Writes `Code/app_config.json` so LED, fan, and OLED startup behavior is reproducible |
 | Expansion preflight | Requires Freenove controller detection before enabling the background service |
 | Background service | Enables and starts `my_app_running.service` under the `admin` user |
 | Hardware apply | Applies LED and fan config directly through Freenove's expansion-board API |
-| Shutdown cleanup | Patches the upstream task-manager SIGTERM defect before the service is managed |
+| Shutdown cleanup | Renders a validated SIGTERM-safe runtime artifact without changing upstream source |
 | Launchers | Creates application-menu and desktop launchers for `FNK0100` |
 | Validation | Checks `/dev/i2c-1`, Python imports, Freenove Python syntax, JSON config, and service state |
 
@@ -87,6 +87,7 @@ Optional Freenove tutorial operations are exposed as explicit variables:
 | `freenove_case_install_dir` | `/opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi` in PiServ playbook | Target runtime path on PiServ |
 | `freenove_case_manage_background_service` | `true` in PiServ playbook | Creates and manages `my_app_running.service` |
 | `freenove_case_manage_sigterm_cleanup_fix` | `true` in PiServ playbook | Makes the upstream task manager clean up and exit on `SIGTERM` |
+| `freenove_case_pre_reboot_mode` | `cold` in PiServ playbook | Requires active cold mode before an automatic I2C reboot |
 | `freenove_case_validate_expansion_controller` | `true` in PiServ playbook | Fails closed when the Freenove I2C controller is not detected |
 | `freenove_case_manage_app_config` | `true` in PiServ playbook | Manages `Code/app_config.json` |
 | `freenove_case_apply_hardware_config` | `true` in PiServ playbook | Applies managed LED and fan values directly to the case controller |
@@ -113,11 +114,21 @@ Optional Freenove tutorial operations are exposed as explicit variables:
 
 The upstream task manager calls a non-existent `stop_all_tasks()` method from
 its `SIGTERM` handler. This was observed during a shutdown that did not return
-PiServ to an online state. The managed patch uses its existing
-`stop_monitoring()` cleanup method, removes the obsolete `atexit` callback,
-and exits normally. Stopping the service validates this path; a separate,
-operator-approved reboot is required to validate the firmware-level reset
-outcome.
+PiServ to an online state. The role leaves upstream `task_manager.py` unchanged
+and atomically renders `task_manager_ansible.py` with the existing
+`stop_monitoring()` cleanup, no obsolete `atexit` callback, and a normal exit.
+The systemd unit runs the managed artifact and restarts only when the artifact
+or unit changes. Stopping the service validates this path; firmware reset
+validation remains separate.
+
+## 2026-08-01 Remediation Validation
+
+| Command | Observed result | Follow-up |
+| --- | --- | --- |
+| `ansible-playbook -i ansible/inventory.ini ansible/playbooks/freenove-post-os.yml -e freenove_case_controller_src=<pinned-source>` | Restored pristine upstream source, rendered the managed artifact, changed the unit, and replaced PID `834` with `35383`; `failed=0` | Keep upstream source and managed runtime separate |
+| Same playbook repeated | `ok=52 changed=0 failed=0`; PID remained `35383` | Treat controller copy, render, and service lifecycle as converged |
+| `sudo systemctl stop my_app_running.service` followed by `systemctl show` | `Result=success`, `ExecMainStatus=0`, `ActiveState=inactive`; no warning journal entries | Preserve the real SIGTERM stop regression |
+| `sudo systemctl start my_app_running.service` | Service returned active with PID `36940` | No reboot was performed during remediation |
 
 Manual upstream steps from the tutorial are retained below for reference.
 

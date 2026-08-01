@@ -195,7 +195,9 @@ then manages SSH root-login and password-auth policy, keeps VNC aligned with
 touchscreen output `DSI-1`, exposes the Cockpit HTTPS console on port `9090`,
 provides an authenticated Glances API to the LAN and Home Assistant, disables
 unneeded CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades,
-and disables cloud-init. PiServ uses `msmtp` with operator-managed
+activates the managed cold-reset policy, and disables cloud-init. The cold-reset
+policy validates its private rollback backup and activates the current kernel
+mode without rebooting the host. PiServ uses `msmtp` with operator-managed
 `/etc/msmtprc` and `/etc/aliases` files because they contain SMTP credentials
 and local delivery policy. The reusable `journald` role receives PiServ's
 persistent, bounded journal policy from this consumer playbook. Boot
@@ -226,7 +228,9 @@ official Freenove code from the controller-managed local vendor copy into
 `/opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi`, creates desktop
 launchers, enables the Freenove background service, manages `Code/app_config.json`
 for LED/fan/OLED startup behavior, and validates Python imports/source syntax.
-It reboots only when the I2C firmware setting changes.
+It renders a SIGTERM-safe runtime task manager without modifying the pinned
+upstream copy. It reboots only when the I2C firmware setting changes and first
+verifies that the active kernel mode is `cold`.
 
 Install the pCloud console client:
 

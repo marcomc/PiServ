@@ -1,143 +1,302 @@
 ---
-- name: Verify Freenove task-manager SIGTERM cleanup patch
+- name: Verify Freenove task-manager SIGTERM cleanup artifact
   hosts: localhost
   gather_facts: false
   vars:
     freenove_case_manage_sigterm_cleanup_fix: true
+    freenove_case_install_user: "{{ freenove_case_test_user.stdout }}"
+    freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/task_manager.py"
+    freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/task_manager_ansible.py"
+  handlers:
+    - name: Restart Freenove background service
+      ansible.builtin.debug:
+        msg: Test handler intentionally does not manage systemd.
+      changed_when: false
   tasks:
+    - name: Read the current test user
+      ansible.builtin.command:
+        argv: [/usr/bin/id, -un]
+      register: freenove_case_test_user
+      changed_when: false
+      check_mode: false
+
     - name: Create an isolated Freenove task-manager fixture
       ansible.builtin.tempfile:
         state: directory
         suffix: freenove-case
       register: freenove_case_test_directory
 
-    - name: Write the upstream SIGTERM-defect fixture
-      ansible.builtin.copy:
-        dest: "{{ freenove_case_test_directory.path }}/task_manager.py"
-        mode: "0644"
-        content: |
-          import atexit
-          import signal
-          import time
-          from pathlib import Path
+    - name: Exercise renderer states and source convergence
+      block:
+        - name: Write the upstream SIGTERM-defect fixture
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_task_manager_path }}"
+            mode: "0644"
+            content: |
+              import atexit
+              import signal
+              import time
+              from pathlib import Path
 
-          class TaskManager:
-              def __init__(self):
-                  self.monitoring = True
-                  atexit.register(self.handle_signal)
-                  signal.signal(signal.SIGTERM, self.handle_signal)
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      atexit.register(self.handle_signal)
+                      signal.signal(signal.SIGTERM, self.handle_signal)
 
-              def handle_signal(self, signum=None, frame=None):
-                  self.stop_all_tasks()
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_all_tasks()
 
-              def stop_monitoring(self):
-                  self.monitoring = False
-                  marker_path = Path("{{ freenove_case_test_directory.path }}/cleanup.log")
-                  previous = marker_path.read_text(encoding="utf-8") if marker_path.exists() else ""
-                  marker_path.write_text(previous + "cleanup\n", encoding="utf-8")
+                  def stop_monitoring(self):
+                      self.monitoring = False
+                      marker = Path("{{ freenove_case_test_directory.path }}/cleanup.log")
+                      previous = marker.read_text(encoding="utf-8") if marker.exists() else ""
+                      marker.write_text(previous + "cleanup\n", encoding="utf-8")
 
-          manager = TaskManager()
-          try:
-              while True:
-                  time.sleep(1)
-          finally:
-              manager.stop_monitoring()
+              manager = TaskManager()
+              Path("{{ freenove_case_test_directory.path }}/ready").write_text("ready", encoding="utf-8")
+              try:
+                  while True:
+                      time.sleep(1)
+              finally:
+                  manager.stop_monitoring()
 
-    - name: Verify the disabled cleanup fix leaves upstream source unchanged
-      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
-      vars:
-        freenove_case_manage_sigterm_cleanup_fix: false
-        freenove_case_task_manager_path: >-
-          {{ freenove_case_test_directory.path }}/task_manager.py
+        - name: Verify disabled mode leaves the source unchanged
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_manage_sigterm_cleanup_fix: false
 
-    - name: Read disabled cleanup-fix fixture
-      ansible.builtin.slurp:
-        src: "{{ freenove_case_test_directory.path }}/task_manager.py"
-      register: freenove_case_disabled_fixture
+        - name: Render the SIGTERM-safe runtime artifact
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
 
-    - name: Assert disabled cleanup fix does not alter upstream source
-      ansible.builtin.assert:
-        that:
-          - "'self.stop_all_tasks()' in (freenove_case_disabled_fixture.content | b64decode)"
-        quiet: true
+        - name: Read the upstream source and managed runtime artifact
+          ansible.builtin.slurp:
+            src: "{{ item }}"
+          loop:
+            - "{{ freenove_case_task_manager_path }}"
+            - "{{ freenove_case_task_manager_runtime_path }}"
+          register: freenove_case_rendered_files
 
-    - name: Apply the SIGTERM cleanup task
-      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
-      vars:
-        freenove_case_task_manager_path: >-
-          {{ freenove_case_test_directory.path }}/task_manager.py
+        - name: Verify source isolation and the rendered fix
+          ansible.builtin.assert:
+            that:
+              - "'self.stop_all_tasks()' in (freenove_case_rendered_files.results[0].content | b64decode)"
+              - "'raise SystemExit(0)' in (freenove_case_rendered_files.results[1].content | b64decode)"
+              - "'if manager.monitoring:' in (freenove_case_rendered_files.results[1].content | b64decode)"
 
-    - name: Apply the cleanup task to the legacy partial-patch fixture
-      ansible.builtin.copy:
-        dest: "{{ freenove_case_test_directory.path }}/legacy_task_manager.py"
-        mode: "0644"
-        content: |
-          import atexit
+        - name: Reapply the renderer
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
 
-          class TaskManager:
-              def __init__(self):
-                  self.monitoring = True
-                  atexit.register(self.stop_monitoring)
+        - name: Verify the second render is unchanged
+          ansible.builtin.assert:
+            that:
+              - freenove_case_sigterm_render.stdout | trim == 'unchanged'
 
-              def handle_signal(self, signum=None, frame=None):
-                  self.stop_monitoring()
-                  raise SystemExit(0)
+        - name: Verify SIGTERM exits after exactly one cleanup
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - -c
+              - |
+                import pathlib
+                import signal
+                import subprocess
+                import sys
+                import time
 
-              def stop_monitoring(self):
-                  pass
+                source = pathlib.Path(sys.argv[1])
+                ready = source.with_name("ready")
+                marker = source.with_name("cleanup.log")
+                process = subprocess.Popen([sys.executable, str(source)])
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if not ready.exists():
+                    process.kill()
+                    process.wait()
+                    raise SystemExit(1)
+                process.send_signal(signal.SIGTERM)
+                try:
+                    return_code = process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                    raise SystemExit(1)
+                lines = marker.read_text(encoding="utf-8").splitlines()
+                raise SystemExit(0 if return_code == 0 and lines == ["cleanup"] else 1)
+              - "{{ freenove_case_task_manager_runtime_path }}"
+          changed_when: false
 
-          manager = TaskManager()
-          manager.stop_monitoring()
+        - name: Disable the managed SIGTERM-safe runtime artifact
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_manage_sigterm_cleanup_fix: false
 
-    - name: Reconcile the legacy partial-patch fixture
-      ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
-      vars:
-        freenove_case_task_manager_path: >-
-          {{ freenove_case_test_directory.path }}/legacy_task_manager.py
+        - name: Verify disabled mode removes the runtime artifact
+          ansible.builtin.stat:
+            path: "{{ freenove_case_task_manager_runtime_path }}"
+            follow: false
+          register: freenove_case_disabled_runtime
 
-    - name: Assert legacy partial-patch fixture has no atexit callback
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/python3
-          - -c
-          - |
-            import pathlib
-            import sys
+        - name: Require disabled mode to remove the runtime artifact
+          ansible.builtin.assert:
+            that:
+              - not freenove_case_disabled_runtime.stat.exists
 
-            source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-            raise SystemExit(0 if "atexit.register(" not in source else 1)
-          - "{{ freenove_case_test_directory.path }}/legacy_task_manager.py"
-      changed_when: false
+        - name: Re-enable the managed SIGTERM-safe runtime artifact
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
 
-    - name: Verify SIGTERM exits the patched task manager after one cleanup
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/python3
-          - -c
-          - |
-            import pathlib
-            import signal
-            import subprocess
-            import sys
-            import time
+        - name: Verify re-enabling renders the runtime artifact again
+          ansible.builtin.assert:
+            that:
+              - freenove_case_sigterm_render.stdout | trim == 'changed'
 
-            source_path = pathlib.Path(sys.argv[1])
-            marker_path = source_path.with_name("cleanup.log")
-            process = subprocess.Popen([sys.executable, str(source_path)])
-            time.sleep(0.2)
-            process.send_signal(signal.SIGTERM)
-            try:
-                return_code = process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-                raise SystemExit(1)
-            cleanup_lines = marker_path.read_text(encoding="utf-8").splitlines()
-            raise SystemExit(0 if return_code == 0 and cleanup_lines == ["cleanup"] else 1)
-          - "{{ freenove_case_test_directory.path }}/task_manager.py"
-      changed_when: false
-  post_tasks:
-    - name: Remove isolated Freenove task manager fixture
-      ansible.builtin.file:
-        path: "{{ freenove_case_test_directory.path }}"
-        state: absent
+        - name: Write a destination-symlink sentinel
+          ansible.builtin.copy:
+            content: |
+              sentinel
+            dest: "{{ freenove_case_test_directory.path }}/sentinel.txt"
+            mode: "0600"
+
+        - name: Create a runtime-artifact symlink
+          ansible.builtin.file:
+            src: "{{ freenove_case_test_directory.path }}/sentinel.txt"
+            dest: "{{ freenove_case_test_directory.path }}/linked-runtime.py"
+            state: link
+
+        - name: Initialize destination-symlink rejection state
+          ansible.builtin.set_fact:
+            freenove_case_destination_symlink_rejected: false
+
+        - name: Reject a destination symlink without following it
+          block:
+            - name: Attempt to render through a destination symlink
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/linked-runtime.py
+          rescue:
+            - name: Record expected destination-symlink rejection
+              ansible.builtin.set_fact:
+                freenove_case_destination_symlink_rejected: true
+
+        - name: Inspect the destination symlink
+          ansible.builtin.stat:
+            path: "{{ freenove_case_test_directory.path }}/linked-runtime.py"
+            follow: false
+          register: freenove_case_destination_symlink
+
+        - name: Read the destination-symlink sentinel
+          ansible.builtin.slurp:
+            src: "{{ freenove_case_test_directory.path }}/sentinel.txt"
+          register: freenove_case_destination_sentinel
+
+        - name: Verify the destination symlink and sentinel remain intact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_destination_symlink_rejected
+              - freenove_case_destination_symlink.stat.islnk
+              - (freenove_case_destination_sentinel.content | b64decode | trim) == 'sentinel'
+
+        - name: Write an unsupported upstream fixture
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/unknown.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_everything()
+
+        - name: Initialize unsupported-source rejection state
+          ansible.builtin.set_fact:
+            freenove_case_unknown_rejected: false
+
+        - name: Reject unsupported source before writing an artifact
+          block:
+            - name: Attempt to render unsupported source
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/unknown.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/unknown-runtime.py"
+          rescue:
+            - name: Record expected unsupported-source rejection
+              ansible.builtin.set_fact:
+                freenove_case_unknown_rejected: true
+
+        - name: Inspect the rejected runtime artifact
+          ansible.builtin.stat:
+            path: "{{ freenove_case_test_directory.path }}/unknown-runtime.py"
+          register: freenove_case_unknown_runtime
+
+        - name: Verify unsupported source failed without an artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_unknown_rejected
+              - not freenove_case_unknown_runtime.stat.exists
+
+        - name: Create a controller-copy convergence fixture
+          ansible.builtin.file:
+            path: "{{ freenove_case_test_directory.path }}/installed/Code"
+            state: directory
+            mode: "0755"
+
+        - name: Install the upstream file as controller-copy mode does
+          ansible.builtin.copy:
+            src: "{{ freenove_case_task_manager_path }}"
+            dest: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager.py"
+            remote_src: true
+            mode: "0644"
+
+        - name: Render the controller-copy runtime artifact
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager.py"
+            freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager_ansible.py"
+
+        - name: Reinstall the unchanged upstream file
+          ansible.builtin.copy:
+            src: "{{ freenove_case_task_manager_path }}"
+            dest: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager.py"
+            remote_src: true
+            mode: "0644"
+          register: freenove_case_test_controller_copy
+
+        - name: Rerender the controller-copy runtime artifact
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager.py"
+            freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/installed/Code/task_manager_ansible.py"
+
+        - name: Verify controller-copy convergence
+          ansible.builtin.assert:
+            that:
+              - not freenove_case_test_controller_copy.changed
+              - freenove_case_sigterm_render.stdout | trim == 'unchanged'
+
+        - name: Create a warm pre-reboot mode fixture
+          ansible.builtin.copy:
+            content: "warm\n"
+            dest: "{{ freenove_case_test_directory.path }}/reboot-mode"
+            mode: "0600"
+
+        - name: Activate cold mode before a simulated automatic reboot
+          ansible.builtin.include_tasks: ../tasks/pre-reboot-mode.yml
+          vars:
+            freenove_case_pre_reboot_mode: cold
+            freenove_case_reboot_mode_path: "{{ freenove_case_test_directory.path }}/reboot-mode"
+
+        - name: Read the simulated pre-reboot mode
+          ansible.builtin.slurp:
+            path: "{{ freenove_case_test_directory.path }}/reboot-mode"
+          register: freenove_case_test_reboot_mode
+
+        - name: Verify cold mode is active before reboot
+          ansible.builtin.assert:
+            that:
+              - (freenove_case_test_reboot_mode.content | b64decode) == 'cold\n'
+      always:
+        - name: Remove isolated Freenove task-manager fixtures
+          ansible.builtin.file:
+            path: "{{ freenove_case_test_directory.path }}"
+            state: absent
+          become: true

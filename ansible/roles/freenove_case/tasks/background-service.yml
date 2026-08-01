@@ -10,7 +10,9 @@
         group: root
         mode: "0644"
       become: true
-      notify: Reload systemd
+      notify:
+        - Reload systemd
+        - Restart Freenove background service
 
     - name: Flush service file update before service management
       ansible.builtin.meta: flush_handlers

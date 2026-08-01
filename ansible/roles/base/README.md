@@ -73,6 +73,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_kernel_reboot_mode` | `default` | Use `default`, `warm`, or `cold` reboot mode |
 | `base_kernel_cmdline_path` | `/boot/firmware/cmdline.txt` | Managed single-line kernel command line |
 | `base_kernel_cmdline_backup_path` | `/var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode` | Stable pre-policy backup |
+| `base_kernel_reboot_runtime_mode_path` | `/sys/kernel/reboot/mode` | Active kernel reboot-mode control |
 | `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
 | `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
 | `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
@@ -117,10 +118,12 @@ with a separate role before expecting delivery.
 
 Kernel reboot-mode management is disabled by default. When enabled, the role
 requires a non-empty single-line command file, preserves its first observed
-content in a stable private backup, removes existing `reboot=` tokens, and
-optionally appends one final `reboot=w` or `reboot=c` token. Mode `default`
-removes the managed token and returns control to the Raspberry Pi device tree.
-The role reports that a reboot is required but never initiates one.
+content in a validated private backup, removes existing `reboot=` tokens, and
+optionally appends one final `reboot=w` or `reboot=c` token. For warm or cold
+mode, it also activates and verifies the running kernel mode so the first reboot
+uses the selected path. Mode `default` removes the managed token and returns
+future boots to the Raspberry Pi device tree; it does not change the current
+kernel mode. The role never initiates a reboot.
 
 The role installs `smartmontools` and derives the physical parent disk from the
 root filesystem. It validates that PiServ is booted from NVMe and that the root
@@ -172,6 +175,7 @@ It also repairs a missing selector installation link on later runs.
 python3 tests/test_unattended_upgrade_digest.py
 ansible-playbook tests/test-unattended-upgrades.yml
 ANSIBLE_ROLES_PATH=.. ansible-playbook tests/test-reboot-mode.yml
+ANSIBLE_ROLES_PATH=.. ansible-playbook --check tests/test-reboot-mode-check.yml
 ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check tests/test.yml
 ansible-lint ansible/playbooks/piserv-base.yml ansible/roles/base
 ```

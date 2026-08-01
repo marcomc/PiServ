@@ -232,6 +232,10 @@ argument_specs:
         type: str
         default: root
         description: Group of the private reboot-policy backup artifacts.
+      base_kernel_reboot_runtime_mode_path:
+        type: path
+        default: /sys/kernel/reboot/mode
+        description: Runtime control used to activate the current kernel reboot mode.
       base_manage_smartmontools:
         type: bool
         default: true
