@@ -41,7 +41,45 @@ def _validate_candidate(source: str) -> None:
     if len(handlers) != 1:
         raise UnsupportedSourceError("expected exactly one handle_signal method")
 
-    handler_body = handlers[0].body
+    handler = handlers[0]
+    handler_arguments = handler.args
+    valid_handler_signature = (
+        not handler.decorator_list
+        and not handler_arguments.posonlyargs
+        and len(handler_arguments.args) == 3
+        and handler_arguments.args[0].arg == "self"
+        and handler_arguments.vararg is None
+        and not handler_arguments.kwonlyargs
+        and handler_arguments.kwarg is None
+    )
+    initializers = [
+        node
+        for node in managers[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    ]
+    sigterm_registrations = [
+        node
+        for initializer in initializers
+        for node in initializer.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and isinstance(node.value.func.value, ast.Name)
+        and node.value.func.value.id == "signal"
+        and node.value.func.attr == "signal"
+        and len(node.value.args) == 2
+        and isinstance(node.value.args[0], ast.Attribute)
+        and isinstance(node.value.args[0].value, ast.Name)
+        and node.value.args[0].value.id == "signal"
+        and node.value.args[0].attr == "SIGTERM"
+        and isinstance(node.value.args[1], ast.Attribute)
+        and isinstance(node.value.args[1].value, ast.Name)
+        and node.value.args[1].value.id == "self"
+        and node.value.args[1].attr == "handle_signal"
+        and not node.value.keywords
+    ]
+
+    handler_body = handler.body
     valid_handler = (
         len(handler_body) == 2
         and isinstance(handler_body[0], ast.Expr)
@@ -83,7 +121,13 @@ def _validate_candidate(source: str) -> None:
         and not block.finalbody[0].body[0].value.keywords
         and not block.finalbody[0].orelse
     ]
-    if not valid_handler or len(guarded_cleanup) != 1 or re.search(r"\batexit\b", source):
+    if (
+        not valid_handler_signature
+        or not valid_handler
+        or len(sigterm_registrations) != 1
+        or len(guarded_cleanup) != 1
+        or re.search(r"\batexit\b", source)
+    ):
         raise UnsupportedSourceError("unsupported SIGTERM cleanup structure")
 
 

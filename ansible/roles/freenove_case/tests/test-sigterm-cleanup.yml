@@ -286,7 +286,13 @@
             dest: "{{ freenove_case_test_directory.path }}/safe-extra.py"
             mode: "0644"
             content: |
+              import signal
+
               class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
                   def handle_signal(self, signum=None, frame=None):
                       self.stop_monitoring()
                       raise SystemExit(0)
@@ -333,7 +339,13 @@
             dest: "{{ freenove_case_test_directory.path }}/nested-runtime.py"
             mode: "0644"
             content: |
+              import signal
+
               class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
                   def handle_signal(self, signum=None, frame=None):
                       self.stop_monitoring()
                       raise SystemExit(0)
@@ -594,6 +606,107 @@
             that:
               - freenove_case_float_exit_rejected
               - not ((freenove_case_test_directory.path + '/handler-float-exit-runtime.py') is exists)
+
+        - name: Write a source without SIGTERM registration
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/missing-sigterm-registration.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize missing SIGTERM registration rejection state
+          ansible.builtin.set_fact:
+            freenove_case_missing_sigterm_registration_rejected: false
+
+        - name: Reject missing SIGTERM registration before writing an artifact
+          block:
+            - name: Attempt to render missing SIGTERM registration
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/missing-sigterm-registration.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/missing-sigterm-registration-runtime.py
+          rescue:
+            - name: Record expected missing SIGTERM registration rejection
+              ansible.builtin.set_fact:
+                freenove_case_missing_sigterm_registration_rejected: true
+
+        - name: Verify missing SIGTERM registration leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_missing_sigterm_registration_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/missing-sigterm-registration-runtime.py') is exists)
+
+        - name: Write a source with an incompatible signal callback signature
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/incompatible-signal-callback.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
+                  def handle_signal(self):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize incompatible signal callback rejection state
+          ansible.builtin.set_fact:
+            freenove_case_incompatible_signal_callback_rejected: false
+
+        - name: Reject an incompatible signal callback before writing an artifact
+          block:
+            - name: Attempt to render an incompatible signal callback
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/incompatible-signal-callback.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/incompatible-signal-callback-runtime.py
+          rescue:
+            - name: Record expected incompatible signal callback rejection
+              ansible.builtin.set_fact:
+                freenove_case_incompatible_signal_callback_rejected: true
+
+        - name: Verify incompatible signal callback leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_incompatible_signal_callback_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/incompatible-signal-callback-runtime.py') is exists)
 
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
