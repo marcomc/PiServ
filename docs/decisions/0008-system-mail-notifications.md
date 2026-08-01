@@ -54,7 +54,7 @@ and hardens operator-created files when present.
 | External recipient | Operator-managed aliases in `/etc/aliases` |
 | unattended-upgrades | `base_unattended_mail_to` receives the routine digest and native error-only fallback |
 | Boot notice | systemd oneshot, skipped until `/etc/msmtprc` exists and is non-empty |
-| Shutdown notice | Persistent systemd service that sends before network stop; reports the latest matching `sudo` command, user, and UTC timestamp from the current boot journal |
+| Shutdown notice | Persistent systemd service that sends before network stop; reports the latest direct shutdown or `systemctl` command, user, and UTC timestamp from the current boot journal |
 | RaiPlaySound | Uses `/usr/local/bin/msmtp-system` for system-config compatibility |
 
 Do not add an external Galaxy `msmtp` dependency unless PiServ later switches

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import py_compile
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,6 +39,48 @@ def load_notification_module() -> object:
         sys.modules[specification.name] = module
         specification.loader.exec_module(module)
         return module
+
+
+def render_service_template() -> str:
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary_path = Path(temporary_directory)
+        output_path = temporary_path / "piserv-shutdown-notify.service"
+        playbook_path = temporary_path / "render-service.yml"
+        playbook_path.write_text(
+            "\n".join(
+                [
+                    "---",
+                    "- name: Render shutdown notification service",
+                    "  hosts: localhost",
+                    "  gather_facts: false",
+                    "  tasks:",
+                    "    - name: Render service",
+                    "      ansible.builtin.template:",
+                    f"        src: {json.dumps(str(SERVICE_TEMPLATE_PATH))}",
+                    f"        dest: {json.dumps(str(output_path))}",
+                    "      vars:",
+                    "        base_shutdown_notification_condition_path: /etc/msmtprc",
+                    "        base_shutdown_notification_script_path: >-",
+                    "          /usr/local/sbin/piserv-shutdown-notify",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                "ansible-playbook",
+                "-i",
+                "localhost,",
+                "-c",
+                "local",
+                str(playbook_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return output_path.read_text(encoding="utf-8")
 
 
 class ShutdownNotificationTests(unittest.TestCase):
@@ -76,6 +120,42 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_command_text_containing_shutdown_is_not_misclassified(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/printf shutdown",
+            }
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_lookup_of_a_shutdown_target_is_not_misclassified(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl show reboot.target",
+            }
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_isolate_of_a_shutdown_target_is_reported(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl isolate poweroff.target",
+            }
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl isolate poweroff.target")
+
     def test_notification_payload_marks_missing_attribution_as_unknown(self) -> None:
         payload = self.notification.notification_payload("PiServ.local", None)
 
@@ -83,6 +163,23 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("Shutdown request time (UTC): unknown", payload)
         self.assertIn("Requested by: unknown", payload)
         self.assertIn("Command: unknown", payload)
+
+    def test_notification_payload_cannot_be_forged_with_journal_control_characters(
+        self,
+    ) -> None:
+        request = self.notification.ShutdownRequest(
+            requested_at="2025-10-09T08:53:21+00:00",
+            requested_by="admin\nBcc: attacker@example.com",
+            command="/usr/bin/systemctl reboot\r\nBcc: attacker@example.com",
+        )
+
+        payload = self.notification.notification_payload("PiServ.local", request)
+
+        self.assertNotIn("\nBcc:", payload)
+        self.assertIn("Requested by: admin Bcc: attacker@example.com", payload)
+        self.assertIn(
+            "Command: /usr/bin/systemctl reboot Bcc: attacker@example.com", payload
+        )
 
     def test_stopping_the_service_during_normal_operation_does_not_send_mail(self) -> None:
         with (
@@ -94,13 +191,15 @@ class ShutdownNotificationTests(unittest.TestCase):
         subprocess_run.assert_not_called()
 
     def test_service_template_stays_active_until_shutdown(self) -> None:
-        template = SERVICE_TEMPLATE_PATH.read_text(encoding="utf-8")
+        template = render_service_template()
 
         self.assertIn("DefaultDependencies=no", template)
         self.assertIn("Before=shutdown.target", template)
         self.assertIn("Conflicts=shutdown.target", template)
         self.assertIn("RemainAfterExit=yes", template)
-        self.assertIn("ExecStop={{ base_shutdown_notification_script_path }}", template)
+        self.assertIn("ExecCondition=/usr/bin/test -s /etc/msmtprc", template)
+        self.assertIn("ExecStop=/usr/local/sbin/piserv-shutdown-notify", template)
+        self.assertNotIn("{{", template)
 
 
 if __name__ == "__main__":

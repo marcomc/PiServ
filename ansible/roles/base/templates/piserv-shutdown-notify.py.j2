@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-import re
+import shlex
 import socket
 import subprocess
 from dataclasses import dataclass
@@ -12,13 +12,23 @@ RECIPIENT = {{ base_shutdown_notification_recipient | to_json }}
 SUBJECT_PREFIX = {{ base_shutdown_notification_subject_prefix | to_json }}
 JOURNAL_TIMEOUT_SECONDS = 10
 MAIL_TIMEOUT_SECONDS = 20
+JOURNAL_RECORD_LIMIT = 100
+FIELD_LENGTH_LIMIT = 512
 
-SUDO_COMMAND_PATTERN = re.compile(
-    r"^(?P<user>[^\s:]+)\s*:\s.*?\bCOMMAND=(?P<command>.+)$"
-)
-SHUTDOWN_COMMAND_PATTERN = re.compile(
-    r"\b(?:reboot|poweroff|halt|shutdown)\b", re.IGNORECASE
-)
+SUDO_COMMAND_PREFIX = "COMMAND="
+DIRECT_SHUTDOWN_COMMANDS = {"reboot", "poweroff", "halt", "shutdown"}
+SYSTEMD_SHUTDOWN_ACTIONS = {
+    "reboot",
+    "poweroff",
+    "halt",
+    "kexec",
+}
+SYSTEMD_SHUTDOWN_TARGETS = {
+    "reboot.target",
+    "poweroff.target",
+    "halt.target",
+    "kexec.target",
+}
 
 
 @dataclass(frozen=True)
@@ -26,6 +36,38 @@ class ShutdownRequest:
     requested_at: str
     requested_by: str
     command: str
+
+
+def safe_field(value: object) -> str:
+    normalized = "".join(
+        character if character.isprintable() else " " for character in str(value)
+    )
+    return " ".join(normalized.split())[:FIELD_LENGTH_LIMIT]
+
+
+def is_shutdown_command(command: str) -> bool:
+    try:
+        arguments = shlex.split(command)
+    except ValueError:
+        return False
+    if not arguments:
+        return False
+
+    executable = arguments[0].rsplit("/", maxsplit=1)[-1]
+    if executable in DIRECT_SHUTDOWN_COMMANDS:
+        return True
+    if executable != "systemctl":
+        return False
+    operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
+    if not operands:
+        return False
+    if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
+        return True
+    return (
+        operands[0] == "isolate"
+        and len(operands) > 1
+        and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
+    )
 
 
 def system_state() -> str:
@@ -54,6 +96,7 @@ def journal_records(identifier: str) -> list[dict[str, object]]:
                 "--boot=0",
                 "--identifier",
                 identifier,
+                f"--lines={JOURNAL_RECORD_LIMIT}",
                 "--no-pager",
                 "--output=json",
             ],
@@ -98,11 +141,14 @@ def latest_sudo_shutdown_request(
         message = record.get("MESSAGE")
         if not isinstance(message, str):
             continue
-        match = SUDO_COMMAND_PATTERN.match(message)
-        if match is None:
+        prefix, separator, command = message.partition(SUDO_COMMAND_PREFIX)
+        if not separator:
             continue
-        command = match.group("command").strip()
-        if SHUTDOWN_COMMAND_PATTERN.search(command) is None:
+        requested_by, separator, _ = prefix.partition(":")
+        if not separator:
+            continue
+        command = safe_field(command)
+        if not is_shutdown_command(command):
             continue
         timestamp = record.get("_SOURCE_REALTIME_TIMESTAMP")
         try:
@@ -114,7 +160,7 @@ def latest_sudo_shutdown_request(
                 sequence,
                 ShutdownRequest(
                     requested_at=journal_timestamp(record),
-                    requested_by=match.group("user"),
+                    requested_by=safe_field(requested_by),
                     command=command,
                 ),
             )
@@ -131,16 +177,17 @@ def shutdown_request() -> ShutdownRequest | None:
 
 def notification_payload(hostname: str, request: ShutdownRequest | None) -> str:
     notification_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    subject = f"{SUBJECT_PREFIX} shutting down: {hostname}"
+    hostname = safe_field(hostname)
+    subject = f"{safe_field(SUBJECT_PREFIX)} shutting down: {hostname}"
     if request is None:
         requested_at = "unknown"
         requested_by = "unknown"
         command = "unknown"
         evidence = "No matching sudo shutdown command was retained for this boot."
     else:
-        requested_at = request.requested_at
-        requested_by = request.requested_by
-        command = request.command
+        requested_at = safe_field(request.requested_at)
+        requested_by = safe_field(request.requested_by)
+        command = safe_field(request.command)
         evidence = "Latest matching sudo journal record from the current boot."
 
     return "\n".join(

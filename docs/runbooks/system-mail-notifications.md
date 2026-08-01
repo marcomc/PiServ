@@ -19,12 +19,14 @@ account credentials in Ansible or this repository.
 
 ## Status
 
-Applied on PiServ on 2026-07-08. The dedicated `msmtp` role installs the mail
-packages and hardens operator-created file metadata without creating or owning
-SMTP credentials. PiServ's playbook preserves operator edits to the SMTP sender,
-user, password, and aliases. For Gmail SMTP, use a Gmail app password rather
-than the normal account password or the Mac-specific OAuth helper. Provider
-connectivity and one root-alias delivery test have been validated.
+The mail transport was applied on PiServ on 2026-07-08. The dedicated `msmtp`
+role installs the mail packages and hardens operator-created file metadata
+without creating or owning SMTP credentials. PiServ's playbook preserves
+operator edits to the SMTP sender, user, password, and aliases. For Gmail SMTP,
+use a Gmail app password rather than the normal account password or the
+Mac-specific OAuth helper. Provider connectivity and one root-alias delivery
+test have been validated. The shutdown-notification service is implemented but
+pending deployment and live validation.
 
 ## Automation
 
@@ -61,7 +63,7 @@ The `base` role configures mail consumers:
 | shutdown notification service | `piserv-shutdown-notify.service` |
 | shutdown notification recipient | `root` |
 | shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
-| shutdown attribution | Latest matching `sudo` command, user, and UTC timestamp in the current boot journal |
+| shutdown attribution | Latest direct shutdown or `systemctl` command, user, and UTC timestamp in the current boot's `sudo` journal |
 
 ## Gmail App Password
 
