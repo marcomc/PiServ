@@ -51,6 +51,7 @@ def _supports_zero_argument_instance_call(method: ast.FunctionDef) -> bool:
         and positional[0].arg == "self"
         and required_positional <= 1
         and all(default is not None for default in arguments.kw_defaults)
+        and not any(isinstance(node, (ast.Yield, ast.YieldFrom)) for node in ast.walk(method))
     )
 
 
@@ -158,6 +159,7 @@ def _validate_candidate(source: str) -> None:
     if (
         not valid_handler_signature
         or not valid_handler
+        or len(initializers) != 1
         or len(sigterm_registrations) != 1
         or len(intended_sigterm_registrations) != 1
         or not valid_stop_method

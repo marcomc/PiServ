@@ -816,6 +816,114 @@
                 not ((freenove_case_test_directory.path
                 + '/required-stop-monitoring-argument-runtime.py') is exists)
 
+        - name: Write a source with a superseded SIGTERM initializer
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/superseded-sigterm-initializer.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
+                  def __init__(self):
+                      self.monitoring = True
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize superseded SIGTERM initializer rejection state
+          ansible.builtin.set_fact:
+            freenove_case_superseded_sigterm_initializer_rejected: false
+
+        - name: Reject a superseded SIGTERM initializer before writing an artifact
+          block:
+            - name: Attempt to render a superseded SIGTERM initializer
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/superseded-sigterm-initializer.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/superseded-sigterm-initializer-runtime.py
+          rescue:
+            - name: Record expected superseded SIGTERM initializer rejection
+              ansible.builtin.set_fact:
+                freenove_case_superseded_sigterm_initializer_rejected: true
+
+        - name: Verify superseded SIGTERM initializer leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_superseded_sigterm_initializer_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/superseded-sigterm-initializer-runtime.py') is exists)
+
+        - name: Write a source with a generator stop-monitoring method
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/generator-stop-monitoring.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      yield "cleanup"
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize generator stop-monitoring rejection state
+          ansible.builtin.set_fact:
+            freenove_case_generator_stop_monitoring_rejected: false
+
+        - name: Reject a generator stop-monitoring method before writing an artifact
+          block:
+            - name: Attempt to render a generator stop-monitoring method
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/generator-stop-monitoring.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/generator-stop-monitoring-runtime.py
+          rescue:
+            - name: Record expected generator stop-monitoring rejection
+              ansible.builtin.set_fact:
+                freenove_case_generator_stop_monitoring_rejected: true
+
+        - name: Verify generator stop-monitoring leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_generator_stop_monitoring_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/generator-stop-monitoring-runtime.py') is exists)
+
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/unknown.py"
