@@ -36,6 +36,7 @@
     - name: Assert check mode predicts the I2C firmware change
       ansible.builtin.assert:
         that:
+          - freenove_case_i2c_config_preflight.changed
           - freenove_case_i2c_config.changed
           - freenove_case_i2c_reboot.skipped | default(false) | bool
 
