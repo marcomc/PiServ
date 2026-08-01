@@ -1,0 +1,107 @@
+---
+- name: Test managed kernel reboot mode and rollback
+  hosts: localhost
+  gather_facts: false
+  vars:
+    base_test_original_cmdline: >-
+      console=tty1 root=PARTUUID=test-02 rootfstype=ext4 quiet reboot=w
+  tasks:
+    - name: Create a temporary reboot-mode test directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: piserv-reboot-mode-
+      register: base_test_reboot_mode_dir
+
+    - name: Exercise cold mode and platform-default rollback
+      block:
+        - name: Create the test kernel command line
+          ansible.builtin.copy:
+            content: "{{ base_test_original_cmdline }}\n"
+            dest: "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+            mode: "0600"
+
+        - name: Apply cold kernel reboot mode
+          ansible.builtin.include_role:
+            name: base
+          vars:
+            base_manage_ssh: false
+            base_manage_vnc: false
+            base_manage_glances: false
+            base_manage_cockpit: false
+            base_manage_disabled_services: false
+            base_manage_unattended_upgrades: false
+            base_manage_reboot_notification: false
+            base_manage_kernel_reboot_mode: true
+            base_kernel_reboot_mode: cold
+            base_kernel_cmdline_path: "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+            base_kernel_cmdline_backup_path: "{{ base_test_reboot_mode_dir.path }}/backup/original.txt"
+            base_kernel_cmdline_backup_group: wheel
+            base_manage_smartmontools: false
+            base_validate_root_storage: false
+            base_packages: []
+            base_manage_cloud_init: false
+
+        - name: Read the cold-mode command line and stable backup
+          ansible.builtin.slurp:
+            path: "{{ item }}"
+          become: true
+          loop:
+            - "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+            - "{{ base_test_reboot_mode_dir.path }}/backup/original.txt"
+          register: base_test_cold_files
+
+        - name: Verify cold mode and the original backup
+          ansible.builtin.assert:
+            that:
+              - >-
+                (base_test_cold_files.results[0].content | b64decode)
+                == 'console=tty1 root=PARTUUID=test-02 rootfstype=ext4 quiet reboot=c\n'
+              - >-
+                (base_test_cold_files.results[1].content | b64decode)
+                == base_test_original_cmdline ~ '\n'
+
+        - name: Roll back to the Raspberry Pi platform default
+          ansible.builtin.include_role:
+            name: base
+          vars:
+            base_manage_ssh: false
+            base_manage_vnc: false
+            base_manage_glances: false
+            base_manage_cockpit: false
+            base_manage_disabled_services: false
+            base_manage_unattended_upgrades: false
+            base_manage_reboot_notification: false
+            base_manage_kernel_reboot_mode: true
+            base_kernel_reboot_mode: default
+            base_kernel_cmdline_path: "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+            base_kernel_cmdline_backup_path: "{{ base_test_reboot_mode_dir.path }}/backup/original.txt"
+            base_kernel_cmdline_backup_group: wheel
+            base_manage_smartmontools: false
+            base_validate_root_storage: false
+            base_packages: []
+            base_manage_cloud_init: false
+
+        - name: Read the rolled-back command line and stable backup
+          ansible.builtin.slurp:
+            path: "{{ item }}"
+          become: true
+          loop:
+            - "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+            - "{{ base_test_reboot_mode_dir.path }}/backup/original.txt"
+          register: base_test_rollback_files
+
+        - name: Verify platform-default rollback preserves the first backup
+          ansible.builtin.assert:
+            that:
+              - >-
+                (base_test_rollback_files.results[0].content | b64decode)
+                == 'console=tty1 root=PARTUUID=test-02 rootfstype=ext4 quiet\n'
+              - >-
+                (base_test_rollback_files.results[1].content | b64decode)
+                == base_test_original_cmdline ~ '\n'
+      always:
+        - name: Remove the temporary reboot-mode test directory
+          ansible.builtin.file:
+            path: "{{ base_test_reboot_mode_dir.path }}"
+            state: absent
+          become: true

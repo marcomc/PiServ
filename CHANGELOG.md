@@ -4,6 +4,12 @@
 
 ### Reliability
 
+- Added a reversible PiServ cold-reset policy that preserves the first kernel
+  command line, reconciles one final `reboot=c` token, and supports returning to
+  the Raspberry Pi device-tree default without automatic reboot.
+- Validated the cold policy through its activation and three subsequent
+  persistent reboots; all returned with NVMe mounts and critical services
+  healthy, bringing the observed cold-reset series to nine successes.
 - Patched the Freenove background task manager's upstream SIGTERM handler so
   it cleans up managed tasks and exits successfully during system shutdown.
 
