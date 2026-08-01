@@ -111,43 +111,95 @@ def _replace_in_handler(source: str, pattern: str, replacement: str, label: str)
     return "".join(lines)
 
 
-def _replace_in_task_manager(source: str, pattern: str, replacement: str, label: str) -> str:
+def _replace_in_task_manager_method(
+    source: str, method_name: str, pattern: str, replacement: str, label: str
+) -> str:
     tree = ast.parse(source)
     manager = next(
         (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TaskManager"),
         None,
     )
-    if manager is None or manager.end_lineno is None:
+    if manager is None:
         raise UnsupportedSourceError("expected exactly one TaskManager class")
+    method = next(
+        (
+            node
+            for node in manager.body
+            if isinstance(node, ast.FunctionDef) and node.name == method_name
+        ),
+        None,
+    )
+    if method is None:
+        return source
+    if method.end_lineno is None:
+        raise UnsupportedSourceError(f"expected exactly one TaskManager.{method_name} method")
     lines = source.splitlines(keepends=True)
-    manager_source = "".join(lines[manager.lineno - 1 : manager.end_lineno])
-    lines[manager.lineno - 1 : manager.end_lineno] = [
-        _replace_once(manager_source, pattern, replacement, label)
+    method_source = "".join(lines[method.lineno - 1 : method.end_lineno])
+    lines[method.lineno - 1 : method.end_lineno] = [
+        _replace_once(method_source, pattern, replacement, label)
     ]
     return "".join(lines)
 
 
-def _replace_in_runtime_block(source: str, pattern: str, replacement: str, label: str) -> str:
+def _is_manager_stop_monitoring(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and isinstance(node.value.func.value, ast.Name)
+        and node.value.func.value.id == "manager"
+        and node.value.func.attr == "stop_monitoring"
+        and not node.value.args
+        and not node.value.keywords
+    )
+
+
+def _is_guarded_manager_stop_monitoring(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Attribute)
+        and isinstance(node.test.value, ast.Name)
+        and node.test.value.id == "manager"
+        and node.test.attr == "monitoring"
+        and len(node.body) == 1
+        and _is_manager_stop_monitoring(node.body[0])
+        and not node.orelse
+    )
+
+
+def _replace_runtime_final_cleanup(source: str) -> str:
     tree = ast.parse(source)
     blocks = [node for node in tree.body if isinstance(node, ast.Try) and node.end_lineno is not None]
     if len(blocks) != 1:
         raise UnsupportedSourceError("expected exactly one top-level runtime block")
     block = blocks[0]
+    if len(block.finalbody) != 1:
+        return source
+    cleanup = block.finalbody[0]
+    if _is_guarded_manager_stop_monitoring(cleanup):
+        return source
+    if not _is_manager_stop_monitoring(cleanup) or cleanup.end_lineno is None:
+        return source
     lines = source.splitlines(keepends=True)
-    block_source = "".join(lines[block.lineno - 1 : block.end_lineno])
-    lines[block.lineno - 1 : block.end_lineno] = [
-        _replace_once(block_source, pattern, replacement, label)
+    cleanup_source = "".join(lines[cleanup.lineno - 1 : cleanup.end_lineno])
+    match = re.fullmatch(r"([ \t]*)manager\.stop_monitoring\(\)[ \t]*\r?\n?", cleanup_source)
+    if match is None:
+        raise UnsupportedSourceError("unsupported top-level final cleanup")
+    indent = match.group(1)
+    lines[cleanup.lineno - 1 : cleanup.end_lineno] = [
+        f"{indent}if manager.monitoring:\n{indent}    manager.stop_monitoring()\n"
     ]
     return "".join(lines)
 
 
 def render(source: str) -> str:
     """Build and validate a candidate before any destination write."""
-    rendered = _replace_in_task_manager(
+    rendered = _replace_in_task_manager_method(
         source,
+        "__init__",
         r"^[ \t]*atexit\.register\(self\.(?:handle_signal|stop_monitoring)\)[ \t]*\r?\n",
         "",
-        "atexit registration in TaskManager",
+        "atexit registration in TaskManager.__init__",
     )
     if not re.search(r"\batexit\.", rendered):
         rendered = _replace_once(
@@ -162,12 +214,7 @@ def render(source: str) -> str:
         r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
         "obsolete signal cleanup in handle_signal",
     )
-    rendered = _replace_in_runtime_block(
-        rendered,
-        r"^([ \t]*)finally:[ \t]*\r?\n([ \t]+)manager\.stop_monitoring\(\)[ \t]*$",
-        r"\1finally:\n\2if manager.monitoring:\n\2    manager.stop_monitoring()",
-        "unguarded final cleanup",
-    )
+    rendered = _replace_runtime_final_cleanup(rendered)
     _validate_candidate(rendered)
     return rendered
 

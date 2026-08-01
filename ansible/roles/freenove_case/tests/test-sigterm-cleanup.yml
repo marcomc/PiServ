@@ -328,6 +328,99 @@
               - "'def unrelated_cleanup' in (freenove_case_scoped_render.content | b64decode)"
               - "'finally:\\n        manager.stop_monitoring()' in (freenove_case_scoped_render.content | b64decode)"
 
+        - name: Write a source with nested runtime cleanup
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/nested-runtime.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  try:
+                      pass
+                  finally:
+                      manager.stop_monitoring()
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Render a source with nested runtime cleanup
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/nested-runtime.py"
+            freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/nested-runtime-ansible.py"
+
+        - name: Read the nested-runtime artifact
+          ansible.builtin.slurp:
+            src: "{{ freenove_case_test_directory.path }}/nested-runtime-ansible.py"
+          register: freenove_case_nested_runtime_render
+
+        - name: Verify nested runtime cleanup was not rewritten
+          ansible.builtin.assert:
+            that:
+              - >-
+                'finally:\n        manager.stop_monitoring()'
+                in (freenove_case_nested_runtime_render.content | b64decode)
+
+        - name: Write a source with nested atexit registration
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/nested-atexit.py"
+            mode: "0644"
+            content: |
+              import atexit
+
+              class TaskManager:
+                  def __init__(self):
+                      atexit.register(self.handle_signal)
+                      self.monitoring = True
+
+                  class Helper:
+                      def __init__(self):
+                          atexit.register(self.handle_signal)
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize nested-atexit rejection state
+          ansible.builtin.set_fact:
+            freenove_case_nested_atexit_rejected: false
+
+        - name: Reject nested atexit registration before writing an artifact
+          block:
+            - name: Attempt to render nested atexit registration
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/nested-atexit.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/nested-atexit-ansible.py"
+          rescue:
+            - name: Record expected nested-atexit rejection
+              ansible.builtin.set_fact:
+                freenove_case_nested_atexit_rejected: true
+
+        - name: Verify nested atexit registration leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_nested_atexit_rejected
+              - not ((freenove_case_test_directory.path + '/nested-atexit-ansible.py') is exists)
+
         - name: Write a source with conditional signal cleanup
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/conditional-handler.py"
