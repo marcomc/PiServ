@@ -708,6 +708,114 @@
                 not ((freenove_case_test_directory.path
                 + '/incompatible-signal-callback-runtime.py') is exists)
 
+        - name: Write a source with a competing SIGTERM registration
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/competing-sigterm-registration.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+                      signal.signal(signal.SIGTERM, self.ignore_signal)
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def ignore_signal(self, signum=None, frame=None):
+                      pass
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize competing SIGTERM registration rejection state
+          ansible.builtin.set_fact:
+            freenove_case_competing_sigterm_registration_rejected: false
+
+        - name: Reject competing SIGTERM registration before writing an artifact
+          block:
+            - name: Attempt to render competing SIGTERM registration
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/competing-sigterm-registration.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/competing-sigterm-registration-runtime.py
+          rescue:
+            - name: Record expected competing SIGTERM registration rejection
+              ansible.builtin.set_fact:
+                freenove_case_competing_sigterm_registration_rejected: true
+
+        - name: Verify competing SIGTERM registration leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_competing_sigterm_registration_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/competing-sigterm-registration-runtime.py') is exists)
+
+        - name: Write a source with a required stop-monitoring argument
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/required-stop-monitoring-argument.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self, required):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize required stop-monitoring argument rejection state
+          ansible.builtin.set_fact:
+            freenove_case_required_stop_monitoring_argument_rejected: false
+
+        - name: Reject a required stop-monitoring argument before writing an artifact
+          block:
+            - name: Attempt to render a required stop-monitoring argument
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/required-stop-monitoring-argument.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/required-stop-monitoring-argument-runtime.py
+          rescue:
+            - name: Record expected required stop-monitoring argument rejection
+              ansible.builtin.set_fact:
+                freenove_case_required_stop_monitoring_argument_rejected: true
+
+        - name: Verify required stop-monitoring argument leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_required_stop_monitoring_argument_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/required-stop-monitoring-argument-runtime.py') is exists)
+
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/unknown.py"

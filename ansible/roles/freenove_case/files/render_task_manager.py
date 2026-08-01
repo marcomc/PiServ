@@ -24,6 +24,36 @@ def _replace_once(source: str, pattern: str, replacement: str, label: str) -> st
     return rendered
 
 
+def _is_sigterm_registration(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "signal"
+        and node.func.attr == "signal"
+        and len(node.args) == 2
+        and isinstance(node.args[0], ast.Attribute)
+        and isinstance(node.args[0].value, ast.Name)
+        and node.args[0].value.id == "signal"
+        and node.args[0].attr == "SIGTERM"
+        and not node.keywords
+    )
+
+
+def _supports_zero_argument_instance_call(method: ast.FunctionDef) -> bool:
+    arguments = method.args
+    positional = [*arguments.posonlyargs, *arguments.args]
+    required_positional = len(positional) - len(arguments.defaults)
+    return (
+        not method.decorator_list
+        and not arguments.posonlyargs
+        and bool(positional)
+        and positional[0].arg == "self"
+        and required_positional <= 1
+        and all(default is not None for default in arguments.kw_defaults)
+    )
+
+
 def _validate_candidate(source: str) -> None:
     tree = ast.parse(source)
     managers = [
@@ -59,25 +89,29 @@ def _validate_candidate(source: str) -> None:
     ]
     sigterm_registrations = [
         node
+        for node in ast.walk(tree)
+        if _is_sigterm_registration(node)
+    ]
+    intended_sigterm_registrations = [
+        node
         for initializer in initializers
         for node in initializer.body
         if isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Attribute)
-        and isinstance(node.value.func.value, ast.Name)
-        and node.value.func.value.id == "signal"
-        and node.value.func.attr == "signal"
-        and len(node.value.args) == 2
-        and isinstance(node.value.args[0], ast.Attribute)
-        and isinstance(node.value.args[0].value, ast.Name)
-        and node.value.args[0].value.id == "signal"
-        and node.value.args[0].attr == "SIGTERM"
+        and _is_sigterm_registration(node.value)
         and isinstance(node.value.args[1], ast.Attribute)
         and isinstance(node.value.args[1].value, ast.Name)
         and node.value.args[1].value.id == "self"
         and node.value.args[1].attr == "handle_signal"
         and not node.value.keywords
     ]
+    stop_methods = [
+        node
+        for node in managers[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "stop_monitoring"
+    ]
+    valid_stop_method = (
+        len(stop_methods) == 1 and _supports_zero_argument_instance_call(stop_methods[0])
+    )
 
     handler_body = handler.body
     valid_handler = (
@@ -125,6 +159,8 @@ def _validate_candidate(source: str) -> None:
         not valid_handler_signature
         or not valid_handler
         or len(sigterm_registrations) != 1
+        or len(intended_sigterm_registrations) != 1
+        or not valid_stop_method
         or len(guarded_cleanup) != 1
         or re.search(r"\batexit\b", source)
     ):
