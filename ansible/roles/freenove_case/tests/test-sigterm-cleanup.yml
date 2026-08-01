@@ -607,6 +607,58 @@
               - freenove_case_float_exit_rejected
               - not ((freenove_case_test_directory.path + '/handler-float-exit-runtime.py') is exists)
 
+        - name: Write a source with a signal exit cause
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/handler-exit-cause.py"
+            mode: "0644"
+            content: |
+              import signal
+
+              class TaskManager:
+                  def __init__(self):
+                      self.monitoring = True
+                      signal.signal(signal.SIGTERM, self.handle_signal)
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0) from missing_cause()
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize signal exit cause rejection state
+          ansible.builtin.set_fact:
+            freenove_case_signal_exit_cause_rejected: false
+
+        - name: Reject a signal exit cause before writing an artifact
+          block:
+            - name: Attempt to render a signal exit cause
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: >-
+                  {{ freenove_case_test_directory.path }}/handler-exit-cause.py
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/handler-exit-cause-runtime.py
+          rescue:
+            - name: Record expected signal exit cause rejection
+              ansible.builtin.set_fact:
+                freenove_case_signal_exit_cause_rejected: true
+
+        - name: Verify signal exit cause leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_signal_exit_cause_rejected
+              - >-
+                not ((freenove_case_test_directory.path
+                + '/handler-exit-cause-runtime.py') is exists)
+
         - name: Write a source without SIGTERM registration
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/missing-sigterm-registration.py"

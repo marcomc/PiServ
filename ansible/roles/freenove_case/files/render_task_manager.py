@@ -134,6 +134,7 @@ def _validate_candidate(source: str) -> None:
         and type(handler_body[1].exc.args[0].value) is int
         and handler_body[1].exc.args[0].value == 0
         and not handler_body[1].exc.keywords
+        and handler_body[1].cause is None
     )
     runtime_blocks = [node for node in tree.body if isinstance(node, ast.Try)]
     guarded_cleanup = [
