@@ -6,6 +6,7 @@
     freenove_case_manage_sigterm_cleanup_fix: true
     freenove_case_manage_background_service: true
     freenove_case_install_user: "{{ freenove_case_test_user.stdout }}"
+    freenove_case_install_dir: "{{ freenove_case_test_directory.path }}"
     freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/task_manager.py"
     freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/task_manager_ansible.py"
   handlers:
@@ -217,6 +218,39 @@
               - freenove_case_destination_symlink.stat.islnk
               - (freenove_case_destination_sentinel.content | b64decode | trim) == 'sentinel'
 
+        - name: Create a parent-directory alias for the upstream source
+          ansible.builtin.file:
+            src: "{{ freenove_case_test_directory.path }}"
+            dest: "{{ freenove_case_test_directory.path }}/source-parent-alias"
+            state: link
+
+        - name: Initialize parent-alias rejection state
+          ansible.builtin.set_fact:
+            freenove_case_parent_alias_rejected: false
+
+        - name: Reject a destination that resolves to the upstream source
+          block:
+            - name: Attempt to render through a parent-directory alias
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_runtime_path: >-
+                  {{ freenove_case_test_directory.path }}/source-parent-alias/task_manager.py
+          rescue:
+            - name: Record expected parent-alias rejection
+              ansible.builtin.set_fact:
+                freenove_case_parent_alias_rejected: true
+
+        - name: Read the upstream source after parent-alias rejection
+          ansible.builtin.slurp:
+            src: "{{ freenove_case_task_manager_path }}"
+          register: freenove_case_parent_alias_source
+
+        - name: Verify the source remains unmodified after parent-alias rejection
+          ansible.builtin.assert:
+            that:
+              - freenove_case_parent_alias_rejected
+              - "'self.stop_all_tasks()' in (freenove_case_parent_alias_source.content | b64decode)"
+
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/unknown.py"
@@ -313,6 +347,28 @@
           ansible.builtin.assert:
             that:
               - (freenove_case_test_reboot_mode.content | b64decode) == 'cold\n'
+
+        - name: Set a string false cleanup flag
+          ansible.builtin.set_fact:
+            freenove_case_manage_sigterm_cleanup_fix: "false"
+
+        - name: Render the service with a string false cleanup flag
+          ansible.builtin.set_fact:
+            freenove_case_string_false_service: >-
+              {{
+                lookup(
+                  'ansible.builtin.template',
+                  playbook_dir ~ '/../templates/freenove-background.service.j2'
+                )
+              }}
+
+        - name: Verify the service honors the coerced cleanup flag
+          ansible.builtin.assert:
+            that:
+              - >-
+                'ExecStart=/usr/bin/python3 '
+                ~ freenove_case_task_manager_path
+                in freenove_case_string_false_service
       always:
         - name: Remove isolated Freenove task-manager fixtures
           ansible.builtin.file:

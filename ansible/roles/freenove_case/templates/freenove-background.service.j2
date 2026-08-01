@@ -2,7 +2,7 @@
 Description=Freenove Computer Case Kit background tasks
 
 [Service]
-ExecStart=/usr/bin/python3 {{ freenove_case_task_manager_runtime_path if freenove_case_manage_sigterm_cleanup_fix else freenove_case_task_manager_path }}
+ExecStart=/usr/bin/python3 {{ freenove_case_task_manager_runtime_path if (freenove_case_manage_sigterm_cleanup_fix | bool) else freenove_case_task_manager_path }}
 WorkingDirectory={{ freenove_case_install_dir }}/Code
 StandardOutput=inherit
 StandardError=inherit

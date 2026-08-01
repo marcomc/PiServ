@@ -107,6 +107,7 @@
             - symlink
             - unsafe_mode
             - empty
+            - whitespace
             - runtime_cmdline_alias
             - runtime_backup_alias
             - runtime_cmdline_hardlink

@@ -103,7 +103,12 @@ def write_candidate(source: Path, destination: Path, check: bool) -> bool:
         raise UnsupportedSourceError("source and destination paths must differ")
     source_metadata = _regular_file(source, "source")
     if destination.exists() or destination.is_symlink():
-        _regular_file(destination, "destination")
+        destination_metadata = _regular_file(destination, "destination")
+        if (
+            source_metadata.st_dev == destination_metadata.st_dev
+            and source_metadata.st_ino == destination_metadata.st_ino
+        ):
+            raise UnsupportedSourceError("source and destination must not resolve to the same file")
     if not destination.parent.is_dir():
         raise UnsupportedSourceError(f"destination parent is not a directory: {destination.parent}")
 

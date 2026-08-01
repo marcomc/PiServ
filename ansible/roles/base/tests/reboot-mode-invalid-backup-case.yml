@@ -54,15 +54,32 @@
   become: true
 
 - name: Create an unsafe, empty, or hard-link-source backup file
-  when: base_test_invalid_backup_kind in ['unsafe_mode', 'empty', 'runtime_backup_hardlink']
+  when: >-
+    base_test_invalid_backup_kind in
+    ['unsafe_mode', 'empty', 'runtime_backup_hardlink']
   ansible.builtin.copy:
     content: >-
-      {{ 'console=tty1\n' if base_test_invalid_backup_kind in ['unsafe_mode', 'runtime_backup_hardlink'] else '' }}
+      {{
+        'console=tty1\n'
+        if base_test_invalid_backup_kind in ['unsafe_mode', 'runtime_backup_hardlink']
+        else ''
+      }}
     dest: >-
       {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
     owner: "{{ base_test_root_user.stdout }}"
     group: "{{ base_test_root_group.stdout }}"
     mode: "{{ '0644' if base_test_invalid_backup_kind == 'unsafe_mode' else '0600' }}"
+  become: true
+
+- name: Create a whitespace-only backup file
+  when: base_test_invalid_backup_kind == 'whitespace'
+  ansible.builtin.copy:
+    content: "{{ '   ' ~ '\x09' ~ '  ' ~ '\x0a' }}"
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0600"
   become: true
 
 - name: Create a runtime-control hard-link alias

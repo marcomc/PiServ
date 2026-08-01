@@ -170,13 +170,16 @@
   become: true
   check_mode: false
 
-- name: Validate the existing kernel command-line backup content
+- name: Require valid existing kernel command-line backup content
   when: base_kernel_cmdline_backup_stat.stat.exists
   ansible.builtin.assert:
     that:
       - >-
         base_kernel_cmdline_backup_existing.content | b64decode
         is match('^[^\r\n]+\r?\n?$')
+      - >-
+        ((base_kernel_cmdline_backup_existing.content | b64decode | trim).split()
+        | length) > 0
     fail_msg: >-
       Existing backup {{ base_kernel_cmdline_backup_path }} must contain one
       non-empty physical command-line record.
@@ -190,39 +193,6 @@
     group: "{{ base_kernel_cmdline_backup_group }}"
     mode: "0600"
   become: true
-
-- name: Apply the managed kernel reboot mode
-  ansible.builtin.copy:
-    content: "{{ base_kernel_cmdline_managed_tokens | join(' ') }}\n"
-    dest: "{{ base_kernel_cmdline_path }}"
-    mode: "{{ base_kernel_cmdline_stat.stat.mode }}"
-  become: true
-
-- name: Read the reconciled kernel command line
-  when: not ansible_check_mode
-  ansible.builtin.slurp:
-    path: "{{ base_kernel_cmdline_path }}"
-  register: base_kernel_cmdline_reconciled_slurp
-  become: true
-  check_mode: false
-
-- name: Verify the reconciled kernel command line
-  when: not ansible_check_mode
-  ansible.builtin.assert:
-    that:
-      - >-
-        (base_kernel_cmdline_reconciled_slurp.content | b64decode)
-        == (base_kernel_cmdline_managed_tokens | join(' ')) ~ '\n'
-      - >-
-        (
-          base_kernel_cmdline_reconciled_slurp.content
-          | b64decode
-          | regex_findall('(?:^|[ \t])reboot=[^ \t]+')
-          | length
-        ) == (0 if base_kernel_reboot_mode == 'default' else 1)
-    fail_msg: >-
-      The reconciled kernel command line does not contain the requested single
-      reboot-mode token.
 
 - name: Activate the current kernel reboot mode
   when: base_kernel_reboot_mode in ['warm', 'cold']
@@ -265,3 +235,36 @@
             == base_kernel_reboot_mode
         fail_msg: >-
           Failed to activate kernel reboot mode {{ base_kernel_reboot_mode }}.
+
+- name: Apply the managed kernel reboot mode
+  ansible.builtin.copy:
+    content: "{{ base_kernel_cmdline_managed_tokens | join(' ') }}\n"
+    dest: "{{ base_kernel_cmdline_path }}"
+    mode: "{{ base_kernel_cmdline_stat.stat.mode }}"
+  become: true
+
+- name: Read the reconciled kernel command line
+  when: not ansible_check_mode
+  ansible.builtin.slurp:
+    path: "{{ base_kernel_cmdline_path }}"
+  register: base_kernel_cmdline_reconciled_slurp
+  become: true
+  check_mode: false
+
+- name: Verify the reconciled kernel command line
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        (base_kernel_cmdline_reconciled_slurp.content | b64decode)
+        == (base_kernel_cmdline_managed_tokens | join(' ')) ~ '\n'
+      - >-
+        (
+          base_kernel_cmdline_reconciled_slurp.content
+          | b64decode
+          | regex_findall('(?:^|[ \t])reboot=[^ \t]+')
+          | length
+        ) == (0 if base_kernel_reboot_mode == 'default' else 1)
+    fail_msg: >-
+      The reconciled kernel command line does not contain the requested single
+      reboot-mode token.
