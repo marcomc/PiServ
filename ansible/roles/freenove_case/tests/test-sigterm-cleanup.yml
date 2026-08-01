@@ -275,8 +275,14 @@
                   def stop_monitoring(self):
                       self.monitoring = False
 
-                  def normal_work(self):
-                      self.stop_all_tasks()
+              def normal_work(self):
+                  self.stop_all_tasks()
+
+              def unrelated_cleanup(self):
+                  try:
+                      pass
+                  finally:
+                      manager.stop_monitoring()
 
               manager = TaskManager()
               try:
@@ -300,6 +306,51 @@
           ansible.builtin.assert:
             that:
               - "'self.stop_all_tasks()' in (freenove_case_scoped_render.content | b64decode)"
+              - "'def unrelated_cleanup' in (freenove_case_scoped_render.content | b64decode)"
+              - "'finally:\\n        manager.stop_monitoring()' in (freenove_case_scoped_render.content | b64decode)"
+
+        - name: Write a source with conditional signal cleanup
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/conditional-handler.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      if self.monitoring:
+                          self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize conditional-handler rejection state
+          ansible.builtin.set_fact:
+            freenove_case_conditional_handler_rejected: false
+
+        - name: Reject conditional signal cleanup before writing an artifact
+          block:
+            - name: Attempt to render conditional signal cleanup
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/conditional-handler.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/conditional-handler-runtime.py"
+          rescue:
+            - name: Record expected conditional-handler rejection
+              ansible.builtin.set_fact:
+                freenove_case_conditional_handler_rejected: true
+
+        - name: Verify conditional signal cleanup leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_conditional_handler_rejected
+              - not ((freenove_case_test_directory.path + '/conditional-handler-runtime.py') is exists)
 
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:

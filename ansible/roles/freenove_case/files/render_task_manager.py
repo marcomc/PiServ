@@ -41,19 +41,45 @@ def _validate_candidate(source: str) -> None:
     if len(handlers) != 1:
         raise UnsupportedSourceError("expected exactly one handle_signal method")
 
-    lines = source.splitlines()
-    handler = "\n".join(lines[handlers[0].lineno - 1 : handlers[0].end_lineno])
+    handler_body = handlers[0].body
     valid_handler = (
-        len(re.findall(r"(?m)^[ \t]*self\.stop_monitoring\(\)[ \t]*$", handler)) == 1
-        and len(re.findall(r"(?m)^[ \t]*raise SystemExit\(0\)[ \t]*$", handler)) == 1
-        and "self.stop_all_tasks()" not in handler
+        len(handler_body) == 2
+        and isinstance(handler_body[0], ast.Expr)
+        and isinstance(handler_body[0].value, ast.Call)
+        and isinstance(handler_body[0].value.func, ast.Attribute)
+        and isinstance(handler_body[0].value.func.value, ast.Name)
+        and handler_body[0].value.func.value.id == "self"
+        and handler_body[0].value.func.attr == "stop_monitoring"
+        and isinstance(handler_body[1], ast.Raise)
+        and isinstance(handler_body[1].exc, ast.Call)
+        and isinstance(handler_body[1].exc.func, ast.Name)
+        and handler_body[1].exc.func.id == "SystemExit"
+        and len(handler_body[1].exc.args) == 1
+        and isinstance(handler_body[1].exc.args[0], ast.Constant)
+        and handler_body[1].exc.args[0].value == 0
+        and not handler_body[1].exc.keywords
     )
-    guarded_cleanup = re.findall(
-        r"(?m)^[ \t]*finally:[ \t]*\r?\n"
-        r"[ \t]+if manager\.monitoring:[ \t]*\r?\n"
-        r"[ \t]+manager\.stop_monitoring\(\)[ \t]*$",
-        source,
-    )
+    runtime_blocks = [node for node in tree.body if isinstance(node, ast.Try)]
+    guarded_cleanup = [
+        block
+        for block in runtime_blocks
+        if len(block.finalbody) == 1
+        and isinstance(block.finalbody[0], ast.If)
+        and isinstance(block.finalbody[0].test, ast.Attribute)
+        and isinstance(block.finalbody[0].test.value, ast.Name)
+        and block.finalbody[0].test.value.id == "manager"
+        and block.finalbody[0].test.attr == "monitoring"
+        and len(block.finalbody[0].body) == 1
+        and isinstance(block.finalbody[0].body[0], ast.Expr)
+        and isinstance(block.finalbody[0].body[0].value, ast.Call)
+        and isinstance(block.finalbody[0].body[0].value.func, ast.Attribute)
+        and isinstance(block.finalbody[0].body[0].value.func.value, ast.Name)
+        and block.finalbody[0].body[0].value.func.value.id == "manager"
+        and block.finalbody[0].body[0].value.func.attr == "stop_monitoring"
+        and not block.finalbody[0].body[0].value.args
+        and not block.finalbody[0].body[0].value.keywords
+        and not block.finalbody[0].orelse
+    ]
     if not valid_handler or len(guarded_cleanup) != 1 or re.search(r"\batexit\b", source):
         raise UnsupportedSourceError("unsupported SIGTERM cleanup structure")
 
@@ -101,6 +127,20 @@ def _replace_in_task_manager(source: str, pattern: str, replacement: str, label:
     return "".join(lines)
 
 
+def _replace_in_runtime_block(source: str, pattern: str, replacement: str, label: str) -> str:
+    tree = ast.parse(source)
+    blocks = [node for node in tree.body if isinstance(node, ast.Try) and node.end_lineno is not None]
+    if len(blocks) != 1:
+        raise UnsupportedSourceError("expected exactly one top-level runtime block")
+    block = blocks[0]
+    lines = source.splitlines(keepends=True)
+    block_source = "".join(lines[block.lineno - 1 : block.end_lineno])
+    lines[block.lineno - 1 : block.end_lineno] = [
+        _replace_once(block_source, pattern, replacement, label)
+    ]
+    return "".join(lines)
+
+
 def render(source: str) -> str:
     """Build and validate a candidate before any destination write."""
     rendered = _replace_in_task_manager(
@@ -122,7 +162,7 @@ def render(source: str) -> str:
         r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
         "obsolete signal cleanup in handle_signal",
     )
-    rendered = _replace_once(
+    rendered = _replace_in_runtime_block(
         rendered,
         r"^([ \t]*)finally:[ \t]*\r?\n([ \t]+)manager\.stop_monitoring\(\)[ \t]*$",
         r"\1finally:\n\2if manager.monitoring:\n\2    manager.stop_monitoring()",
