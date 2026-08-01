@@ -37,12 +37,15 @@
           ansible.builtin.copy:
             content: "{{ item.content }}"
             dest: "{{ base_test_check_dir.path }}/{{ item.path }}"
+            owner: "{{ base_test_root_user.stdout }}"
+            group: "{{ base_test_root_group.stdout }}"
             mode: "0600"
           loop:
             - path: cmdline.txt
               content: "console=tty1 reboot=w\n"
             - path: runtime-mode
               content: "warm\n"
+          become: true
           check_mode: false
 
         - name: Apply the reboot policy in check mode
@@ -61,6 +64,7 @@
             - "{{ base_kernel_cmdline_path }}"
             - "{{ base_kernel_reboot_runtime_mode_path }}"
           register: base_test_check_files
+          become: true
           check_mode: false
 
         - name: Verify check mode did not mutate target state

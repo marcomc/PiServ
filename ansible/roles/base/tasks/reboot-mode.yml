@@ -47,13 +47,15 @@
           - base_kernel_reboot_runtime_stat.stat.exists
           - base_kernel_reboot_runtime_stat.stat.isreg
           - not base_kernel_reboot_runtime_stat.stat.islnk
+          - base_kernel_reboot_runtime_stat.stat.uid == 0
+          - base_kernel_reboot_runtime_stat.stat.mode is match('^0?[0-7][0-5][0-5]$')
           - >-
             base_kernel_reboot_runtime_stat.stat.dev != base_kernel_cmdline_stat.stat.dev
             or base_kernel_reboot_runtime_stat.stat.inode != base_kernel_cmdline_stat.stat.inode
         fail_msg: >-
-          {{ base_kernel_reboot_runtime_mode_path }} must be a non-symlink
-          regular file distinct from {{ base_kernel_cmdline_path }} before
-          reboot-mode policy is applied.
+          {{ base_kernel_reboot_runtime_mode_path }} must be a root-owned,
+          non-group/world-writable, non-symlink regular file distinct from
+          {{ base_kernel_cmdline_path }} before reboot-mode policy is applied.
 
 - name: Read the current kernel command line
   ansible.builtin.slurp:

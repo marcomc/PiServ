@@ -43,6 +43,14 @@
     mode: "0700"
   become: true
 
+- name: Make the runtime-control fixture group/world writable
+  when: base_test_invalid_backup_kind == 'runtime_unsafe_mode'
+  ansible.builtin.file:
+    path: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
+    mode: "0666"
+  become: true
+
 - name: Create an invalid backup symlink
   when: base_test_invalid_backup_kind == 'symlink'
   ansible.builtin.file:

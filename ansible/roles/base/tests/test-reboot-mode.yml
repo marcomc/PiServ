@@ -48,12 +48,15 @@
           ansible.builtin.copy:
             content: "{{ item.content }}"
             dest: "{{ base_test_reboot_mode_dir.path }}/{{ item.path }}"
+            owner: "{{ base_test_root_user.stdout }}"
+            group: "{{ base_test_root_group.stdout }}"
             mode: "0600"
           loop:
             - path: cmdline.txt
               content: "{{ ['console=tty1 reboot=w', 'quiet reboot=s'] | join('\t') }}\n"
             - path: runtime-mode
               content: "warm\n"
+          become: true
 
         - name: Apply cold mode through the base role
           ansible.builtin.include_role:
@@ -92,6 +95,7 @@
           ansible.builtin.slurp:
             path: "{{ base_kernel_cmdline_path }}"
           register: base_test_rollback_cmdline
+          become: true
 
         - name: Verify platform-default rollback
           ansible.builtin.assert:
@@ -131,6 +135,7 @@
             - empty
             - whitespace
             - runtime_unknown
+            - runtime_unsafe_mode
             - runtime_cmdline_alias
             - runtime_backup_alias
             - runtime_cmdline_hardlink
