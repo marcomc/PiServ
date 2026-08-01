@@ -421,6 +421,53 @@
               - freenove_case_nested_atexit_rejected
               - not ((freenove_case_test_directory.path + '/nested-atexit-ansible.py') is exists)
 
+        - name: Write a source with shared-line atexit registration
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/shared-line-atexit.py"
+            mode: "0644"
+            content: |
+              import atexit
+
+              class TaskManager:
+                  def __init__(self):
+                      atexit.register(self.handle_signal); self.monitoring = True
+
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Initialize shared-line atexit rejection state
+          ansible.builtin.set_fact:
+            freenove_case_shared_line_atexit_rejected: false
+
+        - name: Reject shared-line atexit registration before writing an artifact
+          block:
+            - name: Attempt to render shared-line atexit registration
+              ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+              vars:
+                freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/shared-line-atexit.py"
+                freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/shared-line-atexit-ansible.py"
+          rescue:
+            - name: Record expected shared-line atexit rejection
+              ansible.builtin.set_fact:
+                freenove_case_shared_line_atexit_rejected: true
+
+        - name: Verify shared-line atexit registration leaves no artifact
+          ansible.builtin.assert:
+            that:
+              - freenove_case_shared_line_atexit_rejected
+              - not ((freenove_case_test_directory.path + '/shared-line-atexit-ansible.py') is exists)
+
         - name: Write a source with conditional signal cleanup
           ansible.builtin.copy:
             dest: "{{ freenove_case_test_directory.path }}/conditional-handler.py"

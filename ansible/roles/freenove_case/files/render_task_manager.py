@@ -154,6 +154,13 @@ def _remove_direct_atexit_registration(source: str) -> str:
     registration = registrations[0]
     if registration.end_lineno is None:
         raise UnsupportedSourceError("unsupported direct atexit registration")
+    if any(
+        node is not registration
+        and node.lineno is not None
+        and registration.lineno <= node.lineno <= registration.end_lineno
+        for node in initializer.body
+    ):
+        raise UnsupportedSourceError("direct atexit registration shares a line with another statement")
     lines = source.splitlines(keepends=True)
     del lines[registration.lineno - 1 : registration.end_lineno]
     return "".join(lines)
