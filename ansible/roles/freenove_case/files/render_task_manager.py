@@ -58,6 +58,33 @@ def _validate_candidate(source: str) -> None:
         raise UnsupportedSourceError("unsupported SIGTERM cleanup structure")
 
 
+def _replace_handler_cleanup(source: str) -> str:
+    tree = ast.parse(source)
+    manager = next(
+        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TaskManager"),
+        None,
+    )
+    if manager is None:
+        raise UnsupportedSourceError("expected exactly one TaskManager class")
+    handler = next(
+        (node for node in manager.body if isinstance(node, ast.FunctionDef) and node.name == "handle_signal"),
+        None,
+    )
+    if handler is None or handler.end_lineno is None:
+        raise UnsupportedSourceError("expected exactly one handle_signal method")
+    lines = source.splitlines(keepends=True)
+    handler_source = "".join(lines[handler.lineno - 1 : handler.end_lineno])
+    lines[handler.lineno - 1 : handler.end_lineno] = [
+        _replace_once(
+            handler_source,
+            r"^([ \t]*)self\.stop_all_tasks\(\)[ \t]*$",
+            r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
+            "obsolete signal cleanup in handle_signal",
+        )
+    ]
+    return "".join(lines)
+
+
 def render(source: str) -> str:
     """Build and validate a candidate before any destination write."""
     rendered = _replace_once(
@@ -72,12 +99,7 @@ def render(source: str) -> str:
         "",
         "atexit import",
     )
-    rendered = _replace_once(
-        rendered,
-        r"^([ \t]*)self\.stop_all_tasks\(\)[ \t]*$",
-        r"\1self.stop_monitoring()\n\1raise SystemExit(0)",
-        "obsolete signal cleanup",
-    )
+    rendered = _replace_handler_cleanup(rendered)
     rendered = _replace_once(
         rendered,
         r"^([ \t]*)finally:[ \t]*\r?\n([ \t]+)manager\.stop_monitoring\(\)[ \t]*$",

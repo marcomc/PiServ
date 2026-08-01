@@ -204,6 +204,16 @@
       become: true
       check_mode: false
 
+    - name: Require a recognized active kernel reboot mode
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_kernel_reboot_runtime_before.content | b64decode | trim
+            in ['default', 'warm', 'cold']
+        fail_msg: >-
+          {{ base_kernel_reboot_runtime_mode_path }} contains an unrecognized
+          reboot mode and will not be overwritten.
+
     - name: Activate the running kernel reboot mode
       when:
         - not ansible_check_mode

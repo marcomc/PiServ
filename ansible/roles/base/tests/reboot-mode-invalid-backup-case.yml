@@ -24,7 +24,7 @@
     ['runtime_cmdline_alias', 'runtime_backup_alias',
     'runtime_cmdline_hardlink', 'runtime_backup_hardlink']
   ansible.builtin.copy:
-    content: "warm\n"
+    content: "{{ 'unknown\n' if base_test_invalid_backup_kind == 'runtime_unknown' else 'warm\n' }}"
     dest: >-
       {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
     owner: "{{ base_test_root_user.stdout }}"

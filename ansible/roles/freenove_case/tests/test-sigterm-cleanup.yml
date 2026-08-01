@@ -134,6 +134,11 @@
           vars:
             freenove_case_manage_sigterm_cleanup_fix: false
 
+        - name: Remove the disabled runtime artifact after simulated service reconciliation
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup-removal.yml
+          vars:
+            freenove_case_manage_sigterm_cleanup_fix: false
+
         - name: Verify disabled mode removes the runtime artifact
           ansible.builtin.stat:
             path: "{{ freenove_case_task_manager_runtime_path }}"
@@ -155,6 +160,12 @@
 
         - name: Disable the fix while leaving the existing service unmanaged
           ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_manage_sigterm_cleanup_fix: false
+            freenove_case_manage_background_service: false
+
+        - name: Preserve the artifact while the service is unmanaged
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup-removal.yml
           vars:
             freenove_case_manage_sigterm_cleanup_fix: false
             freenove_case_manage_background_service: false
@@ -250,6 +261,45 @@
             that:
               - freenove_case_parent_alias_rejected
               - "'self.stop_all_tasks()' in (freenove_case_parent_alias_source.content | b64decode)"
+
+        - name: Write a source with an unrelated normal task cleanup
+          ansible.builtin.copy:
+            dest: "{{ freenove_case_test_directory.path }}/safe-extra.py"
+            mode: "0644"
+            content: |
+              class TaskManager:
+                  def handle_signal(self, signum=None, frame=None):
+                      self.stop_monitoring()
+                      raise SystemExit(0)
+
+                  def stop_monitoring(self):
+                      self.monitoring = False
+
+                  def normal_work(self):
+                      self.stop_all_tasks()
+
+              manager = TaskManager()
+              try:
+                  pass
+              finally:
+                  if manager.monitoring:
+                      manager.stop_monitoring()
+
+        - name: Render a source with unrelated normal task cleanup
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+          vars:
+            freenove_case_task_manager_path: "{{ freenove_case_test_directory.path }}/safe-extra.py"
+            freenove_case_task_manager_runtime_path: "{{ freenove_case_test_directory.path }}/safe-extra-runtime.py"
+
+        - name: Read the scoped-render runtime artifact
+          ansible.builtin.slurp:
+            src: "{{ freenove_case_test_directory.path }}/safe-extra-runtime.py"
+          register: freenove_case_scoped_render
+
+        - name: Verify normal task cleanup was not rewritten
+          ansible.builtin.assert:
+            that:
+              - "'self.stop_all_tasks()' in (freenove_case_scoped_render.content | b64decode)"
 
         - name: Write an unsupported upstream fixture
           ansible.builtin.copy:
