@@ -32,7 +32,6 @@
       file before reboot-mode policy is applied.
 
 - name: Validate the active kernel reboot-mode control before modifying boot configuration
-  when: base_kernel_reboot_mode in ['warm', 'cold']
   block:
     - name: Inspect the active kernel reboot-mode control
       ansible.builtin.stat:
@@ -151,7 +150,6 @@
 
 - name: Require a runtime control distinct from the existing backup
   when:
-    - base_kernel_reboot_mode in ['warm', 'cold']
     - base_kernel_cmdline_backup_stat.stat.exists
   ansible.builtin.assert:
     that:
@@ -194,8 +192,7 @@
     mode: "0600"
   become: true
 
-- name: Activate the current kernel reboot mode
-  when: base_kernel_reboot_mode in ['warm', 'cold']
+- name: Inspect and activate the current kernel reboot mode
   block:
     - name: Read the active kernel reboot mode
       ansible.builtin.slurp:
@@ -217,6 +214,7 @@
     - name: Activate the running kernel reboot mode
       when:
         - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
         - >-
           base_kernel_reboot_runtime_before.content | b64decode | trim
           != base_kernel_reboot_mode
@@ -229,7 +227,9 @@
       become: true
 
     - name: Read the activated kernel reboot mode
-      when: not ansible_check_mode
+      when:
+        - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
       ansible.builtin.slurp:
         path: "{{ base_kernel_reboot_runtime_mode_path }}"
       register: base_kernel_reboot_runtime_after
@@ -237,7 +237,9 @@
       check_mode: false
 
     - name: Verify the active kernel reboot mode
-      when: not ansible_check_mode
+      when:
+        - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
       ansible.builtin.assert:
         that:
           - >-

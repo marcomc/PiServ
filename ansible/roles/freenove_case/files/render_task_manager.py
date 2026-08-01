@@ -197,7 +197,12 @@ def write_candidate(source: Path, destination: Path, check: bool) -> bool:
         raise UnsupportedSourceError(f"destination parent is not a directory: {destination.parent}")
 
     candidate = render(source.read_text(encoding="utf-8"))
-    if destination.exists() and destination.read_text(encoding="utf-8") == candidate:
+    desired_mode = stat.S_IMODE(source_metadata.st_mode)
+    if (
+        destination.exists()
+        and destination.read_text(encoding="utf-8") == candidate
+        and stat.S_IMODE(destination_metadata.st_mode) == desired_mode
+    ):
         return False
     if check:
         return True
@@ -208,7 +213,7 @@ def write_candidate(source: Path, destination: Path, check: bool) -> bool:
             output.write(candidate)
             output.flush()
             os.fsync(output.fileno())
-        os.chmod(temporary, stat.S_IMODE(source_metadata.st_mode))
+        os.chmod(temporary, desired_mode)
         os.replace(temporary, destination)
     finally:
         if os.path.exists(temporary):

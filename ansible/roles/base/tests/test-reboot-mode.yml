@@ -100,6 +100,28 @@
                 (base_test_rollback_cmdline.content | b64decode)
                 == 'console=tty1 quiet\n'
 
+        - name: Initialize default-mode runtime alias rejection state
+          ansible.builtin.set_fact:
+            base_test_default_runtime_alias_rejected: false
+
+        - name: Reject a default-mode runtime alias before command-line mutation
+          block:
+            - name: Apply default mode with runtime control aliased to command line
+              ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+              vars:
+                base_kernel_reboot_mode: default
+                base_kernel_reboot_runtime_mode_path: "{{ base_kernel_cmdline_path }}"
+          rescue:
+            - name: Record expected default-mode runtime alias rejection
+              ansible.builtin.set_fact:
+                base_test_default_runtime_alias_rejected: true
+
+        - name: Verify default-mode runtime alias failed closed
+          ansible.builtin.assert:
+            that:
+              - base_test_default_runtime_alias_rejected
+              - (base_test_rollback_cmdline.content | b64decode) == 'console=tty1 quiet\n'
+
         - name: Verify unsafe pre-existing backups fail closed
           ansible.builtin.include_tasks: reboot-mode-invalid-backup-case.yml
           loop:

@@ -94,6 +94,25 @@
             that:
               - freenove_case_sigterm_render.stdout | trim == 'unchanged'
 
+        - name: Drift the runtime artifact permissions
+          ansible.builtin.file:
+            path: "{{ freenove_case_task_manager_runtime_path }}"
+            mode: "0666"
+
+        - name: Reconcile the runtime artifact permissions
+          ansible.builtin.include_tasks: ../tasks/sigterm-cleanup.yml
+
+        - name: Inspect reconciled runtime artifact permissions
+          ansible.builtin.stat:
+            path: "{{ freenove_case_task_manager_runtime_path }}"
+          register: freenove_case_reconciled_runtime_mode
+
+        - name: Verify permission drift triggers artifact reconciliation
+          ansible.builtin.assert:
+            that:
+              - freenove_case_sigterm_render.stdout | trim == 'changed'
+              - freenove_case_reconciled_runtime_mode.stat.mode == '0644'
+
         - name: Verify SIGTERM exits after exactly one cleanup
           ansible.builtin.command:
             argv:
