@@ -381,9 +381,9 @@
                       atexit.register(self.handle_signal)
                       self.monitoring = True
 
-                  class Helper:
-                      def __init__(self):
-                          atexit.register(self.handle_signal)
+                      class Helper:
+                          def __init__(self):
+                              atexit.register(self.handle_signal)
 
                   def handle_signal(self, signum=None, frame=None):
                       self.stop_monitoring()

@@ -113,9 +113,7 @@ def _replace_in_handler(source: str, pattern: str, replacement: str, label: str)
     return "".join(lines)
 
 
-def _replace_in_task_manager_method(
-    source: str, method_name: str, pattern: str, replacement: str, label: str
-) -> str:
+def _remove_direct_atexit_registration(source: str) -> str:
     tree = ast.parse(source)
     manager = next(
         (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TaskManager"),
@@ -123,23 +121,41 @@ def _replace_in_task_manager_method(
     )
     if manager is None:
         raise UnsupportedSourceError("expected exactly one TaskManager class")
-    method = next(
+    initializer = next(
         (
             node
             for node in manager.body
-            if isinstance(node, ast.FunctionDef) and node.name == method_name
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
         ),
         None,
     )
-    if method is None:
+    if initializer is None:
         return source
-    if method.end_lineno is None:
-        raise UnsupportedSourceError(f"expected exactly one TaskManager.{method_name} method")
-    lines = source.splitlines(keepends=True)
-    method_source = "".join(lines[method.lineno - 1 : method.end_lineno])
-    lines[method.lineno - 1 : method.end_lineno] = [
-        _replace_once(method_source, pattern, replacement, label)
+    registrations = [
+        node
+        for node in initializer.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and isinstance(node.value.func.value, ast.Name)
+        and node.value.func.value.id == "atexit"
+        and node.value.func.attr == "register"
+        and len(node.value.args) == 1
+        and isinstance(node.value.args[0], ast.Attribute)
+        and isinstance(node.value.args[0].value, ast.Name)
+        and node.value.args[0].value.id == "self"
+        and node.value.args[0].attr in {"handle_signal", "stop_monitoring"}
+        and not node.value.keywords
     ]
+    if len(registrations) > 1:
+        raise UnsupportedSourceError("multiple direct atexit registrations in TaskManager.__init__")
+    if not registrations:
+        return source
+    registration = registrations[0]
+    if registration.end_lineno is None:
+        raise UnsupportedSourceError("unsupported direct atexit registration")
+    lines = source.splitlines(keepends=True)
+    del lines[registration.lineno - 1 : registration.end_lineno]
     return "".join(lines)
 
 
@@ -196,13 +212,7 @@ def _replace_runtime_final_cleanup(source: str) -> str:
 
 def render(source: str) -> str:
     """Build and validate a candidate before any destination write."""
-    rendered = _replace_in_task_manager_method(
-        source,
-        "__init__",
-        r"^[ \t]*atexit\.register\(self\.(?:handle_signal|stop_monitoring)\)[ \t]*\r?\n",
-        "",
-        "atexit registration in TaskManager.__init__",
-    )
+    rendered = _remove_direct_atexit_registration(source)
     if not re.search(r"\batexit\.", rendered):
         rendered = _replace_once(
             rendered,
