@@ -551,6 +551,14 @@ class ShutdownNotificationTests(unittest.TestCase):
     ) -> None:
         tasks = TASKS_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("Validate shutdown notification helper path", tasks)
+        self.assertIn("match('^/[A-Za-z0-9_./+%${} -]+$')", tasks)
+        self.assertLess(
+            tasks.index("Validate shutdown notification helper path"),
+            tasks.index(
+                "Require trusted existing shutdown notification helper ancestors"
+            ),
+        )
         self.assertIn("Read shutdown notification helper parent directory", tasks)
         self.assertIn("for component in path.strip(os.path.sep).split(os.path.sep)", tasks)
         self.assertIn(

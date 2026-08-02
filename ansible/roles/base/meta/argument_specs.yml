@@ -247,7 +247,9 @@ argument_specs:
       base_shutdown_notification_script_path:
         type: path
         default: /usr/local/sbin/piserv-shutdown-notify
-        description: Shutdown notification helper path.
+        description: >-
+          Absolute shutdown notification helper path using characters systemd
+          accepts in executable paths.
       base_shutdown_notification_recipient:
         type: str
         default: root
