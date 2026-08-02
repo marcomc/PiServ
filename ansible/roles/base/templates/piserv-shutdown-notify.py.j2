@@ -65,18 +65,23 @@ def shutdown_in_progress() -> bool:
     return system_state() in {"stopping", "offline"}
 
 
-def journal_records(identifier: str) -> list[dict[str, object]]:
+def journal_records(*identifiers: str) -> list[dict[str, object]]:
+    if not identifiers:
+        return []
+
+    command = ["/usr/bin/journalctl", "--boot=0"]
+    for identifier in identifiers:
+        command.extend(["--identifier", identifier])
+    command.extend(
+        [
+            f"--lines={JOURNAL_RECORD_LIMIT}",
+            "--no-pager",
+            "--output=json",
+        ]
+    )
     try:
         result = subprocess.run(
-            [
-                "/usr/bin/journalctl",
-                "--boot=0",
-                "--identifier",
-                identifier,
-                f"--lines={JOURNAL_RECORD_LIMIT}",
-                "--no-pager",
-                "--output=json",
-            ],
+            command,
             capture_output=True,
             text=True,
             check=False,
@@ -203,7 +208,7 @@ def correlate_shutdown_evidence(
 
 
 def shutdown_evidence() -> ShutdownEvidence | None:
-    records = journal_records("systemd-logind") + journal_records("sudo")
+    records = journal_records("systemd-logind", "sudo")
     observed_monotonic = time.monotonic_ns() // 1_000
     recent_records = [
         record

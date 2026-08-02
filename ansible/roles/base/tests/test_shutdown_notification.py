@@ -335,7 +335,7 @@ class ShutdownNotificationTests(unittest.TestCase):
         with patch.object(
             self.notification,
             "journal_records",
-            side_effect=([logind_record], [sudo_record]),
+            return_value=[logind_record, sudo_record],
         ) as journal_records, patch.object(
             self.notification.time,
             "monotonic_ns",
@@ -346,7 +346,7 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(evidence)
         self.assertEqual(
             journal_records.call_args_list,
-            [call("systemd-logind"), call("sudo")],
+            [call("systemd-logind", "sudo")],
         )
 
     def test_shutdown_evidence_rejects_stale_or_future_logind_events(self) -> None:
@@ -354,15 +354,13 @@ class ShutdownNotificationTests(unittest.TestCase):
             with self.subTest(event_monotonic=event_monotonic), patch.object(
                 self.notification,
                 "journal_records",
-                side_effect=(
-                    [self.logind_record(monotonic=event_monotonic)],
-                    [
-                        self.sudo_record(
-                            "/usr/sbin/reboot",
-                            monotonic=event_monotonic - 1,
-                        )
-                    ],
-                ),
+                return_value=[
+                    self.logind_record(monotonic=event_monotonic),
+                    self.sudo_record(
+                        "/usr/sbin/reboot",
+                        monotonic=event_monotonic - 1,
+                    ),
+                ],
             ), patch.object(
                 self.notification.time,
                 "monotonic_ns",
@@ -384,13 +382,15 @@ class ShutdownNotificationTests(unittest.TestCase):
             "run",
             return_value=completed,
         ) as subprocess_run:
-            records = self.notification.journal_records("sudo")
+            records = self.notification.journal_records("systemd-logind", "sudo")
 
         self.assertEqual(records, [{"MESSAGE": "retained"}])
         subprocess_run.assert_called_once_with(
             [
                 "/usr/bin/journalctl",
                 "--boot=0",
+                "--identifier",
+                "systemd-logind",
                 "--identifier",
                 "sudo",
                 "--lines=256",
