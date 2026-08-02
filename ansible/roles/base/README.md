@@ -75,6 +75,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_kernel_cmdline_backup_path` | `/var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode` | Stable pre-policy backup |
 | `base_kernel_reboot_runtime_mode_path` | `/sys/kernel/reboot/mode` | Active kernel reboot-mode control |
 | `base_manage_shutdown_notification` | `true` | Install and enable shutdown notification service |
+| `base_shutdown_notification_service_name` | `piserv-shutdown-notify.service` | Bounded `.service` unit filename without path components |
 | `base_shutdown_notification_script_path` | `/usr/local/sbin/piserv-shutdown-notify` | Normalized absolute helper file path restricted to systemd-safe executable characters |
 | `base_shutdown_notification_recipient` | `root` | Local recipient for shutdown notification |
 | `base_shutdown_notification_condition_path` | `/etc/msmtprc` | Path required before shutdown notification runs |

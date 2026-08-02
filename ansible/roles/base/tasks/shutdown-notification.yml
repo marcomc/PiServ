@@ -1,7 +1,11 @@
 ---
-- name: Validate shutdown notification helper path
+- name: Validate shutdown notification paths
   ansible.builtin.assert:
     that:
+      - >-
+        base_shutdown_notification_service_name is
+        match('^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service$')
+      - base_shutdown_notification_service_name | length <= 255
       - >-
         base_shutdown_notification_script_path is
         match('^/[A-Za-z0-9_./+%${} -]+$')
@@ -11,10 +15,11 @@
         base_shutdown_notification_script_path is not
         search('/\.{1,2}(/|$)')
     fail_msg: >-
-      The shutdown notification helper path must be a normalized absolute file
-      path and contain only letters, digits, spaces, slash, dot, underscore,
-      plus, hyphen, percent, dollar, or braces so systemd can execute it
-      literally.
+      The shutdown notification service name must be one bounded .service unit
+      filename with no path components. The helper path must be a normalized
+      absolute file path and contain only letters, digits, spaces, slash, dot,
+      underscore, plus, hyphen, percent, dollar, or braces so systemd can
+      execute it literally.
 
 - name: Read shutdown notification helper destination
   ansible.builtin.stat:

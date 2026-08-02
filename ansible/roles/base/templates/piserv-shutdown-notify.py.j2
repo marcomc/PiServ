@@ -248,7 +248,7 @@ def notification_payload(hostname: str, evidence: ShutdownEvidence | None) -> st
 
     return "\n".join(
         [
-            f"To: {RECIPIENT}",
+            f"To: {safe_field(RECIPIENT)}",
             f"Subject: {subject}",
             "",
             f"Host: {hostname}",

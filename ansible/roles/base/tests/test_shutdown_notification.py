@@ -419,9 +419,15 @@ class ShutdownNotificationTests(unittest.TestCase):
             ),
         )
 
-        payload = self.notification.notification_payload("PiServ.local", evidence)
+        with patch.object(
+            self.notification,
+            "RECIPIENT",
+            "root\nBcc: attacker@example.com",
+        ):
+            payload = self.notification.notification_payload("PiServ.local", evidence)
 
         self.assertNotIn("\nBcc:", payload)
+        self.assertIn("To: root Bcc: attacker@example.com", payload)
         self.assertIn("Nearby sudo user: admin Bcc: attacker@example.com", payload)
         command_line = next(
             line for line in payload.splitlines() if line.startswith("Nearby sudo command:")
@@ -551,7 +557,15 @@ class ShutdownNotificationTests(unittest.TestCase):
     ) -> None:
         tasks = TASKS_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Validate shutdown notification helper path", tasks)
+        self.assertIn("Validate shutdown notification paths", tasks)
+        self.assertIn(
+            "match('^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service$')",
+            tasks,
+        )
+        self.assertIn(
+            "base_shutdown_notification_service_name | length <= 255",
+            tasks,
+        )
         self.assertIn("match('^/[A-Za-z0-9_./+%${} -]+$')", tasks)
         self.assertIn("is not search('/$')", tasks)
         self.assertIn("is not search('//')", tasks)
@@ -567,7 +581,7 @@ class ShutdownNotificationTests(unittest.TestCase):
             tasks,
         )
         self.assertLess(
-            tasks.index("Validate shutdown notification helper path"),
+            tasks.index("Validate shutdown notification paths"),
             tasks.index(
                 "Require trusted existing shutdown notification helper ancestors"
             ),
