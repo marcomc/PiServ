@@ -14,7 +14,6 @@ SUBJECT_PREFIX = {{ base_shutdown_notification_subject_prefix | to_json }}
 MAIL_CONFIG_PATH = {{ base_shutdown_notification_condition_path | to_json }}
 JOURNAL_TIMEOUT_SECONDS = 10
 MAIL_TIMEOUT_SECONDS = 20
-JOURNAL_RECORD_LIMIT = 100
 FIELD_LENGTH_LIMIT = 512
 
 SUDO_COMMAND_PREFIX = "COMMAND="
@@ -29,13 +28,19 @@ SYSTEMD_SHUTDOWN_ACTIONS = {
 SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
 SYSTEMCTL_NON_SYSTEM_OPTIONS = {"--user", "--global"}
 SYSTEMCTL_VALUE_OPTIONS = {
+    "--boot-loader-entry",
+    "--boot-loader-menu",
+    "--boot-loader-menu-timeout",
     "--check-inhibitors",
     "--job-mode",
     "--job-timeout",
     "--job-running-timeout",
     "--message",
+    "--reboot-argument",
     "--when",
 }
+SUDO_EXECUTABLE = "/usr/bin/sudo"
+SUDO_UID = "0"
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
     "poweroff.target",
@@ -137,11 +142,11 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
 
 
 def is_sudo_journal_record(record: dict[str, object]) -> bool:
-    command = record.get("_COMM")
-    executable = record.get("_EXE")
-    if command is not None and command != "sudo":
-        return False
-    return executable is None or Path(str(executable)).name == "sudo"
+    return (
+        record.get("_COMM") == "sudo"
+        and record.get("_EXE") == SUDO_EXECUTABLE
+        and str(record.get("_UID")) == SUDO_UID
+    )
 
 
 def shutdown_command_kind(command: str) -> str | None:
@@ -180,7 +185,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
         return "operation"
-    if operands[0] in {"start", "restart"} and any(
+    if operands[0] in {"start", "restart", "reload-or-restart"} and any(
         operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
     ):
         return "operation"
@@ -223,7 +228,6 @@ def journal_records(identifier: str) -> list[dict[str, object]]:
                 "--boot=0",
                 "--identifier",
                 identifier,
-                f"--lines={JOURNAL_RECORD_LIMIT}",
                 "--no-pager",
                 "--output=json",
             ],

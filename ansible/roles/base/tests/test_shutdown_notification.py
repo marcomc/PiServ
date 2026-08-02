@@ -90,6 +90,18 @@ class ShutdownNotificationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.notification = load_notification_module()
+        cls._latest_sudo_shutdown_request = (
+            cls.notification.latest_sudo_shutdown_request
+        )
+
+        def latest_sudo_shutdown_request(records: list[dict[str, object]]) -> object:
+            for record in records:
+                record.setdefault("_COMM", "sudo")
+                record.setdefault("_EXE", "/usr/bin/sudo")
+                record.setdefault("_UID", "0")
+            return cls._latest_sudo_shutdown_request(records)
+
+        cls.notification.latest_sudo_shutdown_request = latest_sudo_shutdown_request
 
     def test_latest_sudo_shutdown_request_uses_the_latest_matching_command(self) -> None:
         records = [
@@ -237,6 +249,12 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --check-inhibitors no reboot")
 
+    def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --boot-loader-entry recovery reboot")
+
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
             {
@@ -329,6 +347,12 @@ class ShutdownNotificationTests(unittest.TestCase):
         request = self.notification.latest_sudo_shutdown_request(records)
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl restart reboot.target")
+
+    def test_systemctl_reload_or_restart_of_a_shutdown_target_is_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reload-or-restart reboot.target"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl reload-or-restart reboot.target")
 
     def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
         self,
