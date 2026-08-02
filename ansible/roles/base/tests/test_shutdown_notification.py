@@ -24,6 +24,8 @@ def load_notification_module() -> object:
         "{{ base_shutdown_notification_recipient | to_json }}", '"root"'
     ).replace(
         "{{ base_shutdown_notification_subject_prefix | to_json }}", '"[PiServ]"'
+    ).replace(
+        "{{ base_shutdown_notification_condition_path | to_json }}", '"/etc/msmtprc"'
     )
     with tempfile.TemporaryDirectory() as temporary_directory:
         script_path = Path(temporary_directory) / "piserv-shutdown-notify"
@@ -228,15 +230,29 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         subprocess_run.assert_not_called()
 
+    def test_missing_mail_configuration_skips_shutdown_notification(self) -> None:
+        with (
+            patch.object(self.notification, "mail_config_available", return_value=False),
+            patch.object(self.notification, "shutdown_in_progress") as shutdown_in_progress,
+            patch.object(self.notification.subprocess, "run") as subprocess_run,
+        ):
+            self.assertEqual(self.notification.main(), 0)
+
+        shutdown_in_progress.assert_not_called()
+        subprocess_run.assert_not_called()
+
     def test_service_template_stays_active_until_shutdown(self) -> None:
         template = render_service_template()
 
         self.assertIn("DefaultDependencies=no", template)
+        self.assertIn("Wants=network-online.target", template)
         self.assertIn("Before=shutdown.target", template)
         self.assertIn("Conflicts=shutdown.target", template)
         self.assertIn("RemainAfterExit=yes", template)
+        self.assertIn("ExecCondition=/usr/bin/test -f /etc/msmtprc", template)
         self.assertIn("ExecCondition=/usr/bin/test -s /etc/msmtprc", template)
         self.assertIn("ExecStop=/usr/local/sbin/piserv-shutdown-notify", template)
+        self.assertIn("TimeoutStopSec=45s", template)
         self.assertNotIn("{{", template)
 
 

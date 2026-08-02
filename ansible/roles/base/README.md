@@ -123,7 +123,9 @@ before the network is stopped when
 latest matching `sudo` command, user, and timestamp retained in the current
 boot journal. A shutdown not initiated through `sudo`, such as a power loss or
 kernel panic, has no attributable command and may not send an email at all.
-Configure a mail transport with a separate role before expecting delivery.
+The helper rechecks that the mail config is a non-empty regular file immediately
+before delivery. Configure a mail transport with a separate role before
+expecting delivery.
 
 Kernel reboot-mode management is disabled by default. When enabled, the role
 requires a non-empty single-line command file, preserves its first observed

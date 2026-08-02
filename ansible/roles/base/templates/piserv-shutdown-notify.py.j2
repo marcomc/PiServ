@@ -7,9 +7,11 @@ import socket
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 RECIPIENT = {{ base_shutdown_notification_recipient | to_json }}
 SUBJECT_PREFIX = {{ base_shutdown_notification_subject_prefix | to_json }}
+MAIL_CONFIG_PATH = {{ base_shutdown_notification_condition_path | to_json }}
 JOURNAL_TIMEOUT_SECONDS = 10
 MAIL_TIMEOUT_SECONDS = 20
 JOURNAL_RECORD_LIMIT = 100
@@ -50,6 +52,14 @@ def safe_field(value: object) -> str:
         character if character.isprintable() else " " for character in str(value)
     )
     return " ".join(normalized.split())[:FIELD_LENGTH_LIMIT]
+
+
+def mail_config_available() -> bool:
+    try:
+        config_path = Path(MAIL_CONFIG_PATH)
+        return config_path.is_file() and config_path.stat().st_size > 0
+    except OSError:
+        return False
 
 
 def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
@@ -239,7 +249,7 @@ def notification_payload(hostname: str, request: ShutdownRequest | None) -> str:
 
 
 def main() -> int:
-    if not shutdown_in_progress():
+    if not mail_config_available() or not shutdown_in_progress():
         return 0
 
     hostname = socket.getfqdn() or socket.gethostname()

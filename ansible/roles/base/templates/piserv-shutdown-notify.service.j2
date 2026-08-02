@@ -1,6 +1,7 @@
 [Unit]
 Description=Send PiServ shutdown notification email
 DefaultDependencies=no
+Wants=network-online.target
 After=network-online.target
 Before=shutdown.target
 Conflicts=shutdown.target
@@ -9,10 +10,11 @@ ConditionPathExists={{ base_shutdown_notification_condition_path }}
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecCondition=/usr/bin/test -f {{ base_shutdown_notification_condition_path | quote }}
 ExecCondition=/usr/bin/test -s {{ base_shutdown_notification_condition_path | quote }}
 ExecStart=/usr/bin/true
 ExecStop={{ base_shutdown_notification_script_path }}
-TimeoutStopSec=30s
+TimeoutStopSec=45s
 
 [Install]
 WantedBy=multi-user.target

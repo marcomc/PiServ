@@ -63,6 +63,7 @@ The `base` role configures mail consumers:
 | shutdown notification service | `piserv-shutdown-notify.service` |
 | shutdown notification recipient | `root` |
 | shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown config recheck | Require a non-empty regular mail-config file immediately before delivery |
 | shutdown attribution | Latest direct shutdown or `systemctl` command, user, and UTC timestamp in the current boot's `sudo` journal |
 
 ## Gmail App Password
