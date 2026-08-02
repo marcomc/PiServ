@@ -185,6 +185,33 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_systemctl_when_cancel_discards_earlier_scheduled_request(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl reboot --when=5m",
+            },
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl reboot --when=cancel",
+            },
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_when_show_is_not_reported(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl reboot --when=show",
+            }
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
             {

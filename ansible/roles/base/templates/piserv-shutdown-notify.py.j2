@@ -103,6 +103,15 @@ def selects_another_systemd_manager(arguments: list[str]) -> bool:
     return False
 
 
+def systemctl_when_mode(arguments: list[str]) -> str | None:
+    for index, argument in enumerate(arguments[1:], start=1):
+        if argument.startswith("--when="):
+            return argument.removeprefix("--when=")
+        if argument == "--when" and index + 1 < len(arguments):
+            return arguments[index + 1]
+    return None
+
+
 def shutdown_command_kind(command: str) -> str | None:
     """Classify a sudo command as an operation, cancellation, or neither."""
     try:
@@ -128,6 +137,11 @@ def shutdown_command_kind(command: str) -> str | None:
         or selects_another_systemd_manager(arguments)
         or any(argument in SYSTEMCTL_NON_SYSTEM_OPTIONS for argument in arguments[1:])
     ):
+        return None
+    when_mode = systemctl_when_mode(arguments)
+    if when_mode == "cancel":
+        return "cancellation"
+    if when_mode == "show":
         return None
     operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
     if not operands:
