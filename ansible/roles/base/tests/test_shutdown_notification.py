@@ -404,6 +404,29 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --kill-value 9 reboot")
 
+    def test_systemctl_inhibitor_shortcut_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -i reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl -i reboot")
+
+    def test_direct_no_wtmp_and_clustered_options_preserve_shutdown_actions(self) -> None:
+        commands = [
+            "/usr/sbin/reboot -d",
+            "/usr/sbin/shutdown -rh now",
+            "/usr/sbin/reboot -fp",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/sbin/reboot -fp")
+
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
             {

@@ -79,12 +79,12 @@ SYSTEMCTL_FLAG_OPTIONS = {
     "--show-types",
     "--value",
 }
-SYSTEMCTL_SHORT_FLAG_OPTIONS = {"-a", "-f", "-l", "-q"}
+SYSTEMCTL_SHORT_FLAG_OPTIONS = {"-a", "-f", "-i", "-l", "-q"}
 DIRECT_COMMAND_OPTIONS = {
     "shutdown": {"-H", "-P", "-h", "-r", "--force", "--halt", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose"},
-    "reboot": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
-    "poweroff": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
-    "halt": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+    "reboot": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+    "poweroff": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+    "halt": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
 }
 SYSTEMCTL_LONG_OPTIONS = {
     option
@@ -332,6 +332,14 @@ def direct_command_options_are_valid(executable: str, arguments: list[str]) -> b
                 and option.startswith(option_name)
             )
         }
+        if option_name.startswith("-") and not option_name.startswith("--"):
+            allowed_short_options = {
+                option[1:]
+                for option in allowed_options
+                if option.startswith("-") and not option.startswith("--")
+            }
+            if all(option in allowed_short_options for option in option_name[1:]):
+                continue
         if len(matching_options) != 1 or separator:
             return False
     return True
