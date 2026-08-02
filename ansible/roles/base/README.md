@@ -119,10 +119,14 @@ The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. The shutdown notification
 service remains active until `systemd` enters a shutdown transaction and sends
 before the network is stopped when
-`base_shutdown_notification_condition_path` exists. Its message includes the
-latest matching `sudo` command, user, and timestamp retained in the current
-boot journal. A shutdown not initiated through `sudo`, such as a power loss or
-kernel panic, has no attributable command and may not send an email at all.
+`base_shutdown_notification_condition_path` exists. For the latest authenticated
+`systemd-logind` shutdown event observed within five seconds of helper execution,
+its message includes an authenticated `sudo` command, user, and timestamp only
+when that record precedes the event by at most five seconds. This is temporal
+correlation, not proof that the command caused the shutdown. Scheduled commands
+outside that window, direct-root and hardware
+paths, power loss, and kernel panic have no correlated `sudo` evidence; power
+loss and kernel panic may not send an email at all.
 The helper rechecks that the mail config is a non-empty regular file immediately
 before delivery. Configure a mail transport with a separate role before
 expecting delivery.

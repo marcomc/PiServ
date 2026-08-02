@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import json
-import re
-import shlex
 import socket
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,114 +15,20 @@ MAIL_CONFIG_PATH = {{ base_shutdown_notification_condition_path | to_json }}
 JOURNAL_TIMEOUT_SECONDS = 10
 MAIL_TIMEOUT_SECONDS = 20
 FIELD_LENGTH_LIMIT = 512
+CORRELATION_WINDOW_MICROSECONDS = 5_000_000
+JOURNAL_RECORD_LIMIT = 256
 
 SUDO_COMMAND_DELIMITER = " ; COMMAND="
-DIRECT_SHUTDOWN_COMMANDS = {"reboot", "poweroff", "halt", "shutdown"}
-TRUSTED_SHUTDOWN_COMMAND_PATHS = {
-    "reboot": {"/usr/sbin/reboot", "/usr/bin/reboot", "/sbin/reboot", "/bin/reboot"},
-    "poweroff": {"/usr/sbin/poweroff", "/usr/bin/poweroff", "/sbin/poweroff", "/bin/poweroff"},
-    "halt": {"/usr/sbin/halt", "/usr/bin/halt", "/sbin/halt", "/bin/halt"},
-    "shutdown": {"/usr/sbin/shutdown", "/usr/bin/shutdown", "/sbin/shutdown", "/bin/shutdown"},
-    "systemctl": {"/usr/bin/systemctl", "/bin/systemctl"},
-}
-SYSTEMD_SHUTDOWN_ACTIONS = {
-    "reboot",
-    "poweroff",
-    "halt",
-    "kexec",
-    "soft-reboot",
-}
-SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
-SYSTEMCTL_NON_SYSTEM_OPTIONS = {"--user", "--global"}
-SYSTEMCTL_OFFLINE_OPTIONS = {"--root", "--image"}
-SYSTEMCTL_VALUE_OPTIONS = {
-    "--boot-loader-entry",
-    "--boot-loader-menu",
-    "--check-inhibitors",
-    "--job-mode",
-    "--kill-value",
-    "--kill-whom",
-    "--legend",
-    "--lines",
-    "--message",
-    "--output",
-    "--property",
-    "--reboot-argument",
-    "--signal",
-    "--state",
-    "--timestamp",
-    "--type",
-    "--what",
-    "--when",
-    "-n",
-    "-o",
-    "-p",
-    "-P",
-    "-s",
-    "-t",
-}
-SYSTEMCTL_FLAG_OPTIONS = {
-    "--all",
-    "--force",
-    "--firmware-setup",
-    "--full",
-    "--no-ask-password",
-    "--no-block",
-    "--no-legend",
-    "--no-pager",
-    "--no-warn",
-    "--no-wall",
-    "--plain",
-    "--quiet",
-    "--runtime",
-    "--show-transaction",
-    "--show-types",
-    "--system",
-    "--value",
-}
-SYSTEMCTL_SHORT_FLAG_OPTIONS = {"-a", "-f", "-i", "-l", "-q"}
-DIRECT_COMMAND_OPTIONS = {
-    "shutdown": {"-H", "-P", "-h", "-r", "--halt", "--no-wall", "--poweroff", "--reboot"},
-    "reboot": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
-    "poweroff": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
-    "halt": {"-d", "-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
-}
-SYSTEMCTL_LONG_OPTIONS = {
-    option
-    for option in (
-        SYSTEMCTL_VALUE_OPTIONS
-        | SYSTEMCTL_MANAGER_OPTIONS
-        | SYSTEMCTL_NON_SYSTEM_OPTIONS
-        | SYSTEMCTL_OFFLINE_OPTIONS
-        | SYSTEMCTL_FLAG_OPTIONS
-        | {"--dry-run", "--wait", "--with-dependencies"}
-    )
-    if option.startswith("--")
-}
 SUDO_EXECUTABLE = "/usr/bin/sudo"
-SYSTEMD_SHUTDOWN_TARGETS = {
-    "reboot.target",
-    "poweroff.target",
-    "halt.target",
-    "kexec.target",
-    "soft-reboot.target",
-    "runlevel0.target",
-    "runlevel6.target",
-    "ctrl-alt-del.target",
-}
-NON_OPERATIVE_OPTIONS = {
-    "shutdown": {"-c", "-k", "--cancel", "--help", "--show", "--version"},
-    "reboot": {"-w", "--help", "--version", "--wtmp-only"},
-    "poweroff": {"-w", "--help", "--version", "--wtmp-only"},
-    "halt": {"-w", "--help", "--version", "--wtmp-only"},
-    "systemctl": {"-h", "--dry-run", "--help", "--version"},
-}
+LOGIND_EXECUTABLE = "/usr/lib/systemd/systemd-logind"
+LOGIND_SHUTDOWN_MESSAGE_ID = "98268866d1d54a499c4e98921d93bc40"
 
 
 @dataclass(frozen=True)
-class ShutdownRequest:
-    requested_at: str
-    requested_by: str
+class ShutdownEvidence:
+    shutdown_event_at: str
+    sudo_evidence_at: str
+    sudo_user: str
     command: str
 
 
@@ -140,346 +45,6 @@ def mail_config_available() -> bool:
         return config_path.is_file() and config_path.stat().st_size > 0
     except OSError:
         return False
-
-
-def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
-    options = NON_OPERATIVE_OPTIONS[executable]
-    for argument in arguments[1:]:
-        if argument == "--":
-            break
-        if argument in options or any(
-            argument.startswith(f"{option}=") for option in options if option.startswith("--")
-        ):
-            return True
-        if (
-            argument != "--"
-            and argument.startswith("--")
-            and any(
-                option.startswith(argument.partition("=")[0])
-                for option in options
-                if option.startswith("--")
-            )
-        ):
-            return True
-        if (
-            executable == "systemctl"
-            and argument != "--"
-            and "--dry-run".startswith(argument)
-        ):
-            return True
-        if argument.startswith("-") and not argument.startswith("--"):
-            if executable == "systemctl" and "h" in argument[1:]:
-                return True
-            if executable == "shutdown" and any(
-                option in argument[1:] for option in {"c", "k"}
-            ):
-                return True
-            if executable in DIRECT_SHUTDOWN_COMMANDS and "w" in argument[1:]:
-                return True
-    return False
-
-
-def is_shutdown_cancellation(arguments: list[str]) -> bool:
-    for argument in arguments[1:]:
-        if argument == "--":
-            break
-        if argument in {"-c", "--cancel"} or (
-            argument != "--"
-            and argument.startswith("--")
-            and "--cancel".startswith(argument)
-        ):
-            return True
-        if argument.startswith("-") and not argument.startswith("--"):
-            if "c" in argument[1:]:
-                return True
-    return False
-
-
-def systemctl_option_arguments(arguments: list[str]) -> list[str]:
-    options: list[str] = []
-    skip_next = False
-    value_options = (
-        SYSTEMCTL_VALUE_OPTIONS
-        | SYSTEMCTL_MANAGER_OPTIONS
-        | SYSTEMCTL_OFFLINE_OPTIONS
-    )
-    for argument in arguments[1:]:
-        if skip_next:
-            skip_next = False
-            continue
-        if argument == "--":
-            break
-        option_name, separator, _ = argument.partition("=")
-        matching_options = {
-            option
-            for option in value_options
-            if option == option_name
-            or (
-                option_name.startswith("--")
-                and option.startswith(option_name)
-            )
-        }
-        if len(matching_options) == 1:
-            options.append(argument)
-            if not separator:
-                skip_next = True
-            continue
-        if argument.startswith("-"):
-            options.append(argument)
-    return options
-
-
-def selects_offline_systemd_root(arguments: list[str]) -> bool:
-    for argument in systemctl_option_arguments(arguments):
-        option_name = argument.partition("=")[0]
-        if option_name in SYSTEMCTL_OFFLINE_OPTIONS or any(
-            option.startswith(option_name)
-            for option in SYSTEMCTL_OFFLINE_OPTIONS
-            if option_name != "--" and option_name.startswith("--")
-        ):
-            return True
-    return False
-
-
-def selects_another_systemd_manager(arguments: list[str]) -> bool:
-    for argument in systemctl_option_arguments(arguments):
-        if argument in SYSTEMCTL_MANAGER_OPTIONS:
-            return True
-        if argument.startswith(("--host=", "--machine=")):
-            return True
-        if (
-            argument != "--"
-            and argument.startswith("--")
-            and any(
-                option.startswith(argument.partition("=")[0])
-                for option in {"--host", "--machine"}
-            )
-        ):
-            return True
-        if argument.startswith(("-H", "-M")) and argument not in {"-H", "-M"}:
-            return True
-    return False
-
-
-def selects_non_system_systemd_manager(arguments: list[str]) -> bool:
-    for argument in systemctl_option_arguments(arguments):
-        option_name = argument.partition("=")[0]
-        if option_name in SYSTEMCTL_NON_SYSTEM_OPTIONS or any(
-            option.startswith(option_name)
-            for option in SYSTEMCTL_NON_SYSTEM_OPTIONS
-            if option_name != "--" and option_name.startswith("--")
-        ):
-            return True
-    return False
-
-
-def systemctl_when_mode(arguments: list[str]) -> str | None:
-    skip_next = False
-    value_options = (
-        SYSTEMCTL_VALUE_OPTIONS
-        | SYSTEMCTL_MANAGER_OPTIONS
-        | SYSTEMCTL_OFFLINE_OPTIONS
-    )
-    for index, argument in enumerate(arguments[1:], start=1):
-        if skip_next:
-            skip_next = False
-            continue
-        if argument == "--":
-            break
-        option_name, separator, option_value = argument.partition("=")
-        matching_value_options = {
-            option
-            for option in value_options
-            if option == option_name
-            or (
-                option_name.startswith("--")
-                and option.startswith(option_name)
-            )
-        }
-        matching_options = {
-            option
-            for option in SYSTEMCTL_LONG_OPTIONS
-            if option.startswith(option_name)
-        }
-        if option_name == "--when" or matching_options == {"--when"}:
-            if separator:
-                return option_value
-            if index + 1 < len(arguments):
-                return arguments[index + 1]
-        if len(matching_value_options) == 1 and not separator:
-            skip_next = True
-    return None
-
-
-def systemctl_operands(arguments: list[str]) -> list[str]:
-    operands: list[str] = []
-    skip_next = False
-    options_ended = False
-    for argument in arguments[1:]:
-        if skip_next:
-            skip_next = False
-            continue
-        if argument == "--":
-            options_ended = True
-            continue
-        if options_ended:
-            operands.append(argument)
-            continue
-        option_name, separator, _ = argument.partition("=")
-        matching_value_options = {
-            option
-            for option in SYSTEMCTL_VALUE_OPTIONS
-            if option == option_name
-            or (
-                option_name.startswith("--")
-                and option.startswith(option_name)
-            )
-        }
-        if len(matching_value_options) > 1:
-            # systemctl rejects ambiguous option abbreviations. Do not attribute a
-            # later shutdown to a command that could not have executed.
-            return []
-        if matching_value_options:
-            if not separator:
-                skip_next = True
-            continue
-        matching_flag_options = {
-            option for option in SYSTEMCTL_FLAG_OPTIONS if option.startswith(option_name)
-        }
-        if matching_flag_options:
-            if len(matching_flag_options) > 1 or separator:
-                return []
-            continue
-        if argument in SYSTEMCTL_SHORT_FLAG_OPTIONS:
-            continue
-        if argument.startswith("-"):
-            return []
-        if not argument.startswith("-"):
-            operands.append(argument)
-    return operands
-
-
-def direct_command_operands(arguments: list[str]) -> list[str]:
-    operands: list[str] = []
-    options_ended = False
-    for argument in arguments[1:]:
-        if argument == "--" and not options_ended:
-            options_ended = True
-            continue
-        if options_ended or not argument.startswith("-"):
-            operands.append(argument)
-    return operands
-
-
-def direct_command_options_are_valid(executable: str, arguments: list[str]) -> bool:
-    allowed_options = DIRECT_COMMAND_OPTIONS[executable] | NON_OPERATIVE_OPTIONS[executable]
-    for argument in arguments[1:]:
-        if argument == "--":
-            return True
-        option_name, separator, _ = argument.partition("=")
-        if not option_name.startswith("-"):
-            continue
-        matching_options = {
-            option
-            for option in allowed_options
-            if option == option_name
-            or (
-                option_name.startswith("--")
-                and option.startswith(option_name)
-            )
-        }
-        if option_name.startswith("-") and not option_name.startswith("--"):
-            allowed_short_options = {
-                option[1:]
-                for option in allowed_options
-                if option.startswith("-") and not option.startswith("--")
-            }
-            if all(option in allowed_short_options for option in option_name[1:]):
-                continue
-        if len(matching_options) != 1 or separator:
-            return False
-    return True
-
-
-def valid_shutdown_time(operands: list[str]) -> bool:
-    if not operands:
-        return True
-    return operands[0] == "now" or bool(
-        re.fullmatch(r"(?:\+\d+|\d{1,2}:\d{2})", operands[0])
-    )
-
-
-def is_sudo_journal_record(record: dict[str, object]) -> bool:
-    return (
-        record.get("_COMM") == "sudo"
-        and record.get("_EXE") == SUDO_EXECUTABLE
-    )
-
-
-def shutdown_command_kind(command: str) -> str | None:
-    """Classify a sudo command as an operation, cancellation, or neither."""
-    try:
-        arguments = shlex.split(command)
-    except ValueError:
-        return None
-    if not arguments:
-        return None
-
-    executable_path = arguments[0]
-    executable = executable_path.rsplit("/", maxsplit=1)[-1]
-    if executable_path not in TRUSTED_SHUTDOWN_COMMAND_PATHS.get(executable, set()):
-        return None
-    if executable in DIRECT_SHUTDOWN_COMMANDS:
-        if not direct_command_options_are_valid(executable, arguments):
-            return None
-        if executable == "shutdown" and is_shutdown_cancellation(arguments):
-            return "cancellation"
-        positional_arguments = direct_command_operands(arguments)
-        if executable == "shutdown" and not valid_shutdown_time(positional_arguments):
-            return None
-        if executable in {"halt", "poweroff"} and positional_arguments:
-            return None
-        if executable == "reboot" and len(positional_arguments) > 1:
-            return None
-        return (
-            "operation"
-            if not has_nonoperative_option(executable, arguments)
-            else None
-        )
-    if executable != "systemctl":
-        return None
-    if (
-        has_nonoperative_option(executable, arguments)
-        or selects_another_systemd_manager(arguments)
-        or selects_offline_systemd_root(arguments)
-        or selects_non_system_systemd_manager(arguments)
-    ):
-        return None
-    when_mode = systemctl_when_mode(arguments)
-    if when_mode == "cancel":
-        return "cancellation"
-    if when_mode == "show":
-        return None
-    operands = systemctl_operands(arguments)
-    if not operands:
-        return None
-    if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS and len(operands) == 1:
-        return "operation"
-    if operands[0] in {"start", "restart", "reload-or-restart"} and any(
-        operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
-    ):
-        return "operation"
-    if (
-        operands[0] == "isolate"
-        and len(operands) == 2
-        and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
-    ):
-        return "operation"
-    return None
-
-
-def is_shutdown_command(command: str) -> bool:
-    return shutdown_command_kind(command) == "operation"
 
 
 def system_state() -> str:
@@ -508,6 +73,7 @@ def journal_records(identifier: str) -> list[dict[str, object]]:
                 "--boot=0",
                 "--identifier",
                 identifier,
+                f"--lines={JOURNAL_RECORD_LIMIT}",
                 "--no-pager",
                 "--output=json",
             ],
@@ -542,7 +108,7 @@ def journal_timestamp_value(record: dict[str, object]) -> int | None:
     return None
 
 
-def journal_sequence_value(record: dict[str, object]) -> int | None:
+def journal_monotonic_value(record: dict[str, object]) -> int | None:
     try:
         return int(str(record.get("__MONOTONIC_TIMESTAMP")))
     except (TypeError, ValueError):
@@ -559,60 +125,122 @@ def journal_timestamp(record: dict[str, object]) -> str:
     )
 
 
-def latest_sudo_shutdown_request(
+def is_authenticated_logind_shutdown(record: dict[str, object]) -> bool:
+    return (
+        record.get("_COMM") == "systemd-logind"
+        and record.get("_EXE") == LOGIND_EXECUTABLE
+        and record.get("MESSAGE_ID") == LOGIND_SHUTDOWN_MESSAGE_ID
+    )
+
+
+def is_authenticated_sudo(record: dict[str, object]) -> bool:
+    return record.get("_COMM") == "sudo" and record.get("_EXE") == SUDO_EXECUTABLE
+
+
+def parse_sudo_evidence(record: dict[str, object]) -> tuple[str, str] | None:
+    message = record.get("MESSAGE")
+    if not isinstance(message, str):
+        return None
+
+    prefix, delimiter, command = message.partition(SUDO_COMMAND_DELIMITER)
+    if not delimiter or not command:
+        return None
+
+    sudo_user, user_delimiter, sudo_fields = prefix.partition(" : ")
+    sudo_user = safe_field(sudo_user)
+    command = safe_field(command)
+    if not user_delimiter or not sudo_user or not sudo_fields or not command:
+        return None
+
+    return sudo_user, command
+
+
+def correlate_shutdown_evidence(
     records: list[dict[str, object]],
-) -> ShutdownRequest | None:
-    latest_request: ShutdownRequest | None = None
-    chronological_records = list(enumerate(records))
-    if all(journal_sequence_value(record) is not None for record in records):
-        chronological_records.sort(
-            key=lambda indexed_record: journal_sequence_value(indexed_record[1]) or 0
+) -> ShutdownEvidence | None:
+    shutdown_events = [
+        record
+        for record in records
+        if is_authenticated_logind_shutdown(record)
+        and journal_monotonic_value(record) is not None
+    ]
+    if not shutdown_events:
+        return None
+
+    shutdown_event = max(
+        shutdown_events,
+        key=lambda record: journal_monotonic_value(record) or 0,
+    )
+    shutdown_monotonic = journal_monotonic_value(shutdown_event)
+    if shutdown_monotonic is None:
+        return None
+
+    candidates: list[tuple[int, dict[str, object], str, str]] = []
+    for record in records:
+        if not is_authenticated_sudo(record):
+            continue
+        sudo_monotonic = journal_monotonic_value(record)
+        parsed = parse_sudo_evidence(record)
+        if sudo_monotonic is None or parsed is None:
+            continue
+        age = shutdown_monotonic - sudo_monotonic
+        if 0 < age <= CORRELATION_WINDOW_MICROSECONDS:
+            candidates.append((sudo_monotonic, record, *parsed))
+
+    if not candidates:
+        return None
+
+    _, sudo_record, sudo_user, command = max(
+        candidates,
+        key=lambda candidate: candidate[0],
+    )
+    return ShutdownEvidence(
+        shutdown_event_at=journal_timestamp(shutdown_event),
+        sudo_evidence_at=journal_timestamp(sudo_record),
+        sudo_user=sudo_user,
+        command=command,
+    )
+
+
+def shutdown_evidence() -> ShutdownEvidence | None:
+    records = journal_records("systemd-logind") + journal_records("sudo")
+    observed_monotonic = time.monotonic_ns() // 1_000
+    recent_records = [
+        record
+        for record in records
+        if not is_authenticated_logind_shutdown(record)
+        or (
+            (event_monotonic := journal_monotonic_value(record)) is not None
+            and 0 <= observed_monotonic - event_monotonic
+            <= CORRELATION_WINDOW_MICROSECONDS
         )
-    for _, record in chronological_records:
-        if not is_sudo_journal_record(record):
-            continue
-        message = record.get("MESSAGE")
-        if not isinstance(message, str):
-            continue
-        prefix, separator, command = message.partition(SUDO_COMMAND_DELIMITER)
-        if not separator:
-            continue
-        requested_by, separator, _ = prefix.partition(":")
-        if not separator:
-            continue
-        command_kind = shutdown_command_kind(command)
-        if command_kind is None:
-            continue
-        if command_kind == "cancellation":
-            latest_request = None
-            continue
-        latest_request = ShutdownRequest(
-            requested_at=journal_timestamp(record),
-            requested_by=safe_field(requested_by),
-            command=safe_field(command),
-        )
-
-    return latest_request
+    ]
+    return correlate_shutdown_evidence(recent_records)
 
 
-def shutdown_request() -> ShutdownRequest | None:
-    return latest_sudo_shutdown_request(journal_records("sudo"))
-
-
-def notification_payload(hostname: str, request: ShutdownRequest | None) -> str:
+def notification_payload(hostname: str, evidence: ShutdownEvidence | None) -> str:
     notification_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
     hostname = safe_field(hostname)
     subject = f"{safe_field(SUBJECT_PREFIX)} shutting down: {hostname}"
-    if request is None:
-        requested_at = "unknown"
-        requested_by = "unknown"
+    if evidence is None:
+        shutdown_event_at = "unknown"
+        sudo_evidence_at = "unknown"
+        sudo_user = "unknown"
         command = "unknown"
-        evidence = "No matching sudo shutdown command was retained for this boot."
+        evidence_note = (
+            "No temporally adjacent authenticated sudo evidence was found for "
+            "an authenticated systemd-logind shutdown event."
+        )
     else:
-        requested_at = safe_field(request.requested_at)
-        requested_by = safe_field(request.requested_by)
-        command = safe_field(request.command)
-        evidence = "Latest matching sudo journal record from the current boot."
+        shutdown_event_at = safe_field(evidence.shutdown_event_at)
+        sudo_evidence_at = safe_field(evidence.sudo_evidence_at)
+        sudo_user = safe_field(evidence.sudo_user)
+        command = safe_field(evidence.command)
+        evidence_note = (
+            "Authenticated sudo journal evidence within 5 seconds before the "
+            "latest authenticated systemd-logind shutdown event. This temporal "
+            "correlation is not proof that the command caused the shutdown."
+        )
 
     return "\n".join(
         [
@@ -621,10 +249,11 @@ def notification_payload(hostname: str, request: ShutdownRequest | None) -> str:
             "",
             f"Host: {hostname}",
             f"Shutdown notification time (UTC): {notification_time}",
-            f"Shutdown request time (UTC): {requested_at}",
-            f"Requested by: {requested_by}",
-            f"Command: {command}",
-            f"Evidence: {evidence}",
+            f"systemd-logind shutdown event time (UTC): {shutdown_event_at}",
+            f"Nearby sudo evidence time (UTC): {sudo_evidence_at}",
+            f"Nearby sudo user: {sudo_user}",
+            f"Nearby sudo command: {command}",
+            f"Evidence: {evidence_note}",
             "",
         ]
     )
@@ -635,7 +264,7 @@ def main() -> int:
         return 0
 
     hostname = socket.getfqdn() or socket.gethostname()
-    payload = notification_payload(hostname, shutdown_request())
+    payload = notification_payload(hostname, shutdown_evidence())
     subprocess.run(
         ["/usr/sbin/sendmail", "-t"],
         input=payload,

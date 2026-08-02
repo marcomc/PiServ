@@ -64,7 +64,13 @@ The `base` role configures mail consumers:
 | shutdown notification recipient | `root` |
 | shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
 | shutdown config recheck | Require a non-empty regular mail-config file immediately before delivery |
-| shutdown attribution | Latest direct shutdown or `systemctl` command, user, and UTC timestamp in the current boot's `sudo` journal |
+| shutdown evidence | Nearest authenticated `sudo` command preceding a fresh authenticated `systemd-logind` shutdown event by no more than five seconds |
+
+The logind event must be observed within five seconds of helper execution. The
+nearby `sudo` record is temporal correlation, not proof that the command caused
+the shutdown. The helper does not interpret command syntax. Scheduled shutdown
+commands outside the five-second window, direct-root commands, and hardware
+paths report unknown `sudo` evidence.
 
 ## Gmail App Password
 

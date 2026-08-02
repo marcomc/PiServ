@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, call, patch
 
 
 ROLE_DIRECTORY = Path(__file__).resolve().parent.parent
@@ -91,602 +91,345 @@ class ShutdownNotificationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.notification = load_notification_module()
-        cls._latest_sudo_shutdown_request = (
-            cls.notification.latest_sudo_shutdown_request
+
+    def logind_record(
+        self,
+        monotonic: int = 10_000_000,
+        realtime: int = 1_760_000_001_000_000,
+    ) -> dict[str, object]:
+        return {
+            "_COMM": "systemd-logind",
+            "_EXE": "/usr/lib/systemd/systemd-logind",
+            "MESSAGE_ID": "98268866d1d54a499c4e98921d93bc40",
+            "__MONOTONIC_TIMESTAMP": str(monotonic),
+            "_SOURCE_REALTIME_TIMESTAMP": str(realtime),
+        }
+
+    def sudo_record(
+        self,
+        command: str,
+        monotonic: int = 9_000_000,
+        realtime: int = 1_760_000_000_000_000,
+        user: str = "admin",
+    ) -> dict[str, object]:
+        return {
+            "_COMM": "sudo",
+            "_EXE": "/usr/bin/sudo",
+            "__MONOTONIC_TIMESTAMP": str(monotonic),
+            "_SOURCE_REALTIME_TIMESTAMP": str(realtime),
+            "MESSAGE": (
+                f"{user} : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                f"COMMAND={command}"
+            ),
+        }
+
+    def test_immediate_direct_command_is_correlated(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [self.sudo_record("/usr/sbin/reboot"), self.logind_record()]
         )
 
-        def latest_sudo_shutdown_request(records: list[dict[str, object]]) -> object:
-            for record in records:
-                record.setdefault("_COMM", "sudo")
-                record.setdefault("_EXE", "/usr/bin/sudo")
-                record.setdefault("_UID", "0")
-            return cls._latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.sudo_user, "admin")
+        self.assertEqual(evidence.command, "/usr/sbin/reboot")
+        self.assertEqual(evidence.sudo_evidence_at, "2025-10-09T08:53:20+00:00")
+        self.assertEqual(evidence.shutdown_event_at, "2025-10-09T08:53:21+00:00")
 
-        cls.notification.latest_sudo_shutdown_request = latest_sudo_shutdown_request
+    def test_ansible_shell_wrapped_command_is_preserved_without_cli_parsing(self) -> None:
+        command = (
+            "/bin/sh -c 'echo BECOME-SUCCESS-abc ; "
+            "/sbin/shutdown -r now && sleep 0'"
+        )
 
-    def test_latest_sudo_shutdown_request_uses_the_latest_matching_command(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [self.sudo_record(command), self.logind_record()]
+        )
+
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.command, command)
+
+    def test_nearby_unrelated_sudo_is_labeled_as_correlation_not_cause(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [self.sudo_record("/usr/bin/apt-get update"), self.logind_record()]
+        )
+
+        payload = self.notification.notification_payload("PiServ.local", evidence)
+
+        self.assertIn("Nearby sudo command: /usr/bin/apt-get update", payload)
+        self.assertIn("temporal correlation is not proof", payload)
+        self.assertNotIn("Requested by", payload)
+
+    def test_scheduled_command_outside_window_is_unknown(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [
+                self.sudo_record("/sbin/shutdown -r +10", monotonic=4_999_999),
+                self.logind_record(monotonic=10_000_000),
+            ]
+        )
+
+        self.assertIsNone(evidence)
+
+    def test_record_at_five_second_boundary_is_correlated(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [
+                self.sudo_record("/usr/sbin/reboot", monotonic=5_000_000),
+                self.logind_record(monotonic=10_000_000),
+            ]
+        )
+
+        self.assertIsNotNone(evidence)
+
+    def test_record_at_same_monotonic_time_does_not_precede_event(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [
+                self.sudo_record("/usr/sbin/reboot", monotonic=10_000_000),
+                self.logind_record(monotonic=10_000_000),
+            ]
+        )
+
+        self.assertIsNone(evidence)
+
+    def test_record_after_shutdown_event_is_unknown(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [
+                self.logind_record(monotonic=10_000_000),
+                self.sudo_record("/usr/sbin/reboot", monotonic=10_000_001),
+            ]
+        )
+
+        self.assertIsNone(evidence)
+
+    def test_forged_sudo_identity_is_rejected(self) -> None:
+        for field, forged_value in (
+            ("_COMM", "logger"),
+            ("_EXE", "/usr/bin/logger"),
+        ):
+            with self.subTest(field=field):
+                sudo_record = self.sudo_record("/usr/sbin/reboot")
+                sudo_record[field] = forged_value
+                evidence = self.notification.correlate_shutdown_evidence(
+                    [sudo_record, self.logind_record()]
+                )
+                self.assertIsNone(evidence)
+
+    def test_forged_logind_identity_or_message_id_is_rejected(self) -> None:
+        for field, forged_value in (
+            ("_COMM", "logger"),
+            ("_EXE", "/usr/bin/logger"),
+            ("MESSAGE_ID", "forged"),
+        ):
+            with self.subTest(field=field):
+                logind_record = self.logind_record()
+                logind_record[field] = forged_value
+                evidence = self.notification.correlate_shutdown_evidence(
+                    [self.sudo_record("/usr/sbin/reboot"), logind_record]
+                )
+                self.assertIsNone(evidence)
+
+    def test_missing_monotonic_timestamp_is_unknown(self) -> None:
+        for missing_from in ("sudo", "logind"):
+            with self.subTest(missing_from=missing_from):
+                sudo_record = self.sudo_record("/usr/sbin/reboot")
+                logind_record = self.logind_record()
+                target = sudo_record if missing_from == "sudo" else logind_record
+                target.pop("__MONOTONIC_TIMESTAMP")
+                evidence = self.notification.correlate_shutdown_evidence(
+                    [sudo_record, logind_record]
+                )
+                self.assertIsNone(evidence)
+
+    def test_no_logind_shutdown_event_is_unknown(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [self.sudo_record("/usr/sbin/reboot")]
+        )
+
+        self.assertIsNone(evidence)
+
+    def test_latest_event_and_nearest_preceding_sudo_record_are_selected(self) -> None:
         records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/reboot",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl reboot",
-            },
+            self.sudo_record("/usr/sbin/reboot old", monotonic=9_000_000),
+            self.logind_record(monotonic=10_000_000),
+            self.sudo_record("/usr/bin/apt-get update", monotonic=18_000_000),
+            self.sudo_record("/usr/bin/systemctl reboot", monotonic=19_500_000),
+            self.logind_record(monotonic=20_000_000),
         ]
 
-        request = self.notification.latest_sudo_shutdown_request(records)
+        evidence = self.notification.correlate_shutdown_evidence(records)
 
-        self.assertIsNotNone(request)
-        self.assertEqual(request.requested_by, "admin")
-        self.assertEqual(request.command, "/usr/bin/systemctl reboot")
-        self.assertEqual(request.requested_at, "2025-10-09T08:53:21+00:00")
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.command, "/usr/bin/systemctl reboot")
 
-    def test_non_shutdown_sudo_command_is_not_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/apt-get update",
-            }
-        ]
+    def test_monotonic_time_controls_order_despite_realtime_clock_correction(self) -> None:
+        evidence = self.notification.correlate_shutdown_evidence(
+            [
+                self.sudo_record(
+                    "/usr/sbin/reboot",
+                    monotonic=9_000_000,
+                    realtime=1_760_000_002_000_000,
+                ),
+                self.logind_record(
+                    monotonic=10_000_000,
+                    realtime=1_760_000_001_000_000,
+                ),
+            ]
+        )
 
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.command, "/usr/sbin/reboot")
 
-    def test_nonoperative_shutdown_commands_are_not_reported(self) -> None:
-        commands = [
-            "/usr/sbin/shutdown -c now",
-            "/usr/sbin/shutdown -k now",
-            "/usr/sbin/reboot -w",
-            "/usr/bin/systemctl --dry-run reboot",
-            "/usr/bin/systemctl -h reboot",
-            "/usr/bin/systemctl -qh reboot",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                f"COMMAND={command}",
-            }
-            for index, command in enumerate(commands)
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_abbreviated_nonoperative_direct_commands_are_not_reported(self) -> None:
-        commands = ["/usr/sbin/shutdown --sho", "/usr/sbin/reboot --wtmp"]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_actions_for_another_manager_are_not_reported(self) -> None:
-        commands = [
-            "/usr/bin/systemctl --host=other reboot",
-            "/usr/bin/systemctl -H other poweroff",
-            "/usr/bin/systemctl --machine=container halt",
-            "/usr/bin/systemctl -Mcontainer kexec",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                f"COMMAND={command}",
-            }
-            for index, command in enumerate(commands)
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_abbreviated_systemctl_manager_selectors_are_not_reported(self) -> None:
-        commands = [
-            "/usr/bin/systemctl --hos=other reboot",
-            "/usr/bin/systemctl --mach=container poweroff",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_user_manager_actions_are_not_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl --user reboot",
-            }
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_abbreviated_systemctl_user_manager_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --us reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_offline_root_and_image_actions_are_not_reported(self) -> None:
-        commands = [
-            "/usr/bin/systemctl --root=/tmp reboot",
-            "/usr/bin/systemctl --image=/tmp/root.img poweroff",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_forged_sudo_identifier_record_is_not_reported(self) -> None:
-        records = [{"_COMM": "logger", "_EXE": "/usr/bin/logger", "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "victim : TTY=x ; COMMAND=/usr/bin/systemctl reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_sudo_command_delimiter_ignores_command_text_in_the_working_directory(
+    def test_reception_realtime_is_used_for_display_when_source_time_is_absent(
         self,
     ) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; PWD=/tmp/COMMAND=notes ; COMMAND=/usr/bin/systemctl reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl reboot")
+        sudo_record = self.sudo_record("/usr/sbin/reboot")
+        logind_record = self.logind_record()
+        sudo_record["__REALTIME_TIMESTAMP"] = sudo_record.pop(
+            "_SOURCE_REALTIME_TIMESTAMP"
+        )
+        logind_record["__REALTIME_TIMESTAMP"] = logind_record.pop(
+            "_SOURCE_REALTIME_TIMESTAMP"
+        )
 
-    def test_untrusted_shutdown_executable_path_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/tmp/reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+        evidence = self.notification.correlate_shutdown_evidence(
+            [sudo_record, logind_record]
+        )
 
-    def test_shutdown_cancellation_discards_earlier_scheduled_request(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/shutdown -r +10",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/shutdown -c",
-            },
-        ]
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.sudo_evidence_at, "2025-10-09T08:53:20+00:00")
+        self.assertEqual(evidence.shutdown_event_at, "2025-10-09T08:53:21+00:00")
 
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+    def test_missing_realtime_keeps_correlation_with_unknown_display_time(self) -> None:
+        sudo_record = self.sudo_record("/usr/sbin/reboot")
+        logind_record = self.logind_record()
+        sudo_record.pop("_SOURCE_REALTIME_TIMESTAMP")
+        logind_record.pop("_SOURCE_REALTIME_TIMESTAMP")
 
-    def test_shutdown_end_of_options_marker_preserves_wall_message_text(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -- +5 -c"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/sbin/shutdown -- +5 -c")
+        evidence = self.notification.correlate_shutdown_evidence(
+            [sudo_record, logind_record]
+        )
 
-    def test_systemctl_when_cancel_discards_earlier_scheduled_request(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl reboot --when=5m",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl reboot --when=cancel",
-            },
-        ]
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.sudo_evidence_at, "unknown")
+        self.assertEqual(evidence.shutdown_event_at, "unknown")
 
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+    def test_exact_sudo_delimiter_and_user_prefix_are_required(self) -> None:
+        for malformed_message in (
+            "admin : TTY=x ; COMMAND =/usr/sbin/reboot",
+            "admin TTY=x ; COMMAND=/usr/sbin/reboot",
+            " : TTY=x ; COMMAND=/usr/sbin/reboot",
+        ):
+            with self.subTest(message=malformed_message):
+                sudo_record = self.sudo_record("/usr/sbin/reboot")
+                sudo_record["MESSAGE"] = malformed_message
+                evidence = self.notification.correlate_shutdown_evidence(
+                    [sudo_record, self.logind_record()]
+                )
+                self.assertIsNone(evidence)
 
-    def test_systemctl_when_show_is_not_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl reboot --when=show",
-            }
-        ]
+    def test_shutdown_evidence_queries_current_boot_logind_and_sudo_records(
+        self,
+    ) -> None:
+        sudo_record = self.sudo_record("/usr/sbin/reboot")
+        logind_record = self.logind_record()
+        with patch.object(
+            self.notification,
+            "journal_records",
+            side_effect=([logind_record], [sudo_record]),
+        ) as journal_records, patch.object(
+            self.notification.time,
+            "monotonic_ns",
+            return_value=10_500_000_000,
+        ):
+            evidence = self.notification.shutdown_evidence()
 
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_abbreviated_systemctl_when_show_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --whe show reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_dash_prefixed_verb_after_end_of_options_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -- -h reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_split_when_value_preserves_shutdown_action(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl --when 5m reboot",
-            }
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --when 5m reboot")
-
-    def test_systemctl_split_check_inhibitors_value_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --check-inhibitors no reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --check-inhibitors no reboot")
-
-    def test_systemctl_split_output_value_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --output short reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --output short reboot")
-
-    def test_systemctl_split_legend_value_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --legend no reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --legend no reboot")
-
-    def test_systemctl_shutdown_action_with_extra_operand_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot extra"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_direct_halt_and_poweroff_with_operands_are_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/halt extra"}, {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000001", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/poweroff extra"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_direct_commands_reject_operands_after_the_option_marker(self) -> None:
-        commands = [
-            "/usr/sbin/halt -- -w",
-            "/usr/sbin/reboot -- -w extra",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_isolate_with_extra_operand_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate reboot.target extra"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_abbreviated_split_output_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --out short reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --out short reboot")
-
-    def test_ambiguous_systemctl_when_prefix_does_not_cancel_a_request(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -r +10",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000001",
-                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --w cancel reboot",
-            },
-        ]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
-
-    def test_systemctl_ambiguous_attached_option_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --bo=foo reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_unknown_systemctl_option_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --definitely-invalid reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_unknown_direct_command_option_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/reboot --definitely-invalid"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_no_wall_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --no-wall reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --no-wall reboot")
-
-    def test_invalid_shutdown_cancellation_does_not_clear_a_request(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -r +10",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000001",
-                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown --definitely-invalid -c",
-            },
-        ]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
-
-    def test_unsupported_shutdown_options_are_not_reported(self) -> None:
-        commands = [
-            "/usr/sbin/shutdown --force now",
-            "/usr/sbin/shutdown --no-sync now",
-            "/usr/sbin/shutdown --verbose now",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_invalid_shutdown_time_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown definitely-not-a-time"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --boot-loader-entry recovery reboot")
-
-    def test_systemctl_split_kill_value_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --kill-value 9 reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --kill-value 9 reboot")
-
-    def test_systemctl_inhibitor_shortcut_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -i reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl -i reboot")
-
-    def test_systemctl_property_value_does_not_select_user_manager(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -p --user reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl -p --user reboot")
-
-    def test_systemctl_firmware_setup_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --firmware-setup reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --firmware-setup reboot")
-
-    def test_systemctl_system_manager_selector_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --system reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --system reboot")
-
-    def test_systemctl_property_value_does_not_cancel_a_request(self) -> None:
-        records = [
-            {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -r +10"},
-            {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000001", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -p --when cancel reboot"},
-        ]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
-
-    def test_systemctl_no_warn_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --no-warn reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl --no-warn reboot")
-
-    def test_direct_no_wtmp_and_clustered_options_preserve_shutdown_actions(self) -> None:
-        commands = [
-            "/usr/sbin/reboot -d",
-            "/usr/sbin/shutdown -rh now",
-            "/usr/sbin/reboot -fp",
-        ]
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
-                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
-            }
-            for index, command in enumerate(commands)
-        ]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/sbin/reboot -fp")
-
-    def test_systemctl_soft_reboot_is_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl soft-reboot",
-            }
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl soft-reboot")
-
-    def test_command_text_containing_shutdown_is_not_misclassified(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/printf shutdown",
-            }
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_lookup_of_a_shutdown_target_is_not_misclassified(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl show reboot.target",
-            }
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_isolate_of_a_shutdown_target_is_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl isolate poweroff.target",
-            }
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl isolate poweroff.target")
-
-    def test_systemctl_start_of_a_shutdown_target_is_reported(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl start reboot.target",
-            }
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl start reboot.target")
-
-    def test_systemctl_start_of_multiple_units_reports_a_shutdown_target(self) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl start auxiliary.service reboot.target",
-            }
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
+        self.assertIsNotNone(evidence)
         self.assertEqual(
-            request.command,
-            "/usr/bin/systemctl start auxiliary.service reboot.target",
+            journal_records.call_args_list,
+            [call("systemd-logind"), call("sudo")],
         )
 
-    def test_systemctl_soft_reboot_target_is_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate soft-reboot.target"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl isolate soft-reboot.target")
+    def test_shutdown_evidence_rejects_stale_or_future_logind_events(self) -> None:
+        for event_monotonic in (4_999_999, 10_500_001):
+            with self.subTest(event_monotonic=event_monotonic), patch.object(
+                self.notification,
+                "journal_records",
+                side_effect=(
+                    [self.logind_record(monotonic=event_monotonic)],
+                    [
+                        self.sudo_record(
+                            "/usr/sbin/reboot",
+                            monotonic=event_monotonic - 1,
+                        )
+                    ],
+                ),
+            ), patch.object(
+                self.notification.time,
+                "monotonic_ns",
+                return_value=10_000_000_000,
+            ):
+                evidence = self.notification.shutdown_evidence()
 
-    def test_systemctl_shutdown_target_alias_is_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate runlevel6.target"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl isolate runlevel6.target")
+            self.assertIsNone(evidence)
 
-    def test_systemctl_restart_of_a_shutdown_target_is_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl restart reboot.target"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl restart reboot.target")
+    def test_journal_queries_are_bounded_to_the_current_boot_tail(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout='{"MESSAGE": "retained"}\ninvalid-json\n',
+            stderr="",
+        )
+        with patch.object(
+            self.notification.subprocess,
+            "run",
+            return_value=completed,
+        ) as subprocess_run:
+            records = self.notification.journal_records("sudo")
 
-    def test_systemctl_reload_or_restart_of_a_shutdown_target_is_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reload-or-restart reboot.target"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl reload-or-restart reboot.target")
+        self.assertEqual(records, [{"MESSAGE": "retained"}])
+        subprocess_run.assert_called_once_with(
+            [
+                "/usr/bin/journalctl",
+                "--boot=0",
+                "--identifier",
+                "sudo",
+                "--lines=256",
+                "--no-pager",
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=self.notification.JOURNAL_TIMEOUT_SECONDS,
+        )
 
-    def test_systemctl_force_reload_of_a_shutdown_target_is_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl force-reload reboot.target"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNone(request)
-
-    def test_long_dry_run_command_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot --message=" + ("x" * 600) + " --dry-run"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_abbreviated_systemctl_dry_run_is_not_reported(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --dry reboot"}]
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_systemctl_end_of_options_marker_preserves_shutdown_action(self) -> None:
-        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -- reboot"}]
-        request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl -- reboot")
-
-    def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
-        self,
-    ) -> None:
-        records = [
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
-                "__MONOTONIC_TIMESTAMP": "100",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/shutdown -r +10",
-            },
-            {
-                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
-                "__MONOTONIC_TIMESTAMP": "200",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/shutdown -c",
-            },
-        ]
-
-        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
-
-    def test_journal_reception_timestamp_is_used_when_source_time_is_absent(self) -> None:
-        records = [
-            {
-                "__REALTIME_TIMESTAMP": "1760000000000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/sbin/reboot",
-            },
-            {
-                "__REALTIME_TIMESTAMP": "1760000001000000",
-                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
-                "COMMAND=/usr/bin/systemctl reboot",
-            },
-        ]
-
-        request = self.notification.latest_sudo_shutdown_request(records)
-
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl reboot")
-        self.assertEqual(request.requested_at, "2025-10-09T08:53:21+00:00")
-
-    def test_notification_payload_marks_missing_attribution_as_unknown(self) -> None:
+    def test_notification_payload_marks_missing_evidence_as_unknown(self) -> None:
         payload = self.notification.notification_payload("PiServ.local", None)
 
         self.assertIn("Host: PiServ.local", payload)
-        self.assertIn("Shutdown request time (UTC): unknown", payload)
-        self.assertIn("Requested by: unknown", payload)
-        self.assertIn("Command: unknown", payload)
+        self.assertIn("systemd-logind shutdown event time (UTC): unknown", payload)
+        self.assertIn("Nearby sudo evidence time (UTC): unknown", payload)
+        self.assertIn("Nearby sudo user: unknown", payload)
+        self.assertIn("Nearby sudo command: unknown", payload)
 
-    def test_notification_payload_cannot_be_forged_with_journal_control_characters(
-        self,
-    ) -> None:
-        request = self.notification.ShutdownRequest(
-            requested_at="2025-10-09T08:53:21+00:00",
-            requested_by="admin\nBcc: attacker@example.com",
-            command="/usr/bin/systemctl reboot\r\nBcc: attacker@example.com",
+    def test_payload_normalizes_and_bounds_journal_fields(self) -> None:
+        evidence = self.notification.ShutdownEvidence(
+            shutdown_event_at="2025-10-09T08:53:21+00:00",
+            sudo_evidence_at="2025-10-09T08:53:20+00:00",
+            sudo_user="admin\nBcc: attacker@example.com",
+            command=(
+                "/usr/bin/systemctl reboot\r\nBcc: attacker@example.com"
+                + ("x" * 600)
+            ),
         )
 
-        payload = self.notification.notification_payload("PiServ.local", request)
+        payload = self.notification.notification_payload("PiServ.local", evidence)
 
         self.assertNotIn("\nBcc:", payload)
-        self.assertIn("Requested by: admin Bcc: attacker@example.com", payload)
-        self.assertIn(
-            "Command: /usr/bin/systemctl reboot Bcc: attacker@example.com", payload
+        self.assertIn("Nearby sudo user: admin Bcc: attacker@example.com", payload)
+        command_line = next(
+            line for line in payload.splitlines() if line.startswith("Nearby sudo command:")
+        )
+        self.assertLessEqual(
+            len(command_line.removeprefix("Nearby sudo command: ")),
+            self.notification.FIELD_LENGTH_LIMIT,
         )
 
     def test_stopping_the_service_during_normal_operation_does_not_send_mail(self) -> None:
@@ -708,6 +451,43 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         shutdown_in_progress.assert_not_called()
         subprocess_run.assert_not_called()
+
+    def test_shutdown_in_progress_sends_correlated_evidence(self) -> None:
+        evidence = self.notification.ShutdownEvidence(
+            shutdown_event_at="2025-10-09T08:53:21+00:00",
+            sudo_evidence_at="2025-10-09T08:53:20+00:00",
+            sudo_user="admin",
+            command="/usr/bin/systemctl reboot",
+        )
+        with (
+            patch.object(self.notification, "mail_config_available", return_value=True),
+            patch.object(self.notification, "shutdown_in_progress", return_value=True),
+            patch.object(
+                self.notification,
+                "shutdown_evidence",
+                return_value=evidence,
+            ) as shutdown_evidence,
+            patch.object(
+                self.notification.socket,
+                "getfqdn",
+                return_value="PiServ.local",
+            ),
+            patch.object(self.notification.subprocess, "run") as subprocess_run,
+        ):
+            self.assertEqual(self.notification.main(), 0)
+
+        shutdown_evidence.assert_called_once_with()
+        subprocess_run.assert_called_once_with(
+            ["/usr/sbin/sendmail", "-t"],
+            input=ANY,
+            text=True,
+            check=True,
+            timeout=self.notification.MAIL_TIMEOUT_SECONDS,
+        )
+        payload = subprocess_run.call_args.kwargs["input"]
+        self.assertIn("Host: PiServ.local", payload)
+        self.assertIn("Nearby sudo user: admin", payload)
+        self.assertIn("Nearby sudo command: /usr/bin/systemctl reboot", payload)
 
     def test_service_template_stays_active_until_shutdown(self) -> None:
         template = render_service_template()
@@ -737,14 +517,20 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIn("Read shutdown notification helper parent directory", tasks)
         self.assertIn("for component in path.strip(os.path.sep).split(os.path.sep)", tasks)
-        self.assertIn("Require trusted existing shutdown notification helper ancestors", tasks)
+        self.assertIn(
+            "Require trusted existing shutdown notification helper ancestors", tasks
+        )
         self.assertIn("base_shutdown_notification_script_path | dirname", tasks)
         self.assertIn(
             "Require a safe existing shutdown notification helper parent directory",
             tasks,
         )
-        self.assertIn("Create missing shutdown notification helper parent directory", tasks)
-        self.assertIn("base_shutdown_notification_script_parent_stat.stat.exists", tasks)
+        self.assertIn(
+            "Create missing shutdown notification helper parent directory", tasks
+        )
+        self.assertIn(
+            "base_shutdown_notification_script_parent_stat.stat.exists", tasks
+        )
         self.assertIn("Read shutdown notification unit state", tasks)
         self.assertIn("Read shutdown notification mail configuration state", tasks)
         self.assertIn("base_shutdown_notification_condition_stat.stat.isreg", tasks)

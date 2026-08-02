@@ -16,8 +16,8 @@
   managed service only when needed, preserves it when an existing unit is
   unmanaged, and exits cleanly during system shutdown.
 - Added an orderly-shutdown email notification that runs before network stop
-  and reports the latest matching current-boot `sudo` shutdown command, user,
-  and UTC timestamp when that evidence is available.
+  and reports authenticated current-boot `sudo` evidence correlated within five
+  seconds before a fresh authenticated `systemd-logind` shutdown event.
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.
