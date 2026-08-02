@@ -158,6 +158,17 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_systemctl_user_manager_actions_are_not_reported(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl --user reboot",
+            }
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_shutdown_cancellation_discards_earlier_scheduled_request(self) -> None:
         records = [
             {
@@ -223,6 +234,20 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl isolate poweroff.target")
+
+    def test_systemctl_start_of_a_shutdown_target_is_reported(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl start reboot.target",
+            }
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl start reboot.target")
 
     def test_journal_reception_timestamp_is_used_when_source_time_is_absent(self) -> None:
         records = [

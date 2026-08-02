@@ -27,6 +27,7 @@ SYSTEMD_SHUTDOWN_ACTIONS = {
     "soft-reboot",
 }
 SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
+SYSTEMCTL_NON_SYSTEM_OPTIONS = {"--user", "--global"}
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
     "poweroff.target",
@@ -125,6 +126,7 @@ def shutdown_command_kind(command: str) -> str | None:
     if (
         has_nonoperative_option(executable, arguments)
         or selects_another_systemd_manager(arguments)
+        or any(argument in SYSTEMCTL_NON_SYSTEM_OPTIONS for argument in arguments[1:])
     ):
         return None
     operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
@@ -133,7 +135,7 @@ def shutdown_command_kind(command: str) -> str | None:
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
         return "operation"
     if (
-        operands[0] == "isolate"
+        operands[0] in {"isolate", "start"}
         and len(operands) > 1
         and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
     ):
