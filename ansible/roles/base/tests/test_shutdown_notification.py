@@ -153,6 +153,17 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_abbreviated_nonoperative_direct_commands_are_not_reported(self) -> None:
+        commands = ["/usr/sbin/shutdown --sho", "/usr/sbin/reboot --wtmp"]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_actions_for_another_manager_are_not_reported(self) -> None:
         commands = [
             "/usr/bin/systemctl --host=other reboot",
@@ -194,6 +205,20 @@ class ShutdownNotificationTests(unittest.TestCase):
             }
         ]
 
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_offline_root_and_image_actions_are_not_reported(self) -> None:
+        commands = [
+            "/usr/bin/systemctl --root=/tmp reboot",
+            "/usr/bin/systemctl --image=/tmp/root.img poweroff",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
     def test_forged_sudo_identifier_record_is_not_reported(self) -> None:

@@ -34,6 +34,7 @@ SYSTEMD_SHUTDOWN_ACTIONS = {
 }
 SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
 SYSTEMCTL_NON_SYSTEM_OPTIONS = {"--user", "--global"}
+SYSTEMCTL_OFFLINE_OPTIONS = {"--root", "--image"}
 SYSTEMCTL_VALUE_OPTIONS = {
     "--boot-loader-entry",
     "--boot-loader-menu",
@@ -96,6 +97,16 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
         ):
             return True
         if (
+            argument != "--"
+            and argument.startswith("--")
+            and any(
+                option.startswith(argument.partition("=")[0])
+                for option in options
+                if option.startswith("--")
+            )
+        ):
+            return True
+        if (
             executable == "systemctl"
             and argument != "--"
             and "--dry-run".startswith(argument)
@@ -113,11 +124,27 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
 
 def is_shutdown_cancellation(arguments: list[str]) -> bool:
     for argument in arguments[1:]:
-        if argument in {"-c", "--cancel"}:
+        if argument in {"-c", "--cancel"} or (
+            argument != "--"
+            and argument.startswith("--")
+            and "--cancel".startswith(argument)
+        ):
             return True
         if argument.startswith("-") and not argument.startswith("--"):
             if "c" in argument[1:]:
                 return True
+    return False
+
+
+def selects_offline_systemd_root(arguments: list[str]) -> bool:
+    for argument in arguments[1:]:
+        option_name = argument.partition("=")[0]
+        if option_name in SYSTEMCTL_OFFLINE_OPTIONS or any(
+            option.startswith(option_name)
+            for option in SYSTEMCTL_OFFLINE_OPTIONS
+            if option_name != "--" and option_name.startswith("--")
+        ):
+            return True
     return False
 
 
@@ -198,6 +225,7 @@ def shutdown_command_kind(command: str) -> str | None:
     if (
         has_nonoperative_option(executable, arguments)
         or selects_another_systemd_manager(arguments)
+        or selects_offline_systemd_root(arguments)
         or any(argument in SYSTEMCTL_NON_SYSTEM_OPTIONS for argument in arguments[1:])
     ):
         return None
