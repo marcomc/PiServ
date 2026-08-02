@@ -28,6 +28,14 @@ SYSTEMD_SHUTDOWN_ACTIONS = {
 }
 SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
 SYSTEMCTL_NON_SYSTEM_OPTIONS = {"--user", "--global"}
+SYSTEMCTL_VALUE_OPTIONS = {
+    "--check-inhibitors",
+    "--job-mode",
+    "--job-timeout",
+    "--job-running-timeout",
+    "--message",
+    "--when",
+}
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
     "poweroff.target",
@@ -120,12 +128,20 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
         if skip_next:
             skip_next = False
             continue
-        if argument == "--when":
+        if argument in SYSTEMCTL_VALUE_OPTIONS:
             skip_next = True
             continue
         if not argument.startswith("-"):
             operands.append(argument)
     return operands
+
+
+def is_sudo_journal_record(record: dict[str, object]) -> bool:
+    command = record.get("_COMM")
+    executable = record.get("_EXE")
+    if command is not None and command != "sudo":
+        return False
+    return executable is None or Path(str(executable)).name == "sudo"
 
 
 def shutdown_command_kind(command: str) -> str | None:
@@ -269,6 +285,8 @@ def latest_sudo_shutdown_request(
             key=lambda indexed_record: journal_sequence_value(indexed_record[1]) or 0
         )
     for _, record in chronological_records:
+        if not is_sudo_journal_record(record):
+            continue
         message = record.get("MESSAGE")
         if not isinstance(message, str):
             continue

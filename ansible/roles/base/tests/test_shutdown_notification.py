@@ -170,6 +170,10 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_forged_sudo_identifier_record_is_not_reported(self) -> None:
+        records = [{"_COMM": "logger", "_EXE": "/usr/bin/logger", "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "victim : TTY=x ; COMMAND=/usr/bin/systemctl reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_shutdown_cancellation_discards_earlier_scheduled_request(self) -> None:
         records = [
             {
@@ -226,6 +230,12 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --when 5m reboot")
+
+    def test_systemctl_split_check_inhibitors_value_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --check-inhibitors no reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --check-inhibitors no reboot")
 
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
