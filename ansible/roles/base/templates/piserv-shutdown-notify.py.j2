@@ -112,6 +112,21 @@ def systemctl_when_mode(arguments: list[str]) -> str | None:
     return None
 
 
+def systemctl_operands(arguments: list[str]) -> list[str]:
+    operands: list[str] = []
+    skip_next = False
+    for argument in arguments[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument == "--when":
+            skip_next = True
+            continue
+        if not argument.startswith("-"):
+            operands.append(argument)
+    return operands
+
+
 def shutdown_command_kind(command: str) -> str | None:
     """Classify a sudo command as an operation, cancellation, or neither."""
     try:
@@ -143,7 +158,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return "cancellation"
     if when_mode == "show":
         return None
-    operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
+    operands = systemctl_operands(arguments)
     if not operands:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:

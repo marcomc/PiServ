@@ -1,4 +1,35 @@
 ---
+- name: Read shutdown notification helper parent directory
+  ansible.builtin.stat:
+    path: "{{ base_shutdown_notification_script_path | dirname }}"
+  register: base_shutdown_notification_script_parent_stat
+  changed_when: false
+  become: true
+
+- name: Require a safe existing shutdown notification helper parent directory
+  when: base_shutdown_notification_script_parent_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - base_shutdown_notification_script_parent_stat.stat.isdir
+      - base_shutdown_notification_script_parent_stat.stat.pw_name == 'root'
+      - base_shutdown_notification_script_parent_stat.stat.gr_name == 'root'
+      - >-
+        base_shutdown_notification_script_parent_stat.stat.mode is
+        match('^0[0-7][0145][0145]$')
+    fail_msg: >-
+      The existing shutdown notification helper parent must be a root-owned
+      directory that is not writable by group or other users.
+
+- name: Create missing shutdown notification helper parent directory
+  when: not base_shutdown_notification_script_parent_stat.stat.exists
+  ansible.builtin.file:
+    path: "{{ base_shutdown_notification_script_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Install shutdown notification helper
   ansible.builtin.template:
     src: piserv-shutdown-notify.py.j2
@@ -17,7 +48,18 @@
     mode: "0644"
   become: true
 
+- name: Read shutdown notification unit state
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ base_shutdown_notification_service_name }}"
+  register: base_shutdown_notification_unit_stat
+  changed_when: false
+  check_mode: false
+  become: true
+
 - name: Enable shutdown notification service
+  when: >-
+    not ansible_check_mode
+    or base_shutdown_notification_unit_stat.stat.exists
   ansible.builtin.systemd_service:
     name: "{{ base_shutdown_notification_service_name }}"
     enabled: true

@@ -16,6 +16,7 @@ from unittest.mock import patch
 ROLE_DIRECTORY = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = ROLE_DIRECTORY / "templates" / "piserv-shutdown-notify.py.j2"
 SERVICE_TEMPLATE_PATH = ROLE_DIRECTORY / "templates" / "piserv-shutdown-notify.service.j2"
+TASKS_PATH = ROLE_DIRECTORY / "tasks" / "shutdown-notification.yml"
 
 
 def load_notification_module() -> object:
@@ -212,6 +213,20 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_systemctl_split_when_value_preserves_shutdown_action(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl --when 5m reboot",
+            }
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --when 5m reboot")
+
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
             {
@@ -354,6 +369,22 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("ExecStop=/usr/local/sbin/piserv-shutdown-notify", template)
         self.assertIn("TimeoutStopSec=45s", template)
         self.assertNotIn("{{", template)
+
+    def test_shutdown_notification_tasks_support_custom_paths_and_first_check_mode(
+        self,
+    ) -> None:
+        tasks = TASKS_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("Read shutdown notification helper parent directory", tasks)
+        self.assertIn("base_shutdown_notification_script_path | dirname", tasks)
+        self.assertIn(
+            "Require a safe existing shutdown notification helper parent directory",
+            tasks,
+        )
+        self.assertIn("Create missing shutdown notification helper parent directory", tasks)
+        self.assertIn("Read shutdown notification unit state", tasks)
+        self.assertIn("not ansible_check_mode", tasks)
+        self.assertIn("base_shutdown_notification_unit_stat.stat.exists", tasks)
 
 
 if __name__ == "__main__":
