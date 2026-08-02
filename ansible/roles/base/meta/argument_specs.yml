@@ -243,7 +243,7 @@ argument_specs:
       base_shutdown_notification_service_name:
         type: str
         default: piserv-shutdown-notify.service
-        description: Bounded shutdown notification .service unit filename.
+        description: Bounded concrete shutdown notification .service unit filename.
       base_shutdown_notification_script_path:
         type: path
         default: /usr/local/sbin/piserv-shutdown-notify

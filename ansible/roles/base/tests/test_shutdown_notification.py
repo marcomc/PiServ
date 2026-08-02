@@ -562,6 +562,7 @@ class ShutdownNotificationTests(unittest.TestCase):
             "match('^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service$')",
             tasks,
         )
+        self.assertIn("search('@[.]service$')", tasks)
         self.assertIn(
             "base_shutdown_notification_service_name | length <= 255",
             tasks,
