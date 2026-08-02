@@ -259,6 +259,12 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_shutdown_end_of_options_marker_preserves_wall_message_text(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -- +5 -c"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/sbin/shutdown -- +5 -c")
+
     def test_systemctl_when_cancel_discards_earlier_scheduled_request(self) -> None:
         records = [
             {
