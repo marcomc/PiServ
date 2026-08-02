@@ -113,6 +113,8 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
         ):
             return True
         if argument.startswith("-") and not argument.startswith("--"):
+            if executable == "systemctl" and "h" in argument[1:]:
+                return True
             if executable == "shutdown" and any(
                 option in argument[1:] for option in {"c", "k"}
             ):

@@ -142,6 +142,7 @@ class ShutdownNotificationTests(unittest.TestCase):
             "/usr/sbin/reboot -w",
             "/usr/bin/systemctl --dry-run reboot",
             "/usr/bin/systemctl -h reboot",
+            "/usr/bin/systemctl -qh reboot",
         ]
         records = [
             {
