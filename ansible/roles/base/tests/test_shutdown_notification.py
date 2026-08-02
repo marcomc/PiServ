@@ -413,6 +413,21 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
 
+    def test_unsupported_shutdown_options_are_not_reported(self) -> None:
+        commands = [
+            "/usr/sbin/shutdown --force now",
+            "/usr/sbin/shutdown --no-sync now",
+            "/usr/sbin/shutdown --verbose now",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]
         request = self.notification.latest_sudo_shutdown_request(records)
@@ -442,6 +457,12 @@ class ShutdownNotificationTests(unittest.TestCase):
         request = self.notification.latest_sudo_shutdown_request(records)
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --firmware-setup reboot")
+
+    def test_systemctl_system_manager_selector_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --system reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --system reboot")
 
     def test_direct_no_wtmp_and_clustered_options_preserve_shutdown_actions(self) -> None:
         commands = [
