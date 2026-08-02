@@ -64,6 +64,7 @@ SYSTEMCTL_VALUE_OPTIONS = {
 SYSTEMCTL_FLAG_OPTIONS = {
     "--all",
     "--force",
+    "--firmware-setup",
     "--full",
     "--no-ask-password",
     "--no-block",
@@ -191,8 +192,42 @@ def is_shutdown_cancellation(arguments: list[str]) -> bool:
     return False
 
 
-def selects_offline_systemd_root(arguments: list[str]) -> bool:
+def systemctl_option_arguments(arguments: list[str]) -> list[str]:
+    options: list[str] = []
+    skip_next = False
+    value_options = (
+        SYSTEMCTL_VALUE_OPTIONS
+        | SYSTEMCTL_MANAGER_OPTIONS
+        | SYSTEMCTL_OFFLINE_OPTIONS
+    )
     for argument in arguments[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument == "--":
+            break
+        option_name, separator, _ = argument.partition("=")
+        matching_options = {
+            option
+            for option in value_options
+            if option == option_name
+            or (
+                option_name.startswith("--")
+                and option.startswith(option_name)
+            )
+        }
+        if len(matching_options) == 1:
+            options.append(argument)
+            if not separator:
+                skip_next = True
+            continue
+        if argument.startswith("-"):
+            options.append(argument)
+    return options
+
+
+def selects_offline_systemd_root(arguments: list[str]) -> bool:
+    for argument in systemctl_option_arguments(arguments):
         option_name = argument.partition("=")[0]
         if option_name in SYSTEMCTL_OFFLINE_OPTIONS or any(
             option.startswith(option_name)
@@ -204,7 +239,7 @@ def selects_offline_systemd_root(arguments: list[str]) -> bool:
 
 
 def selects_another_systemd_manager(arguments: list[str]) -> bool:
-    for argument in arguments[1:]:
+    for argument in systemctl_option_arguments(arguments):
         if argument in SYSTEMCTL_MANAGER_OPTIONS:
             return True
         if argument.startswith(("--host=", "--machine=")):
@@ -224,7 +259,7 @@ def selects_another_systemd_manager(arguments: list[str]) -> bool:
 
 
 def selects_non_system_systemd_manager(arguments: list[str]) -> bool:
-    for argument in arguments[1:]:
+    for argument in systemctl_option_arguments(arguments):
         option_name = argument.partition("=")[0]
         if option_name in SYSTEMCTL_NON_SYSTEM_OPTIONS or any(
             option.startswith(option_name)
