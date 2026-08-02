@@ -68,6 +68,8 @@
     - role: base
       vars:
         base_ssh_dropin_comment: "Managed by PiServ hardening."
+        base_manage_kernel_reboot_mode: true
+        base_kernel_reboot_mode: cold
         base_vnc_output: DSI-1
         base_cockpit_packages:
           - cockpit

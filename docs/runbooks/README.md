@@ -21,6 +21,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Jackett search](jackett.md) | Deploy and operate trusted-network Jackett search |
 | [PiServ installation and convergence](piserv-install.md) | Apply the ordered full-host installation entry point |
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |
+| [Kernel reboot policy](kernel-reboot-policy.md) | Apply, verify, and roll back PiServ cold-reset policy |
 | [Freenove FNK0100K post-OS](freenove-fnk0100k-post-os.md) | Configure the case after OS boot |
 | [pCloud console client storage](pcloudcc-storage.md) | Validate `pcloudcc` for podcast storage |
 | [External SSD storage](external-storage.md) | Prepare and operate the PiServ-owned ext4 data disk |

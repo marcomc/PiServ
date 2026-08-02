@@ -11,6 +11,9 @@ freenove_case_archive_url: ""
 freenove_case_archive_extra_opts: []
 freenove_case_archive_creates: "{{ freenove_case_install_dir }}/Code/app_ui.py"
 freenove_case_boot_config_path: /boot/firmware/config.txt
+freenove_case_manage_sigterm_cleanup_fix: false
+freenove_case_task_manager_path: "{{ freenove_case_install_dir }}/Code/task_manager.py"
+freenove_case_task_manager_runtime_path: "{{ freenove_case_install_dir }}/Code/task_manager_ansible.py"
 
 freenove_case_apt_packages:
   - git
@@ -27,6 +30,8 @@ freenove_case_app_name: "FNK0100"
 freenove_case_app_comment: "Freenove Computer Case Kit for Raspberry Pi"
 freenove_case_reboot_on_i2c_config_change: true
 freenove_case_reboot_timeout: 600
+freenove_case_pre_reboot_mode: ""
+freenove_case_reboot_mode_path: /sys/kernel/reboot/mode
 freenove_case_i2c_device: /dev/i2c-1
 
 freenove_case_manage_background_service: false

@@ -1,0 +1,67 @@
+---
+- name: Inspect the active kernel reboot mode
+  ansible.builtin.stat:
+    path: "{{ freenove_case_reboot_mode_path }}"
+    follow: false
+  register: freenove_case_reboot_mode_stat
+  become: true
+  check_mode: false
+
+- name: Require a writable kernel reboot-mode control
+  ansible.builtin.assert:
+    that:
+      - freenove_case_reboot_mode_stat.stat.exists
+      - freenove_case_reboot_mode_stat.stat.isreg
+      - not freenove_case_reboot_mode_stat.stat.islnk
+      - freenove_case_reboot_mode_stat.stat.uid == 0
+      - freenove_case_reboot_mode_stat.stat.mode is match('^0?[0-7][0145][0145]$')
+    fail_msg: >-
+      Automatic reboot is blocked because {{ freenove_case_reboot_mode_path }}
+      is not a root-owned, non-group/world-writable, non-symlink regular file.
+
+- name: Read the active kernel reboot mode
+  ansible.builtin.slurp:
+    path: "{{ freenove_case_reboot_mode_path }}"
+  register: freenove_case_reboot_mode_before
+  become: true
+  check_mode: false
+
+- name: Require a recognized active kernel reboot mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        freenove_case_reboot_mode_before.content | b64decode | trim
+        in ['default', 'warm', 'cold']
+    fail_msg: >-
+      Automatic reboot is blocked because {{ freenove_case_reboot_mode_path }}
+      contains an unrecognized reboot mode and will not be overwritten.
+
+- name: Activate the required mode for the pending reboot
+  when:
+    - freenove_case_reboot_mode_before.content | b64decode | trim != freenove_case_pre_reboot_mode
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tee
+      - "{{ freenove_case_reboot_mode_path }}"
+    stdin: "{{ freenove_case_pre_reboot_mode }}"
+  register: freenove_case_reboot_mode_activation
+  changed_when: true
+  become: true
+
+- name: Read the verified kernel reboot mode
+  ansible.builtin.slurp:
+    path: "{{ freenove_case_reboot_mode_path }}"
+  register: freenove_case_reboot_mode_after
+  become: true
+  check_mode: false
+
+- name: Require the safe mode before automatic reboot
+  ansible.builtin.assert:
+    that:
+      - >-
+        freenove_case_reboot_mode_after.content | b64decode | trim
+        == freenove_case_pre_reboot_mode
+    fail_msg: >-
+      Automatic reboot is blocked because the active kernel reboot mode is not
+      {{ freenove_case_pre_reboot_mode }}.

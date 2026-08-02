@@ -81,12 +81,17 @@ ansible-playbook --syntax-check tests/test.yml
 | `freenove_case_archive_extra_opts` | `[]` | Extra options passed to `unarchive` |
 | `freenove_case_archive_creates` | `{{ freenove_case_install_dir }}/Code/app_ui.py` | Archive idempotence marker |
 | `freenove_case_boot_config_path` | `/boot/firmware/config.txt` | Firmware config path |
+| `freenove_case_manage_sigterm_cleanup_fix` | `false` | Render a SIGTERM-safe task-manager runtime artifact |
+| `freenove_case_task_manager_path` | `{{ freenove_case_install_dir }}/Code/task_manager.py` | Installed upstream task-manager source |
+| `freenove_case_task_manager_runtime_path` | `{{ freenove_case_install_dir }}/Code/task_manager_ansible.py` | Managed SIGTERM-safe runtime artifact |
 | `freenove_case_apt_packages` | See `defaults/main.yml` | Debian packages to install |
 | `freenove_case_manage_desktop_launcher` | `true` | Create FNK0100 desktop/menu launchers |
 | `freenove_case_app_name` | `FNK0100` | Launcher name and icon basename |
 | `freenove_case_app_comment` | Freenove case description | Launcher comment |
 | `freenove_case_reboot_on_i2c_config_change` | `true` | Reboot after changing I2C firmware config; skip reboot in check mode |
 | `freenove_case_reboot_timeout` | `600` | Reboot timeout in seconds |
+| `freenove_case_pre_reboot_mode` | `""` | Optional `cold` or `warm` runtime mode required before automatic reboot |
+| `freenove_case_reboot_mode_path` | `/sys/kernel/reboot/mode` | Active kernel reboot-mode control |
 | `freenove_case_i2c_device` | `/dev/i2c-1` | Expected I2C device |
 | `freenove_case_manage_background_service` | `false` | Manage Freenove background task service |
 | `freenove_case_service_name` | `my_app_running.service` | Background task service name |
@@ -178,6 +183,21 @@ The role intentionally does not apply Freenove's permissive
 `chmod 777 ~/Desktop/Freenove.desktop` suggestion. Launchers are installed with
 mode `0755`.
 
+Set `freenove_case_manage_sigterm_cleanup_fix: true` for the affected
+Freenove task manager. The upstream signal handler calls a non-existent method
+during system shutdown. The role validates the known source shape and atomically
+renders a separate runtime artifact with task cleanup and a successful process
+exit. It never modifies the upstream checkout, so Git, archive, and
+`controller_copy` source modes remain convergent. A changed artifact restarts an
+already-running managed service; an unchanged artifact does not. Disabling the
+fix removes the artifact only while that service unit is managed, so an existing
+unmanaged unit is never left pointing at a missing executable.
+
+Set `freenove_case_pre_reboot_mode: cold` when hardware requires a cold reset.
+Before an I2C configuration change triggers the role's automatic reboot, the
+role writes and verifies the active kernel mode. The empty default leaves reboot
+mode policy to the consuming project.
+
 PCIe Gen3 is disabled by default because Freenove documents it as experimental
 and recommends PCIe Gen2 for stability.
 
@@ -235,7 +255,9 @@ task files:
 | `validate-target.yml` | Platform assertion |
 | `packages.yml` | Runtime packages and hardware groups |
 | `i2c.yml` | I2C firmware/module setup |
+| `pre-reboot-mode.yml` | Optional active reboot-mode safety gate |
 | `freenove-code.yml` | Freenove upstream checkout |
+| `sigterm-cleanup.yml` | Managed SIGTERM-safe runtime artifact |
 | `app-config.yml` | Optional Freenove runtime configuration |
 | `expansion-controller.yml` | Optional Freenove controller preflight |
 | `desktop-launchers.yml` | Application and desktop launchers |
@@ -252,6 +274,7 @@ Role validation:
 
 ```sh
 ansible-playbook --syntax-check tests/test.yml
+ANSIBLE_ROLES_PATH=.. ansible-playbook tests/test-sigterm-cleanup.yml
 ansible-lint .
 ```
 

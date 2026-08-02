@@ -4,6 +4,18 @@
 
 ### Reliability
 
+- Added a reversible PiServ cold-reset policy that validates distinct private
+  rollback and runtime-control paths, reconciles one final `reboot=c` token,
+  activates the running kernel's cold mode, and supports returning to the
+  Raspberry Pi device-tree default without automatic reboot.
+- Validated the cold policy through its activation and three subsequent
+  persistent reboots; all returned with NVMe mounts and critical services
+  healthy, bringing the observed cold-reset series to nine successes.
+- Rendered a separate Freenove background task-manager artifact that fixes the
+  upstream SIGTERM handler without dirtying the pinned source tree, restarts the
+  managed service only when needed, preserves it when an existing unit is
+  unmanaged, and exits cleanly during system shutdown.
+
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.

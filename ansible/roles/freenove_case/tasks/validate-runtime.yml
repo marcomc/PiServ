@@ -31,6 +31,16 @@
       - "{{ freenove_case_install_dir }}/Code/task_oled.py"
   changed_when: false
 
+- name: Validate the managed Freenove task-manager runtime syntax
+  when: freenove_case_manage_sigterm_cleanup_fix | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - "import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'), filename=sys.argv[1])"
+      - "{{ freenove_case_task_manager_runtime_path }}"
+  changed_when: false
+
 - name: Validate Freenove hardware apply helper syntax
   when: freenove_case_apply_hardware_config | bool
   ansible.builtin.command:

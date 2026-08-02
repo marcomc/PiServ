@@ -1,4 +1,21 @@
 ---
+- name: Predict whether I2C firmware configuration needs a reboot
+  ansible.builtin.lineinfile:
+    path: "{{ freenove_case_boot_config_path }}"
+    regexp: '^#?\s*dtparam=i2c_arm='
+    line: 'dtparam=i2c_arm=on'
+  register: freenove_case_i2c_config_preflight
+  become: true
+  check_mode: true
+
+- name: Activate the required kernel mode before changing I2C firmware config
+  when:
+    - freenove_case_reboot_on_i2c_config_change | bool
+    - freenove_case_i2c_config_preflight.changed
+    - freenove_case_pre_reboot_mode | default('') | length > 0
+    - not ansible_check_mode
+  ansible.builtin.include_tasks: pre-reboot-mode.yml
+
 - name: Enable I2C in boot firmware config
   ansible.builtin.lineinfile:
     path: "{{ freenove_case_boot_config_path }}"

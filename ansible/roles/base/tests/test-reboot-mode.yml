@@ -1,0 +1,151 @@
+---
+- name: Test managed kernel reboot mode and rollback
+  hosts: localhost
+  gather_facts: false
+  vars:
+    base_manage_ssh: false
+    base_manage_vnc: false
+    base_manage_glances: false
+    base_manage_cockpit: false
+    base_manage_disabled_services: false
+    base_manage_unattended_upgrades: false
+    base_manage_reboot_notification: false
+    base_manage_kernel_reboot_mode: true
+    base_kernel_reboot_mode: cold
+    base_kernel_cmdline_path: "{{ base_test_reboot_mode_dir.path }}/cmdline.txt"
+    base_kernel_cmdline_backup_path: "{{ base_test_reboot_mode_dir.path }}/backup/original.txt"
+    base_kernel_cmdline_backup_owner: "{{ base_test_root_user.stdout }}"
+    base_kernel_cmdline_backup_group: "{{ base_test_root_group.stdout }}"
+    base_kernel_reboot_runtime_mode_path: "{{ base_test_reboot_mode_dir.path }}/runtime-mode"
+    base_manage_smartmontools: false
+    base_validate_root_storage: false
+    base_packages: []
+    base_manage_cloud_init: false
+  tasks:
+    - name: Read the privileged test owner
+      ansible.builtin.command:
+        argv: [/usr/bin/id, -un, "0"]
+      register: base_test_root_user
+      changed_when: false
+      check_mode: false
+
+    - name: Read the privileged test group
+      ansible.builtin.command:
+        argv: [/usr/bin/id, -gn, "0"]
+      register: base_test_root_group
+      changed_when: false
+      check_mode: false
+
+    - name: Create a temporary reboot-mode test directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: piserv-reboot-mode-
+      register: base_test_reboot_mode_dir
+
+    - name: Exercise reboot-mode lifecycle and failure paths
+      block:
+        - name: Create command-line and runtime-mode fixtures
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ base_test_reboot_mode_dir.path }}/{{ item.path }}"
+            owner: "{{ base_test_root_user.stdout }}"
+            group: "{{ base_test_root_group.stdout }}"
+            mode: "0600"
+          loop:
+            - path: cmdline.txt
+              content: "{{ ['console=tty1 reboot=w', 'quiet reboot=s'] | join('\t') }}\n"
+            - path: runtime-mode
+              content: "warm\n"
+          become: true
+
+        - name: Apply cold mode through the base role
+          ansible.builtin.include_role:
+            name: base
+
+        - name: Read the managed command line, backup, and runtime mode
+          ansible.builtin.slurp:
+            path: "{{ item }}"
+          become: true
+          loop:
+            - "{{ base_kernel_cmdline_path }}"
+            - "{{ base_kernel_cmdline_backup_path }}"
+            - "{{ base_kernel_reboot_runtime_mode_path }}"
+          register: base_test_cold_files
+
+        - name: Verify cold mode and the stable original backup
+          ansible.builtin.assert:
+            that:
+              - >-
+                (base_test_cold_files.results[0].content | b64decode)
+                == 'console=tty1 quiet reboot=c\n'
+              - >-
+                (base_test_cold_files.results[1].content | b64decode)
+                == 'console=tty1 reboot=w\tquiet reboot=s\n'
+              - (base_test_cold_files.results[2].content | b64decode) == 'cold\n'
+
+        - name: Reapply cold mode to verify stable convergence
+          ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+
+        - name: Roll back to the Raspberry Pi platform default
+          ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+          vars:
+            base_kernel_reboot_mode: default
+
+        - name: Read the rolled-back command line
+          ansible.builtin.slurp:
+            path: "{{ base_kernel_cmdline_path }}"
+          register: base_test_rollback_cmdline
+          become: true
+
+        - name: Verify platform-default rollback
+          ansible.builtin.assert:
+            that:
+              - >-
+                (base_test_rollback_cmdline.content | b64decode)
+                == 'console=tty1 quiet\n'
+
+        - name: Initialize default-mode runtime alias rejection state
+          ansible.builtin.set_fact:
+            base_test_default_runtime_alias_rejected: false
+
+        - name: Reject a default-mode runtime alias before command-line mutation
+          block:
+            - name: Apply default mode with runtime control aliased to command line
+              ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+              vars:
+                base_kernel_reboot_mode: default
+                base_kernel_reboot_runtime_mode_path: "{{ base_kernel_cmdline_path }}"
+          rescue:
+            - name: Record expected default-mode runtime alias rejection
+              ansible.builtin.set_fact:
+                base_test_default_runtime_alias_rejected: true
+
+        - name: Verify default-mode runtime alias failed closed
+          ansible.builtin.assert:
+            that:
+              - base_test_default_runtime_alias_rejected
+              - (base_test_rollback_cmdline.content | b64decode) == 'console=tty1 quiet\n'
+
+        - name: Verify unsafe pre-existing backups fail closed
+          ansible.builtin.include_tasks: reboot-mode-invalid-backup-case.yml
+          loop:
+            - directory
+            - symlink
+            - unsafe_mode
+            - empty
+            - whitespace
+            - quoted
+            - runtime_unknown
+            - runtime_unsafe_mode
+            - runtime_cmdline_alias
+            - runtime_backup_alias
+            - runtime_cmdline_hardlink
+            - runtime_backup_hardlink
+          loop_control:
+            loop_var: base_test_invalid_backup_kind
+      always:
+        - name: Remove the temporary reboot-mode test directory
+          ansible.builtin.file:
+            path: "{{ base_test_reboot_mode_dir.path }}"
+            state: absent
+          become: true

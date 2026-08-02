@@ -204,6 +204,38 @@ argument_specs:
         type: path
         default: /etc/msmtprc
         description: Path that must exist before the boot notification service runs.
+      base_manage_kernel_reboot_mode:
+        type: bool
+        default: false
+        description: Whether to manage the kernel command-line reboot mode.
+      base_kernel_reboot_mode:
+        type: str
+        default: default
+        choices:
+          - default
+          - warm
+          - cold
+        description: Requested reboot mode or the Raspberry Pi platform default.
+      base_kernel_cmdline_path:
+        type: path
+        default: /boot/firmware/cmdline.txt
+        description: Single-line Raspberry Pi kernel command-line file.
+      base_kernel_cmdline_backup_path:
+        type: path
+        default: /var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode
+        description: Stable backup of the command line before policy management.
+      base_kernel_cmdline_backup_owner:
+        type: str
+        default: root
+        description: Owner of the private reboot-policy backup artifacts.
+      base_kernel_cmdline_backup_group:
+        type: str
+        default: root
+        description: Group of the private reboot-policy backup artifacts.
+      base_kernel_reboot_runtime_mode_path:
+        type: path
+        default: /sys/kernel/reboot/mode
+        description: Runtime control used to activate the current kernel reboot mode.
       base_manage_smartmontools:
         type: bool
         default: true
