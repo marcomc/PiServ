@@ -354,6 +354,16 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl reload-or-restart reboot.target")
 
+    def test_systemctl_force_reload_of_a_shutdown_target_is_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl force-reload reboot.target"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl force-reload reboot.target")
+
+    def test_long_dry_run_command_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot --message=" + ("x" * 600) + " --dry-run"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
         self,
     ) -> None:
@@ -469,6 +479,8 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("Create missing shutdown notification helper parent directory", tasks)
         self.assertIn("base_shutdown_notification_script_parent_stat.stat.exists", tasks)
         self.assertIn("Read shutdown notification unit state", tasks)
+        self.assertIn("Read shutdown notification mail configuration state", tasks)
+        self.assertIn("base_shutdown_notification_condition_stat.stat.isreg", tasks)
         self.assertIn("not ansible_check_mode", tasks)
         self.assertIn("base_shutdown_notification_unit_stat.stat.exists", tasks)
 

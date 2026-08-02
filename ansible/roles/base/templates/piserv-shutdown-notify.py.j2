@@ -185,7 +185,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
         return "operation"
-    if operands[0] in {"start", "restart", "reload-or-restart"} and any(
+    if operands[0] in {"start", "restart", "reload-or-restart", "force-reload"} and any(
         operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
     ):
         return "operation"
@@ -300,7 +300,6 @@ def latest_sudo_shutdown_request(
         requested_by, separator, _ = prefix.partition(":")
         if not separator:
             continue
-        command = safe_field(command)
         command_kind = shutdown_command_kind(command)
         if command_kind is None:
             continue
@@ -310,7 +309,7 @@ def latest_sudo_shutdown_request(
         latest_request = ShutdownRequest(
             requested_at=journal_timestamp(record),
             requested_by=safe_field(requested_by),
-            command=command,
+            command=safe_field(command),
         )
 
     return latest_request
