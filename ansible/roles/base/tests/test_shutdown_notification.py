@@ -120,6 +120,24 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_nonoperative_shutdown_commands_are_not_reported(self) -> None:
+        commands = [
+            "/usr/sbin/shutdown -c now",
+            "/usr/sbin/shutdown -k now",
+            "/usr/sbin/reboot -w",
+            "/usr/bin/systemctl --dry-run reboot",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                f"COMMAND={command}",
+            }
+            for index, command in enumerate(commands)
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_command_text_containing_shutdown_is_not_misclassified(self) -> None:
         records = [
             {
@@ -155,6 +173,26 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl isolate poweroff.target")
+
+    def test_journal_reception_timestamp_is_used_when_source_time_is_absent(self) -> None:
+        records = [
+            {
+                "__REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/sbin/reboot",
+            },
+            {
+                "__REALTIME_TIMESTAMP": "1760000001000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl reboot",
+            },
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl reboot")
+        self.assertEqual(request.requested_at, "2025-10-09T08:53:21+00:00")
 
     def test_notification_payload_marks_missing_attribution_as_unknown(self) -> None:
         payload = self.notification.notification_payload("PiServ.local", None)

@@ -29,6 +29,13 @@ SYSTEMD_SHUTDOWN_TARGETS = {
     "halt.target",
     "kexec.target",
 }
+NON_OPERATIVE_OPTIONS = {
+    "shutdown": {"-c", "-k", "--cancel", "--help", "--show", "--version"},
+    "reboot": {"-w", "--help", "--version", "--wtmp-only"},
+    "poweroff": {"-w", "--help", "--version", "--wtmp-only"},
+    "halt": {"-w", "--help", "--version", "--wtmp-only"},
+    "systemctl": {"--dry-run", "--help", "--version"},
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +52,23 @@ def safe_field(value: object) -> str:
     return " ".join(normalized.split())[:FIELD_LENGTH_LIMIT]
 
 
+def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
+    options = NON_OPERATIVE_OPTIONS[executable]
+    for argument in arguments[1:]:
+        if argument in options or any(
+            argument.startswith(f"{option}=") for option in options if option.startswith("--")
+        ):
+            return True
+        if argument.startswith("-") and not argument.startswith("--"):
+            if executable == "shutdown" and any(
+                option in argument[1:] for option in {"c", "k"}
+            ):
+                return True
+            if executable in DIRECT_SHUTDOWN_COMMANDS and "w" in argument[1:]:
+                return True
+    return False
+
+
 def is_shutdown_command(command: str) -> bool:
     try:
         arguments = shlex.split(command)
@@ -55,8 +79,10 @@ def is_shutdown_command(command: str) -> bool:
 
     executable = arguments[0].rsplit("/", maxsplit=1)[-1]
     if executable in DIRECT_SHUTDOWN_COMMANDS:
-        return True
+        return not has_nonoperative_option(executable, arguments)
     if executable != "systemctl":
+        return False
+    if has_nonoperative_option(executable, arguments):
         return False
     operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
     if not operands:
@@ -122,12 +148,20 @@ def journal_records(identifier: str) -> list[dict[str, object]]:
     return records
 
 
+def journal_timestamp_value(record: dict[str, object]) -> int | None:
+    for field_name in ("_SOURCE_REALTIME_TIMESTAMP", "__REALTIME_TIMESTAMP"):
+        try:
+            return int(str(record.get(field_name)))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def journal_timestamp(record: dict[str, object]) -> str:
-    timestamp = record.get("_SOURCE_REALTIME_TIMESTAMP")
-    try:
-        timestamp_seconds = int(str(timestamp)) / 1_000_000
-    except (TypeError, ValueError):
+    timestamp = journal_timestamp_value(record)
+    if timestamp is None:
         return "unknown"
+    timestamp_seconds = timestamp / 1_000_000
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(
         timespec="seconds"
     )
@@ -150,10 +184,8 @@ def latest_sudo_shutdown_request(
         command = safe_field(command)
         if not is_shutdown_command(command):
             continue
-        timestamp = record.get("_SOURCE_REALTIME_TIMESTAMP")
-        try:
-            sequence = int(str(timestamp))
-        except (TypeError, ValueError):
+        sequence = journal_timestamp_value(record)
+        if sequence is None:
             sequence = -1
         requests.append(
             (
