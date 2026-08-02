@@ -127,6 +127,15 @@ def selects_another_systemd_manager(arguments: list[str]) -> bool:
             return True
         if argument.startswith(("--host=", "--machine=")):
             return True
+        if (
+            argument != "--"
+            and argument.startswith("--")
+            and any(
+                option.startswith(argument.partition("=")[0])
+                for option in {"--host", "--machine"}
+            )
+        ):
+            return True
         if argument.startswith(("-H", "-M")) and argument not in {"-H", "-M"}:
             return True
     return False

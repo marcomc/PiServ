@@ -171,6 +171,20 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_abbreviated_systemctl_manager_selectors_are_not_reported(self) -> None:
+        commands = [
+            "/usr/bin/systemctl --hos=other reboot",
+            "/usr/bin/systemctl --mach=container poweroff",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_user_manager_actions_are_not_reported(self) -> None:
         records = [
             {
