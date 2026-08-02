@@ -163,8 +163,12 @@ def shutdown_command_kind(command: str) -> str | None:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
         return "operation"
+    if operands[0] == "start" and any(
+        operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
+    ):
+        return "operation"
     if (
-        operands[0] in {"isolate", "start"}
+        operands[0] == "isolate"
         and len(operands) > 1
         and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
     ):
@@ -237,6 +241,13 @@ def journal_timestamp_value(record: dict[str, object]) -> int | None:
     return None
 
 
+def journal_sequence_value(record: dict[str, object]) -> int | None:
+    try:
+        return int(str(record.get("__MONOTONIC_TIMESTAMP")))
+    except (TypeError, ValueError):
+        return None
+
+
 def journal_timestamp(record: dict[str, object]) -> str:
     timestamp = journal_timestamp_value(record)
     if timestamp is None:
@@ -251,14 +262,11 @@ def latest_sudo_shutdown_request(
     records: list[dict[str, object]],
 ) -> ShutdownRequest | None:
     latest_request: ShutdownRequest | None = None
-    chronological_records = sorted(
-        enumerate(records),
-        key=lambda indexed_record: (
-            journal_timestamp_value(indexed_record[1]) is None,
-            journal_timestamp_value(indexed_record[1]) or 0,
-            indexed_record[0],
-        ),
-    )
+    chronological_records = list(enumerate(records))
+    if all(journal_sequence_value(record) is not None for record in records):
+        chronological_records.sort(
+            key=lambda indexed_record: journal_sequence_value(indexed_record[1]) or 0
+        )
     for _, record in chronological_records:
         message = record.get("MESSAGE")
         if not isinstance(message, str):

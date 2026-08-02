@@ -291,6 +291,43 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl start reboot.target")
 
+    def test_systemctl_start_of_multiple_units_reports_a_shutdown_target(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl start auxiliary.service reboot.target",
+            }
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(
+            request.command,
+            "/usr/bin/systemctl start auxiliary.service reboot.target",
+        )
+
+    def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
+        self,
+    ) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
+                "__MONOTONIC_TIMESTAMP": "100",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/sbin/shutdown -r +10",
+            },
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "__MONOTONIC_TIMESTAMP": "200",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/sbin/shutdown -c",
+            },
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_journal_reception_timestamp_is_used_when_source_time_is_absent(self) -> None:
         records = [
             {
@@ -382,6 +419,7 @@ class ShutdownNotificationTests(unittest.TestCase):
             tasks,
         )
         self.assertIn("Create missing shutdown notification helper parent directory", tasks)
+        self.assertIn("base_shutdown_notification_script_parent_stat.stat.exists", tasks)
         self.assertIn("Read shutdown notification unit state", tasks)
         self.assertIn("not ansible_check_mode", tasks)
         self.assertIn("base_shutdown_notification_unit_stat.stat.exists", tasks)

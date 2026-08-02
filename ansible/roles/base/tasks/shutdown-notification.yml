@@ -31,6 +31,9 @@
   become: true
 
 - name: Install shutdown notification helper
+  when: >-
+    not ansible_check_mode
+    or base_shutdown_notification_script_parent_stat.stat.exists
   ansible.builtin.template:
     src: piserv-shutdown-notify.py.j2
     dest: "{{ base_shutdown_notification_script_path }}"
