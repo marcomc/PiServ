@@ -4,19 +4,19 @@
     that:
       - >-
         base_shutdown_notification_service_name is
-        match('^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service$')
+        match('^[A-Za-z0-9][A-Za-z0-9_.@-]*[.]service\Z')
       - >-
         base_shutdown_notification_service_name is not
-        search('@[.]service$')
+        search('@[.]service\Z')
       - base_shutdown_notification_service_name | length <= 255
       - >-
         base_shutdown_notification_script_path is
-        match('^/[A-Za-z0-9_./+%${} -]+$')
-      - base_shutdown_notification_script_path is not search('/$')
+        match('^/[A-Za-z0-9_./+%${} -]+\Z')
+      - base_shutdown_notification_script_path is not search('/\Z')
       - base_shutdown_notification_script_path is not search('//')
       - >-
         base_shutdown_notification_script_path is not
-        search('/\.{1,2}(/|$)')
+        search('/\.{1,2}(/|\Z)')
     fail_msg: >-
       The shutdown notification service name must be one bounded, concrete
       .service unit filename with no path components or bare template. The
