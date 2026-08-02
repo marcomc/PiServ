@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import socket
 import subprocess
@@ -400,6 +401,14 @@ def direct_command_options_are_valid(executable: str, arguments: list[str]) -> b
     return True
 
 
+def valid_shutdown_time(operands: list[str]) -> bool:
+    if not operands:
+        return True
+    return operands[0] == "now" or bool(
+        re.fullmatch(r"(?:\+\d+|\d{1,2}:\d{2})", operands[0])
+    )
+
+
 def is_sudo_journal_record(record: dict[str, object]) -> bool:
     return (
         record.get("_COMM") == "sudo"
@@ -426,6 +435,8 @@ def shutdown_command_kind(command: str) -> str | None:
         if executable == "shutdown" and is_shutdown_cancellation(arguments):
             return "cancellation"
         positional_arguments = direct_command_operands(arguments)
+        if executable == "shutdown" and not valid_shutdown_time(positional_arguments):
+            return None
         if executable in {"halt", "poweroff"} and positional_arguments:
             return None
         if executable == "reboot" and len(positional_arguments) > 1:
@@ -454,7 +465,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS and len(operands) == 1:
         return "operation"
-    if operands[0] in {"start", "restart", "reload-or-restart", "force-reload"} and any(
+    if operands[0] in {"start", "restart", "reload-or-restart"} and any(
         operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
     ):
         return "operation"

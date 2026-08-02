@@ -428,6 +428,10 @@ class ShutdownNotificationTests(unittest.TestCase):
         ]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_invalid_shutdown_time_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown definitely-not-a-time"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]
         request = self.notification.latest_sudo_shutdown_request(records)
@@ -604,8 +608,7 @@ class ShutdownNotificationTests(unittest.TestCase):
     def test_systemctl_force_reload_of_a_shutdown_target_is_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl force-reload reboot.target"}]
         request = self.notification.latest_sudo_shutdown_request(records)
-        self.assertIsNotNone(request)
-        self.assertEqual(request.command, "/usr/bin/systemctl force-reload reboot.target")
+        self.assertIsNone(request)
 
     def test_long_dry_run_command_is_not_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot --message=" + ("x" * 600) + " --dry-run"}]
