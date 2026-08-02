@@ -21,6 +21,7 @@
         base_shutdown_notification_condition_path is
         match('^/[A-Za-z0-9_./+%${} -]+\Z')
       - base_shutdown_notification_condition_path is not search('/\Z')
+      - base_shutdown_notification_condition_path is not search(' \Z')
       - base_shutdown_notification_condition_path is not search('//')
       - >-
         base_shutdown_notification_condition_path is not

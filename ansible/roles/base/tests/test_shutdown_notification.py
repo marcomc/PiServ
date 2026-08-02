@@ -532,6 +532,11 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("ConditionPathExists=/etc/mail-%%n.conf", template)
         self.assertIn("ExecCondition=/usr/bin/test -f /etc/mail-%%n.conf", template)
 
+    def test_service_template_preserves_internal_condition_path_space(self) -> None:
+        template = render_service_template("/etc/mail config")
+        self.assertIn("ConditionPathExists=/etc/mail config", template)
+        self.assertIn("ExecCondition=/usr/bin/test -f '/etc/mail config'", template)
+
     def test_service_template_escapes_dollars_in_executable_paths(self) -> None:
         template = render_service_template(
             "/etc/mail-${NAME}.conf",
@@ -578,6 +583,10 @@ class ShutdownNotificationTests(unittest.TestCase):
         )
         self.assertIn(
             "base_shutdown_notification_condition_path is not search('/\\Z')",
+            tasks,
+        )
+        self.assertIn(
+            "base_shutdown_notification_condition_path is not search(' \\Z')",
             tasks,
         )
         self.assertIn(
