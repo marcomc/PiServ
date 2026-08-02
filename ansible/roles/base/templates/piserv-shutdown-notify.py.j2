@@ -59,6 +59,7 @@ SYSTEMCTL_VALUE_OPTIONS = {
     "-n",
     "-o",
     "-p",
+    "-P",
     "-s",
     "-t",
 }
@@ -237,11 +238,7 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
         if argument in SYSTEMCTL_VALUE_OPTIONS or (
             argument != "--"
             and argument.startswith("--")
-            and any(
-                option.startswith(argument)
-                for option in SYSTEMCTL_VALUE_OPTIONS
-                if option.startswith("--")
-            )
+            and sum(1 for option in SYSTEMCTL_VALUE_OPTIONS if option.startswith(argument)) == 1
         ):
             skip_next = True
             continue
@@ -275,6 +272,8 @@ def shutdown_command_kind(command: str) -> str | None:
             return "cancellation"
         positional_arguments = [argument for argument in arguments[1:] if not argument.startswith("-")]
         if executable in {"halt", "poweroff"} and positional_arguments:
+            return None
+        if executable == "reboot" and len(positional_arguments) > 1:
             return None
         return (
             "operation"
