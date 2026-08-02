@@ -203,6 +203,8 @@ def selects_non_system_systemd_manager(arguments: list[str]) -> bool:
 
 def systemctl_when_mode(arguments: list[str]) -> str | None:
     for index, argument in enumerate(arguments[1:], start=1):
+        if argument == "--":
+            break
         option_name, separator, option_value = argument.partition("=")
         if (
             option_name != "--"

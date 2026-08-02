@@ -10,10 +10,10 @@ ConditionPathExists={{ base_shutdown_notification_condition_path }}
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecCondition=/usr/bin/test -f {{ base_shutdown_notification_condition_path | quote }}
-ExecCondition=/usr/bin/test -s {{ base_shutdown_notification_condition_path | quote }}
+ExecCondition=/usr/bin/test -f {{ base_shutdown_notification_condition_path | replace('%', '%%') | quote }}
+ExecCondition=/usr/bin/test -s {{ base_shutdown_notification_condition_path | replace('%', '%%') | quote }}
 ExecStart=/usr/bin/true
-ExecStop={{ base_shutdown_notification_script_path | quote }}
+ExecStop={{ base_shutdown_notification_script_path | replace('%', '%%') | quote }}
 TimeoutStopSec=45s
 
 [Install]
