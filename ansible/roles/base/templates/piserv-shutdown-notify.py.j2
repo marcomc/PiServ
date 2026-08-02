@@ -33,6 +33,7 @@ SYSTEMD_SHUTDOWN_TARGETS = {
     "poweroff.target",
     "halt.target",
     "kexec.target",
+    "soft-reboot.target",
 }
 NON_OPERATIVE_OPTIONS = {
     "shutdown": {"-c", "-k", "--cancel", "--help", "--show", "--version"},
@@ -163,7 +164,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
         return "operation"
-    if operands[0] == "start" and any(
+    if operands[0] in {"start", "restart"} and any(
         operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]
     ):
         return "operation"

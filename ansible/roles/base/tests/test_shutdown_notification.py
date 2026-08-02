@@ -308,6 +308,18 @@ class ShutdownNotificationTests(unittest.TestCase):
             "/usr/bin/systemctl start auxiliary.service reboot.target",
         )
 
+    def test_systemctl_soft_reboot_target_is_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate soft-reboot.target"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl isolate soft-reboot.target")
+
+    def test_systemctl_restart_of_a_shutdown_target_is_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl restart reboot.target"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl restart reboot.target")
+
     def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
         self,
     ) -> None:
