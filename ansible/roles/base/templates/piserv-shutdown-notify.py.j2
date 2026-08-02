@@ -16,8 +16,15 @@ JOURNAL_TIMEOUT_SECONDS = 10
 MAIL_TIMEOUT_SECONDS = 20
 FIELD_LENGTH_LIMIT = 512
 
-SUDO_COMMAND_PREFIX = "COMMAND="
+SUDO_COMMAND_DELIMITER = " ; COMMAND="
 DIRECT_SHUTDOWN_COMMANDS = {"reboot", "poweroff", "halt", "shutdown"}
+TRUSTED_SHUTDOWN_COMMAND_PATHS = {
+    "reboot": {"/usr/sbin/reboot", "/usr/bin/reboot", "/sbin/reboot", "/bin/reboot"},
+    "poweroff": {"/usr/sbin/poweroff", "/usr/bin/poweroff", "/sbin/poweroff", "/bin/poweroff"},
+    "halt": {"/usr/sbin/halt", "/usr/bin/halt", "/sbin/halt", "/bin/halt"},
+    "shutdown": {"/usr/sbin/shutdown", "/usr/bin/shutdown", "/sbin/shutdown", "/bin/shutdown"},
+    "systemctl": {"/usr/bin/systemctl", "/bin/systemctl"},
+}
 SYSTEMD_SHUTDOWN_ACTIONS = {
     "reboot",
     "poweroff",
@@ -165,7 +172,10 @@ def shutdown_command_kind(command: str) -> str | None:
     if not arguments:
         return None
 
-    executable = arguments[0].rsplit("/", maxsplit=1)[-1]
+    executable_path = arguments[0]
+    executable = executable_path.rsplit("/", maxsplit=1)[-1]
+    if executable_path not in TRUSTED_SHUTDOWN_COMMAND_PATHS.get(executable, set()):
+        return None
     if executable in DIRECT_SHUTDOWN_COMMANDS:
         if executable == "shutdown" and is_shutdown_cancellation(arguments):
             return "cancellation"
@@ -301,7 +311,7 @@ def latest_sudo_shutdown_request(
         message = record.get("MESSAGE")
         if not isinstance(message, str):
             continue
-        prefix, separator, command = message.partition(SUDO_COMMAND_PREFIX)
+        prefix, separator, command = message.partition(SUDO_COMMAND_DELIMITER)
         if not separator:
             continue
         requested_by, separator, _ = prefix.partition(":")

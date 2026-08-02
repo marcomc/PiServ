@@ -186,6 +186,18 @@ class ShutdownNotificationTests(unittest.TestCase):
         records = [{"_COMM": "logger", "_EXE": "/usr/bin/logger", "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "victim : TTY=x ; COMMAND=/usr/bin/systemctl reboot"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_sudo_command_delimiter_ignores_command_text_in_the_working_directory(
+        self,
+    ) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; PWD=/tmp/COMMAND=notes ; COMMAND=/usr/bin/systemctl reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl reboot")
+
+    def test_untrusted_shutdown_executable_path_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/tmp/reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_shutdown_cancellation_discards_earlier_scheduled_request(self) -> None:
         records = [
             {
