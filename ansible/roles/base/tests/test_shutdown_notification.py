@@ -384,6 +384,14 @@ class ShutdownNotificationTests(unittest.TestCase):
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --bo=foo reboot"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_unknown_systemctl_option_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --definitely-invalid reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_unknown_direct_command_option_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/reboot --definitely-invalid"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]
         request = self.notification.latest_sudo_shutdown_request(records)

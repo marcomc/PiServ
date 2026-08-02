@@ -64,6 +64,28 @@ SYSTEMCTL_VALUE_OPTIONS = {
     "-s",
     "-t",
 }
+SYSTEMCTL_FLAG_OPTIONS = {
+    "--all",
+    "--force",
+    "--full",
+    "--no-ask-password",
+    "--no-block",
+    "--no-legend",
+    "--no-pager",
+    "--plain",
+    "--quiet",
+    "--runtime",
+    "--show-transaction",
+    "--show-types",
+    "--value",
+}
+SYSTEMCTL_SHORT_FLAG_OPTIONS = {"-a", "-f", "-l", "-q"}
+DIRECT_COMMAND_OPTIONS = {
+    "shutdown": {"-H", "-P", "-h", "-r", "--force", "--halt", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose"},
+    "reboot": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+    "poweroff": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+    "halt": {"-f", "-h", "-p", "-w", "--force", "--halt", "--kexec", "--no-sync", "--no-wall", "--poweroff", "--reboot", "--verbose", "--wtmp-only"},
+}
 SYSTEMCTL_LONG_OPTIONS = {
     option
     for option in (
@@ -71,6 +93,7 @@ SYSTEMCTL_LONG_OPTIONS = {
         | SYSTEMCTL_MANAGER_OPTIONS
         | SYSTEMCTL_NON_SYSTEM_OPTIONS
         | SYSTEMCTL_OFFLINE_OPTIONS
+        | SYSTEMCTL_FLAG_OPTIONS
         | {"--dry-run", "--wait", "--with-dependencies"}
     )
     if option.startswith("--")
@@ -264,6 +287,17 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
             if not separator:
                 skip_next = True
             continue
+        matching_flag_options = {
+            option for option in SYSTEMCTL_FLAG_OPTIONS if option.startswith(option_name)
+        }
+        if matching_flag_options:
+            if len(matching_flag_options) > 1 or separator:
+                return []
+            continue
+        if argument in SYSTEMCTL_SHORT_FLAG_OPTIONS:
+            continue
+        if argument.startswith("-"):
+            return []
         if not argument.startswith("-"):
             operands.append(argument)
     return operands
@@ -279,6 +313,28 @@ def direct_command_operands(arguments: list[str]) -> list[str]:
         if options_ended or not argument.startswith("-"):
             operands.append(argument)
     return operands
+
+
+def direct_command_options_are_valid(executable: str, arguments: list[str]) -> bool:
+    allowed_options = DIRECT_COMMAND_OPTIONS[executable] | NON_OPERATIVE_OPTIONS[executable]
+    for argument in arguments[1:]:
+        if argument == "--":
+            return True
+        option_name, separator, _ = argument.partition("=")
+        if not option_name.startswith("-"):
+            continue
+        matching_options = {
+            option
+            for option in allowed_options
+            if option == option_name
+            or (
+                option_name.startswith("--")
+                and option.startswith(option_name)
+            )
+        }
+        if len(matching_options) != 1 or separator:
+            return False
+    return True
 
 
 def is_sudo_journal_record(record: dict[str, object]) -> bool:
@@ -304,6 +360,8 @@ def shutdown_command_kind(command: str) -> str | None:
     if executable in DIRECT_SHUTDOWN_COMMANDS:
         if executable == "shutdown" and is_shutdown_cancellation(arguments):
             return "cancellation"
+        if not direct_command_options_are_valid(executable, arguments):
+            return None
         positional_arguments = direct_command_operands(arguments)
         if executable in {"halt", "poweroff"} and positional_arguments:
             return None
