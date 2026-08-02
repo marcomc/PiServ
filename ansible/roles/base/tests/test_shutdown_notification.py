@@ -64,7 +64,7 @@ def render_service_template() -> str:
                     "      vars:",
                     "        base_shutdown_notification_condition_path: /etc/msmtprc",
                     "        base_shutdown_notification_script_path: >-",
-                    "          /usr/local/sbin/piserv-shutdown-notify",
+                    "          /opt/PiServ helpers/piserv-shutdown-notify",
                     "",
                 ]
             ),
@@ -425,7 +425,9 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("RemainAfterExit=yes", template)
         self.assertIn("ExecCondition=/usr/bin/test -f /etc/msmtprc", template)
         self.assertIn("ExecCondition=/usr/bin/test -s /etc/msmtprc", template)
-        self.assertIn("ExecStop=/usr/local/sbin/piserv-shutdown-notify", template)
+        self.assertIn(
+            "ExecStop='/opt/PiServ helpers/piserv-shutdown-notify'", template
+        )
         self.assertIn("TimeoutStopSec=45s", template)
         self.assertNotIn("{{", template)
 

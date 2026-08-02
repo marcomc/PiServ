@@ -13,7 +13,7 @@ RemainAfterExit=yes
 ExecCondition=/usr/bin/test -f {{ base_shutdown_notification_condition_path | quote }}
 ExecCondition=/usr/bin/test -s {{ base_shutdown_notification_condition_path | quote }}
 ExecStart=/usr/bin/true
-ExecStop={{ base_shutdown_notification_script_path }}
+ExecStop={{ base_shutdown_notification_script_path | quote }}
 TimeoutStopSec=45s
 
 [Install]
