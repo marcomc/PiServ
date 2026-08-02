@@ -1,4 +1,33 @@
 ---
+- name: Require trusted existing shutdown notification helper ancestors
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import os
+        import stat
+        import sys
+
+        path = os.path.realpath(sys.argv[1])
+        while not os.path.exists(path):
+            parent = os.path.dirname(path)
+            if parent == path:
+                break
+            path = parent
+        while True:
+            path_stat = os.stat(path)
+            if path_stat.st_uid != 0 or stat.S_IMODE(path_stat.st_mode) & 0o022:
+                raise SystemExit(f"unsafe privileged helper ancestor: {path}")
+            parent = os.path.dirname(path)
+            if parent == path:
+                break
+            path = parent
+      - "{{ base_shutdown_notification_script_path | dirname }}"
+  changed_when: false
+  check_mode: false
+  become: true
+
 - name: Read shutdown notification helper parent directory
   ansible.builtin.stat:
     path: "{{ base_shutdown_notification_script_path | dirname }}"

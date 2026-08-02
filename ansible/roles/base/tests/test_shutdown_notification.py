@@ -209,6 +209,10 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_abbreviated_systemctl_user_manager_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --us reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_offline_root_and_image_actions_are_not_reported(self) -> None:
         commands = [
             "/usr/bin/systemctl --root=/tmp reboot",
@@ -540,6 +544,7 @@ class ShutdownNotificationTests(unittest.TestCase):
         tasks = TASKS_PATH.read_text(encoding="utf-8")
 
         self.assertIn("Read shutdown notification helper parent directory", tasks)
+        self.assertIn("Require trusted existing shutdown notification helper ancestors", tasks)
         self.assertIn("base_shutdown_notification_script_path | dirname", tasks)
         self.assertIn(
             "Require a safe existing shutdown notification helper parent directory",
