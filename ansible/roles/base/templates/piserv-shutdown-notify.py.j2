@@ -70,6 +70,7 @@ SYSTEMCTL_FLAG_OPTIONS = {
     "--no-block",
     "--no-legend",
     "--no-pager",
+    "--no-warn",
     "--no-wall",
     "--plain",
     "--quiet",
@@ -272,10 +273,28 @@ def selects_non_system_systemd_manager(arguments: list[str]) -> bool:
 
 
 def systemctl_when_mode(arguments: list[str]) -> str | None:
+    skip_next = False
+    value_options = (
+        SYSTEMCTL_VALUE_OPTIONS
+        | SYSTEMCTL_MANAGER_OPTIONS
+        | SYSTEMCTL_OFFLINE_OPTIONS
+    )
     for index, argument in enumerate(arguments[1:], start=1):
+        if skip_next:
+            skip_next = False
+            continue
         if argument == "--":
             break
         option_name, separator, option_value = argument.partition("=")
+        matching_value_options = {
+            option
+            for option in value_options
+            if option == option_name
+            or (
+                option_name.startswith("--")
+                and option.startswith(option_name)
+            )
+        }
         matching_options = {
             option
             for option in SYSTEMCTL_LONG_OPTIONS
@@ -286,6 +305,8 @@ def systemctl_when_mode(arguments: list[str]) -> str | None:
                 return option_value
             if index + 1 < len(arguments):
                 return arguments[index + 1]
+        if len(matching_value_options) == 1 and not separator:
+            skip_next = True
     return None
 
 

@@ -10,11 +10,18 @@
         import sys
 
         path = os.path.abspath(sys.argv[1])
-        while not os.path.exists(path):
-            parent = os.path.dirname(path)
-            if parent == path:
+        current = os.path.sep
+        for component in path.strip(os.path.sep).split(os.path.sep):
+            current = os.path.join(current, component)
+            try:
+                path_stat = os.lstat(current)
+            except FileNotFoundError:
+                path = os.path.dirname(current)
                 break
-            path = parent
+            if stat.S_ISLNK(path_stat.st_mode):
+                raise SystemExit(f"symlinked privileged helper ancestor: {current}")
+        else:
+            path = current
         while True:
             path_stat = os.lstat(path)
             if stat.S_ISLNK(path_stat.st_mode):

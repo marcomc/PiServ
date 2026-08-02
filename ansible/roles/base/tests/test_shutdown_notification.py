@@ -464,6 +464,21 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --system reboot")
 
+    def test_systemctl_property_value_does_not_cancel_a_request(self) -> None:
+        records = [
+            {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -r +10"},
+            {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000001", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -p --when cancel reboot"},
+        ]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
+
+    def test_systemctl_no_warn_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --no-warn reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --no-warn reboot")
+
     def test_direct_no_wtmp_and_clustered_options_preserve_shutdown_actions(self) -> None:
         commands = [
             "/usr/sbin/reboot -d",
@@ -718,6 +733,7 @@ class ShutdownNotificationTests(unittest.TestCase):
         tasks = TASKS_PATH.read_text(encoding="utf-8")
 
         self.assertIn("Read shutdown notification helper parent directory", tasks)
+        self.assertIn("for component in path.strip(os.path.sep).split(os.path.sep)", tasks)
         self.assertIn("Require trusted existing shutdown notification helper ancestors", tasks)
         self.assertIn("base_shutdown_notification_script_path | dirname", tasks)
         self.assertIn(
