@@ -271,6 +271,9 @@ def shutdown_command_kind(command: str) -> str | None:
     if executable in DIRECT_SHUTDOWN_COMMANDS:
         if executable == "shutdown" and is_shutdown_cancellation(arguments):
             return "cancellation"
+        positional_arguments = [argument for argument in arguments[1:] if not argument.startswith("-")]
+        if executable in {"halt", "poweroff"} and positional_arguments:
+            return None
         return (
             "operation"
             if not has_nonoperative_option(executable, arguments)
@@ -301,7 +304,7 @@ def shutdown_command_kind(command: str) -> str | None:
         return "operation"
     if (
         operands[0] == "isolate"
-        and len(operands) > 1
+        and len(operands) == 2
         and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
     ):
         return "operation"

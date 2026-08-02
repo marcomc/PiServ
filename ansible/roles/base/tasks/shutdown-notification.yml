@@ -9,14 +9,16 @@
         import stat
         import sys
 
-        path = os.path.realpath(sys.argv[1])
+        path = os.path.abspath(sys.argv[1])
         while not os.path.exists(path):
             parent = os.path.dirname(path)
             if parent == path:
                 break
             path = parent
         while True:
-            path_stat = os.stat(path)
+            path_stat = os.lstat(path)
+            if stat.S_ISLNK(path_stat.st_mode):
+                raise SystemExit(f"symlinked privileged helper ancestor: {path}")
             if path_stat.st_uid != 0 or stat.S_IMODE(path_stat.st_mode) & 0o022:
                 raise SystemExit(f"unsafe privileged helper ancestor: {path}")
             parent = os.path.dirname(path)

@@ -336,6 +336,14 @@ class ShutdownNotificationTests(unittest.TestCase):
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot extra"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_direct_halt_and_poweroff_with_operands_are_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/halt extra"}, {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000001", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/poweroff extra"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_isolate_with_extra_operand_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate reboot.target extra"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_abbreviated_split_output_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --out short reboot"}]
         request = self.notification.latest_sudo_shutdown_request(records)
