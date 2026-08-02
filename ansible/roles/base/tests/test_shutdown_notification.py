@@ -292,6 +292,14 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_abbreviated_systemctl_when_show_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --whe show reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_dash_prefixed_verb_after_end_of_options_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -- -h reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_split_when_value_preserves_shutdown_action(self) -> None:
         records = [
             {

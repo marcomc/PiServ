@@ -202,8 +202,16 @@ def selects_non_system_systemd_manager(arguments: list[str]) -> bool:
 
 def systemctl_when_mode(arguments: list[str]) -> str | None:
     for index, argument in enumerate(arguments[1:], start=1):
-        if argument.startswith("--when="):
-            return argument.removeprefix("--when=")
+        option_name, separator, option_value = argument.partition("=")
+        if (
+            option_name != "--"
+            and "--when".startswith(option_name)
+            and option_name.startswith("--")
+        ):
+            if separator:
+                return option_value
+            if index + 1 < len(arguments):
+                return arguments[index + 1]
         if argument == "--when" and index + 1 < len(arguments):
             return arguments[index + 1]
     return None
@@ -212,9 +220,16 @@ def systemctl_when_mode(arguments: list[str]) -> str | None:
 def systemctl_operands(arguments: list[str]) -> list[str]:
     operands: list[str] = []
     skip_next = False
+    options_ended = False
     for argument in arguments[1:]:
         if skip_next:
             skip_next = False
+            continue
+        if argument == "--":
+            options_ended = True
+            continue
+        if options_ended:
+            operands.append(argument)
             continue
         if argument in SYSTEMCTL_VALUE_OPTIONS or (
             argument != "--"
