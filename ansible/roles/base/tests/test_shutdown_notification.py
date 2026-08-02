@@ -340,6 +340,20 @@ class ShutdownNotificationTests(unittest.TestCase):
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/halt extra"}, {"_SOURCE_REALTIME_TIMESTAMP": "1760000000000001", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/poweroff extra"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_direct_commands_reject_operands_after_the_option_marker(self) -> None:
+        commands = [
+            "/usr/sbin/halt -- -w",
+            "/usr/sbin/reboot -- -w extra",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=x ; COMMAND=" + command,
+            }
+            for index, command in enumerate(commands)
+        ]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_isolate_with_extra_operand_is_not_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate reboot.target extra"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
@@ -349,6 +363,10 @@ class ShutdownNotificationTests(unittest.TestCase):
         request = self.notification.latest_sudo_shutdown_request(records)
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --out short reboot")
+
+    def test_systemctl_ambiguous_attached_option_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --bo=foo reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
     def test_systemctl_split_boot_loader_entry_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --boot-loader-entry recovery reboot"}]

@@ -235,14 +235,37 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
         if options_ended:
             operands.append(argument)
             continue
-        if argument in SYSTEMCTL_VALUE_OPTIONS or (
-            argument != "--"
-            and argument.startswith("--")
-            and sum(1 for option in SYSTEMCTL_VALUE_OPTIONS if option.startswith(argument)) == 1
-        ):
-            skip_next = True
+        option_name, separator, _ = argument.partition("=")
+        matching_value_options = {
+            option
+            for option in SYSTEMCTL_VALUE_OPTIONS
+            if option == option_name
+            or (
+                option_name.startswith("--")
+                and option.startswith(option_name)
+            )
+        }
+        if len(matching_value_options) > 1:
+            # systemctl rejects ambiguous option abbreviations. Do not attribute a
+            # later shutdown to a command that could not have executed.
+            return []
+        if matching_value_options:
+            if not separator:
+                skip_next = True
             continue
         if not argument.startswith("-"):
+            operands.append(argument)
+    return operands
+
+
+def direct_command_operands(arguments: list[str]) -> list[str]:
+    operands: list[str] = []
+    options_ended = False
+    for argument in arguments[1:]:
+        if argument == "--" and not options_ended:
+            options_ended = True
+            continue
+        if options_ended or not argument.startswith("-"):
             operands.append(argument)
     return operands
 
@@ -270,7 +293,7 @@ def shutdown_command_kind(command: str) -> str | None:
     if executable in DIRECT_SHUTDOWN_COMMANDS:
         if executable == "shutdown" and is_shutdown_cancellation(arguments):
             return "cancellation"
-        positional_arguments = [argument for argument in arguments[1:] if not argument.startswith("-")]
+        positional_arguments = direct_command_operands(arguments)
         if executable in {"halt", "poweroff"} and positional_arguments:
             return None
         if executable == "reboot" and len(positional_arguments) > 1:
