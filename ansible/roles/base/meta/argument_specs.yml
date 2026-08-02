@@ -248,8 +248,8 @@ argument_specs:
         type: path
         default: /usr/local/sbin/piserv-shutdown-notify
         description: >-
-          Absolute shutdown notification helper path using characters systemd
-          accepts in executable paths.
+          Normalized absolute shutdown notification helper file path using
+          characters systemd accepts in executable paths.
       base_shutdown_notification_recipient:
         type: str
         default: root

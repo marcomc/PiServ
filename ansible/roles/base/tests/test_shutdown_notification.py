@@ -553,8 +553,27 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIn("Validate shutdown notification helper path", tasks)
         self.assertIn("match('^/[A-Za-z0-9_./+%${} -]+$')", tasks)
+        self.assertIn("is not search('/$')", tasks)
+        self.assertIn("is not search('//')", tasks)
+        self.assertIn("search('/\\.{1,2}(/|$)')", tasks)
+        self.assertIn("Read shutdown notification helper destination", tasks)
+        self.assertIn(
+            "Require a regular shutdown notification helper destination",
+            tasks,
+        )
+        self.assertIn("base_shutdown_notification_script_stat.stat.isreg", tasks)
+        self.assertIn(
+            "not base_shutdown_notification_script_stat.stat.islnk",
+            tasks,
+        )
         self.assertLess(
             tasks.index("Validate shutdown notification helper path"),
+            tasks.index(
+                "Require trusted existing shutdown notification helper ancestors"
+            ),
+        )
+        self.assertLess(
+            tasks.index("Read shutdown notification helper destination"),
             tasks.index(
                 "Require trusted existing shutdown notification helper ancestors"
             ),

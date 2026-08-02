@@ -5,10 +5,34 @@
       - >-
         base_shutdown_notification_script_path is
         match('^/[A-Za-z0-9_./+%${} -]+$')
+      - base_shutdown_notification_script_path is not search('/$')
+      - base_shutdown_notification_script_path is not search('//')
+      - >-
+        base_shutdown_notification_script_path is not
+        search('/\.{1,2}(/|$)')
     fail_msg: >-
-      The shutdown notification helper path must be absolute and contain only
-      letters, digits, spaces, slash, dot, underscore, plus, hyphen, percent,
-      dollar, or braces so systemd can execute it literally.
+      The shutdown notification helper path must be a normalized absolute file
+      path and contain only letters, digits, spaces, slash, dot, underscore,
+      plus, hyphen, percent, dollar, or braces so systemd can execute it
+      literally.
+
+- name: Read shutdown notification helper destination
+  ansible.builtin.stat:
+    path: "{{ base_shutdown_notification_script_path }}"
+    follow: false
+  register: base_shutdown_notification_script_stat
+  changed_when: false
+  become: true
+
+- name: Require a regular shutdown notification helper destination
+  when: base_shutdown_notification_script_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - base_shutdown_notification_script_stat.stat.isreg
+      - not base_shutdown_notification_script_stat.stat.islnk
+    fail_msg: >-
+      An existing shutdown notification helper destination must be a regular,
+      non-symlink file.
 
 - name: Require trusted existing shutdown notification helper ancestors
   ansible.builtin.command:
