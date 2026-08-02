@@ -216,7 +216,15 @@ def systemctl_operands(arguments: list[str]) -> list[str]:
         if skip_next:
             skip_next = False
             continue
-        if argument in SYSTEMCTL_VALUE_OPTIONS:
+        if argument in SYSTEMCTL_VALUE_OPTIONS or (
+            argument != "--"
+            and argument.startswith("--")
+            and any(
+                option.startswith(argument)
+                for option in SYSTEMCTL_VALUE_OPTIONS
+                if option.startswith("--")
+            )
+        ):
             skip_next = True
             continue
         if not argument.startswith("-"):
