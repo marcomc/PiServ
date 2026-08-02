@@ -44,7 +44,7 @@ def load_notification_module() -> object:
         return module
 
 
-def render_service_template() -> str:
+def render_service_template(condition_path: str = "/etc/msmtprc") -> str:
     with tempfile.TemporaryDirectory() as temporary_directory:
         temporary_path = Path(temporary_directory)
         output_path = temporary_path / "piserv-shutdown-notify.service"
@@ -62,7 +62,8 @@ def render_service_template() -> str:
                     f"        src: {json.dumps(str(SERVICE_TEMPLATE_PATH))}",
                     f"        dest: {json.dumps(str(output_path))}",
                     "      vars:",
-                    "        base_shutdown_notification_condition_path: /etc/msmtprc",
+                    "        base_shutdown_notification_condition_path: "
+                    + json.dumps(condition_path),
                     "        base_shutdown_notification_script_path: >-",
                     "          /opt/PiServ helpers/piserv-shutdown-notify",
                     "",
@@ -374,6 +375,12 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --boot-loader-entry recovery reboot")
 
+    def test_systemctl_split_kill_value_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --kill-value 9 reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --kill-value 9 reboot")
+
     def test_systemctl_soft_reboot_is_reported(self) -> None:
         records = [
             {
@@ -599,6 +606,11 @@ class ShutdownNotificationTests(unittest.TestCase):
         )
         self.assertIn("TimeoutStopSec=45s", template)
         self.assertNotIn("{{", template)
+
+    def test_service_template_escapes_systemd_specifiers_in_condition_path(self) -> None:
+        template = render_service_template("/etc/mail-%n.conf")
+        self.assertIn("ConditionPathExists=/etc/mail-%%n.conf", template)
+        self.assertIn("ExecCondition=/usr/bin/test -f /etc/mail-%%n.conf", template)
 
     def test_shutdown_notification_tasks_support_custom_paths_and_first_check_mode(
         self,

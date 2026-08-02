@@ -5,7 +5,7 @@ Wants=network-online.target
 After=network-online.target
 Before=shutdown.target
 Conflicts=shutdown.target
-ConditionPathExists={{ base_shutdown_notification_condition_path }}
+ConditionPathExists={{ base_shutdown_notification_condition_path | replace('%', '%%') }}
 
 [Service]
 Type=oneshot
