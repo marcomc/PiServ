@@ -342,6 +342,12 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl isolate soft-reboot.target")
 
+    def test_systemctl_shutdown_target_alias_is_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl isolate runlevel6.target"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl isolate runlevel6.target")
+
     def test_systemctl_restart_of_a_shutdown_target_is_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl restart reboot.target"}]
         request = self.notification.latest_sudo_shutdown_request(records)
@@ -367,6 +373,12 @@ class ShutdownNotificationTests(unittest.TestCase):
     def test_abbreviated_systemctl_dry_run_is_not_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --dry reboot"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_end_of_options_marker_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl -- reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl -- reboot")
 
     def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
         self,

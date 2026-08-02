@@ -46,6 +46,9 @@ SYSTEMD_SHUTDOWN_TARGETS = {
     "halt.target",
     "kexec.target",
     "soft-reboot.target",
+    "runlevel0.target",
+    "runlevel6.target",
+    "ctrl-alt-del.target",
 }
 NON_OPERATIVE_OPTIONS = {
     "shutdown": {"-c", "-k", "--cancel", "--help", "--show", "--version"},
@@ -85,7 +88,11 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
             argument.startswith(f"{option}=") for option in options if option.startswith("--")
         ):
             return True
-        if executable == "systemctl" and "--dry-run".startswith(argument):
+        if (
+            executable == "systemctl"
+            and argument != "--"
+            and "--dry-run".startswith(argument)
+        ):
             return True
         if argument.startswith("-") and not argument.startswith("--"):
             if executable == "shutdown" and any(
