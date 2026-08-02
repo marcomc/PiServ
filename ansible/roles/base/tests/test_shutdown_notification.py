@@ -44,7 +44,10 @@ def load_notification_module() -> object:
         return module
 
 
-def render_service_template(condition_path: str = "/etc/msmtprc") -> str:
+def render_service_template(
+    condition_path: str = "/etc/msmtprc",
+    script_path: str = "/opt/PiServ helpers/piserv-shutdown-notify",
+) -> str:
     with tempfile.TemporaryDirectory() as temporary_directory:
         temporary_path = Path(temporary_directory)
         output_path = temporary_path / "piserv-shutdown-notify.service"
@@ -65,7 +68,7 @@ def render_service_template(condition_path: str = "/etc/msmtprc") -> str:
                     "        base_shutdown_notification_condition_path: "
                     + json.dumps(condition_path),
                     "        base_shutdown_notification_script_path: >-",
-                    "          /opt/PiServ helpers/piserv-shutdown-notify",
+                    "          " + script_path,
                     "",
                 ]
             ),
@@ -509,6 +512,26 @@ class ShutdownNotificationTests(unittest.TestCase):
         template = render_service_template("/etc/mail-%n.conf")
         self.assertIn("ConditionPathExists=/etc/mail-%%n.conf", template)
         self.assertIn("ExecCondition=/usr/bin/test -f /etc/mail-%%n.conf", template)
+
+    def test_service_template_escapes_dollars_in_executable_paths(self) -> None:
+        template = render_service_template(
+            "/etc/mail-${NAME}.conf",
+            "/opt/PiServ ${helpers}/piserv-shutdown-notify",
+        )
+
+        self.assertIn("ConditionPathExists=/etc/mail-${NAME}.conf", template)
+        self.assertIn(
+            "ExecCondition=/usr/bin/test -f '/etc/mail-$${NAME}.conf'",
+            template,
+        )
+        self.assertIn(
+            "ExecCondition=/usr/bin/test -s '/etc/mail-$${NAME}.conf'",
+            template,
+        )
+        self.assertIn(
+            "ExecStop='/opt/PiServ $${helpers}/piserv-shutdown-notify'",
+            template,
+        )
 
     def test_shutdown_notification_tasks_support_custom_paths_and_first_check_mode(
         self,
