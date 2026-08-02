@@ -261,7 +261,7 @@ argument_specs:
       base_shutdown_notification_condition_path:
         type: path
         default: /etc/msmtprc
-        description: Path that must exist before the shutdown notification service runs.
+        description: Normalized absolute path required by the shutdown notification service.
       base_manage_smartmontools:
         type: bool
         default: true

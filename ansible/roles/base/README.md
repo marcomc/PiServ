@@ -78,7 +78,7 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_shutdown_notification_service_name` | `piserv-shutdown-notify.service` | Bounded concrete `.service` unit filename without path components |
 | `base_shutdown_notification_script_path` | `/usr/local/sbin/piserv-shutdown-notify` | Normalized absolute helper file path restricted to systemd-safe executable characters |
 | `base_shutdown_notification_recipient` | `root` | Local recipient for shutdown notification |
-| `base_shutdown_notification_condition_path` | `/etc/msmtprc` | Path required before shutdown notification runs |
+| `base_shutdown_notification_condition_path` | `/etc/msmtprc` | Normalized absolute path required before shutdown notification runs |
 | `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
 | `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
 | `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |

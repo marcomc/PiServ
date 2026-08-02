@@ -571,6 +571,19 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIn("is not search('/\\Z')", tasks)
         self.assertIn("is not search('//')", tasks)
         self.assertIn("search('/\\.{1,2}(/|\\Z)')", tasks)
+        self.assertIn(
+            "base_shutdown_notification_condition_path is\n"
+            "        match('^/[A-Za-z0-9_./+%${} -]+\\Z')",
+            tasks,
+        )
+        self.assertIn(
+            "base_shutdown_notification_condition_path is not search('/\\Z')",
+            tasks,
+        )
+        self.assertIn(
+            "base_shutdown_notification_condition_path is not search('//')",
+            tasks,
+        )
         self.assertIn("Read shutdown notification helper destination", tasks)
         self.assertIn(
             "Require a regular shutdown notification helper destination",

@@ -17,12 +17,20 @@
       - >-
         base_shutdown_notification_script_path is not
         search('/\.{1,2}(/|\Z)')
+      - >-
+        base_shutdown_notification_condition_path is
+        match('^/[A-Za-z0-9_./+%${} -]+\Z')
+      - base_shutdown_notification_condition_path is not search('/\Z')
+      - base_shutdown_notification_condition_path is not search('//')
+      - >-
+        base_shutdown_notification_condition_path is not
+        search('/\.{1,2}(/|\Z)')
     fail_msg: >-
       The shutdown notification service name must be one bounded, concrete
       .service unit filename with no path components or bare template. The
-      helper path must be a normalized absolute file path and contain only
-      letters, digits, spaces, slash, dot, underscore, plus, hyphen, percent,
-      dollar, or braces so systemd can execute it literally.
+      helper and condition paths must be normalized absolute file paths and
+      contain only letters, digits, spaces, slash, dot, underscore, plus,
+      hyphen, percent, dollar, or braces so systemd can use them literally.
 
 - name: Read shutdown notification helper destination
   ansible.builtin.stat:
