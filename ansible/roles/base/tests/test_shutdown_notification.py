@@ -364,6 +364,10 @@ class ShutdownNotificationTests(unittest.TestCase):
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot --message=" + ("x" * 600) + " --dry-run"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_abbreviated_systemctl_dry_run_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --dry reboot"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_monotonic_journal_time_orders_a_cancellation_after_clock_correction(
         self,
     ) -> None:

@@ -40,7 +40,6 @@ SYSTEMCTL_VALUE_OPTIONS = {
     "--when",
 }
 SUDO_EXECUTABLE = "/usr/bin/sudo"
-SUDO_UID = "0"
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
     "poweroff.target",
@@ -85,6 +84,8 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
         if argument in options or any(
             argument.startswith(f"{option}=") for option in options if option.startswith("--")
         ):
+            return True
+        if executable == "systemctl" and "--dry-run".startswith(argument):
             return True
         if argument.startswith("-") and not argument.startswith("--"):
             if executable == "shutdown" and any(
@@ -145,7 +146,6 @@ def is_sudo_journal_record(record: dict[str, object]) -> bool:
     return (
         record.get("_COMM") == "sudo"
         and record.get("_EXE") == SUDO_EXECUTABLE
-        and str(record.get("_UID")) == SUDO_UID
     )
 
 
