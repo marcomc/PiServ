@@ -365,6 +365,21 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --out short reboot")
 
+    def test_ambiguous_systemctl_when_prefix_does_not_cancel_a_request(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/sbin/shutdown -r +10",
+            },
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000001",
+                "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --w cancel reboot",
+            },
+        ]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/sbin/shutdown -r +10")
+
     def test_systemctl_ambiguous_attached_option_is_not_reported(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --bo=foo reboot"}]
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))

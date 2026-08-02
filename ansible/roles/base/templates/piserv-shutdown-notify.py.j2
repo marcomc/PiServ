@@ -64,6 +64,17 @@ SYSTEMCTL_VALUE_OPTIONS = {
     "-s",
     "-t",
 }
+SYSTEMCTL_LONG_OPTIONS = {
+    option
+    for option in (
+        SYSTEMCTL_VALUE_OPTIONS
+        | SYSTEMCTL_MANAGER_OPTIONS
+        | SYSTEMCTL_NON_SYSTEM_OPTIONS
+        | SYSTEMCTL_OFFLINE_OPTIONS
+        | {"--dry-run", "--wait", "--with-dependencies"}
+    )
+    if option.startswith("--")
+}
 SUDO_EXECUTABLE = "/usr/bin/sudo"
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
@@ -208,17 +219,16 @@ def systemctl_when_mode(arguments: list[str]) -> str | None:
         if argument == "--":
             break
         option_name, separator, option_value = argument.partition("=")
-        if (
-            option_name != "--"
-            and "--when".startswith(option_name)
-            and option_name.startswith("--")
-        ):
+        matching_options = {
+            option
+            for option in SYSTEMCTL_LONG_OPTIONS
+            if option.startswith(option_name)
+        }
+        if option_name == "--when" or matching_options == {"--when"}:
             if separator:
                 return option_value
             if index + 1 < len(arguments):
                 return arguments[index + 1]
-        if argument == "--when" and index + 1 < len(arguments):
-            return arguments[index + 1]
     return None
 
 
