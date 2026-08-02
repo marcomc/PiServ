@@ -38,11 +38,8 @@ SYSTEMCTL_OFFLINE_OPTIONS = {"--root", "--image"}
 SYSTEMCTL_VALUE_OPTIONS = {
     "--boot-loader-entry",
     "--boot-loader-menu",
-    "--boot-loader-menu-timeout",
     "--check-inhibitors",
     "--job-mode",
-    "--job-timeout",
-    "--job-running-timeout",
     "--kill-value",
     "--kill-whom",
     "--legend",
@@ -72,6 +69,7 @@ SYSTEMCTL_FLAG_OPTIONS = {
     "--no-block",
     "--no-legend",
     "--no-pager",
+    "--no-wall",
     "--plain",
     "--quiet",
     "--runtime",
@@ -366,10 +364,10 @@ def shutdown_command_kind(command: str) -> str | None:
     if executable_path not in TRUSTED_SHUTDOWN_COMMAND_PATHS.get(executable, set()):
         return None
     if executable in DIRECT_SHUTDOWN_COMMANDS:
-        if executable == "shutdown" and is_shutdown_cancellation(arguments):
-            return "cancellation"
         if not direct_command_options_are_valid(executable, arguments):
             return None
+        if executable == "shutdown" and is_shutdown_cancellation(arguments):
+            return "cancellation"
         positional_arguments = direct_command_operands(arguments)
         if executable in {"halt", "poweroff"} and positional_arguments:
             return None
