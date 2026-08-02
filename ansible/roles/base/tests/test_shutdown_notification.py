@@ -140,6 +140,54 @@ class ShutdownNotificationTests(unittest.TestCase):
 
         self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
 
+    def test_systemctl_actions_for_another_manager_are_not_reported(self) -> None:
+        commands = [
+            "/usr/bin/systemctl --host=other reboot",
+            "/usr/bin/systemctl -H other poweroff",
+            "/usr/bin/systemctl --machine=container halt",
+            "/usr/bin/systemctl -Mcontainer kexec",
+        ]
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": str(1_760_000_000_000_000 + index),
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                f"COMMAND={command}",
+            }
+            for index, command in enumerate(commands)
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_shutdown_cancellation_discards_earlier_scheduled_request(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/sbin/shutdown -r +10",
+            },
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000001000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/sbin/shutdown -c",
+            },
+        ]
+
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
+    def test_systemctl_soft_reboot_is_reported(self) -> None:
+        records = [
+            {
+                "_SOURCE_REALTIME_TIMESTAMP": "1760000000000000",
+                "MESSAGE": "admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; "
+                "COMMAND=/usr/bin/systemctl soft-reboot",
+            }
+        ]
+
+        request = self.notification.latest_sudo_shutdown_request(records)
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl soft-reboot")
+
     def test_command_text_containing_shutdown_is_not_misclassified(self) -> None:
         records = [
             {

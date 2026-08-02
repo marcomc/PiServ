@@ -24,7 +24,9 @@ SYSTEMD_SHUTDOWN_ACTIONS = {
     "poweroff",
     "halt",
     "kexec",
+    "soft-reboot",
 }
+SYSTEMCTL_MANAGER_OPTIONS = {"--host", "-H", "--machine", "-M"}
 SYSTEMD_SHUTDOWN_TARGETS = {
     "reboot.target",
     "poweroff.target",
@@ -79,31 +81,68 @@ def has_nonoperative_option(executable: str, arguments: list[str]) -> bool:
     return False
 
 
-def is_shutdown_command(command: str) -> bool:
+def is_shutdown_cancellation(arguments: list[str]) -> bool:
+    for argument in arguments[1:]:
+        if argument in {"-c", "--cancel"}:
+            return True
+        if argument.startswith("-") and not argument.startswith("--"):
+            if "c" in argument[1:]:
+                return True
+    return False
+
+
+def selects_another_systemd_manager(arguments: list[str]) -> bool:
+    for argument in arguments[1:]:
+        if argument in SYSTEMCTL_MANAGER_OPTIONS:
+            return True
+        if argument.startswith(("--host=", "--machine=")):
+            return True
+        if argument.startswith(("-H", "-M")) and argument not in {"-H", "-M"}:
+            return True
+    return False
+
+
+def shutdown_command_kind(command: str) -> str | None:
+    """Classify a sudo command as an operation, cancellation, or neither."""
     try:
         arguments = shlex.split(command)
     except ValueError:
-        return False
+        return None
     if not arguments:
-        return False
+        return None
 
     executable = arguments[0].rsplit("/", maxsplit=1)[-1]
     if executable in DIRECT_SHUTDOWN_COMMANDS:
-        return not has_nonoperative_option(executable, arguments)
+        if executable == "shutdown" and is_shutdown_cancellation(arguments):
+            return "cancellation"
+        return (
+            "operation"
+            if not has_nonoperative_option(executable, arguments)
+            else None
+        )
     if executable != "systemctl":
-        return False
-    if has_nonoperative_option(executable, arguments):
-        return False
+        return None
+    if (
+        has_nonoperative_option(executable, arguments)
+        or selects_another_systemd_manager(arguments)
+    ):
+        return None
     operands = [argument for argument in arguments[1:] if not argument.startswith("-")]
     if not operands:
-        return False
+        return None
     if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
-        return True
-    return (
+        return "operation"
+    if (
         operands[0] == "isolate"
         and len(operands) > 1
         and operands[1] in SYSTEMD_SHUTDOWN_TARGETS
-    )
+    ):
+        return "operation"
+    return None
+
+
+def is_shutdown_command(command: str) -> bool:
+    return shutdown_command_kind(command) == "operation"
 
 
 def system_state() -> str:
@@ -180,8 +219,16 @@ def journal_timestamp(record: dict[str, object]) -> str:
 def latest_sudo_shutdown_request(
     records: list[dict[str, object]],
 ) -> ShutdownRequest | None:
-    requests: list[tuple[int, ShutdownRequest]] = []
-    for record in records:
+    latest_request: ShutdownRequest | None = None
+    chronological_records = sorted(
+        enumerate(records),
+        key=lambda indexed_record: (
+            journal_timestamp_value(indexed_record[1]) is None,
+            journal_timestamp_value(indexed_record[1]) or 0,
+            indexed_record[0],
+        ),
+    )
+    for _, record in chronological_records:
         message = record.get("MESSAGE")
         if not isinstance(message, str):
             continue
@@ -192,25 +239,19 @@ def latest_sudo_shutdown_request(
         if not separator:
             continue
         command = safe_field(command)
-        if not is_shutdown_command(command):
+        command_kind = shutdown_command_kind(command)
+        if command_kind is None:
             continue
-        sequence = journal_timestamp_value(record)
-        if sequence is None:
-            sequence = -1
-        requests.append(
-            (
-                sequence,
-                ShutdownRequest(
-                    requested_at=journal_timestamp(record),
-                    requested_by=safe_field(requested_by),
-                    command=command,
-                ),
-            )
+        if command_kind == "cancellation":
+            latest_request = None
+            continue
+        latest_request = ShutdownRequest(
+            requested_at=journal_timestamp(record),
+            requested_by=safe_field(requested_by),
+            command=command,
         )
 
-    if not requests:
-        return None
-    return max(requests, key=lambda item: item[0])[1]
+    return latest_request
 
 
 def shutdown_request() -> ShutdownRequest | None:
