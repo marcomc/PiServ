@@ -44,6 +44,7 @@ SYSTEMCTL_VALUE_OPTIONS = {
     "--job-timeout",
     "--job-running-timeout",
     "--kill-whom",
+    "--legend",
     "--lines",
     "--message",
     "--output",
@@ -292,7 +293,7 @@ def shutdown_command_kind(command: str) -> str | None:
     operands = systemctl_operands(arguments)
     if not operands:
         return None
-    if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS:
+    if operands[0] in SYSTEMD_SHUTDOWN_ACTIONS and len(operands) == 1:
         return "operation"
     if operands[0] in {"start", "restart", "reload-or-restart", "force-reload"} and any(
         operand in SYSTEMD_SHUTDOWN_TARGETS for operand in operands[1:]

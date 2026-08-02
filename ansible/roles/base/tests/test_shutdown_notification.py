@@ -326,6 +326,16 @@ class ShutdownNotificationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.command, "/usr/bin/systemctl --output short reboot")
 
+    def test_systemctl_split_legend_value_preserves_shutdown_action(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --legend no reboot"}]
+        request = self.notification.latest_sudo_shutdown_request(records)
+        self.assertIsNotNone(request)
+        self.assertEqual(request.command, "/usr/bin/systemctl --legend no reboot")
+
+    def test_systemctl_shutdown_action_with_extra_operand_is_not_reported(self) -> None:
+        records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl reboot extra"}]
+        self.assertIsNone(self.notification.latest_sudo_shutdown_request(records))
+
     def test_systemctl_abbreviated_split_output_preserves_shutdown_action(self) -> None:
         records = [{"_SOURCE_REALTIME_TIMESTAMP": "1760000000000000", "MESSAGE": "admin : TTY=x ; COMMAND=/usr/bin/systemctl --out short reboot"}]
         request = self.notification.latest_sudo_shutdown_request(records)
