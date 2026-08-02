@@ -336,12 +336,8 @@ class ShutdownNotificationTests(unittest.TestCase):
             self.notification,
             "journal_records",
             return_value=[logind_record, sudo_record],
-        ) as journal_records, patch.object(
-            self.notification.time,
-            "monotonic_ns",
-            return_value=10_500_000_000,
-        ):
-            evidence = self.notification.shutdown_evidence()
+        ) as journal_records:
+            evidence = self.notification.shutdown_evidence(10_500_000)
 
         self.assertIsNotNone(evidence)
         self.assertEqual(
@@ -364,11 +360,11 @@ class ShutdownNotificationTests(unittest.TestCase):
             ), patch.object(
                 self.notification.time,
                 "monotonic_ns",
-                return_value=10_000_000_000,
-            ):
-                evidence = self.notification.shutdown_evidence()
+            ) as monotonic_ns:
+                evidence = self.notification.shutdown_evidence(10_000_000)
 
             self.assertIsNone(evidence)
+            monotonic_ns.assert_not_called()
 
     def test_journal_queries_are_bounded_to_the_current_boot_tail(self) -> None:
         completed = subprocess.CompletedProcess(
@@ -462,24 +458,41 @@ class ShutdownNotificationTests(unittest.TestCase):
             sudo_user="admin",
             command="/usr/bin/systemctl reboot",
         )
+        call_order: list[str] = []
         with (
             patch.object(self.notification, "mail_config_available", return_value=True),
-            patch.object(self.notification, "shutdown_in_progress", return_value=True),
+            patch.object(
+                self.notification,
+                "shutdown_in_progress",
+                side_effect=lambda: call_order.append("system-state") or True,
+            ),
             patch.object(
                 self.notification,
                 "shutdown_evidence",
-                return_value=evidence,
+                side_effect=lambda observed: (
+                    call_order.append(f"evidence:{observed}") or evidence
+                ),
             ) as shutdown_evidence,
             patch.object(
                 self.notification.socket,
-                "getfqdn",
-                return_value="PiServ.local",
+                "gethostname",
+                return_value="PiServ",
+            ),
+            patch.object(
+                self.notification.time,
+                "monotonic_ns",
+                side_effect=lambda: call_order.append("helper-start")
+                or 10_500_000_000,
             ),
             patch.object(self.notification.subprocess, "run") as subprocess_run,
         ):
             self.assertEqual(self.notification.main(), 0)
 
-        shutdown_evidence.assert_called_once_with()
+        shutdown_evidence.assert_called_once_with(10_500_000)
+        self.assertEqual(
+            call_order,
+            ["helper-start", "system-state", "evidence:10500000"],
+        )
         subprocess_run.assert_called_once_with(
             ["/usr/sbin/sendmail", "-t"],
             input=ANY,
@@ -488,7 +501,7 @@ class ShutdownNotificationTests(unittest.TestCase):
             timeout=self.notification.MAIL_TIMEOUT_SECONDS,
         )
         payload = subprocess_run.call_args.kwargs["input"]
-        self.assertIn("Host: PiServ.local", payload)
+        self.assertIn("Host: PiServ", payload)
         self.assertIn("Nearby sudo user: admin", payload)
         self.assertIn("Nearby sudo command: /usr/bin/systemctl reboot", payload)
 

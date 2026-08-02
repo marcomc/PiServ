@@ -207,9 +207,8 @@ def correlate_shutdown_evidence(
     )
 
 
-def shutdown_evidence() -> ShutdownEvidence | None:
+def shutdown_evidence(observed_monotonic: int) -> ShutdownEvidence | None:
     records = journal_records("systemd-logind", "sudo")
-    observed_monotonic = time.monotonic_ns() // 1_000
     recent_records = [
         record
         for record in records
@@ -265,11 +264,15 @@ def notification_payload(hostname: str, evidence: ShutdownEvidence | None) -> st
 
 
 def main() -> int:
+    helper_started_monotonic = time.monotonic_ns() // 1_000
     if not mail_config_available() or not shutdown_in_progress():
         return 0
 
-    hostname = socket.getfqdn() or socket.gethostname()
-    payload = notification_payload(hostname, shutdown_evidence())
+    hostname = socket.gethostname()
+    payload = notification_payload(
+        hostname,
+        shutdown_evidence(helper_started_monotonic),
+    )
     subprocess.run(
         ["/usr/sbin/sendmail", "-t"],
         input=payload,
