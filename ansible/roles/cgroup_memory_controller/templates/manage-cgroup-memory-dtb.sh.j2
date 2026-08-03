@@ -4,7 +4,6 @@ set -euo pipefail
 source_dtb={{ cgroup_memory_controller_vendor_dtb | quote }}
 config_path={{ cgroup_memory_controller_config_path | quote }}
 managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
-managed_dtb_name={{ cgroup_memory_controller_managed_dtb_name | quote }}
 disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
 refresh_dependency_path={{ cgroup_memory_controller_kernel_refresh_dependency_path | quote }}
 reboot_mode_path={{ cgroup_memory_controller_reboot_mode_path | quote }}
@@ -15,7 +14,7 @@ vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory
 backup_manifest_path={{ (cgroup_memory_controller_backup_dir ~ '/backup-checksums.sha256') | quote }}
 source_state_path={{ (cgroup_memory_controller_backup_dir ~ '/current-source-state') | quote }}
 
-readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
+readonly source_dtb config_path managed_dtb_path disabled_argument
 readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_path
 readonly reboot_mode_path required_reboot_mode backup_manifest_path source_state_path
 readonly fdtget_binary=/usr/bin/fdtget
@@ -23,7 +22,7 @@ readonly fdtput_binary=/usr/bin/fdtput
 readonly sha256sum_binary=/usr/bin/sha256sum
 readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
 readonly end_marker={{ ('# END ' ~ cgroup_memory_controller_config_marker) | quote }}
-readonly managed_config_line="device_tree=${managed_dtb_name}"
+readonly managed_config_line="device_tree=${managed_dtb_path##*/}"
 readonly managed_filter_line='[all]'
 
 work_directory=''
@@ -146,6 +145,7 @@ require_safe_backups() {
   local config_identity
   local expected_manifest
   local manifest_identity
+  local reboot_identity
   local retained_manifest
   local source_identity
   local -a backup_hashes=()
@@ -159,6 +159,10 @@ require_safe_backups() {
     require_private_root_file "${backup_path}"
   done
   config_identity="$(stat -c '%d:%i' "${config_path}")"
+  reboot_identity=''
+  if [[ -n "${reboot_mode_path}" ]]; then
+    reboot_identity="$(stat -c '%d:%i' "${reboot_mode_path}")"
+  fi
   source_identity=''
   if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
     source_identity="$(stat -c '%d:%i' "${source_dtb}")"
@@ -170,6 +174,8 @@ require_safe_backups() {
       fail "boot backup aliases firmware configuration: ${backup_path}"
     [[ -z "${source_identity}" || "${backup_identity}" != "${source_identity}" ]] || \
       fail "boot backup aliases vendor Device Tree: ${backup_path}"
+    [[ -z "${reboot_identity}" || "${backup_identity}" != "${reboot_identity}" ]] || \
+      fail "boot backup aliases active reboot-mode control: ${backup_path}"
     backup_identities+=("${backup_identity}")
     backup_hashes+=("$("${sha256sum_binary}" "${backup_path}" | awk '{print $1}')")
   done
@@ -178,6 +184,7 @@ require_safe_backups() {
   manifest_identity="$(stat -c '%d:%i' "${backup_manifest_path}")"
   [[ "${manifest_identity}" != "${config_identity}" && \
     "${manifest_identity}" != "${source_identity}" && \
+    "${manifest_identity}" != "${reboot_identity}" && \
     "${manifest_identity}" != "${backup_identities[0]}" && \
     "${manifest_identity}" != "${backup_identities[1]}" ]] || \
     fail 'boot backup checksum manifest aliases a protected artifact'
@@ -312,7 +319,6 @@ install_managed_config() {
 inspect_source_bootargs() {
   local argument
   local disabled_argument_count=0
-  local replacement_argument_count=0
   local -a source_arguments
   local -a replacement_arguments
 
@@ -331,14 +337,12 @@ inspect_source_bootargs() {
       ((disabled_argument_count += 1))
     else
       replacement_arguments+=("${argument}")
-      ((replacement_argument_count += 1))
     fi
   done
 
   case "${disabled_argument_count}" in
     0)
       controller_status='vendor-enabled'
-      replacement_bootargs="${source_bootargs}"
       ;;
     1)
       controller_status='managed-dtb-required'
@@ -348,7 +352,7 @@ inspect_source_bootargs() {
       ;;
   esac
 
-  ((replacement_argument_count > 0)) || \
+  [[ -n "${replacement_arguments[*]}" ]] || \
     fail "removing ${disabled_argument} would leave boot arguments empty"
   replacement_bootargs="${replacement_arguments[*]}"
 }

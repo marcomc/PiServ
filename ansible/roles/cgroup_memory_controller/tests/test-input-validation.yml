@@ -14,9 +14,6 @@
     - name: Reject invalid cgroup memory-controller role inputs
       ansible.builtin.include_tasks: assert-invalid-role-input.yml
       loop:
-        - name: inconsistent managed DTB path
-          managed_name: expected.dtb
-          managed_path: /boot/firmware/different.dtb
         - name: non-atomic disabled argument
           disabled_argument: cgroup_disable memory
         - name: managed hook skipped by run-parts

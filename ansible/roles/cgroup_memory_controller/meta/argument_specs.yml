@@ -30,10 +30,6 @@ argument_specs:
         type: path
         default: /boot/firmware/config.txt
         description: Firmware configuration file that selects the managed Device Tree.
-      cgroup_memory_controller_managed_dtb_name:
-        type: str
-        default: ansible-cgroup-memory.dtb
-        description: Managed Device Tree filename including the .dtb suffix.
       cgroup_memory_controller_managed_dtb_path:
         type: path
         default: /boot/firmware/ansible-cgroup-memory.dtb

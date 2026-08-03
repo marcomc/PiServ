@@ -11,7 +11,6 @@ piserv_glances_port: 61208
 # of PiServ-specific paths and kernel assumptions.
 cgroup_memory_controller_vendor_dtb: /boot/firmware/bcm2712-rpi-5-b.dtb
 cgroup_memory_controller_config_path: /boot/firmware/config.txt
-cgroup_memory_controller_managed_dtb_name: piserv-cgroup-memory.dtb
 cgroup_memory_controller_managed_dtb_path: >-
   /boot/firmware/piserv-cgroup-memory.dtb
 cgroup_memory_controller_helper_path: >-

@@ -6,9 +6,7 @@ cgroup_memory_controller_packages:
   - device-tree-compiler
 cgroup_memory_controller_vendor_dtb: ""
 cgroup_memory_controller_config_path: /boot/firmware/config.txt
-cgroup_memory_controller_managed_dtb_name: ansible-cgroup-memory.dtb
-cgroup_memory_controller_managed_dtb_path: >-
-  /boot/firmware/{{ cgroup_memory_controller_managed_dtb_name }}
+cgroup_memory_controller_managed_dtb_path: /boot/firmware/ansible-cgroup-memory.dtb
 cgroup_memory_controller_disabled_argument: cgroup_disable=memory
 cgroup_memory_controller_helper_path: >-
   /usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb

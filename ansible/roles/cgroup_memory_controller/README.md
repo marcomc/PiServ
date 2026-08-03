@@ -65,7 +65,6 @@ ansible-galaxy role install marcomc.cgroup_memory_controller,0.1.0
 | `cgroup_memory_controller_enabled` | `true` | Install and select the managed DTB; set `false` for rollback |
 | `cgroup_memory_controller_vendor_dtb` | `""` | Required active vendor DTB source |
 | `cgroup_memory_controller_config_path` | `/boot/firmware/config.txt` | Firmware configuration file |
-| `cgroup_memory_controller_managed_dtb_name` | `ansible-cgroup-memory.dtb` | Managed DTB filename selected by firmware |
 | `cgroup_memory_controller_managed_dtb_path` | `/boot/firmware/ansible-cgroup-memory.dtb` | Managed DTB destination |
 | `cgroup_memory_controller_disabled_argument` | `cgroup_disable=memory` | Exact vendor boot argument to remove |
 | `cgroup_memory_controller_helper_path` | `/usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb` | Generation and rollback helper |

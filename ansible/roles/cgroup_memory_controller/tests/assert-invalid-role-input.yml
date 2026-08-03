@@ -7,9 +7,6 @@
         tasks_from: configuration.yml
       vars:
         cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
-        cgroup_memory_controller_managed_dtb_name: >-
-          {{ cgroup_memory_controller_invalid_input_case.managed_name
-             | default('managed.dtb') }}
         cgroup_memory_controller_managed_dtb_path: >-
           {{ cgroup_memory_controller_invalid_input_case.managed_path
              | default('/boot/firmware/managed.dtb') }}

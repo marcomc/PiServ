@@ -10,15 +10,9 @@
       - cgroup_memory_controller_config_path is match('^/[A-Za-z0-9_./-]+\\Z')
       - "'..' not in cgroup_memory_controller_config_path"
       - >-
-        cgroup_memory_controller_managed_dtb_name
-        is match('^[A-Za-z0-9._-]+\\.dtb\\Z')
-      - >-
         cgroup_memory_controller_managed_dtb_path
         is match('^/[A-Za-z0-9_./-]+\\.dtb\\Z')
       - "'..' not in cgroup_memory_controller_managed_dtb_path"
-      - >-
-        (cgroup_memory_controller_managed_dtb_path | basename)
-        == cgroup_memory_controller_managed_dtb_name
       - >-
         (cgroup_memory_controller_managed_dtb_path | dirname)
         == (cgroup_memory_controller_config_path | dirname)
@@ -439,7 +433,10 @@
                 | default('')
                 | b64decode
               )
-              and ('device_tree=' ~ cgroup_memory_controller_managed_dtb_name)
+              and (
+                'device_tree='
+                ~ (cgroup_memory_controller_managed_dtb_path | basename)
+              )
               not in (
                 cgroup_memory_controller_config_before_rollback.content
                 | default('')
