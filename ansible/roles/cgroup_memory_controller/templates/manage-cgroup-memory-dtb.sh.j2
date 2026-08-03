@@ -6,11 +6,15 @@ config_path={{ cgroup_memory_controller_config_path | quote }}
 managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
 managed_dtb_name={{ cgroup_memory_controller_managed_dtb_name | quote }}
 disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
+refresh_dependency_path={{ cgroup_memory_controller_kernel_refresh_dependency_path | quote }}
+backup_dir={{ cgroup_memory_controller_backup_dir | quote }}
 config_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_config_backup_filename) | quote }}
 vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_vendor_dtb_backup_filename) | quote }}
+source_state_path={{ (cgroup_memory_controller_backup_dir ~ '/current-source-state') | quote }}
 
 readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
-readonly config_backup_path vendor_backup_path
+readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_path
+readonly source_state_path
 readonly fdtget_binary=/usr/bin/fdtget
 readonly fdtput_binary=/usr/bin/fdtput
 readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
@@ -21,7 +25,10 @@ readonly managed_filter_line='[all]'
 work_directory=''
 config_temp=''
 managed_dtb_temp=''
+source_state_temp=''
 source_bootargs=''
+source_sha256='not-inspected'
+source_state_changed=false
 replacement_bootargs=''
 controller_status=''
 candidate_dtb_path=''
@@ -38,6 +45,9 @@ cleanup() {
   fi
   if [[ -n "${managed_dtb_temp}" && -e "${managed_dtb_temp}" ]]; then
     rm -f -- "${managed_dtb_temp}"
+  fi
+  if [[ -n "${source_state_temp}" && -e "${source_state_temp}" ]]; then
+    rm -f -- "${source_state_temp}"
   fi
   if [[ -n "${work_directory}" && -d "${work_directory}" ]]; then
     rm -rf -- "${work_directory}"
@@ -78,6 +88,30 @@ require_safe_root_file() {
     fail "${description} is writable by its group or other users: ${file_path}"
 }
 
+require_safe_private_directory() {
+  local directory_path="$1"
+  local directory_mode
+  local directory_owner
+
+  [[ -d "${directory_path}" && ! -L "${directory_path}" ]] || \
+    fail "expected private directory at ${directory_path}"
+  directory_owner="$(stat -c '%u:%g' "${directory_path}")"
+  [[ "${directory_owner}" == '0:0' ]] || \
+    fail "private directory is not owned by root:root: ${directory_path}"
+  directory_mode="$(stat -c '%a' "${directory_path}")"
+  [[ "${directory_mode}" == '700' ]] || \
+    fail "private directory is not mode 0700: ${directory_path}"
+}
+
+require_safe_refresh_dependency() {
+  [[ -n "${refresh_dependency_path}" ]] || return 0
+
+  require_safe_root_file "${refresh_dependency_path}" \
+    'firmware-refresh dependency'
+  [[ -x "${refresh_dependency_path}" ]] || \
+    fail "firmware-refresh dependency is not executable: ${refresh_dependency_path}"
+}
+
 require_safe_backups() {
   local backup_path
   local backup_identity
@@ -87,6 +121,7 @@ require_safe_backups() {
   local source_identity
   local -a backup_identities=()
 
+  require_safe_private_directory "${backup_dir}"
   config_identity="$(stat -c '%d:%i' "${config_path}")"
   source_identity="$(stat -c '%d:%i' "${source_dtb}")"
   for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
@@ -172,32 +207,34 @@ prepare_managed_config() {
   config_temp="$(mktemp "${config_path}.cgroup-memory-controller.XXXXXX")"
 
   awk -v begin="${begin_marker}" -v end="${end_marker}" \
-    -v desired="${desired_state}" -v managed="${managed_config_line}" '
+    -v reset="${managed_filter_line}" '
     $0 == begin {
-      if (desired == "present") {
-        print begin
-        print "[all]"
-        print managed
-      }
       inside = 1
       next
     }
     $0 == end {
-      if (desired == "present") print end
       inside = 0
       pending_reset = 1
       next
     }
     inside { next }
     pending_reset {
-      if ($0 != "[all]") print "[all]"
+      if ($0 == reset) {
+        pending_reset = 0
+        deferred_reset = 1
+        next
+      }
+      print reset
       pending_reset = 0
     }
+    deferred_reset {
+      print reset
+      deferred_reset = 0
+    }
     { print }
-    END { if (pending_reset) print "[all]" }
   ' "${config_path}" > "${config_temp}"
 
-  if [[ "${desired_state}" == 'present' && "${marker_count}" == '0' ]]; then
+  if [[ "${desired_state}" == 'present' ]]; then
     printf '%s\n%s\n%s\n%s\n%s\n' \
       "${begin_marker}" "${managed_filter_line}" "${managed_config_line}" \
       "${end_marker}" "${managed_filter_line}" >> "${config_temp}"
@@ -232,6 +269,7 @@ inspect_source_bootargs() {
   require_command "${fdtget_binary}"
 
   source_bootargs="$("${fdtget_binary}" --type s "${source_dtb}" /chosen bootargs)"
+  source_sha256="$(sha256sum "${source_dtb}" | awk '{print $1}')"
   [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
   [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
 
@@ -286,18 +324,40 @@ prepare_managed_dtb() {
 
 print_status() {
   local changed="$1"
-  local source_sha256='not-inspected'
 
-  if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
-    source_sha256="$(sha256sum "${source_dtb}" | awk '{print $1}')"
-  fi
   printf 'status=%s\n' "${controller_status}"
   printf 'changed=%s\n' "${changed}"
   printf 'source_dtb_sha256=%s\n' "${source_sha256}"
 }
 
+write_source_state() {
+  local state_mode
+  local state_owner
+
+  source_state_temp="$(mktemp "${source_state_path}.XXXXXX")"
+  printf 'status=%s\nsource_dtb_sha256=%s\n' \
+    "${controller_status}" "${source_sha256}" > "${source_state_temp}"
+  chown root:root "${source_state_temp}"
+  chmod 0600 "${source_state_temp}"
+  if [[ -f "${source_state_path}" && ! -L "${source_state_path}" ]]; then
+    state_owner="$(stat -c '%u:%g' "${source_state_path}")"
+    state_mode="$(stat -c '%a' "${source_state_path}")"
+    if [[ "${state_owner}" == '0:0' && "${state_mode}" == '600' ]] && \
+      cmp -s "${source_state_temp}" "${source_state_path}"; then
+      rm -f -- "${source_state_temp}"
+      source_state_temp=''
+      return 0
+    fi
+  fi
+  sync -f "${source_state_temp}"
+  mv -f -- "${source_state_temp}" "${source_state_path}"
+  source_state_temp=''
+  sync -f "${backup_dir}"
+  source_state_changed=true
+}
+
 disable_managed_dtb() {
-  local changed=false
+  local changed="${source_state_changed}"
 
   if [[ "${marker_count}" == '1' ]]; then
     prepare_managed_config absent
@@ -329,7 +389,7 @@ check_disable_managed_dtb() {
 
 apply_managed_dtb() {
   local installed_bootargs
-  local changed=false
+  local changed="${source_state_changed}"
 
   prepare_managed_dtb
   if [[ ! -f "${managed_dtb_path}" ]] || \
@@ -400,7 +460,9 @@ main() {
       if [[ "${mode}" == '--check' ]]; then
         check_managed_dtb
       else
+        require_safe_refresh_dependency
         require_safe_backups
+        write_source_state
         if [[ "${controller_status}" == 'vendor-enabled' ]]; then
           disable_managed_dtb
         else

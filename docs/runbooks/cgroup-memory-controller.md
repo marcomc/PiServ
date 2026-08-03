@@ -39,7 +39,9 @@ The helper copies the complete vendor DTB, removes exactly one
 `cgroup_disable=memory` token with `fdtput`, and validates with `fdtget` that the
 managed `bootargs` match the vendor arguments except for that token.
 Before each apply, it also revalidates the retained backups and requires a
-root-owned vendor DTB that is not writable by unprivileged users.
+root-owned vendor DTB that is not writable by unprivileged users. The helper
+also revalidates the firmware-refresh dependency, keeps its managed selection
+last in `config.txt`, and atomically refreshes `current-source-state`.
 
 ## Apply and Preflight
 
@@ -53,17 +55,19 @@ ssh admin@PiServ.local \
   "sudo grep -A2 -B1 'PiServ cgroup v2 memory controller' /boot/firmware/config.txt"
 ```
 
-Expected preflight output before activation includes:
+Observed on PiServ after the 2026-08-03 deployment:
 
 ```text
 status=managed-dtb-required
 changed=false
-source_dtb_sha256=<current vendor DTB checksum>
+source_dtb_sha256=4186c583885d0337494d9c8e4533a2d387e948ac00c2e4ae4c7e12b5c49ebe35
 ```
 
 `changed=false` proves the installed managed DTB matches the current vendor DTB
 and the marked firmware selection is correct.
-The host still has no active memory controller until it is restarted.
+The live controller list was `cpuset cpu io pids`, so `memory` is not active.
+No reboot was performed; the follow-up remains an operator-approved reboot and
+the runtime validation below.
 
 ## Activation and Runtime Validation
 
@@ -109,7 +113,8 @@ directory is for audit and emergency comparison; do not restore an old whole
 
 Raspberry Pi's `z50-raspi-firmware` kernel post-install hook copies the current
 DTB to `/boot/firmware`. PiServ's `zz-piserv-cgroup-memory-controller` hook
-runs afterwards and regenerates the managed DTB from that new vendor DTB.
+runs afterwards, revalidates that earlier hook, regenerates the managed DTB
+from the new vendor DTB, and refreshes the recorded source checksum.
 
 If the vendor DTB already omits `cgroup_disable=memory`, the hook removes the
 redundant managed DTB and configuration block. If the DTB is malformed,

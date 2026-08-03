@@ -445,20 +445,6 @@
           changed_when: "'changed=true' in cgroup_memory_controller_apply.stdout"
           become: true
 
-        - name: Record cgroup memory-controller source state
-          ansible.builtin.copy:
-            content: >-
-              {{
-                (cgroup_memory_controller_preflight.stdout_lines
-                | reject('match', '^changed=')
-                | join('\n')
-              ) ~ '\n' }}
-            dest: "{{ cgroup_memory_controller_backup_dir }}/current-source-state"
-            owner: root
-            group: root
-            mode: "0600"
-          become: true
-
         - name: Install cgroup memory-controller kernel refresh hook
           ansible.builtin.template:
             src: cgroup-memory-controller-kernel-hook.sh.j2
