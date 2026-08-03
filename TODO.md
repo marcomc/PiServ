@@ -3,10 +3,11 @@
 ## Current
 
 - [ ] **Enable the cgroup v2 memory controller**
-  - Assessment: The PiServ-managed overlay, `config.txt` entry, initial boot
-    artifact backup, and kernel post-install refresh hook are deployed and
-    passed their offline DTB merge validation. They will take effect only after
-    an operator-approved reboot. The current kernel still exposes
+  - Assessment: The full PiServ-managed DTB, marked `device_tree` selection,
+    initial boot-artifact backup, and kernel post-install refresh hook are
+    deployed. The managed copy passed `fdtget` validation after removing exactly
+    `cgroup_disable=memory`. It will take effect only after an operator-approved
+    reboot. The current kernel still exposes
     `cgroup_disable=memory`, so systemd and Docker cannot yet enforce their
     configured memory controls. Hermes retains its `LimitAS` fallback.
   - Actions:

@@ -16,7 +16,11 @@ Device Tree Blob (DTB). This makes the existing systemd and Docker memory
 limits enforceable for Hermes local-model services and future bounded workloads.
 
 The current Pi 5 DTB puts `cgroup_disable=memory` in `/chosen/bootargs`.
-Appending an argument in `cmdline.txt` does not undo that setting.
+An overlay cannot remove it because Raspberry Pi firmware
+[`bootargs` assignments append instead of overwrite][rpi-bootargs]. PiServ
+therefore boots a validated, managed copy of the complete vendor DTB.
+
+[rpi-bootargs]: https://www.raspberrypi.com/documentation/computers/configuration.html#special-properties
 
 ## Managed State
 
@@ -25,15 +29,15 @@ PiServ consumer values:
 
 | Path | Purpose |
 | --- | --- |
-| `/boot/firmware/overlays/piserv-enable-cgroup-memory.dtbo` | PiServ-owned overlay generated from the installed vendor DTB |
-| `/boot/firmware/config.txt` | A marked `dtoverlay=piserv-enable-cgroup-memory` entry |
-| `/usr/local/libexec/piserv/enable-cgroup-memory-overlay` | Root-owned preflight, generation, validation, and disable helper |
-| `/etc/kernel/postinst.d/zz-piserv-cgroup-memory-controller` | Refreshes the overlay after Raspberry Pi's firmware-copy hook |
+| `/boot/firmware/piserv-cgroup-memory.dtb` | PiServ-owned full copy generated from the installed vendor DTB |
+| `/boot/firmware/config.txt` | A marked `[all]` and `device_tree=piserv-cgroup-memory.dtb` block |
+| `/usr/local/libexec/piserv/manage-cgroup-memory-dtb` | Root-owned preflight, generation, validation, and disable helper |
+| `/etc/kernel/postinst.d/zz-piserv-cgroup-memory-controller` | Refreshes the managed DTB after Raspberry Pi's firmware-copy hook |
 | `/var/lib/piserv/boot-backups/cgroup-memory-controller` | Root-only initial boot-artifact backups and current source state |
 
-The helper removes exactly one `cgroup_disable=memory` token, compiles an
-overlay, merges it with the current DTB offline, and requires the merged
-`bootargs` to match the vendor arguments except for that token.
+The helper copies the complete vendor DTB, removes exactly one
+`cgroup_disable=memory` token with `fdtput`, and validates with `fdtget` that the
+managed `bootargs` match the vendor arguments except for that token.
 
 ## Apply and Preflight
 
@@ -42,7 +46,7 @@ Apply the role without restarting PiServ:
 ```sh
 ansible-playbook ansible/playbooks/piserv-base.yml
 ssh admin@PiServ.local \
-  'sudo /usr/local/libexec/piserv/enable-cgroup-memory-overlay --check'
+  'sudo /usr/local/libexec/piserv/manage-cgroup-memory-dtb --check'
 ssh admin@PiServ.local \
   "sudo grep -A2 -B1 'PiServ cgroup v2 memory controller' /boot/firmware/config.txt"
 ```
@@ -50,12 +54,13 @@ ssh admin@PiServ.local \
 Expected preflight output before activation includes:
 
 ```text
-status=overlay-required
+status=managed-dtb-required
 changed=false
 source_dtb_sha256=<current vendor DTB checksum>
 ```
 
-`changed=false` proves the installed overlay matches the current vendor DTB.
+`changed=false` proves the installed managed DTB matches the current vendor DTB
+and the marked firmware selection is correct.
 The host still has no active memory controller until it is restarted.
 
 ## Activation and Runtime Validation
@@ -102,13 +107,16 @@ directory is for audit and emergency comparison; do not restore an old whole
 
 Raspberry Pi's `z50-raspi-firmware` kernel post-install hook copies the current
 DTB to `/boot/firmware`. PiServ's `zz-piserv-cgroup-memory-controller` hook
-runs afterwards and regenerates the overlay from that new DTB.
+runs afterwards and regenerates the managed DTB from that new vendor DTB.
 
 If the vendor DTB already omits `cgroup_disable=memory`, the hook removes the
-redundant overlay and config block. If the DTB is malformed, ambiguous, or
-cannot pass the offline merge, it removes the managed overlay and makes the
-package operation fail visibly. This prevents a reboot with an overlay that
-would replace newer vendor boot arguments.
+redundant managed DTB and configuration block. If the DTB is malformed,
+ambiguous, or cannot pass `fdtget` validation, the hook attempts to remove the
+managed selection and DTB, then fails the package operation visibly.
+
+If rollback itself fails, the hook reports that the managed state could not be
+disabled. Do not reboot until the helper's `--check` output and the marked
+firmware block have been inspected and corrected.
 
 Recover by inspecting the package failure and the source state, then rerunning
 the base playbook after correcting the cause:
@@ -117,6 +125,6 @@ the base playbook after correcting the cause:
 ssh admin@PiServ.local \
   'sudo cat /var/lib/piserv/boot-backups/cgroup-memory-controller/current-source-state'
 ssh admin@PiServ.local \
-  'sudo /usr/local/libexec/piserv/enable-cgroup-memory-overlay --check'
+  'sudo /usr/local/libexec/piserv/manage-cgroup-memory-dtb --check'
 ansible-playbook ansible/playbooks/piserv-base.yml
 ```

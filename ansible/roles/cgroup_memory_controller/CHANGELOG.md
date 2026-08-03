@@ -7,13 +7,15 @@ documented here.
 
 ### Added
 
-- Added Debian-family cgroup v2 memory-controller management through a
-  validated Device Tree overlay.
-- Added source-DTB checks, offline merge validation, initial boot-artifact
-  backups, explicit rollback, and optional runtime assertions.
-- Added a kernel post-install hook that refreshes the overlay after a declared
-  firmware-refresh hook.
-- Added consumer input checks for overlay-name/file consistency, atomic boot
-  arguments, and trusted root-owned paths used by privileged helpers.
+- Added Debian-family cgroup v2 memory-controller management through a full,
+  validated copy of the vendor Device Tree Blob.
+- Added exact `cgroup_disable=memory` removal with `fdtput`, post-write
+  validation with `fdtget`, and marked `device_tree=<filename>` selection.
+- Added initial boot-artifact backups, explicit rollback, and optional runtime
+  assertions without modifying the vendor DTB.
+- Added a kernel post-install hook that refreshes the managed DTB after a
+  declared firmware-refresh hook updates the vendor DTB.
+- Added consumer input checks for managed-DTB name/path consistency, atomic
+  boot arguments, and trusted root-owned paths used by privileged helpers.
 - Added Galaxy-ready metadata, role documentation, validation, and release
   instructions.

@@ -3,16 +3,34 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  check_mode: false
   vars:
     cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
     cgroup_memory_controller_config_path: /boot/firmware/config.txt
-    cgroup_memory_controller_overlay_path: >-
-      /boot/firmware/overlays/ansible-enable-cgroup-memory.dtbo
+    cgroup_memory_controller_managed_dtb_name: ansible-cgroup-memory.dtb
+    cgroup_memory_controller_managed_dtb_path: >-
+      /boot/firmware/ansible-cgroup-memory.dtb
     cgroup_memory_controller_disabled_argument: cgroup_disable=memory
     cgroup_memory_controller_helper_path: >-
-      /usr/local/libexec/cgroup-memory-controller/enable-cgroup-memory-overlay
+      /usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb
     cgroup_memory_controller_config_marker: "ANSIBLE MANAGED: cgroup v2 memory controller"
     cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+    cgroup_memory_controller_test_is_linux: >-
+      {{ lookup('ansible.builtin.pipe', 'uname -s') == 'Linux' }}
+    cgroup_memory_controller_test_has_dtb_tools: >-
+      {{
+        lookup(
+          'ansible.builtin.pipe',
+          'command -v dtc fdtget fdtput >/dev/null 2>&1; printf "%s" "$?"'
+        ) == '0'
+      }}
+    cgroup_memory_controller_test_managed_config: |
+      base=1
+      # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+      [all]
+      device_tree=managed.dtb
+      # END ANSIBLE MANAGED: cgroup v2 memory controller
+      [all]
   tasks:
     - name: Create temporary cgroup memory-controller test directory
       ansible.builtin.tempfile:
@@ -25,7 +43,7 @@
         - name: Render cgroup memory-controller helper
           ansible.builtin.template:
             src: >-
-              {{ cgroup_memory_controller_test_role_path }}/templates/enable-cgroup-memory-overlay.sh.j2
+              {{ cgroup_memory_controller_test_role_path }}/templates/manage-cgroup-memory-dtb.sh.j2
             dest: "{{ cgroup_memory_controller_test_directory.path }}/helper"
             mode: "0700"
 
@@ -47,11 +65,490 @@
                 "controller_status='vendor-enabled'"
                 in (cgroup_memory_controller_rendered_helper.content | b64decode)
               - >-
-                'offline Device Tree merge retained'
+                'managed Device Tree retained'
                 in (cgroup_memory_controller_rendered_helper.content | b64decode)
               - >-
-                'Usage: %s --check|--apply|--disable'
+                'Usage: %s --check|--apply|--check-disable|--disable'
                 in (cgroup_memory_controller_rendered_helper.content | b64decode)
+
+        - name: Render executable cgroup memory-controller test helper
+          ansible.builtin.template:
+            src: >-
+              {{ cgroup_memory_controller_test_role_path }}/templates/manage-cgroup-memory-dtb.sh.j2
+            dest: "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+            mode: "0700"
+          vars:
+            cgroup_memory_controller_vendor_dtb: >-
+              {{ cgroup_memory_controller_test_directory.path }}/vendor.dtb
+            cgroup_memory_controller_config_path: >-
+              {{ cgroup_memory_controller_test_directory.path }}/config.txt
+            cgroup_memory_controller_managed_dtb_name: managed.dtb
+            cgroup_memory_controller_managed_dtb_path: >-
+              {{ cgroup_memory_controller_test_directory.path }}/managed.dtb
+
+        - name: Reject malformed cgroup memory-controller marker states
+          ansible.builtin.include_tasks: assert-invalid-marker-state.yml
+          loop:
+            - name: begin-only
+              content: |-
+                base=1
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+                device_tree=managed.dtb
+            - name: end-only
+              content: |-
+                base=1
+                device_tree=managed.dtb
+                # END ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: duplicate
+              content: |-
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+                device_tree=managed.dtb
+                # END ANSIBLE MANAGED: cgroup v2 memory controller
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+                device_tree=managed.dtb
+                # END ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: reversed
+              content: |-
+                base=1
+                # END ANSIBLE MANAGED: cgroup v2 memory controller
+                device_tree=managed.dtb
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: selection-outside-markers
+              content: |-
+                device_tree=managed.dtb
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+                [all]
+                device_tree=managed.dtb
+                # END ANSIBLE MANAGED: cgroup v2 memory controller
+          loop_control:
+            loop_var: cgroup_memory_controller_marker_case
+
+        - name: Write unmanaged cgroup memory-controller test configuration
+          ansible.builtin.copy:
+            content: "base=1\n"
+            dest: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+            mode: "0640"
+
+        - name: Disable absent cgroup memory-controller markers twice
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+              - --disable
+          loop:
+            - first
+            - second
+          register: cgroup_memory_controller_absent_marker_runs
+          changed_when: false
+
+        - name: Require absent cgroup memory-controller markers to remain a no-op
+          ansible.builtin.assert:
+            that:
+              - >-
+                cgroup_memory_controller_absent_marker_runs.results
+                | map(attribute='stdout')
+                | select('search', 'changed=false')
+                | length == 2
+
+        - name: Create non-regular cgroup memory-controller managed DTB target
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+            state: directory
+            mode: "0700"
+
+        - name: Check non-regular cgroup memory-controller managed DTB target
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+              - --check
+          register: cgroup_memory_controller_directory_dtb_check
+          changed_when: false
+          failed_when: false
+
+        - name: Remove non-regular cgroup memory-controller managed DTB target
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+            state: absent
+
+        - name: Create dangling cgroup memory-controller managed DTB symlink
+          ansible.builtin.file:
+            src: "{{ cgroup_memory_controller_test_directory.path }}/missing.dtb"
+            dest: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+            state: link
+            force: true
+            follow: false
+
+        - name: Apply with dangling cgroup memory-controller managed DTB symlink
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+              - --apply
+          register: cgroup_memory_controller_symlink_dtb_apply
+          changed_when: false
+          failed_when: false
+
+        - name: Require unsafe cgroup memory-controller managed DTB targets to fail
+          ansible.builtin.assert:
+            that:
+              - cgroup_memory_controller_directory_dtb_check.rc != 0
+              - cgroup_memory_controller_symlink_dtb_apply.rc != 0
+              - >-
+                'expected regular file'
+                in cgroup_memory_controller_directory_dtb_check.stderr
+              - >-
+                'expected regular file'
+                in cgroup_memory_controller_symlink_dtb_apply.stderr
+
+        - name: Remove dangling cgroup memory-controller managed DTB symlink
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+            state: absent
+
+        - name: Exercise cgroup memory-controller managed Device Tree lifecycle
+          when:
+            - cgroup_memory_controller_test_is_linux | bool
+            - cgroup_memory_controller_test_has_dtb_tools | bool
+          block:
+            - name: Write cgroup memory-controller vendor Device Tree source
+              ansible.builtin.copy:
+                content: |-
+                  /dts-v1/;
+
+                  / {
+                    chosen {
+                      bootargs = "reboot=w cgroup_disable=memory quiet";
+                    };
+                  };
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/vendor.dts"
+                mode: "0640"
+
+            - name: Compile cgroup memory-controller vendor Device Tree fixture
+              ansible.builtin.command:
+                argv:
+                  - dtc
+                  - -I
+                  - dts
+                  - -O
+                  - dtb
+                  - -o
+                  - "{{ cgroup_memory_controller_test_directory.path }}/vendor.dtb"
+                  - "{{ cgroup_memory_controller_test_directory.path }}/vendor.dts"
+              changed_when: true
+
+            - name: Write unmanaged cgroup memory-controller lifecycle configuration
+              ansible.builtin.copy:
+                content: "base=1\n"
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                mode: "0640"
+
+            - name: Create aliased cgroup memory-controller managed DTB target
+              ansible.builtin.file:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/vendor.dtb"
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: hard
+                mode: "0640"
+
+            - name: Reject aliased cgroup memory-controller managed DTB target
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              register: cgroup_memory_controller_aliased_dtb_apply
+              changed_when: false
+              failed_when: false
+
+            - name: Require aliased managed DTB rejection
+              ansible.builtin.assert:
+                that:
+                  - cgroup_memory_controller_aliased_dtb_apply.rc != 0
+                  - >-
+                    'aliases the vendor Device Tree'
+                    in cgroup_memory_controller_aliased_dtb_apply.stderr
+
+            - name: Remove aliased cgroup memory-controller managed DTB target
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: absent
+
+            - name: Create writable cgroup memory-controller managed DTB target
+              ansible.builtin.copy:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/vendor.dtb"
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                remote_src: true
+                mode: "0666"
+
+            - name: Reject writable cgroup memory-controller managed DTB target
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --check
+              register: cgroup_memory_controller_writable_dtb_check
+              changed_when: false
+              failed_when: false
+
+            - name: Require writable managed DTB rejection
+              ansible.builtin.assert:
+                that:
+                  - cgroup_memory_controller_writable_dtb_check.rc != 0
+                  - >-
+                    'writable by its group or other users'
+                    in cgroup_memory_controller_writable_dtb_check.stderr
+
+            - name: Remove writable cgroup memory-controller managed DTB target
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: absent
+
+            - name: Apply cgroup memory-controller managed Device Tree
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              register: cgroup_memory_controller_lifecycle_apply
+              changed_when: false
+
+            - name: Check cgroup memory-controller managed Device Tree idempotence
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --check
+              register: cgroup_memory_controller_lifecycle_check
+              changed_when: false
+
+            - name: Read cgroup memory-controller managed Device Tree boot arguments
+              ansible.builtin.command:
+                argv:
+                  - fdtget
+                  - --type
+                  - s
+                  - "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                  - /chosen
+                  - bootargs
+              register: cgroup_memory_controller_lifecycle_bootargs
+              changed_when: false
+
+            - name: Read configuration after managed Device Tree application
+              ansible.builtin.slurp:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+              register: cgroup_memory_controller_lifecycle_config
+
+            - name: Inspect configuration metadata after managed Device Tree application
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+              register: cgroup_memory_controller_lifecycle_stat
+
+            - name: Require a valid idempotent managed Device Tree application
+              ansible.builtin.assert:
+                that:
+                  - "'status=managed-dtb-required' in cgroup_memory_controller_lifecycle_apply.stdout"
+                  - "'changed=true' in cgroup_memory_controller_lifecycle_apply.stdout"
+                  - "'changed=false' in cgroup_memory_controller_lifecycle_check.stdout"
+                  - >-
+                    cgroup_memory_controller_lifecycle_bootargs.stdout
+                    == 'reboot=w quiet'
+                  - >-
+                    (cgroup_memory_controller_lifecycle_config.content | b64decode)
+                    == cgroup_memory_controller_test_managed_config
+                  - cgroup_memory_controller_lifecycle_stat.stat.mode == '0640'
+
+            - name: Append a directive after the managed firmware block
+              ansible.builtin.lineinfile:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                line: after=1
+                insertafter: EOF
+
+            - name: Reapply managed Device Tree with a trailing directive
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              register: cgroup_memory_controller_trailing_directive_reapply
+              changed_when: false
+
+            - name: Read configuration after trailing-directive reapply
+              ansible.builtin.slurp:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+              register: cgroup_memory_controller_trailing_directive_reapplied_config
+
+            - name: Require reapply to preserve trailing directive scope
+              ansible.builtin.assert:
+                that:
+                  - "'changed=false' in cgroup_memory_controller_trailing_directive_reapply.stdout"
+                  - >-
+                    (cgroup_memory_controller_trailing_directive_reapplied_config.content | b64decode)
+                    == cgroup_memory_controller_test_managed_config ~ 'after=1\n'
+
+            - name: Disable managed Device Tree with a trailing directive
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --disable
+              changed_when: false
+
+            - name: Read configuration after trailing-directive rollback
+              ansible.builtin.slurp:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+              register: cgroup_memory_controller_trailing_directive_config
+
+            - name: Require rollback to preserve trailing directive scope
+              ansible.builtin.assert:
+                that:
+                  - >-
+                    (cgroup_memory_controller_trailing_directive_config.content | b64decode)
+                    == 'base=1\n[all]\nafter=1\n'
+
+            - name: Reset configuration after trailing-directive rollback
+              ansible.builtin.copy:
+                content: "base=1\n"
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                mode: "0640"
+
+            - name: Restore managed state after trailing-directive rollback
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              changed_when: false
+
+            - name: Inspect configuration before unsafe-target rollback
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_before_unsafe_rollback
+
+            - name: Replace managed Device Tree with an unsafe directory
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: absent
+
+            - name: Create unsafe managed Device Tree directory
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: directory
+                mode: "0700"
+
+            - name: Reject unsafe-target cgroup memory-controller rollback
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --disable
+              register: cgroup_memory_controller_unsafe_rollback
+              changed_when: false
+              failed_when: false
+
+            - name: Reinspect configuration after unsafe-target rollback
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_after_unsafe_rollback
+
+            - name: Require unsafe-target rollback to preserve configuration
+              ansible.builtin.assert:
+                that:
+                  - cgroup_memory_controller_unsafe_rollback.rc != 0
+                  - >-
+                    cgroup_memory_controller_before_unsafe_rollback.stat.checksum
+                    == cgroup_memory_controller_after_unsafe_rollback.stat.checksum
+
+            - name: Remove unsafe managed Device Tree directory
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+                state: absent
+
+            - name: Restore cgroup memory-controller managed Device Tree
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              changed_when: false
+
+            - name: Disable cgroup memory-controller managed Device Tree
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --disable
+              register: cgroup_memory_controller_lifecycle_disable
+              changed_when: false
+
+            - name: Read configuration after managed Device Tree rollback
+              ansible.builtin.slurp:
+                src: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+              register: cgroup_memory_controller_disabled_config
+
+            - name: Inspect managed Device Tree after rollback
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/managed.dtb"
+              register: cgroup_memory_controller_disabled_dtb
+
+            - name: Require complete managed Device Tree rollback
+              ansible.builtin.assert:
+                that:
+                  - "'changed=true' in cgroup_memory_controller_lifecycle_disable.stdout"
+                  - >-
+                    (cgroup_memory_controller_disabled_config.content | b64decode)
+                    == 'base=1\n[all]\n'
+                  - not cgroup_memory_controller_disabled_dtb.stat.exists
+
+            - name: Create failing awk test command
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin"
+                state: directory
+                mode: "0700"
+
+            - name: Install failing awk test command
+              ansible.builtin.copy:
+                content: |-
+                  #!/bin/sh
+                  printf 'partial output\n'
+                  exit 1
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin/awk"
+                mode: "0700"
+
+            - name: Restore managed state for failure cleanup test
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --apply
+              changed_when: false
+
+            - name: Inspect configuration before marker-removal failure
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_before_awk_failure
+
+            - name: Fail cgroup memory-controller marker removal after temp creation
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_directory.path }}/runtime-helper"
+                  - --disable
+              environment:
+                PATH: >-
+                  {{ cgroup_memory_controller_test_directory.path }}/fake-bin:{{ lookup('ansible.builtin.env', 'PATH') }}
+              register: cgroup_memory_controller_awk_failure
+              changed_when: false
+              failed_when: false
+
+            - name: Inspect configuration after marker-removal failure
+              ansible.builtin.stat:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/config.txt"
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_after_awk_failure
+
+            - name: Find leaked cgroup memory-controller configuration temps
+              ansible.builtin.find:
+                paths: "{{ cgroup_memory_controller_test_directory.path }}"
+                patterns: config.txt.cgroup-memory-controller.*
+                file_type: file
+              register: cgroup_memory_controller_leaked_temps
+
+            - name: Require failed marker removal to preserve configuration
+              ansible.builtin.assert:
+                that:
+                  - cgroup_memory_controller_awk_failure.rc != 0
+                  - >-
+                    cgroup_memory_controller_before_awk_failure.stat.checksum
+                    == cgroup_memory_controller_after_awk_failure.stat.checksum
+                  - cgroup_memory_controller_leaked_temps.matched == 0
 
         - name: Render cgroup memory-controller kernel refresh hook
           ansible.builtin.template:
@@ -59,6 +556,9 @@
               {{ cgroup_memory_controller_test_role_path }}/templates/cgroup-memory-controller-kernel-hook.sh.j2
             dest: "{{ cgroup_memory_controller_test_directory.path }}/kernel-hook"
             mode: "0700"
+          vars:
+            cgroup_memory_controller_helper_path: >-
+              {{ cgroup_memory_controller_test_directory.path }}/missing-refresh-helper
 
         - name: Read rendered cgroup memory-controller kernel refresh hook
           ansible.builtin.slurp:
@@ -69,7 +569,7 @@
           ansible.builtin.assert:
             that:
               - >-
-                'helper_path=/usr/local/libexec/cgroup-memory-controller/enable-cgroup-memory-overlay'
+                'missing-refresh-helper'
                 in (cgroup_memory_controller_rendered_hook.content | b64decode)
               - >-
                 '"${helper_path}" --apply'
@@ -77,6 +577,22 @@
               - >-
                 '"${helper_path}" --disable'
                 in (cgroup_memory_controller_rendered_hook.content | b64decode)
+
+        - name: Run kernel refresh hook without its helper
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_test_directory.path }}/kernel-hook"
+          register: cgroup_memory_controller_missing_refresh_helper
+          changed_when: false
+          failed_when: false
+
+        - name: Require missing refresh helper to fail closed
+          ansible.builtin.assert:
+            that:
+              - cgroup_memory_controller_missing_refresh_helper.rc != 0
+              - >-
+                'refresh helper is unavailable'
+                in cgroup_memory_controller_missing_refresh_helper.stderr
 
         - name: Lint rendered cgroup memory-controller shell helpers
           ansible.builtin.command:

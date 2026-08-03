@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_dtb={{ cgroup_memory_controller_vendor_dtb | quote }}
+config_path={{ cgroup_memory_controller_config_path | quote }}
+managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
+managed_dtb_name={{ cgroup_memory_controller_managed_dtb_name | quote }}
+disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
+
+readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
+readonly fdtget_binary=/usr/bin/fdtget
+readonly fdtput_binary=/usr/bin/fdtput
+readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
+readonly end_marker={{ ('# END ' ~ cgroup_memory_controller_config_marker) | quote }}
+readonly managed_config_line="device_tree=${managed_dtb_name}"
+readonly managed_filter_line='[all]'
+
+work_directory=''
+config_temp=''
+managed_dtb_temp=''
+source_bootargs=''
+replacement_bootargs=''
+controller_status=''
+candidate_dtb_path=''
+marker_count=0
+config_changed=false
+
+usage() {
+  printf 'Usage: %s --check|--apply|--check-disable|--disable\n' "$0" >&2
+}
+
+cleanup() {
+  if [[ -n "${config_temp}" && -e "${config_temp}" ]]; then
+    rm -f -- "${config_temp}"
+  fi
+  if [[ -n "${managed_dtb_temp}" && -e "${managed_dtb_temp}" ]]; then
+    rm -f -- "${managed_dtb_temp}"
+  fi
+  if [[ -n "${work_directory}" && -d "${work_directory}" ]]; then
+    rm -rf -- "${work_directory}"
+  fi
+}
+
+fail() {
+  printf 'cgroup memory controller: %s\n' "$*" >&2
+  exit 1
+}
+
+require_regular_file() {
+  local file_path="$1"
+
+  [[ -f "${file_path}" && ! -L "${file_path}" ]] || \
+    fail "expected regular file at ${file_path}"
+}
+
+require_command() {
+  local command_path="$1"
+
+  [[ -x "${command_path}" ]] || fail "required command is unavailable: ${command_path}"
+}
+
+require_safe_managed_target() {
+  local config_identity
+  local source_identity
+  local target_identity
+  local target_mode
+  local target_uid
+
+  if [[ -e "${managed_dtb_path}" || -L "${managed_dtb_path}" ]]; then
+    require_regular_file "${managed_dtb_path}"
+    target_uid="$(stat -c '%u' "${managed_dtb_path}")"
+    [[ "${target_uid}" == '0' ]] || \
+      fail "managed Device Tree is not root-owned: ${managed_dtb_path}"
+    target_mode="$(stat -c '%a' "${managed_dtb_path}")"
+    (( (8#${target_mode} & 0022) == 0 )) || \
+      fail "managed Device Tree is writable by its group or other users: ${managed_dtb_path}"
+
+    target_identity="$(stat -c '%d:%i' "${managed_dtb_path}")"
+    if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
+      source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+      [[ "${target_identity}" != "${source_identity}" ]] || \
+        fail 'managed Device Tree aliases the vendor Device Tree'
+    fi
+    if [[ -f "${config_path}" && ! -L "${config_path}" ]]; then
+      config_identity="$(stat -c '%d:%i' "${config_path}")"
+      [[ "${target_identity}" != "${config_identity}" ]] || \
+        fail 'managed Device Tree aliases the firmware configuration'
+    fi
+  fi
+}
+
+inspect_config_markers() {
+  local begin_count
+  local begin_line
+  local end_count
+  local end_line
+  local managed_line
+  local managed_line_count
+
+  require_regular_file "${config_path}"
+  begin_count="$(grep -Fxc "${begin_marker}" "${config_path}" || true)"
+  end_count="$(grep -Fxc "${end_marker}" "${config_path}" || true)"
+  managed_line_count="$(grep -Fxc "${managed_config_line}" "${config_path}" || true)"
+  [[ "${begin_count}" == "${end_count}" ]] || \
+    fail 'managed config markers are incomplete; refusing to edit firmware configuration'
+  [[ "${begin_count}" -le 1 ]] || \
+    fail 'managed config markers are duplicated; refusing to edit firmware configuration'
+
+  marker_count="${begin_count}"
+  if [[ "${marker_count}" == '1' ]]; then
+    begin_line="$(grep -Fnx "${begin_marker}" "${config_path}" | cut -d: -f1)"
+    end_line="$(grep -Fnx "${end_marker}" "${config_path}" | cut -d: -f1)"
+    ((begin_line < end_line)) || \
+      fail 'managed config markers are reversed; refusing to edit firmware configuration'
+    [[ "${managed_line_count}" == '1' ]] || \
+      fail 'managed Device Tree selection must appear exactly once inside its markers'
+    managed_line="$(grep -Fnx "${managed_config_line}" "${config_path}" | cut -d: -f1)"
+    ((begin_line < managed_line && managed_line < end_line)) || \
+      fail 'managed Device Tree selection appears outside its markers'
+  else
+    [[ "${managed_line_count}" == '0' ]] || \
+      fail 'managed Device Tree selection appears without its markers'
+  fi
+}
+
+write_managed_config() {
+  local desired_state="$1"
+  local config_gid
+  local config_mode
+  local config_uid
+
+  config_uid="$(stat -c '%u' "${config_path}")"
+  config_gid="$(stat -c '%g' "${config_path}")"
+  config_mode="$(stat -c '%a' "${config_path}")"
+  config_temp="$(mktemp "${config_path}.cgroup-memory-controller.XXXXXX")"
+
+  awk -v begin="${begin_marker}" -v end="${end_marker}" \
+    -v desired="${desired_state}" -v managed="${managed_config_line}" '
+    $0 == begin {
+      if (desired == "present") {
+        print begin
+        print "[all]"
+        print managed
+      }
+      inside = 1
+      next
+    }
+    $0 == end {
+      if (desired == "present") print end
+      inside = 0
+      pending_reset = 1
+      next
+    }
+    inside { next }
+    pending_reset {
+      if ($0 != "[all]") print "[all]"
+      pending_reset = 0
+    }
+    { print }
+    END { if (pending_reset) print "[all]" }
+  ' "${config_path}" > "${config_temp}"
+
+  if [[ "${desired_state}" == 'present' && "${marker_count}" == '0' ]]; then
+    printf '%s\n%s\n%s\n%s\n%s\n' \
+      "${begin_marker}" "${managed_filter_line}" "${managed_config_line}" \
+      "${end_marker}" "${managed_filter_line}" >> "${config_temp}"
+  fi
+
+  if cmp -s "${config_temp}" "${config_path}"; then
+    rm -f -- "${config_temp}"
+    config_temp=''
+    config_changed=false
+    return
+  fi
+
+  chown "${config_uid}:${config_gid}" "${config_temp}"
+  chmod "${config_mode}" "${config_temp}"
+  mv -f -- "${config_temp}" "${config_path}"
+  config_temp=''
+  config_changed=true
+}
+
+inspect_source_bootargs() {
+  local argument
+  local disabled_argument_count=0
+  local replacement_argument_count=0
+  local -a source_arguments
+  local -a replacement_arguments
+
+  require_regular_file "${source_dtb}"
+  require_command "${fdtget_binary}"
+
+  source_bootargs="$("${fdtget_binary}" --type s "${source_dtb}" /chosen bootargs)"
+  [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
+  [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
+
+  read -r -a source_arguments <<< "${source_bootargs}"
+  for argument in "${source_arguments[@]}"; do
+    if [[ "${argument}" == "${disabled_argument}" ]]; then
+      ((disabled_argument_count += 1))
+    else
+      replacement_arguments+=("${argument}")
+      ((replacement_argument_count += 1))
+    fi
+  done
+
+  case "${disabled_argument_count}" in
+    0)
+      controller_status='vendor-enabled'
+      replacement_bootargs="${source_bootargs}"
+      ;;
+    1)
+      controller_status='managed-dtb-required'
+      ;;
+    *)
+      fail "vendor boot arguments contain ${disabled_argument_count} copies of ${disabled_argument}"
+      ;;
+  esac
+
+  ((replacement_argument_count > 0)) || \
+    fail "removing ${disabled_argument} would leave boot arguments empty"
+  replacement_bootargs="${replacement_arguments[*]}"
+}
+
+prepare_managed_dtb() {
+  local candidate_bootargs
+
+  [[ "${controller_status}" == 'managed-dtb-required' ]] || \
+    fail 'cannot prepare a managed DTB when the vendor already enables memory cgroups'
+  require_command "${fdtput_binary}"
+
+  work_directory="$(mktemp -d /run/cgroup-memory-controller.XXXXXX)"
+  chmod 0700 "${work_directory}"
+  candidate_dtb_path="${work_directory}/managed.dtb"
+  cp -- "${source_dtb}" "${candidate_dtb_path}"
+  "${fdtput_binary}" --type s "${candidate_dtb_path}" /chosen bootargs \
+    "${replacement_bootargs}"
+  candidate_bootargs="$("${fdtget_binary}" --type s \
+    "${candidate_dtb_path}" /chosen bootargs)"
+  [[ "${candidate_bootargs}" == "${replacement_bootargs}" ]] || \
+    fail 'managed Device Tree does not contain the expected boot arguments'
+  [[ " ${candidate_bootargs} " != *" ${disabled_argument} "* ]] || \
+    fail "managed Device Tree retained ${disabled_argument}"
+}
+
+print_status() {
+  local changed="$1"
+  local source_sha256='not-inspected'
+
+  if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
+    source_sha256="$(sha256sum "${source_dtb}" | awk '{print $1}')"
+  fi
+  printf 'status=%s\n' "${controller_status}"
+  printf 'changed=%s\n' "${changed}"
+  printf 'source_dtb_sha256=%s\n' "${source_sha256}"
+}
+
+disable_managed_dtb() {
+  local changed=false
+
+  require_safe_managed_target
+  inspect_config_markers
+  if [[ "${marker_count}" == '1' ]]; then
+    write_managed_config absent
+    if [[ "${config_changed}" == true ]]; then
+      changed=true
+    fi
+  fi
+  if [[ -e "${managed_dtb_path}" ]]; then
+    rm -f -- "${managed_dtb_path}"
+    changed=true
+  fi
+  if [[ "${changed}" == true ]]; then
+    sync -f "${config_path}"
+  fi
+  controller_status='disabled'
+  print_status "${changed}"
+}
+
+check_disable_managed_dtb() {
+  local changed=false
+
+  if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+    changed=true
+  fi
+  controller_status='rollback-required'
+  print_status "${changed}"
+}
+
+apply_managed_dtb() {
+  local installed_bootargs
+  local changed=false
+
+  prepare_managed_dtb
+  if [[ ! -f "${managed_dtb_path}" ]] || \
+    ! cmp -s "${candidate_dtb_path}" "${managed_dtb_path}"; then
+    managed_dtb_temp="$(mktemp "${managed_dtb_path}.XXXXXX")"
+    install -m 0644 "${candidate_dtb_path}" "${managed_dtb_temp}"
+    installed_bootargs="$("${fdtget_binary}" --type s \
+      "${managed_dtb_temp}" /chosen bootargs)"
+    [[ "${installed_bootargs}" == "${replacement_bootargs}" ]] || \
+      fail 'staged managed Device Tree does not contain the expected boot arguments'
+    sync -f "${managed_dtb_temp}"
+    mv -f -- "${managed_dtb_temp}" "${managed_dtb_path}"
+    managed_dtb_temp=''
+    sync -f "$(dirname "${managed_dtb_path}")"
+    changed=true
+  fi
+  write_managed_config present
+  if [[ "${config_changed}" == true ]]; then
+    changed=true
+  fi
+  if [[ "${changed}" == true ]]; then
+    sync -f "${config_path}"
+  fi
+  print_status "${changed}"
+}
+
+check_managed_dtb() {
+  local changed=false
+  local end_line=''
+  local managed_block=''
+  local reset_line=''
+
+  if [[ "${controller_status}" == 'vendor-enabled' ]]; then
+    if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+      changed=true
+    fi
+    print_status "${changed}"
+    return
+  fi
+
+  prepare_managed_dtb
+  if [[ "${marker_count}" == '1' ]]; then
+    managed_block="$(awk -v begin="${begin_marker}" -v end="${end_marker}" '
+      $0 == begin { inside = 1; next }
+      $0 == end { inside = 0; next }
+      inside { print }
+    ' "${config_path}")"
+    end_line="$(grep -Fnx "${end_marker}" "${config_path}" | cut -d: -f1)"
+    reset_line="$(sed -n "$((end_line + 1))p" "${config_path}")"
+  fi
+  if [[ ! -f "${managed_dtb_path}" ]] || \
+    ! cmp -s "${candidate_dtb_path}" "${managed_dtb_path}" || \
+    [[ "${marker_count}" == '0' ]] || \
+    [[ "${managed_block}" != "${managed_filter_line}"$'\n'"${managed_config_line}" ]] || \
+    [[ "${reset_line}" != "${managed_filter_line}" ]]; then
+    changed=true
+  fi
+  print_status "${changed}"
+}
+
+main() {
+  local mode="${1:-}"
+
+  [[ $# -eq 1 ]] || {
+    usage
+    exit 2
+  }
+  trap cleanup EXIT
+  require_safe_managed_target
+  inspect_config_markers
+
+  case "${mode}" in
+    --check-disable)
+      check_disable_managed_dtb
+      ;;
+    --disable)
+      disable_managed_dtb
+      ;;
+    --check|--apply)
+      inspect_source_bootargs
+      if [[ "${mode}" == '--check' ]]; then
+        check_managed_dtb
+      elif [[ "${controller_status}" == 'vendor-enabled' ]]; then
+        disable_managed_dtb
+      else
+        apply_managed_dtb
+      fi
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

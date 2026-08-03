@@ -5,23 +5,23 @@
   vars:
     cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
   tasks:
-    - name: Reject an overlay path that does not match its configured name
+    - name: Reject a managed DTB path that does not match its configured name
       block:
-        - name: Validate inconsistent cgroup memory-controller overlay input
+        - name: Validate inconsistent cgroup memory-controller DTB input
           ansible.builtin.include_role:
             name: "{{ cgroup_memory_controller_test_role_path }}"
             tasks_from: configuration.yml
           vars:
             cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
-            cgroup_memory_controller_overlay_name: expected-overlay
-            cgroup_memory_controller_overlay_path: >-
-              /boot/firmware/overlays/different-overlay.dtbo
+            cgroup_memory_controller_managed_dtb_name: expected.dtb
+            cgroup_memory_controller_managed_dtb_path: >-
+              /boot/firmware/different.dtb
 
-        - name: Require inconsistent overlay input to fail validation
+        - name: Require inconsistent managed DTB input to fail validation
           ansible.builtin.fail:
-            msg: The inconsistent overlay input unexpectedly passed validation.
+            msg: The inconsistent managed DTB input unexpectedly passed validation.
       rescue:
-        - name: Assert inconsistent overlay input failed validation
+        - name: Assert inconsistent managed DTB input failed validation
           ansible.builtin.assert:
             that:
               - >-
@@ -48,3 +48,31 @@
               - >-
                 'policy requires safe absolute paths'
                 in ansible_failed_result.msg
+
+    - name: Reject reserved cgroup memory-controller backup filenames
+      ansible.builtin.include_tasks: assert-invalid-backup-filename.yml
+      loop:
+        - .
+        - ..
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_backup_filename
+
+    - name: Reject aliased cgroup memory-controller backup filenames
+      block:
+        - name: Validate aliased cgroup memory-controller backup filenames
+          ansible.builtin.include_role:
+            name: "{{ cgroup_memory_controller_test_role_path }}"
+            tasks_from: configuration.yml
+          vars:
+            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+            cgroup_memory_controller_config_backup_filename: shared.backup
+            cgroup_memory_controller_vendor_dtb_backup_filename: shared.backup
+
+        - name: Require aliased backup filenames to fail validation
+          ansible.builtin.fail:
+            msg: The aliased backup filenames unexpectedly passed validation.
+      rescue:
+        - name: Assert aliased backup filenames failed validation
+          ansible.builtin.assert:
+            that:
+              - "'policy requires safe absolute paths' in ansible_failed_result.msg"

@@ -1,9 +1,9 @@
 ---
 argument_specs:
   main:
-    short_description: Enable the cgroup v2 memory controller through a Device Tree overlay.
+    short_description: Enable the cgroup v2 memory controller with a managed Device Tree.
     description:
-      - Builds and validates a Device Tree overlay that removes one vendor boot argument.
+      - Builds and validates a managed Device Tree that removes one vendor boot argument.
       - Supports explicit rollback without changing the vendor Device Tree Blob.
     options:
       cgroup_memory_controller_manage:
@@ -13,7 +13,7 @@ argument_specs:
       cgroup_memory_controller_enabled:
         type: bool
         default: true
-        description: Whether the managed overlay should enable the memory controller.
+        description: Whether the managed Device Tree should enable the memory controller.
       cgroup_memory_controller_require_runtime:
         type: bool
         default: false
@@ -21,42 +21,42 @@ argument_specs:
       cgroup_memory_controller_packages:
         type: list
         elements: str
-        description: Packages required to generate and validate the Device Tree overlay.
+        description: Packages required to generate and validate the managed Device Tree.
       cgroup_memory_controller_vendor_dtb:
         type: path
         required: true
-        description: Vendor Device Tree Blob used as the overlay source.
+        description: Vendor Device Tree Blob used as the managed copy source.
       cgroup_memory_controller_config_path:
         type: path
         default: /boot/firmware/config.txt
-        description: Firmware configuration file that loads the managed overlay.
-      cgroup_memory_controller_overlay_name:
+        description: Firmware configuration file that selects the managed Device Tree.
+      cgroup_memory_controller_managed_dtb_name:
         type: str
-        default: ansible-enable-cgroup-memory
-        description: Overlay name without the .dtbo suffix.
-      cgroup_memory_controller_overlay_path:
+        default: ansible-cgroup-memory.dtb
+        description: Managed Device Tree filename including the .dtb suffix.
+      cgroup_memory_controller_managed_dtb_path:
         type: path
-        default: /boot/firmware/overlays/ansible-enable-cgroup-memory.dtbo
-        description: Destination path for the managed overlay.
+        default: /boot/firmware/ansible-cgroup-memory.dtb
+        description: Destination path for the managed Device Tree.
       cgroup_memory_controller_disabled_argument:
         type: str
         default: cgroup_disable=memory
-        description: Exact vendor boot argument removed by the managed overlay.
+        description: Exact vendor boot argument removed from the managed Device Tree.
       cgroup_memory_controller_helper_path:
         type: path
-        default: /usr/local/libexec/cgroup-memory-controller/enable-cgroup-memory-overlay
-        description: Root-owned helper that validates and generates the boot overlay.
+        default: /usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb
+        description: Root-owned helper that validates and generates the managed Device Tree.
       cgroup_memory_controller_kernel_hook_path:
         type: path
         default: /etc/kernel/postinst.d/zz-ansible-cgroup-memory-controller
-        description: Kernel post-install hook that refreshes the overlay after a DTB update.
+        description: Kernel hook that refreshes the managed copy after a vendor DTB update.
       cgroup_memory_controller_kernel_refresh_dependency_path:
         type: path
         default: ""
         description: Optional earlier kernel hook that refreshes the vendor DTB.
       cgroup_memory_controller_backup_dir:
         type: path
-        default: /var/lib/ansible/cgroup-memory-controller
+        default: /var/lib/cgroup-memory-controller
         description: Root-only directory retaining initial boot artifacts and source state.
       cgroup_memory_controller_config_backup_filename:
         type: str
