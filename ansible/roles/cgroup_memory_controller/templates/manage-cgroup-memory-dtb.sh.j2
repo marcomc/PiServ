@@ -400,6 +400,12 @@ install_managed_config() {
 inspect_source_bootargs() {
   local argument
   local disabled_argument_count=0
+  local snapshot_captured=false
+  local snapshot_sha256
+  local source_metadata_after_copy
+  local source_metadata_after_hash
+  local source_metadata_before
+  local source_sha256_after
   local -a source_arguments
   local -a replacement_arguments
 
@@ -410,13 +416,32 @@ inspect_source_bootargs() {
   work_directory="$(mktemp -d /run/cgroup-memory-controller.XXXXXX)"
   chmod 0700 "${work_directory}"
   source_snapshot_path="${work_directory}/source.dtb"
-  cp --no-dereference -- "${source_dtb}" "${source_snapshot_path}"
-  require_regular_file "${source_snapshot_path}"
-  chmod 0600 "${source_snapshot_path}"
+  for _ in 1 2 3; do
+    source_metadata_before="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    cp --no-dereference -- "${source_dtb}" "${source_snapshot_path}"
+    require_regular_file "${source_snapshot_path}"
+    chmod 0600 "${source_snapshot_path}"
+    require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+    source_metadata_after_copy="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    snapshot_sha256="$("${sha256sum_binary}" \
+      "${source_snapshot_path}" | awk '{print $1}')"
+    source_sha256_after="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
+    require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+    source_metadata_after_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    if [[ "${source_metadata_before}" == "${source_metadata_after_copy}" && \
+      "${source_metadata_before}" == "${source_metadata_after_hash}" && \
+      "${snapshot_sha256}" == "${source_sha256_after}" ]]; then
+      source_sha256="${snapshot_sha256}"
+      snapshot_captured=true
+      break
+    fi
+    rm -f -- "${source_snapshot_path}"
+  done
+  [[ "${snapshot_captured}" == true ]] || \
+    fail 'vendor Device Tree changed during snapshot capture after 3 attempts'
 
   source_bootargs="$("${fdtget_binary}" --type s \
     "${source_snapshot_path}" /chosen bootargs)"
-  source_sha256="$("${sha256sum_binary}" "${source_snapshot_path}" | awk '{print $1}')"
   [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
   [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
 

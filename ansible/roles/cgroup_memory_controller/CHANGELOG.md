@@ -19,8 +19,9 @@ documented here.
 - Added fail-closed backup validation before managed boot-state rollback.
 - Added serialized boot-state mutations across reconciliation and kernel-hook
   fallback rollback.
-- Added private source snapshots so each reconciliation derives status,
-  checksum, and managed boot artifacts from one firmware generation.
+- Added verified private source snapshots with bounded retries so each
+  reconciliation derives status, checksum, and managed boot artifacts from one
+  stable firmware generation.
 - Added consumer input checks for managed-DTB name/path consistency, atomic
   boot arguments, and trusted root-owned paths used by privileged helpers.
 - Added Galaxy-ready metadata, role documentation, validation, and release
