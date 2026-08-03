@@ -19,12 +19,14 @@ account credentials in Ansible or this repository.
 
 ## Status
 
-Applied on PiServ on 2026-07-08. The dedicated `msmtp` role installs the mail
-packages and hardens operator-created file metadata without creating or owning
-SMTP credentials. PiServ's playbook preserves operator edits to the SMTP sender,
-user, password, and aliases. For Gmail SMTP, use a Gmail app password rather
-than the normal account password or the Mac-specific OAuth helper. Provider
-connectivity and one root-alias delivery test have been validated.
+The mail transport was applied on PiServ on 2026-07-08. The dedicated `msmtp`
+role installs the mail packages and hardens operator-created file metadata
+without creating or owning SMTP credentials. PiServ's playbook preserves
+operator edits to the SMTP sender, user, password, and aliases. For Gmail SMTP,
+use a Gmail app password rather than the normal account password or the
+Mac-specific OAuth helper. Provider connectivity and one root-alias delivery
+test have been validated. The shutdown-notification service is implemented but
+pending deployment and live validation.
 
 ## Automation
 
@@ -58,6 +60,17 @@ The `base` role configures mail consumers:
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown notification service | `piserv-shutdown-notify.service` |
+| shutdown notification recipient | `root` |
+| shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown config recheck | Require a non-empty regular mail-config file immediately before delivery |
+| shutdown evidence | Nearest authenticated `sudo` command preceding a fresh authenticated `systemd-logind` shutdown event by no more than five seconds |
+
+The logind event must be observed within five seconds of helper execution. The
+nearby `sudo` record is temporal correlation, not proof that the command caused
+the shutdown. The helper does not interpret command syntax. Scheduled shutdown
+commands outside the five-second window, direct-root commands, and hardware
+paths report unknown `sudo` evidence.
 
 ## Gmail App Password
 
@@ -179,6 +192,7 @@ Verify:
 
 ```sh
 ssh admin@PiServ.local 'systemctl status piserv-reboot-notify.service --no-pager'
+ssh admin@PiServ.local 'systemctl status piserv-shutdown-notify.service --no-pager'
 ssh admin@PiServ.local 'sudo test -f /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py'
 ssh admin@PiServ.local 'sudo grep -R "^Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
 ```
@@ -207,10 +221,11 @@ The live PiServ config is create-only and already has these keys.
 
 ## Rollback
 
-Disable boot notifications:
+Disable boot and shutdown notifications:
 
 ```sh
 ssh admin@PiServ.local 'sudo systemctl disable --now piserv-reboot-notify.service'
+ssh admin@PiServ.local 'sudo systemctl disable --now piserv-shutdown-notify.service'
 ```
 
 Remove email keys from the RaiPlaySound config to make it skip summaries again.

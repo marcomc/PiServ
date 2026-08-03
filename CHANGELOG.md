@@ -15,7 +15,8 @@
   upstream SIGTERM handler without dirtying the pinned source tree, restarts the
   managed service only when needed, preserves it when an existing unit is
   unmanaged, and exits cleanly during system shutdown.
-
+- Added a pre-network-teardown shutdown email with bounded, authenticated
+  journal correlation for nearby `sudo` evidence.
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.

@@ -200,8 +200,13 @@ policy validates its private rollback backup and activates the current kernel
 mode without rebooting the host. PiServ uses `msmtp` with operator-managed
 `/etc/msmtprc` and `/etc/aliases` files because they contain SMTP credentials
 and local delivery policy. The reusable `journald` role receives PiServ's
-persistent, bounded journal policy from this consumer playbook. Boot
-notifications are skipped until `/etc/msmtprc` exists and is non-empty.
+persistent, bounded journal policy from this consumer playbook. Boot and
+shutdown notifications are skipped until `/etc/msmtprc` exists and is
+non-empty. The shutdown message is sent before the network is stopped and
+reports an authenticated `sudo` command, user, and timestamp only when that
+record appears within five seconds before an authenticated `systemd-logind`
+shutdown event that is itself observed within five seconds of helper execution.
+This is correlation, not proof of causation.
 Unattended upgrades send a mobile-readable routine digest with package version
 transitions; full logs remain on PiServ and native error alerts remain enabled
 as a fallback.
