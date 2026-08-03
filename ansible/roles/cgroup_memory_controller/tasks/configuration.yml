@@ -137,26 +137,35 @@
       changed_when: false
       become: true
 
-    - name: Read cgroup memory-controller kernel hook directories
+    - name: Read cgroup memory-controller kernel hook paths
       ansible.builtin.stat:
         path: "{{ item.path }}"
         follow: false
       loop:
         - path: /etc
           required: true
+          kind: directory
         - path: /etc/kernel
           required: true
+          kind: directory
         - path: /etc/kernel/postinst.d
           required: false
-      register: cgroup_memory_controller_kernel_hook_directories
+          kind: directory
+        - path: "{{ cgroup_memory_controller_kernel_hook_path }}"
+          required: false
+          kind: file
+      register: cgroup_memory_controller_kernel_hook_paths
       changed_when: false
       become: true
 
-    - name: Require safe cgroup memory-controller kernel hook directories
+    - name: Require safe cgroup memory-controller kernel hook paths
       ansible.builtin.assert:
         that:
           - item.stat.exists or not item.item.required
-          - not item.stat.exists or (item.stat.isdir | default(false))
+          - >-
+            not item.stat.exists
+            or (item.item.kind == 'directory' and item.stat.isdir | default(false))
+            or (item.item.kind == 'file' and item.stat.isreg | default(false))
           - not item.stat.exists or not (item.stat.islnk | default(false))
           - not item.stat.exists or (item.stat.uid | default(-1)) == 0
           - >-
@@ -168,10 +177,11 @@
             or (item.stat.mode | default('0000'))[-1]
             not in ['2', '3', '6', '7']
         fail_msg: >-
-          {{ item.item.path }} must be a root-owned directory that is not
-          writable by its group or other users before installing a
-          root-executed kernel hook. Mandatory ancestors must already exist.
-      loop: "{{ cgroup_memory_controller_kernel_hook_directories.results }}"
+          {{ item.item.path }} must be a root-owned {{ item.item.kind }} that is
+          not writable by its group or other users before installing a
+          root-executed kernel hook. Mandatory ancestors must already exist;
+          the final hook target may be absent.
+      loop: "{{ cgroup_memory_controller_kernel_hook_paths.results }}"
 
     - name: Validate the declared firmware-refresh hook
       when: cgroup_memory_controller_kernel_refresh_dependency_path | length > 0
@@ -190,7 +200,7 @@
 
     - name: Create missing cgroup memory-controller kernel hook directory
       when: >-
-        not cgroup_memory_controller_kernel_hook_directories.results[2].stat.exists
+        not cgroup_memory_controller_kernel_hook_paths.results[2].stat.exists
       ansible.builtin.file:
         path: /etc/kernel/postinst.d
         state: directory
