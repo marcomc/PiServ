@@ -520,6 +520,21 @@
                       | b64decode
                     )
 
+            - name: Exercise coherent source snapshot lifecycle
+              ansible.builtin.command:
+                argv:
+                  - >-
+                    {{ cgroup_memory_controller_test_role_path
+                       }}/tests/test-source-snapshot-race.sh
+                  - "{{ cgroup_memory_controller_test_helper }}"
+                  - "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                  - "{{ cgroup_memory_controller_test_managed_dtb }}"
+                  - "{{ cgroup_memory_controller_test_config }}"
+                  - >-
+                    {{ cgroup_memory_controller_test_backup_dir
+                       }}/current-source-state
+              changed_when: true
+
             - name: Alias reboot-mode control to firmware configuration
               ansible.builtin.file:
                 src: "{{ cgroup_memory_controller_test_config }}"

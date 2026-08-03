@@ -27,6 +27,7 @@ readonly managed_config_line="device_tree=${managed_dtb_path##*/}"
 readonly managed_filter_line='[all]'
 
 work_directory=''
+source_snapshot_path=''
 config_temp=''
 config_previous=''
 managed_dtb_temp=''
@@ -406,8 +407,16 @@ inspect_source_bootargs() {
   require_command "${fdtget_binary}"
   require_command "${sha256sum_binary}"
 
-  source_bootargs="$("${fdtget_binary}" --type s "${source_dtb}" /chosen bootargs)"
-  source_sha256="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
+  work_directory="$(mktemp -d /run/cgroup-memory-controller.XXXXXX)"
+  chmod 0700 "${work_directory}"
+  source_snapshot_path="${work_directory}/source.dtb"
+  cp --no-dereference -- "${source_dtb}" "${source_snapshot_path}"
+  require_regular_file "${source_snapshot_path}"
+  chmod 0600 "${source_snapshot_path}"
+
+  source_bootargs="$("${fdtget_binary}" --type s \
+    "${source_snapshot_path}" /chosen bootargs)"
+  source_sha256="$("${sha256sum_binary}" "${source_snapshot_path}" | awk '{print $1}')"
   [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
   [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
 
@@ -444,10 +453,8 @@ prepare_managed_dtb() {
     fail 'cannot prepare a managed DTB when the vendor already enables memory cgroups'
   require_command "${fdtput_binary}"
 
-  work_directory="$(mktemp -d /run/cgroup-memory-controller.XXXXXX)"
-  chmod 0700 "${work_directory}"
   candidate_dtb_path="${work_directory}/managed.dtb"
-  cp -- "${source_dtb}" "${candidate_dtb_path}"
+  cp -- "${source_snapshot_path}" "${candidate_dtb_path}"
   "${fdtput_binary}" --type s "${candidate_dtb_path}" /chosen bootargs \
     "${replacement_bootargs}"
   candidate_bootargs="$("${fdtget_binary}" --type s \
