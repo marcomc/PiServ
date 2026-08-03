@@ -41,9 +41,11 @@ managed `bootargs` match the vendor arguments except for that token.
 Before each apply, it also revalidates the retained backups and requires a
 root-owned vendor DTB that is not writable by unprivileged users. The helper
 also revalidates the firmware-refresh dependency, keeps its managed selection
-last in `config.txt`, and atomically refreshes `current-source-state`.
+last in `config.txt`, verifies the active `cold` reboot mode before apply, and
+atomically refreshes `current-source-state`.
 The role creates `backup-checksums.sha256` only with a fresh pair of backups;
 partial or unmanifested existing sets fail without being modified.
+Rollback also validates this recovery set before changing boot state.
 
 ## Apply and Preflight
 
@@ -63,11 +65,14 @@ Observed on PiServ after the 2026-08-03 deployment:
 status=managed-dtb-required
 changed=false
 source_dtb_sha256=4186c583885d0337494d9c8e4533a2d387e948ac00c2e4ae4c7e12b5c49ebe35
+reboot_mode=cold
 ```
 
 Before adding the manifest, the retained configuration matched a reconstruction
 of the pre-managed `config.txt` byte-for-byte and `fdtget` parsed the retained
 vendor DTB. The migrated manifest then passed normal and check-mode role runs.
+The independently invoked installed kernel hook returned the same idempotent
+status while the active reboot mode was `cold`.
 
 `changed=false` proves the installed managed DTB matches the current vendor DTB
 and the marked firmware selection is correct.

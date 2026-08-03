@@ -7,6 +7,8 @@ managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
 managed_dtb_name={{ cgroup_memory_controller_managed_dtb_name | quote }}
 disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
 refresh_dependency_path={{ cgroup_memory_controller_kernel_refresh_dependency_path | quote }}
+reboot_mode_path={{ cgroup_memory_controller_reboot_mode_path | quote }}
+required_reboot_mode={{ cgroup_memory_controller_required_reboot_mode | quote }}
 backup_dir={{ cgroup_memory_controller_backup_dir | quote }}
 config_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_config_backup_filename) | quote }}
 vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_vendor_dtb_backup_filename) | quote }}
@@ -15,7 +17,7 @@ source_state_path={{ (cgroup_memory_controller_backup_dir ~ '/current-source-sta
 
 readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
 readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_path
-readonly backup_manifest_path source_state_path
+readonly reboot_mode_path required_reboot_mode backup_manifest_path source_state_path
 readonly fdtget_binary=/usr/bin/fdtget
 readonly fdtput_binary=/usr/bin/fdtput
 readonly sha256sum_binary=/usr/bin/sha256sum
@@ -128,6 +130,16 @@ require_safe_refresh_dependency() {
     fail "firmware-refresh dependency is not executable: ${refresh_dependency_path}"
 }
 
+require_reboot_mode() {
+  local active_reboot_mode
+
+  [[ -n "${reboot_mode_path}" ]] || return 0
+  require_safe_root_file "${reboot_mode_path}" 'active reboot-mode control'
+  active_reboot_mode="$(<"${reboot_mode_path}")"
+  [[ "${active_reboot_mode}" == "${required_reboot_mode}" ]] || \
+    fail "active reboot mode is ${active_reboot_mode}, expected ${required_reboot_mode}"
+}
+
 require_safe_backups() {
   local backup_path
   local backup_identity
@@ -139,19 +151,24 @@ require_safe_backups() {
   local -a backup_hashes=()
   local -a backup_identities=()
 
+  require_command "${fdtget_binary}"
+  require_command "${sha256sum_binary}"
   require_safe_private_directory "${backup_dir}"
   for backup_path in \
     "${config_backup_path}" "${vendor_backup_path}" "${backup_manifest_path}"; do
     require_private_root_file "${backup_path}"
   done
   config_identity="$(stat -c '%d:%i' "${config_path}")"
-  source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+  source_identity=''
+  if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
+    source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+  fi
   for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
     [[ -s "${backup_path}" ]] || fail "boot backup is empty: ${backup_path}"
     backup_identity="$(stat -c '%d:%i' "${backup_path}")"
     [[ "${backup_identity}" != "${config_identity}" ]] || \
       fail "boot backup aliases firmware configuration: ${backup_path}"
-    [[ "${backup_identity}" != "${source_identity}" ]] || \
+    [[ -z "${source_identity}" || "${backup_identity}" != "${source_identity}" ]] || \
       fail "boot backup aliases vendor Device Tree: ${backup_path}"
     backup_identities+=("${backup_identity}")
     backup_hashes+=("$("${sha256sum_binary}" "${backup_path}" | awk '{print $1}')")
@@ -171,6 +188,12 @@ require_safe_backups() {
   [[ "${retained_manifest}" == "${expected_manifest}" ]] || \
     fail 'boot backup checksum manifest does not match retained artifacts'
   "${fdtget_binary}" -p "${vendor_backup_path}" / >/dev/null
+}
+
+require_recovery_for_managed_state() {
+  if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+    require_safe_backups
+  fi
 }
 
 require_safe_managed_target() {
@@ -479,9 +502,11 @@ main() {
 
   case "${mode}" in
     --check-disable)
+      require_recovery_for_managed_state
       check_disable_managed_dtb
       ;;
     --disable)
+      require_recovery_for_managed_state
       disable_managed_dtb
       ;;
     --check|--apply)
@@ -490,6 +515,7 @@ main() {
         check_managed_dtb
       else
         require_safe_refresh_dependency
+        require_reboot_mode
         require_safe_backups
         write_source_state
         if [[ "${controller_status}" == 'vendor-enabled' ]]; then

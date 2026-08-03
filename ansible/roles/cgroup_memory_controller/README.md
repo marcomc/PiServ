@@ -71,6 +71,8 @@ ansible-galaxy role install marcomc.cgroup_memory_controller,0.1.0
 | `cgroup_memory_controller_helper_path` | `/usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb` | Generation and rollback helper |
 | `cgroup_memory_controller_kernel_hook_path` | `/etc/kernel/postinst.d/zz-ansible-cgroup-memory-controller` | Managed-DTB refresh hook |
 | `cgroup_memory_controller_kernel_refresh_dependency_path` | `""` | Optional earlier hook that copies the vendor DTB |
+| `cgroup_memory_controller_reboot_mode_path` | `""` | Optional active reboot-mode control checked before refresh |
+| `cgroup_memory_controller_required_reboot_mode` | `""` | Required active reboot-mode value |
 | `cgroup_memory_controller_backup_dir` | `/var/lib/cgroup-memory-controller` | Root-only initial backup and source state |
 | `cgroup_memory_controller_config_backup_filename` | `config.before-cgroup-memory-controller` | Initial firmware configuration backup basename |
 | `cgroup_memory_controller_vendor_dtb_backup_filename` | `vendor.dtb.before-cgroup-memory-controller` | Initial vendor DTB backup basename |
@@ -93,6 +95,8 @@ See `defaults/main.yml` for the complete defaults.
         cgroup_memory_controller_vendor_dtb: /boot/firmware/example-board.dtb
         cgroup_memory_controller_kernel_refresh_dependency_path: >-
           /etc/kernel/postinst.d/z50-firmware-copy
+        cgroup_memory_controller_reboot_mode_path: /sys/kernel/reboot/mode
+        cgroup_memory_controller_required_reboot_mode: cold
         cgroup_memory_controller_runtime_systemd_service: docker.service
 ```
 
@@ -126,10 +130,10 @@ The optional kernel-refresh dependency lets a consumer declare the hook that
 copies a new DTB into the boot filesystem. The role requires it to exist and to
 sort before its own `zz-` hook. Both basenames are restricted to characters
 accepted by Debian `run-parts`, and the dependency must be a safe root-owned
-executable. Every apply revalidates that dependency and atomically records the
-validated source checksum. On each kernel update, the managed hook requires a
-trusted root-owned vendor DTB before rebuilding the managed copy. It removes
-the managed DTB and
+executable. Every apply revalidates that dependency, verifies any declared
+active reboot-mode control, and atomically records the validated source
+checksum. On each kernel update, the managed hook requires a trusted root-owned
+vendor DTB before rebuilding the managed copy. It removes the managed DTB and
 configuration block if the argument is no longer present. If validation fails,
 the hook attempts to remove the managed selection and DTB, then fails the
 package operation visibly. A rollback failure is reported explicitly and

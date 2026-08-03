@@ -14,7 +14,9 @@ documented here.
 - Added initial boot-artifact backups, explicit rollback, and optional runtime
   assertions without modifying the vendor DTB.
 - Added a kernel post-install hook that refreshes the managed DTB after a
-  declared firmware-refresh hook updates the vendor DTB.
+  declared firmware-refresh hook updates the vendor DTB, with optional active
+  reboot-mode verification before regeneration.
+- Added fail-closed backup validation before managed boot-state rollback.
 - Added consumer input checks for managed-DTB name/path consistency, atomic
   boot arguments, and trusted root-owned paths used by privileged helpers.
 - Added Galaxy-ready metadata, role documentation, validation, and release

@@ -27,6 +27,10 @@
           kernel_hook_path: "/etc/kernel/postinst.d/zz-invalid\n"
         - name: dependency hook trailing newline
           dependency_path: "/etc/kernel/postinst.d/z50-invalid\n"
+        - name: reboot-mode path without required value
+          reboot_mode_path: /sys/kernel/reboot/mode
+        - name: reboot-mode value without control path
+          required_reboot_mode: cold
         - name: marker literal awk escape
           config_marker: 'ANSIBLE MANAGED: invalid\nmarker'
         - name: marker trailing newline

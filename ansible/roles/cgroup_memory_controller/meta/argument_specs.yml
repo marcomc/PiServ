@@ -54,6 +54,14 @@ argument_specs:
         type: path
         default: ""
         description: Optional earlier kernel hook that refreshes the vendor DTB.
+      cgroup_memory_controller_reboot_mode_path:
+        type: path
+        default: ""
+        description: Optional active reboot-mode control checked before refresh.
+      cgroup_memory_controller_required_reboot_mode:
+        type: str
+        default: ""
+        description: Required value of the optional active reboot-mode control.
       cgroup_memory_controller_backup_dir:
         type: path
         default: /var/lib/cgroup-memory-controller

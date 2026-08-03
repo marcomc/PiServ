@@ -20,6 +20,8 @@ cgroup_memory_controller_kernel_hook_path: >-
   /etc/kernel/postinst.d/zz-piserv-cgroup-memory-controller
 cgroup_memory_controller_kernel_refresh_dependency_path: >-
   /etc/kernel/postinst.d/z50-raspi-firmware
+cgroup_memory_controller_reboot_mode_path: /sys/kernel/reboot/mode
+cgroup_memory_controller_required_reboot_mode: cold
 cgroup_memory_controller_backup_dir: >-
   /var/lib/piserv/boot-backups/cgroup-memory-controller
 cgroup_memory_controller_config_backup_filename: >-

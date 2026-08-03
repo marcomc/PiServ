@@ -37,6 +37,18 @@
         cgroup_memory_controller_kernel_refresh_dependency_path == ''
         or cgroup_memory_controller_kernel_refresh_dependency_path
         is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+\\Z')
+      - >-
+        (cgroup_memory_controller_reboot_mode_path == '')
+        == (cgroup_memory_controller_required_reboot_mode == '')
+      - >-
+        cgroup_memory_controller_reboot_mode_path == ''
+        or cgroup_memory_controller_reboot_mode_path
+        is match('^/[A-Za-z0-9_./-]+\\Z')
+      - "'..' not in cgroup_memory_controller_reboot_mode_path"
+      - >-
+        cgroup_memory_controller_required_reboot_mode == ''
+        or cgroup_memory_controller_required_reboot_mode
+        is match('^[A-Za-z0-9_.-]+\\Z')
       - cgroup_memory_controller_backup_dir is match('^/var/lib/[A-Za-z0-9_./-]+\\Z')
       - "'..' not in cgroup_memory_controller_backup_dir"
       - >-
@@ -64,7 +76,7 @@
     fail_msg: >-
       The cgroup memory-controller policy requires safe absolute paths, a
       non-empty vendor DTB, an exact disabled boot argument, and valid optional
-      kernel-hook and systemd-service declarations.
+      kernel-hook, reboot-mode, and systemd-service declarations.
 
 - name: Validate cgroup memory-controller helper path
   ansible.builtin.import_tasks: validate-helper-path.yml

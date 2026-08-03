@@ -15,6 +15,8 @@ cgroup_memory_controller_helper_path: >-
 cgroup_memory_controller_kernel_hook_path: >-
   /etc/kernel/postinst.d/zz-ansible-cgroup-memory-controller
 cgroup_memory_controller_kernel_refresh_dependency_path: ""
+cgroup_memory_controller_reboot_mode_path: ""
+cgroup_memory_controller_required_reboot_mode: ""
 cgroup_memory_controller_backup_dir: /var/lib/cgroup-memory-controller
 cgroup_memory_controller_config_backup_filename: config.before-cgroup-memory-controller
 cgroup_memory_controller_vendor_dtb_backup_filename: vendor.dtb.before-cgroup-memory-controller
