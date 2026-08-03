@@ -131,12 +131,13 @@ sort before its own `zz-` hook. Both basenames are restricted to characters
 accepted by Debian `run-parts`, and the dependency must be a safe root-owned
 executable. Every apply revalidates that dependency, verifies any declared
 active reboot-mode control, and atomically records the validated source
-checksum. On each kernel update, the managed hook requires a trusted root-owned
-vendor DTB before rebuilding the managed copy. It removes the managed DTB and
-configuration block if the argument is no longer present. If validation fails,
-the hook attempts to remove the managed selection and DTB, then fails the
-package operation visibly. A rollback failure is reported explicitly and
-requires manual verification before reboot.
+checksum. Mutating helper runs are serialized, and the kernel hook retains the
+same lock across regeneration and its fallback rollback. On each kernel update,
+the managed hook requires a trusted root-owned vendor DTB before rebuilding the
+managed copy. It removes the managed DTB and configuration block if the argument
+is no longer present. If validation fails, the hook attempts to remove the
+managed selection and DTB, then fails the package operation visibly. A rollback
+failure is reported explicitly and requires manual verification before reboot.
 
 The role never reboots the host. After an operator-approved reboot, set
 `cgroup_memory_controller_require_runtime: true` to assert `memory` in the root

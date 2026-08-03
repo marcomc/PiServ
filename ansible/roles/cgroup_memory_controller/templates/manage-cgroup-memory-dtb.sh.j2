@@ -19,6 +19,7 @@ readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_pat
 readonly reboot_mode_path required_reboot_mode backup_manifest_path source_state_path
 readonly fdtget_binary=/usr/bin/fdtget
 readonly fdtput_binary=/usr/bin/fdtput
+readonly flock_binary=/usr/bin/flock
 readonly sha256sum_binary=/usr/bin/sha256sum
 readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
 readonly end_marker={{ ('# END ' ~ cgroup_memory_controller_config_marker) | quote }}
@@ -41,7 +42,7 @@ config_changed=false
 restore_managed_dtb=false
 
 usage() {
-  printf 'Usage: %s --check|--apply|--check-disable|--disable\n' "$0" >&2
+  printf 'Usage: %s --check|--apply|--refresh|--check-disable|--disable\n' "$0" >&2
 }
 
 cleanup() {
@@ -118,6 +119,13 @@ require_safe_private_directory() {
   directory_mode="$(stat -c '%a' "${directory_path}")"
   [[ "${directory_mode}" == '700' ]] || \
     fail "private directory is not mode 0700: ${directory_path}"
+}
+
+acquire_operation_lock() {
+  require_command "${flock_binary}"
+  require_safe_private_directory "${backup_dir}"
+  exec 9<"${backup_dir}"
+  "${flock_binary}" --exclusive 9
 }
 
 require_private_root_file() {
@@ -557,14 +565,9 @@ check_managed_dtb() {
   print_status "${changed}"
 }
 
-main() {
-  local mode="${1:-}"
+run_mode() {
+  local mode="$1"
 
-  [[ $# -eq 1 ]] || {
-    usage
-    exit 2
-  }
-  trap cleanup EXIT
   require_safe_managed_target
   inspect_config_markers
 
@@ -598,6 +601,56 @@ main() {
       exit 2
       ;;
   esac
+}
+
+refresh_managed_dtb() {
+  local apply_status
+  local result
+  local rollback_status
+  local rollback_result
+
+  set +e
+  result="$(set -e; trap cleanup EXIT; run_mode --apply 2>&1)"
+  apply_status=$?
+  set -e
+  if (( apply_status == 0 )); then
+    printf '%s\n' "${result}"
+    return
+  fi
+  printf '%s\n' "${result}" >&2
+  set +e
+  rollback_result="$(set -e; trap cleanup EXIT; run_mode --disable 2>&1)"
+  rollback_status=$?
+  set -e
+  if (( rollback_status == 0 )); then
+    printf '%s\n' "${rollback_result}" >&2
+    printf '%s\n' \
+      'The managed cgroup memory Device Tree was disabled after regeneration failed.' >&2
+  else
+    printf '%s\n' "${rollback_result}" >&2
+    printf '%s\n' \
+      'The managed cgroup memory Device Tree could not be disabled after regeneration failed.' >&2
+  fi
+  return 1
+}
+
+main() {
+  local mode="${1:-}"
+
+  [[ $# -eq 1 ]] || {
+    usage
+    exit 2
+  }
+  trap cleanup EXIT
+  if [[ "${mode}" == '--apply' || "${mode}" == '--refresh' || \
+    "${mode}" == '--disable' ]]; then
+    acquire_operation_lock
+  fi
+  if [[ "${mode}" == '--refresh' ]]; then
+    refresh_managed_dtb
+  else
+    run_mode "${mode}"
+  fi
 }
 
 main "$@"

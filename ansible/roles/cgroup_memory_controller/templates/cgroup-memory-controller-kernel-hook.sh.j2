@@ -2,24 +2,48 @@
 set -euo pipefail
 
 readonly helper_path={{ cgroup_memory_controller_helper_path | quote }}
+readonly stat_binary=/usr/bin/stat
 
-if [[ ! -x "${helper_path}" ]]; then
-  printf 'The cgroup memory-controller refresh helper is unavailable: %s\n' \
-    "${helper_path}" >&2
+fail() {
+  printf 'cgroup memory-controller kernel hook: %s\n' "$*" >&2
   exit 1
-fi
+}
 
-if ! result="$("${helper_path}" --apply 2>&1)"; then
-  printf '%s\n' "${result}" >&2
-  if rollback_result="$("${helper_path}" --disable 2>&1)"; then
-    printf '%s\n' "${rollback_result}" >&2
-    printf '%s\n' \
-      'The managed cgroup memory Device Tree was disabled after regeneration failed.' >&2
+require_safe_path() {
+  local path="$1"
+  local kind="$2"
+  local description="$3"
+  local mode
+  local owner
+
+  if [[ "${kind}" == 'directory' ]]; then
+    [[ -d "${path}" && ! -L "${path}" ]] || \
+      fail "${description} is unavailable or unsafe: ${path}"
   else
-    printf '%s\n' "${rollback_result}" >&2
-    printf '%s\n' \
-      'The managed cgroup memory Device Tree could not be disabled after regeneration failed.' >&2
+    [[ -f "${path}" && ! -L "${path}" ]] || \
+      fail "${description} is unavailable or unsafe: ${path}"
   fi
+  owner="$("${stat_binary}" -c '%u' "${path}")"
+  [[ "${owner}" == '0' ]] || fail "${description} is not root-owned: ${path}"
+  mode="$("${stat_binary}" -c '%a' "${path}")"
+  (( (8#${mode} & 0022) == 0 )) || \
+    fail "${description} is writable by its group or other users: ${path}"
+}
+
+require_safe_helper() {
+  local helper_directory
+
+  for helper_directory in \
+    /usr /usr/local /usr/local/libexec "${helper_path%/*}"; do
+    require_safe_path "${helper_directory}" directory 'helper directory'
+  done
+  require_safe_path "${helper_path}" file 'refresh helper'
+  [[ -x "${helper_path}" ]] || fail "refresh helper is not executable: ${helper_path}"
+}
+
+require_safe_helper
+if ! result="$("${helper_path}" --refresh 2>&1)"; then
+  printf '%s\n' "${result}" >&2
   exit 1
 fi
 

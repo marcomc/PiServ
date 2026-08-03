@@ -92,7 +92,10 @@
                 'managed Device Tree retained'
                 in (cgroup_memory_controller_rendered_helper.content | b64decode)
               - >-
-                'Usage: %s --check|--apply|--check-disable|--disable'
+                'Usage: %s --check|--apply|--refresh|--check-disable|--disable'
+                in (cgroup_memory_controller_rendered_helper.content | b64decode)
+              - >-
+                '"${flock_binary}" --exclusive 9'
                 in (cgroup_memory_controller_rendered_helper.content | b64decode)
 
         - name: Reject malformed cgroup memory-controller marker states
@@ -138,25 +141,34 @@
             dest: "{{ cgroup_memory_controller_test_config }}"
             mode: "0640"
 
-        - name: Disable absent cgroup memory-controller markers twice
-          ansible.builtin.command:
-            argv:
-              - "{{ cgroup_memory_controller_test_helper }}"
-              - --disable
-          loop:
-            - first
-            - second
-          register: cgroup_memory_controller_absent_marker_runs
-          changed_when: false
+        - name: Create cgroup memory-controller test backup directory
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_backup_dir }}"
+            state: directory
+            mode: "0700"
 
-        - name: Require absent cgroup memory-controller markers to remain a no-op
-          ansible.builtin.assert:
-            that:
-              - >-
-                cgroup_memory_controller_absent_marker_runs.results
-                | map(attribute='stdout')
-                | select('search', 'changed=false')
-                | length == 2
+        - name: Verify absent managed markers on Linux
+          when: cgroup_memory_controller_test_is_linux | bool
+          block:
+            - name: Disable absent cgroup memory-controller markers twice
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_helper }}"
+                  - --disable
+              loop:
+                - first
+                - second
+              register: cgroup_memory_controller_absent_marker_runs
+              changed_when: false
+
+            - name: Require absent managed markers to remain a no-op
+              ansible.builtin.assert:
+                that:
+                  - >-
+                    cgroup_memory_controller_absent_marker_runs.results
+                    | map(attribute='stdout')
+                    | select('search', 'changed=false')
+                    | length == 2
 
         - name: Create non-regular cgroup memory-controller managed DTB target
           ansible.builtin.file:
@@ -190,6 +202,7 @@
             follow: false
 
         - name: Apply with dangling cgroup memory-controller managed DTB symlink
+          when: cgroup_memory_controller_test_is_linux | bool
           ansible.builtin.command:
             argv:
               - "{{ cgroup_memory_controller_test_helper }}"
@@ -254,12 +267,6 @@
                 content: "cold\n"
                 dest: "{{ cgroup_memory_controller_test_reboot_mode }}"
                 mode: "0600"
-
-            - name: Create cgroup memory-controller lifecycle backup directory
-              ansible.builtin.file:
-                path: "{{ cgroup_memory_controller_test_backup_dir }}"
-                state: directory
-                mode: "0700"
 
             - name: Read cgroup memory-controller lifecycle sources
               ansible.builtin.stat:
@@ -1002,6 +1009,8 @@
             mode: "0700"
           vars:
             cgroup_memory_controller_helper_path: "{{ cgroup_memory_controller_test_directory.path }}/missing-refresh-helper"
+            cgroup_memory_controller_backup_dir: >-
+              {{ cgroup_memory_controller_test_backup_dir }}
 
         - name: Read rendered cgroup memory-controller kernel refresh hook
           ansible.builtin.slurp:
@@ -1015,22 +1024,91 @@
                 'missing-refresh-helper'
                 in (cgroup_memory_controller_rendered_hook.content | b64decode)
               - >-
-                '"${helper_path}" --apply'
+                '"${helper_path}" --refresh'
                 in (cgroup_memory_controller_rendered_hook.content | b64decode)
               - >-
-                '"${helper_path}" --disable'
+                'require_safe_helper'
                 in (cgroup_memory_controller_rendered_hook.content | b64decode)
 
-        - name: Run kernel refresh hook without its helper
-          ansible.builtin.command:
-            argv:
-              - "{{ cgroup_memory_controller_test_kernel_hook }}"
-          register: cgroup_memory_controller_missing_refresh_helper
-          changed_when: false
-          failed_when: >-
-            cgroup_memory_controller_missing_refresh_helper.rc == 0
-            or 'refresh helper is unavailable'
-            not in cgroup_memory_controller_missing_refresh_helper.stderr
+        - name: Exercise Linux kernel refresh hook safeguards
+          when: cgroup_memory_controller_test_is_linux | bool
+          block:
+            - name: Run kernel refresh hook without its helper
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_kernel_hook }}"
+              register: cgroup_memory_controller_missing_refresh_helper
+              changed_when: false
+              failed_when: >-
+                cgroup_memory_controller_missing_refresh_helper.rc == 0
+                or 'refresh helper is unavailable'
+                not in cgroup_memory_controller_missing_refresh_helper.stderr
+
+            - name: Render kernel refresh hook with an untrusted helper
+              ansible.builtin.template:
+                src: "{{ cgroup_memory_controller_test_role_path }}/templates/cgroup-memory-controller-kernel-hook.sh.j2"
+                dest: "{{ cgroup_memory_controller_test_kernel_hook }}"
+                mode: "0700"
+              vars:
+                cgroup_memory_controller_helper_path: >-
+                  {{ cgroup_memory_controller_test_helper }}
+                cgroup_memory_controller_backup_dir: >-
+                  {{ cgroup_memory_controller_test_backup_dir }}
+
+            - name: Make kernel refresh helper untrusted
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_helper }}"
+                mode: "0775"
+
+            - name: Run kernel refresh hook with an untrusted helper
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_kernel_hook }}"
+              register: cgroup_memory_controller_untrusted_refresh_helper
+              changed_when: false
+              failed_when: >-
+                cgroup_memory_controller_untrusted_refresh_helper.rc == 0
+                or 'refresh helper is writable'
+                not in cgroup_memory_controller_untrusted_refresh_helper.stderr
+
+            - name: Restore trusted kernel refresh helper mode
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_helper }}"
+                mode: "0700"
+
+            - name: Exercise kernel refresh transaction with DTB tooling
+              when: cgroup_memory_controller_test_has_dtb_tools | bool
+              block:
+                - name: Remove firmware-refresh dependency before hook fallback
+                  ansible.builtin.file:
+                    path: "{{ cgroup_memory_controller_test_refresh_dependency }}"
+                    state: absent
+
+                - name: Require refresh failure to disable managed state
+                  ansible.builtin.command:
+                    argv:
+                      - "{{ cgroup_memory_controller_test_kernel_hook }}"
+                  register: cgroup_memory_controller_refresh_fallback
+                  changed_when: false
+                  failed_when: >-
+                    cgroup_memory_controller_refresh_fallback.rc == 0
+                    or 'was disabled after regeneration failed'
+                    not in cgroup_memory_controller_refresh_fallback.stderr
+
+                - name: Restore firmware-refresh dependency after hook fallback
+                  ansible.builtin.copy:
+                    content: "#!/bin/sh\nexit 0\n"
+                    dest: "{{ cgroup_memory_controller_test_refresh_dependency }}"
+                    mode: "0755"
+
+                - name: Run kernel refresh hook with its trusted helper
+                  ansible.builtin.command:
+                    argv:
+                      - "{{ cgroup_memory_controller_test_kernel_hook }}"
+                  register: cgroup_memory_controller_trusted_refresh_helper
+                  changed_when: >-
+                    'changed=true'
+                    in cgroup_memory_controller_trusted_refresh_helper.stderr
 
         - name: Lint rendered cgroup memory-controller shell helpers
           ansible.builtin.command:
