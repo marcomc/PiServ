@@ -218,6 +218,25 @@
       become: true
       check_mode: false
 
+    - name: Create missing cgroup memory-controller backup parent directory
+      when: not cgroup_memory_controller_backup_parent.stat.exists
+      ansible.builtin.file:
+        path: "{{ cgroup_memory_controller_backup_dir | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      become: true
+
+    - name: Refresh cgroup memory-controller backup parent directory
+      ansible.builtin.stat:
+        path: "{{ cgroup_memory_controller_backup_dir | dirname }}"
+        follow: false
+      register: cgroup_memory_controller_backup_parent
+      changed_when: false
+      become: true
+      check_mode: false
+
     - name: Resolve cgroup memory-controller backup parent directory
       when: cgroup_memory_controller_backup_parent.stat.exists
       ansible.builtin.command:
@@ -420,6 +439,16 @@
       register: cgroup_memory_controller_config_before_rollback
       become: true
       check_mode: false
+
+    - name: Require a safe removable cgroup memory-controller kernel hook
+      when: cgroup_memory_controller_artifacts_before_rollback.results[3].stat.exists
+      ansible.builtin.assert:
+        that:
+          - cgroup_memory_controller_artifacts_before_rollback.results[3].stat.isreg
+          - not cgroup_memory_controller_artifacts_before_rollback.results[3].stat.islnk
+        fail_msg: >-
+          The configured kernel hook must be a regular non-symlink file before
+          rollback can change or remove managed boot state.
 
     - name: Require no managed state when rollback helper is absent
       when: >-
