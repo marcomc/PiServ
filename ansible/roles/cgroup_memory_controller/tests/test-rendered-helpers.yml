@@ -30,6 +30,8 @@
     cgroup_memory_controller_test_reboot_mode: "{{ cgroup_memory_controller_test_directory.path }}/reboot-mode"
     cgroup_memory_controller_test_is_linux: >-
       {{ lookup('ansible.builtin.pipe', 'uname -s') == 'Linux' }}
+    cgroup_memory_controller_test_is_root: >-
+      {{ lookup('ansible.builtin.pipe', 'id -u') == '0' }}
     cgroup_memory_controller_test_has_dtb_tools: >-
       {{
         lookup(
@@ -146,6 +148,83 @@
             path: "{{ cgroup_memory_controller_test_backup_dir }}"
             state: directory
             mode: "0700"
+
+        - name: Exercise backup-parent safeguards on Linux
+          when:
+            - cgroup_memory_controller_test_is_linux | bool
+            - cgroup_memory_controller_test_is_root | bool
+          block:
+            - name: Create trusted backup-parent test root
+              ansible.builtin.tempfile:
+                path: /var/lib
+                state: directory
+                suffix: cgroup-memory-controller
+              register: cgroup_memory_controller_backup_parent_test_root
+
+            - name: Create a safe nested backup parent twice
+              ansible.builtin.include_tasks: ../tasks/manage-backup-parent.yml
+              vars:
+                cgroup_memory_controller_backup_dir: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     }}/safe/nested/backups
+              loop:
+                - first
+                - converged
+
+            - name: Create unsafe backup-parent target
+              ansible.builtin.file:
+                path: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     }}/unsafe-target
+                state: directory
+                mode: "0700"
+
+            - name: Create unsafe backup-parent symlink
+              ansible.builtin.file:
+                src: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     }}/unsafe-target
+                dest: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     }}/unsafe-link
+                state: link
+
+            - name: Create writable backup-parent ancestor
+              ansible.builtin.file:
+                path: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     }}/unsafe-mode
+                state: directory
+                mode: "0777"
+
+            - name: Reject unsafe backup parents before mutation
+              ansible.builtin.include_tasks: assert-unsafe-backup-parent.yml
+              loop:
+                - backup_dir: >-
+                    {{ cgroup_memory_controller_backup_parent_test_root.path
+                       }}/unsafe-link/new/backups
+                  blocked_path: >-
+                    {{ cgroup_memory_controller_backup_parent_test_root.path
+                       }}/unsafe-target/new
+                  failure_tasks:
+                    - Require a canonical cgroup memory-controller backup parent path
+                - backup_dir: >-
+                    {{ cgroup_memory_controller_backup_parent_test_root.path
+                       }}/unsafe-mode/new/backups
+                  blocked_path: >-
+                    {{ cgroup_memory_controller_backup_parent_test_root.path
+                       }}/unsafe-mode/new
+                  failure_tasks:
+                    - Require trusted existing cgroup memory-controller backup ancestors
+              loop_control:
+                loop_var: cgroup_memory_controller_backup_parent_case
+          always:
+            - name: Remove trusted backup-parent test root
+              ansible.builtin.file:
+                path: >-
+                  {{ cgroup_memory_controller_backup_parent_test_root.path
+                     | default('/var/lib/cgroup-memory-controller-test-absent') }}
+                state: absent
 
         - name: Verify absent managed markers on Linux
           when: cgroup_memory_controller_test_is_linux | bool
@@ -662,10 +741,15 @@
               ansible.builtin.copy:
                 content: |-
                   #!/bin/sh
+                  : "${FAIL_MV_DESTINATION:=}"
+                  : "${FAIL_MV_AFTER_COMMIT:=false}"
                   for argument in "$@"; do
-                    destination=$argument
+                    destination=${argument}
                   done
-                  if [ "$destination" = "$FAIL_MV_DESTINATION" ]; then
+                  if [ "${destination}" = "${FAIL_MV_DESTINATION}" ]; then
+                    if [ "${FAIL_MV_AFTER_COMMIT}" = true ]; then
+                      /usr/bin/mv "$@"
+                    fi
                     printf 'injected managed-state commit failure\n' >&2
                     exit 73
                   fi
@@ -696,6 +780,40 @@
                 path: "{{ cgroup_memory_controller_test_config }}"
                 line: device_tree=other.dtb
                 state: absent
+
+            - name: Reject source-state commit without changing managed state
+              ansible.builtin.include_tasks: assert-atomic-refresh-failure.yml
+              vars:
+                cgroup_memory_controller_failed_destination: >-
+                  {{ cgroup_memory_controller_test_backup_dir
+                     }}/current-source-state
+
+            - name: Reject post-rename failure without changing managed state
+              ansible.builtin.include_tasks: assert-atomic-refresh-failure.yml
+              vars:
+                cgroup_memory_controller_failed_destination: >-
+                  {{ cgroup_memory_controller_test_backup_dir
+                     }}/current-source-state
+                cgroup_memory_controller_fail_after_commit: true
+
+            - name: Enable memory cgroups in the vendor Device Tree
+              ansible.builtin.command:
+                argv:
+                  - fdtput
+                  - --type
+                  - s
+                  - "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                  - /chosen
+                  - bootargs
+                  - reboot=w quiet
+              changed_when: true
+
+            - name: Reject vendor-enabled source-state commit atomically
+              ansible.builtin.include_tasks: assert-atomic-refresh-failure.yml
+              vars:
+                cgroup_memory_controller_failed_destination: >-
+                  {{ cgroup_memory_controller_test_backup_dir
+                     }}/current-source-state
 
             - name: Restore vendor Device Tree after commit failures
               ansible.builtin.command:
@@ -905,6 +1023,14 @@
                   - --apply
               changed_when: false
 
+            - name: Checksum source state before direct rollback
+              ansible.builtin.stat:
+                path: >-
+                  {{ cgroup_memory_controller_test_backup_dir
+                     }}/current-source-state
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_source_state_before_disable
+
             - name: Make vendor Device Tree unavailable for rollback
               ansible.builtin.command:
                 argv:
@@ -939,6 +1065,14 @@
                 path: "{{ cgroup_memory_controller_test_managed_dtb }}"
               register: cgroup_memory_controller_disabled_dtb
 
+            - name: Rechecksum source state after direct rollback
+              ansible.builtin.stat:
+                path: >-
+                  {{ cgroup_memory_controller_test_backup_dir
+                     }}/current-source-state
+                checksum_algorithm: sha256
+              register: cgroup_memory_controller_source_state_after_disable
+
             - name: Require complete managed Device Tree rollback
               ansible.builtin.assert:
                 that:
@@ -947,6 +1081,9 @@
                     (cgroup_memory_controller_disabled_config.content | b64decode)
                     == 'base=1\n'
                   - not cgroup_memory_controller_disabled_dtb.stat.exists
+                  - >-
+                    cgroup_memory_controller_source_state_before_disable.stat.checksum
+                    == cgroup_memory_controller_source_state_after_disable.stat.checksum
 
             - name: Install failing awk test command
               ansible.builtin.copy:
@@ -1124,3 +1261,44 @@
           ansible.builtin.file:
             path: "{{ cgroup_memory_controller_test_directory.path }}"
             state: absent
+
+- name: Test fresh cgroup memory-controller backup parent in check mode
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags:
+    - backup-parent-check-mode
+  vars:
+    cgroup_memory_controller_check_mode_test_path: >-
+      /var/lib/cgroup-memory-controller-check-mode-test
+    cgroup_memory_controller_check_mode_test_supported: >-
+      {{ lookup('ansible.builtin.pipe', 'uname -s') == 'Linux'
+         and lookup('ansible.builtin.pipe', 'id -u') == '0' }}
+  tasks:
+    - name: Exercise real fresh check-mode backup-parent handling
+      when:
+        - ansible_check_mode
+        - cgroup_memory_controller_check_mode_test_supported | bool
+      block:
+        - name: Remove stale check-mode backup-parent fixture
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_check_mode_test_path }}"
+            state: absent
+          check_mode: false
+
+        - name: Validate a missing backup parent in real check mode
+          ansible.builtin.include_tasks: ../tasks/manage-backup-parent.yml
+          vars:
+            cgroup_memory_controller_backup_dir: >-
+              {{ cgroup_memory_controller_check_mode_test_path }}/backups
+
+        - name: Inspect fresh check-mode backup parent
+          ansible.builtin.stat:
+            path: "{{ cgroup_memory_controller_check_mode_test_path }}"
+          register: cgroup_memory_controller_check_mode_backup_parent
+          check_mode: false
+
+        - name: Require fresh check mode to avoid mutation
+          ansible.builtin.assert:
+            that:
+              - not cgroup_memory_controller_check_mode_backup_parent.stat.exists

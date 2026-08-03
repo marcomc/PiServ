@@ -10,47 +10,6 @@
         ~ ansible_facts.default_ipv4.prefix
       }}
   pre_tasks:
-    - name: Read PiServ cgroup memory-controller backup ancestors
-      ansible.builtin.stat:
-        path: "{{ item }}"
-        follow: false
-      loop:
-        - /var/lib/piserv
-        - /var/lib/piserv/boot-backups
-      register: piserv_cgroup_memory_controller_backup_ancestors
-      changed_when: false
-      become: true
-
-    - name: Require safe existing PiServ cgroup backup ancestors
-      when: item.stat.exists
-      ansible.builtin.assert:
-        that:
-          - item.stat.isdir | default(false)
-          - not (item.stat.islnk | default(false))
-          - (item.stat.uid | default(-1)) == 0
-          - (item.stat.gid | default(-1)) == 0
-          - >-
-            (item.stat.mode | default('0000'))[-2]
-            not in ['2', '3', '6', '7']
-          - >-
-            (item.stat.mode | default('0000'))[-1]
-            not in ['2', '3', '6', '7']
-        fail_msg: >-
-          {{ item.item }} must be a root-owned directory that is not writable
-          by its group or other users.
-      loop: "{{ piserv_cgroup_memory_controller_backup_ancestors.results }}"
-
-    - name: Create missing PiServ cgroup backup ancestors
-      when: not item.stat.exists
-      ansible.builtin.file:
-        path: "{{ item.item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0700"
-      loop: "{{ piserv_cgroup_memory_controller_backup_ancestors.results }}"
-      become: true
-
     - name: Validate firewall policy for the LAN Glances listener
       when: piserv_glances_bind_address == '0.0.0.0'
       block:

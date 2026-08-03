@@ -5,6 +5,7 @@
       - sha256sum
       - "{{ cgroup_memory_controller_test_config }}"
       - "{{ cgroup_memory_controller_test_managed_dtb }}"
+      - "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
   register: cgroup_memory_controller_before_commit_failure
   changed_when: false
 
@@ -14,8 +15,11 @@
       - "{{ cgroup_memory_controller_test_helper }}"
       - --apply
   environment:
-    FAIL_MV_DESTINATION: "{{ cgroup_memory_controller_failed_destination }}"
     PATH: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin:{{ lookup('ansible.builtin.env', 'PATH') }}"
+    FAIL_MV_DESTINATION: >-
+      {{ cgroup_memory_controller_failed_destination | default('') }}
+    FAIL_MV_AFTER_COMMIT: >-
+      {{ cgroup_memory_controller_fail_after_commit | default(false) | string | lower }}
   register: cgroup_memory_controller_commit_failure
   changed_when: false
   failed_when: >-
@@ -29,6 +33,7 @@
       - sha256sum
       - "{{ cgroup_memory_controller_test_config }}"
       - "{{ cgroup_memory_controller_test_managed_dtb }}"
+      - "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
   register: cgroup_memory_controller_after_commit_failure
   changed_when: false
 

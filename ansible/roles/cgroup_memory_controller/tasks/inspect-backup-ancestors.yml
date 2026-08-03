@@ -1,0 +1,40 @@
+---
+- name: Read cgroup memory-controller backup parent ancestors
+  ansible.builtin.stat:
+    path: >-
+      /{{
+        (cgroup_memory_controller_backup_dir | dirname | split('/'))
+        [1:item + 1] | join('/')
+      }}
+    follow: false
+  loop: >-
+    {{
+      range(
+        1,
+        (cgroup_memory_controller_backup_dir | dirname | split('/')) | length
+      ) | list
+    }}
+  register: cgroup_memory_controller_backup_parent_ancestors
+  changed_when: false
+  become: true
+  check_mode: false
+
+- name: Require trusted existing cgroup memory-controller backup ancestors
+  when: item.stat.exists
+  ansible.builtin.assert:
+    that:
+      - item.stat.isdir | default(false)
+      - not (item.stat.islnk | default(false))
+      - (item.stat.uid | default(-1)) == 0
+      - (item.stat.gid | default(-1)) == 0
+      - >-
+        (item.stat.mode | default('0000'))[-2] not in ['2', '3', '6', '7']
+      - >-
+        (item.stat.mode | default('0000'))[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      /{{
+        (cgroup_memory_controller_backup_dir | dirname | split('/'))
+        [1:item.item + 1] | join('/')
+      }} must be a root-owned directory that is not writable by its group or
+      other users.
+  loop: "{{ cgroup_memory_controller_backup_parent_ancestors.results }}"

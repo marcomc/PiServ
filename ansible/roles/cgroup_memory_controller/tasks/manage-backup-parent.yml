@@ -1,0 +1,44 @@
+---
+- name: Resolve cgroup memory-controller backup parent without mutation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ cgroup_memory_controller_backup_dir | dirname }}"
+  register: cgroup_memory_controller_backup_parent_realpath
+  changed_when: false
+  become: true
+  check_mode: false
+
+- name: Require a canonical cgroup memory-controller backup parent path
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_backup_parent_realpath.stdout
+        == (cgroup_memory_controller_backup_dir | dirname)
+    fail_msg: >-
+      The backup parent path must be canonical and must not traverse symlinks.
+
+- name: Validate cgroup memory-controller backup parent ancestors
+  ansible.builtin.include_tasks: inspect-backup-ancestors.yml
+
+- name: Create missing cgroup memory-controller backup parent directory
+  when: >-
+    not cgroup_memory_controller_backup_parent_ancestors.results[-1].stat.exists
+  ansible.builtin.file:
+    path: "{{ cgroup_memory_controller_backup_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Revalidate cgroup memory-controller backup parent ancestors
+  ansible.builtin.include_tasks: inspect-backup-ancestors.yml
+
+- name: Require the cgroup memory-controller backup parent directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        ansible_check_mode
+        or cgroup_memory_controller_backup_parent_ancestors.results[-1].stat.exists
