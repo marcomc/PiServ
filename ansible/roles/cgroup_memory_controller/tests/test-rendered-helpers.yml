@@ -550,6 +550,89 @@
                   [pi5]
                   device_tree=managed.dtb
 
+            - name: Create injected-failure command directory
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin"
+                state: directory
+                mode: "0700"
+
+            - name: Append an inactive Device Tree selection
+              ansible.builtin.lineinfile:
+                path: "{{ cgroup_memory_controller_test_config }}"
+                line: "{{ item }}"
+                insertafter: EOF
+              loop:
+                - "[none]"
+                - device_tree=other.dtb
+
+            - name: Change vendor Device Tree before commit failure
+              ansible.builtin.command:
+                argv:
+                  - fdtput
+                  - --type
+                  - s
+                  - "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                  - /chosen
+                  - bootargs
+                  - reboot=w cgroup_disable=memory quiet test-refresh=1
+              changed_when: true
+
+            - name: Install configuration commit failure command
+              ansible.builtin.copy:
+                content: |-
+                  #!/bin/sh
+                  for argument in "$@"; do
+                    destination=$argument
+                  done
+                  if [ "$destination" = "$FAIL_MV_DESTINATION" ]; then
+                    printf 'injected managed-state commit failure\n' >&2
+                    exit 73
+                  fi
+                  exec /usr/bin/mv "$@"
+                dest: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin/mv"
+                mode: "0700"
+
+            - name: Reject configuration commit without changing managed state
+              ansible.builtin.include_tasks: assert-atomic-refresh-failure.yml
+              vars:
+                cgroup_memory_controller_failed_destination: >-
+                  {{ cgroup_memory_controller_test_config }}
+
+            - name: Activate the trailing Device Tree selection
+              ansible.builtin.lineinfile:
+                path: "{{ cgroup_memory_controller_test_config }}"
+                line: "[none]"
+                state: absent
+
+            - name: Reject managed DTB commit without changing managed state
+              ansible.builtin.include_tasks: assert-atomic-refresh-failure.yml
+              vars:
+                cgroup_memory_controller_failed_destination: >-
+                  {{ cgroup_memory_controller_test_managed_dtb }}
+
+            - name: Remove the trailing Device Tree selection
+              ansible.builtin.lineinfile:
+                path: "{{ cgroup_memory_controller_test_config }}"
+                line: device_tree=other.dtb
+                state: absent
+
+            - name: Restore vendor Device Tree after commit failures
+              ansible.builtin.command:
+                argv:
+                  - fdtput
+                  - --type
+                  - s
+                  - "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                  - /chosen
+                  - bootargs
+                  - reboot=w cgroup_disable=memory quiet
+              changed_when: true
+
+            - name: Remove managed-state commit failure command
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin/mv"
+                state: absent
+
             - name: Check and repair non-canonical managed configuration
               ansible.builtin.command:
                 argv:
@@ -783,12 +866,6 @@
                     (cgroup_memory_controller_disabled_config.content | b64decode)
                     == 'base=1\n'
                   - not cgroup_memory_controller_disabled_dtb.stat.exists
-
-            - name: Create failing awk test command
-              ansible.builtin.file:
-                path: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin"
-                state: directory
-                mode: "0700"
 
             - name: Install failing awk test command
               ansible.builtin.copy:

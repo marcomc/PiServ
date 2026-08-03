@@ -28,6 +28,7 @@ readonly managed_filter_line='[all]'
 work_directory=''
 config_temp=''
 managed_dtb_temp=''
+managed_dtb_previous=''
 source_state_temp=''
 source_bootargs=''
 source_sha256='not-inspected'
@@ -37,17 +38,30 @@ controller_status=''
 candidate_dtb_path=''
 marker_count=0
 config_changed=false
+restore_managed_dtb=false
 
 usage() {
   printf 'Usage: %s --check|--apply|--check-disable|--disable\n' "$0" >&2
 }
 
 cleanup() {
+  if [[ "${restore_managed_dtb}" == true ]]; then
+    if [[ -n "${managed_dtb_previous}" ]]; then
+      mv -f -- "${managed_dtb_previous}" "${managed_dtb_path}"
+      managed_dtb_previous=''
+    else
+      rm -f -- "${managed_dtb_path}"
+    fi
+    sync -f "$(dirname "${managed_dtb_path}")"
+  fi
   if [[ -n "${config_temp}" && -e "${config_temp}" ]]; then
     rm -f -- "${config_temp}"
   fi
   if [[ -n "${managed_dtb_temp}" && -e "${managed_dtb_temp}" ]]; then
     rm -f -- "${managed_dtb_temp}"
+  fi
+  if [[ -n "${managed_dtb_previous}" && -e "${managed_dtb_previous}" ]]; then
+    rm -f -- "${managed_dtb_previous}"
   fi
   if [[ -n "${source_state_temp}" && -e "${source_state_temp}" ]]; then
     rm -f -- "${source_state_temp}"
@@ -446,6 +460,7 @@ check_disable_managed_dtb() {
 apply_managed_dtb() {
   local installed_bootargs
   local changed="${source_state_changed}"
+  local managed_dtb_changed=false
 
   prepare_managed_dtb
   if [[ ! -f "${managed_dtb_path}" ]] || \
@@ -457,13 +472,28 @@ apply_managed_dtb() {
     [[ "${installed_bootargs}" == "${replacement_bootargs}" ]] || \
       fail 'staged managed Device Tree does not contain the expected boot arguments'
     sync -f "${managed_dtb_temp}"
+    managed_dtb_changed=true
+  fi
+  prepare_managed_config present
+
+  if [[ "${managed_dtb_changed}" == true ]]; then
+    if [[ -f "${managed_dtb_path}" ]]; then
+      managed_dtb_previous="$(mktemp "${managed_dtb_path}.previous.XXXXXX")"
+      cp --preserve=all -- "${managed_dtb_path}" "${managed_dtb_previous}"
+      sync -f "${managed_dtb_previous}"
+    fi
     mv -f -- "${managed_dtb_temp}" "${managed_dtb_path}"
     managed_dtb_temp=''
+    restore_managed_dtb=true
     sync -f "$(dirname "${managed_dtb_path}")"
     changed=true
   fi
-  prepare_managed_config present
   install_managed_config
+  restore_managed_dtb=false
+  if [[ -n "${managed_dtb_previous}" ]]; then
+    rm -f -- "${managed_dtb_previous}"
+    managed_dtb_previous=''
+  fi
   if [[ "${config_changed}" == true ]]; then
     changed=true
   fi
