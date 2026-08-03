@@ -41,6 +41,42 @@
     cgroup_memory_controller_backup_set_fresh: >-
       {{ not cgroup_memory_controller_initial_recovery_set.results[0].stat.exists }}
 
+- name: Validate provenance before fresh recovery creation
+  when: cgroup_memory_controller_backup_set_fresh
+  block:
+    - name: Read firmware configuration before fresh recovery creation
+      ansible.builtin.slurp:
+        path: "{{ cgroup_memory_controller_config_path }}"
+      register: cgroup_memory_controller_fresh_config
+      become: true
+      check_mode: false
+
+    - name: Inspect managed Device Tree before fresh recovery creation
+      ansible.builtin.stat:
+        path: "{{ cgroup_memory_controller_managed_dtb_path }}"
+        follow: false
+      register: cgroup_memory_controller_fresh_managed_dtb
+      changed_when: false
+      become: true
+      check_mode: false
+
+    - name: Require pre-policy provenance for fresh recovery creation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('# BEGIN ' ~ cgroup_memory_controller_config_marker)
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - >-
+            ('# END ' ~ cgroup_memory_controller_config_marker)
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - >-
+            ('device_tree=' ~ (cgroup_memory_controller_managed_dtb_path | basename))
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - not cgroup_memory_controller_fresh_managed_dtb.stat.exists
+        fail_msg: >-
+          Fresh recovery backups require unmodified pre-policy boot artifacts.
+          Refusing to preserve managed cgroup memory-controller state as recovery.
+
 - name: Create and validate cgroup memory-controller recovery set
   block:
     - name: Run cgroup memory-controller recovery-set transaction

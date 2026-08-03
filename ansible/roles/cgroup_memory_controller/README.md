@@ -123,7 +123,8 @@ the backup for comparison. Every `--apply` revalidates that both retained
 backups remain private, non-empty, distinct files, match the immutable SHA-256
 manifest created with the initial pair, and include a parseable DTB before
 changing boot state. Incomplete or legacy backup sets without that manifest
-fail closed; the role never generates a manifest for pre-existing backups.
+fail closed; the role never generates a manifest for pre-existing backups or
+recreates an absent recovery set from an already managed boot state.
 
 The optional kernel-refresh dependency lets a consumer declare the hook that
 copies a new DTB into the boot filesystem. The role requires it to exist and to

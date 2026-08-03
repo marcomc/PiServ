@@ -18,7 +18,8 @@ documented here.
   reboot-mode verification before regeneration.
 - Added fail-closed backup validation before managed boot-state rollback.
 - Added recoverable initial backup-set creation so failed fresh copies or
-  validation leave no partial recovery generation behind.
+  validation leave no partial recovery generation behind, while managed boot
+  state cannot be accepted as a new pre-policy recovery baseline.
 - Added serialized boot-state mutations across reconciliation and kernel-hook
   fallback rollback.
 - Added verified private source snapshots with bounded retries so each

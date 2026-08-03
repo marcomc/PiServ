@@ -17,6 +17,38 @@
         expected_error: Backups must be non-empty private root-owned copies
       - stage: three
         expected_error: non-zero return code
+    cgroup_memory_controller_provenance_cases:
+      - name: clean-fresh
+        config: "base=clean\n"
+        managed_dtb: false
+        rejected: false
+        check_mode: true
+      - name: begin-only
+        config: |-
+          base=begin
+          # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+        managed_dtb: false
+        rejected: true
+        check_mode: true
+      - name: end-only
+        config: |-
+          base=end
+          # END ANSIBLE MANAGED: cgroup v2 memory controller
+        managed_dtb: false
+        rejected: true
+        check_mode: false
+      - name: exact-selection-only
+        config: |-
+          base=selection
+          device_tree=managed.dtb
+        managed_dtb: false
+        rejected: true
+        check_mode: false
+      - name: managed-dtb-only
+        config: "base=managed-dtb\n"
+        managed_dtb: true
+        rejected: true
+        check_mode: false
   tasks:
     - name: Require a root Linux recovery test target
       ansible.builtin.assert:
@@ -74,6 +106,40 @@
             group: root
             mode: "0640"
 
+        - name: Exercise fresh recovery provenance cases
+          when:
+            - >-
+              not ansible_check_mode
+              or cgroup_memory_controller_provenance_case.check_mode
+          ansible.builtin.include_tasks: assert-recovery-backup-provenance.yml
+          loop: "{{ cgroup_memory_controller_provenance_cases }}"
+          loop_control:
+            loop_var: cgroup_memory_controller_provenance_case
+            label: "{{ cgroup_memory_controller_provenance_case.name }}"
+          vars:
+            cgroup_memory_controller_provenance_root: >-
+              {{ cgroup_memory_controller_test_root }}/provenance/{{ cgroup_memory_controller_provenance_case.name }}
+            cgroup_memory_controller_provenance_config: >-
+              {{ cgroup_memory_controller_provenance_root }}/config.txt
+            cgroup_memory_controller_provenance_vendor_dtb: >-
+              {{ cgroup_memory_controller_provenance_root }}/vendor.dtb
+            cgroup_memory_controller_provenance_managed_dtb: >-
+              {{ cgroup_memory_controller_provenance_root }}/managed.dtb
+            cgroup_memory_controller_provenance_backup_dir: >-
+              {{ cgroup_memory_controller_provenance_root }}/backups
+            cgroup_memory_controller_vendor_dtb: >-
+              {{ cgroup_memory_controller_provenance_vendor_dtb }}
+            cgroup_memory_controller_config_path: >-
+              {{ cgroup_memory_controller_provenance_config }}
+            cgroup_memory_controller_managed_dtb_path: >-
+              {{ cgroup_memory_controller_provenance_managed_dtb }}
+            cgroup_memory_controller_config_marker: >-
+              ANSIBLE MANAGED: cgroup v2 memory controller
+            cgroup_memory_controller_backup_dir: >-
+              {{ cgroup_memory_controller_provenance_backup_dir }}
+            cgroup_memory_controller_config_backup_filename: config.backup
+            cgroup_memory_controller_vendor_dtb_backup_filename: vendor.backup
+
         - name: Exercise staged fresh recovery failures and retries
           when: not ansible_check_mode
           ansible.builtin.include_tasks: assert-recovery-backup-stage.yml
@@ -94,6 +160,10 @@
               {{ cgroup_memory_controller_stage_config }}
             cgroup_memory_controller_backup_dir: >-
               {{ cgroup_memory_controller_stage_backup_dir }}
+            cgroup_memory_controller_managed_dtb_path: >-
+              {{ cgroup_memory_controller_test_root }}/{{ cgroup_memory_controller_recovery_case.stage }}/managed.dtb
+            cgroup_memory_controller_config_marker: >-
+              ANSIBLE MANAGED: cgroup v2 memory controller
             cgroup_memory_controller_config_backup_filename: config.backup
             cgroup_memory_controller_vendor_dtb_backup_filename: vendor.backup
 
@@ -255,86 +325,6 @@
               - not cgroup_memory_controller_partial_after_failure.results[1].stat.exists
               - not cgroup_memory_controller_partial_after_failure.results[2].stat.exists
 
-        - name: Create fresh check-mode source directory
-          when: ansible_check_mode
-          check_mode: false
-          ansible.builtin.file:
-            path: "{{ cgroup_memory_controller_test_root }}/check"
-            state: directory
-            owner: root
-            group: root
-            mode: "0755"
-
-        - name: Prepare fresh check-mode recovery sources
-          when: ansible_check_mode
-          check_mode: false
-          ansible.builtin.copy:
-            src: "{{ item.src }}"
-            dest: "{{ item.dest }}"
-            remote_src: true
-            owner: root
-            group: root
-            mode: "0640"
-          loop:
-            - src: "{{ cgroup_memory_controller_valid_dtb }}"
-              dest: "{{ cgroup_memory_controller_test_root }}/check/vendor.dtb"
-            - src: "{{ cgroup_memory_controller_test_root }}/valid.dts"
-              dest: "{{ cgroup_memory_controller_test_root }}/check/config.txt"
-
-        - name: Create fresh check-mode backup directory
-          when: ansible_check_mode
-          check_mode: false
-          ansible.builtin.file:
-            path: "{{ cgroup_memory_controller_test_root }}/check/backups"
-            state: directory
-            owner: root
-            group: root
-            mode: "0700"
-
-        - name: Read fresh check-mode recovery sources
-          when: ansible_check_mode
-          ansible.builtin.stat:
-            path: "{{ item }}"
-            checksum_algorithm: sha256
-          loop:
-            - "{{ cgroup_memory_controller_test_root }}/check/vendor.dtb"
-            - "{{ cgroup_memory_controller_test_root }}/check/config.txt"
-          register: cgroup_memory_controller_boot_artifacts
-          changed_when: false
-
-        - name: Exercise fresh recovery creation in check mode
-          when: ansible_check_mode
-          ansible.builtin.include_tasks: ../tasks/manage-backups.yml
-          vars:
-            cgroup_memory_controller_vendor_dtb: >-
-              {{ cgroup_memory_controller_test_root }}/check/vendor.dtb
-            cgroup_memory_controller_config_path: >-
-              {{ cgroup_memory_controller_test_root }}/check/config.txt
-            cgroup_memory_controller_backup_dir: >-
-              {{ cgroup_memory_controller_test_root }}/check/backups
-            cgroup_memory_controller_config_backup_filename: config.backup
-            cgroup_memory_controller_vendor_dtb_backup_filename: vendor.backup
-
-        - name: Inspect fresh check-mode recovery artifacts
-          when: ansible_check_mode
-          check_mode: false
-          ansible.builtin.stat:
-            path: "{{ item }}"
-          loop:
-            - "{{ cgroup_memory_controller_test_root }}/check/backups/config.backup"
-            - "{{ cgroup_memory_controller_test_root }}/check/backups/vendor.backup"
-            - >-
-              {{ cgroup_memory_controller_test_root }}/check/backups/backup-checksums.sha256
-          register: cgroup_memory_controller_check_mode_artifacts
-          changed_when: false
-
-        - name: Require mutation-free fresh recovery check mode
-          when: ansible_check_mode
-          ansible.builtin.assert:
-            that:
-              - >-
-                cgroup_memory_controller_check_mode_artifacts.results
-                | selectattr('stat.exists') | list | length == 0
       always:
         - name: Remove recovery transaction test root
           check_mode: false
