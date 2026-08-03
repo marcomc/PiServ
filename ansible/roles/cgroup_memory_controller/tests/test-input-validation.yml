@@ -1,0 +1,93 @@
+---
+- name: Test cgroup_memory_controller input validation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+    cgroup_memory_controller_valid_dependency_stat:
+      isreg: true
+      islnk: false
+      uid: 0
+      mode: "0755"
+      executable: true
+  tasks:
+    - name: Reject invalid cgroup memory-controller role inputs
+      ansible.builtin.include_tasks: assert-invalid-role-input.yml
+      loop:
+        - name: non-atomic disabled argument
+          disabled_argument: cgroup_disable memory
+        - name: managed hook skipped by run-parts
+          kernel_hook_path: /etc/kernel/postinst.d/zz-invalid.sh
+        - name: dependency hook skipped by run-parts
+          dependency_path: /etc/kernel/postinst.d/z50-invalid.sh
+        - name: managed hook trailing newline
+          kernel_hook_path: "/etc/kernel/postinst.d/zz-invalid\n"
+        - name: dependency hook trailing newline
+          dependency_path: "/etc/kernel/postinst.d/z50-invalid\n"
+        - name: reboot-mode path without required value
+          reboot_mode_path: /sys/kernel/reboot/mode
+        - name: reboot-mode value without control path
+          required_reboot_mode: cold
+        - name: marker literal awk escape
+          config_marker: 'ANSIBLE MANAGED: invalid\nmarker'
+        - name: marker trailing newline
+          config_marker: "ANSIBLE MANAGED: invalid\n"
+        - name: config backup dot
+          config_backup_filename: "."
+        - name: config backup dot-dot
+          config_backup_filename: ".."
+        - name: config backup internal state
+          config_backup_filename: current-source-state
+        - name: config backup internal manifest
+          config_backup_filename: backup-checksums.sha256
+        - name: config backup trailing newline
+          config_backup_filename: "config.backup\n"
+        - name: vendor backup dot
+          vendor_backup_filename: "."
+        - name: vendor backup dot-dot
+          vendor_backup_filename: ".."
+        - name: vendor backup internal state
+          vendor_backup_filename: current-source-state
+        - name: vendor backup internal manifest
+          vendor_backup_filename: backup-checksums.sha256
+        - name: vendor backup trailing newline
+          vendor_backup_filename: "vendor.backup\n"
+        - name: aliased backup filenames
+          config_backup_filename: shared.backup
+          vendor_backup_filename: shared.backup
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_input_case
+
+    - name: Accept a safe firmware-refresh dependency fixture
+      ansible.builtin.include_tasks: >-
+        ../tasks/validate-kernel-refresh-dependency.yml
+      vars:
+        cgroup_memory_controller_kernel_hook_path: >-
+          /etc/kernel/postinst.d/zz-valid
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          /etc/kernel/postinst.d/z50-valid
+        cgroup_memory_controller_kernel_refresh_dependency:
+          stat: "{{ cgroup_memory_controller_valid_dependency_stat }}"
+
+    - name: Reject unsafe firmware-refresh dependency fixtures
+      ansible.builtin.include_tasks: >-
+        assert-invalid-kernel-refresh-dependency.yml
+      loop:
+        - name: symlink
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'islnk': true}) }}
+        - name: non-root owner
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'uid': 1000}) }}
+        - name: writable mode
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'mode': '0775'}) }}
+        - name: non-executable
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'executable': false}) }}
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_dependency_case

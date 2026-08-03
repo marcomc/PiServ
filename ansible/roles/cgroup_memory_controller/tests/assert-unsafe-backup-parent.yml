@@ -1,0 +1,34 @@
+---
+- name: Initialize unsafe backup-parent rejection state
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_unsafe_parent_rejected: false
+
+- name: Attempt unsafe backup-parent creation
+  block:
+    - name: Validate unsafe cgroup memory-controller backup parent
+      ansible.builtin.include_tasks: ../tasks/manage-backup-parent.yml
+      vars:
+        cgroup_memory_controller_backup_dir: >-
+          {{ cgroup_memory_controller_backup_parent_case.backup_dir }}
+  rescue:
+    - name: Require the expected backup-parent rejection
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name
+            in cgroup_memory_controller_backup_parent_case.failure_tasks
+
+    - name: Record unsafe backup-parent rejection
+      ansible.builtin.set_fact:
+        cgroup_memory_controller_unsafe_parent_rejected: true
+
+- name: Inspect unsafe backup-parent mutation target
+  ansible.builtin.stat:
+    path: "{{ cgroup_memory_controller_backup_parent_case.blocked_path }}"
+  register: cgroup_memory_controller_unsafe_parent_target
+
+- name: Require unsafe backup-parent rejection before mutation
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_unsafe_parent_rejected | bool
+      - not cgroup_memory_controller_unsafe_parent_target.stat.exists

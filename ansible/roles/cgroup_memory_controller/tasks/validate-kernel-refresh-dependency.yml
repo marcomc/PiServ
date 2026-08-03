@@ -1,0 +1,20 @@
+---
+- name: Require a safe ordered firmware-refresh hook
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_kernel_refresh_dependency.stat.isreg | default(false)
+      - not (cgroup_memory_controller_kernel_refresh_dependency.stat.islnk | default(false))
+      - (cgroup_memory_controller_kernel_refresh_dependency.stat.uid | default(-1)) == 0
+      - >-
+        (cgroup_memory_controller_kernel_refresh_dependency.stat.mode
+         | default('0000'))[-2] not in ['2', '3', '6', '7']
+      - >-
+        (cgroup_memory_controller_kernel_refresh_dependency.stat.mode
+         | default('0000'))[-1] not in ['2', '3', '6', '7']
+      - cgroup_memory_controller_kernel_refresh_dependency.stat.executable | default(false)
+      - >-
+        (cgroup_memory_controller_kernel_hook_path | basename)
+        > (cgroup_memory_controller_kernel_refresh_dependency_path | basename)
+    fail_msg: >-
+      The declared firmware-refresh hook must be a safe root-owned executable
+      and sort before the managed cgroup memory-controller hook.

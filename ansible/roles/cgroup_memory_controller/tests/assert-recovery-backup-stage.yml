@@ -1,0 +1,133 @@
+---
+- name: Reset staged recovery-set fixture
+  ansible.builtin.file:
+    path: "{{ cgroup_memory_controller_stage_backup_dir }}"
+    state: absent
+
+- name: Create staged recovery-set directory
+  ansible.builtin.file:
+    path: "{{ cgroup_memory_controller_stage_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write staged firmware configuration source
+  ansible.builtin.copy:
+    content: "base={{ cgroup_memory_controller_recovery_case.stage }}\n"
+    dest: "{{ cgroup_memory_controller_stage_config }}"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Prepare staged vendor Device Tree source
+  when: cgroup_memory_controller_recovery_case.stage != 'one'
+  ansible.builtin.copy:
+    src: >-
+      {{
+        cgroup_memory_controller_valid_dtb
+        if cgroup_memory_controller_recovery_case.stage == 'two'
+        else cgroup_memory_controller_invalid_dtb
+      }}
+    dest: "{{ cgroup_memory_controller_stage_vendor_dtb }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Read staged recovery sources before failure injection
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - "{{ cgroup_memory_controller_stage_vendor_dtb }}"
+    - "{{ cgroup_memory_controller_stage_config }}"
+  register: cgroup_memory_controller_boot_artifacts
+  changed_when: false
+
+- name: Drift configuration after source inspection
+  when: cgroup_memory_controller_recovery_case.stage == 'two'
+  ansible.builtin.copy:
+    content: "base=two-drifted\n"
+    dest: "{{ cgroup_memory_controller_stage_config }}"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Initialize staged recovery failure result
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_stage_failed: false
+    cgroup_memory_controller_stage_failure_message: ""
+
+- name: Exercise staged fresh recovery-set failure
+  block:
+    - name: Create staged fresh recovery set
+      ansible.builtin.include_tasks: ../tasks/manage-backups.yml
+  rescue:
+    - name: Record staged fresh recovery-set failure
+      ansible.builtin.set_fact:
+        cgroup_memory_controller_stage_failed: true
+        cgroup_memory_controller_stage_failure_message: >-
+          {{ ansible_failed_result.msg | default(ansible_failed_result | string) }}
+
+- name: Inspect recovery artifacts after staged failure
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/config.backup"
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/vendor.backup"
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/backup-checksums.sha256"
+  register: cgroup_memory_controller_stage_failure_artifacts
+  changed_when: false
+
+- name: Require fresh recovery cleanup and original failure
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_stage_failed
+      - >-
+        cgroup_memory_controller_recovery_case.expected_error
+        in cgroup_memory_controller_stage_failure_message
+      - >-
+        cgroup_memory_controller_stage_failure_artifacts.results
+        | selectattr('stat.exists') | list | length == 0
+
+- name: Restore valid staged vendor Device Tree source
+  ansible.builtin.copy:
+    src: "{{ cgroup_memory_controller_valid_dtb }}"
+    dest: "{{ cgroup_memory_controller_stage_vendor_dtb }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Refresh staged recovery source facts for retry
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - "{{ cgroup_memory_controller_stage_vendor_dtb }}"
+    - "{{ cgroup_memory_controller_stage_config }}"
+  register: cgroup_memory_controller_boot_artifacts
+  changed_when: false
+
+- name: Retry staged fresh recovery-set creation
+  ansible.builtin.include_tasks: ../tasks/manage-backups.yml
+
+- name: Inspect successful staged recovery set
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/config.backup"
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/vendor.backup"
+    - "{{ cgroup_memory_controller_stage_backup_dir }}/backup-checksums.sha256"
+  register: cgroup_memory_controller_stage_retry_artifacts
+  changed_when: false
+
+- name: Require successful staged recovery retry
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_stage_retry_artifacts.results
+        | rejectattr('stat.exists') | list | length == 0

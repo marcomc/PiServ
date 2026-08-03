@@ -1,0 +1,54 @@
+---
+- name: Reset disabled-role check result
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_disabled_case_failed: false
+    cgroup_memory_controller_disabled_case_stderr: ""
+
+- name: Check disabled-role helper trust
+  block:
+    - name: Run disabled-role check
+      ansible.builtin.include_role:
+        name: cgroup_memory_controller
+        public: true
+      vars:
+        cgroup_memory_controller_test_case: >-
+          {{ cgroup_memory_controller_disabled_case.name }}
+  rescue:
+    - name: Record disabled-role check failure
+      ansible.builtin.set_fact:
+        cgroup_memory_controller_disabled_case_failed: true
+        cgroup_memory_controller_disabled_case_stderr: >-
+          {{ ansible_failed_result.stderr | default('') }}
+
+- name: Inspect disabled-role check artifacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - >-
+      /usr/local/libexec/cgroup-memory-controller-disabled-{{
+      cgroup_memory_controller_disabled_case.name }}-test/manage-cgroup-memory-dtb
+    - >-
+      /etc/kernel/postinst.d/zz-cgroup-memory-controller-disabled-{{
+      cgroup_memory_controller_disabled_case.name }}-test
+    - >-
+      {{ cgroup_memory_controller_test_root
+         }}/{{ cgroup_memory_controller_disabled_case.name }}-executed
+  register: cgroup_memory_controller_disabled_case_artifacts
+
+- name: Require safe disabled-role check behavior
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_disabled_case_failed
+        == cgroup_memory_controller_disabled_case.expect_failure
+      - >-
+        cgroup_memory_controller_disabled_case_artifacts.results[0].stat.exists
+        == cgroup_memory_controller_disabled_case.helper_exists
+      - >-
+        cgroup_memory_controller_disabled_case_artifacts.results[1].stat.exists
+        == cgroup_memory_controller_disabled_case.hook_exists
+      - not cgroup_memory_controller_disabled_case_artifacts.results[2].stat.exists
+      - >-
+        not cgroup_memory_controller_disabled_case.expect_failure
+        or 'managed config markers are incomplete'
+           in cgroup_memory_controller_disabled_case_stderr

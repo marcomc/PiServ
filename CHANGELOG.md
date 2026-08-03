@@ -42,7 +42,17 @@
 - Restricted the root-executed watchdog script to a validated trusted system
   path.
 
-All notable project changes are documented here.
+### Cgroup Memory Controller
+
+- Extracted managed cgroup-memory boot policy into a Galaxy-ready local
+  `cgroup_memory_controller` role, keeping PiServ artifact identities and
+  runtime policy exclusively in the consumer configuration.
+- Added a full managed copy of the Raspberry Pi vendor DTB that removes exactly
+  `cgroup_disable=memory` with `fdtput`, validates the result with `fdtget`, and
+  is selected through a marked `device_tree=piserv-cgroup-memory.dtb` entry.
+- Preserved the vendor DTB while retaining initial boot-artifact backups,
+  explicit rollback, and refresh after vendor DTB updates; activation remains
+  pending an operator-approved reboot.
 
 ## [0.3.0] - 2026-07-29
 

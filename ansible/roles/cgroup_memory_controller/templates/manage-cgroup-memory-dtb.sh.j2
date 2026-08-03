@@ -1,0 +1,787 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_dtb={{ cgroup_memory_controller_vendor_dtb | quote }}
+config_path={{ cgroup_memory_controller_config_path | quote }}
+managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
+disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
+refresh_dependency_path={{ cgroup_memory_controller_kernel_refresh_dependency_path | quote }}
+reboot_mode_path={{ cgroup_memory_controller_reboot_mode_path | quote }}
+required_reboot_mode={{ cgroup_memory_controller_required_reboot_mode | quote }}
+backup_dir={{ cgroup_memory_controller_backup_dir | quote }}
+config_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_config_backup_filename) | quote }}
+vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_vendor_dtb_backup_filename) | quote }}
+backup_manifest_path={{ (cgroup_memory_controller_backup_dir ~ '/backup-checksums.sha256') | quote }}
+source_state_path={{ (cgroup_memory_controller_backup_dir ~ '/current-source-state') | quote }}
+
+readonly source_dtb config_path managed_dtb_path disabled_argument
+readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_path
+readonly reboot_mode_path required_reboot_mode backup_manifest_path source_state_path
+readonly fdtget_binary=/usr/bin/fdtget
+readonly fdtput_binary=/usr/bin/fdtput
+readonly flock_binary=/usr/bin/flock
+readonly sha256sum_binary=/usr/bin/sha256sum
+readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
+readonly end_marker={{ ('# END ' ~ cgroup_memory_controller_config_marker) | quote }}
+readonly managed_config_line="device_tree=${managed_dtb_path##*/}"
+readonly managed_filter_line='[all]'
+
+work_directory=''
+source_snapshot_path=''
+config_temp=''
+config_previous=''
+managed_dtb_temp=''
+managed_dtb_previous=''
+source_state_temp=''
+source_state_previous=''
+source_bootargs=''
+source_sha256='not-inspected'
+source_metadata=''
+source_state_changed=false
+replacement_bootargs=''
+controller_status=''
+candidate_dtb_path=''
+marker_count=0
+config_changed=false
+restore_config=false
+restore_managed_dtb=false
+restore_source_state=false
+
+usage() {
+  printf 'Usage: %s --check|--apply|--refresh|--check-disable|--disable\n' "$0" >&2
+}
+
+cleanup() {
+  if [[ "${restore_config}" == true ]]; then
+    mv -f -- "${config_previous}" "${config_path}"
+    config_previous=''
+    sync -f "$(dirname "${config_path}")"
+  fi
+  if [[ "${restore_managed_dtb}" == true ]]; then
+    if [[ -n "${managed_dtb_previous}" ]]; then
+      mv -f -- "${managed_dtb_previous}" "${managed_dtb_path}"
+      managed_dtb_previous=''
+    else
+      rm -f -- "${managed_dtb_path}"
+    fi
+    sync -f "$(dirname "${managed_dtb_path}")"
+  fi
+  if [[ "${restore_source_state}" == true ]]; then
+    if [[ -n "${source_state_previous}" ]]; then
+      mv -f -- "${source_state_previous}" "${source_state_path}"
+      source_state_previous=''
+    else
+      rm -f -- "${source_state_path}"
+    fi
+    sync -f "${backup_dir}"
+  fi
+  if [[ -n "${config_temp}" && -e "${config_temp}" ]]; then
+    rm -f -- "${config_temp}"
+  fi
+  if [[ -n "${config_previous}" && -e "${config_previous}" ]]; then
+    rm -f -- "${config_previous}"
+  fi
+  if [[ -n "${managed_dtb_temp}" && -e "${managed_dtb_temp}" ]]; then
+    rm -f -- "${managed_dtb_temp}"
+  fi
+  if [[ -n "${managed_dtb_previous}" && -e "${managed_dtb_previous}" ]]; then
+    rm -f -- "${managed_dtb_previous}"
+  fi
+  if [[ -n "${source_state_temp}" && -e "${source_state_temp}" ]]; then
+    rm -f -- "${source_state_temp}"
+  fi
+  if [[ -n "${source_state_previous}" && -e "${source_state_previous}" ]]; then
+    rm -f -- "${source_state_previous}"
+  fi
+  if [[ -n "${work_directory}" && -d "${work_directory}" ]]; then
+    rm -rf -- "${work_directory}"
+  fi
+}
+
+fail() {
+  printf 'cgroup memory controller: %s\n' "$*" >&2
+  exit 1
+}
+
+require_regular_file() {
+  local file_path="$1"
+
+  [[ -f "${file_path}" && ! -L "${file_path}" ]] || \
+    fail "expected regular file at ${file_path}"
+}
+
+require_command() {
+  local command_path="$1"
+
+  [[ -x "${command_path}" ]] || fail "required command is unavailable: ${command_path}"
+}
+
+require_safe_root_file() {
+  local file_path="$1"
+  local description="$2"
+  local file_mode
+  local file_uid
+
+  require_regular_file "${file_path}"
+  (( EUID == 0 )) || return 0
+  file_uid="$(stat -c '%u' "${file_path}")"
+  [[ "${file_uid}" == '0' ]] || \
+    fail "${description} is not root-owned: ${file_path}"
+  file_mode="$(stat -c '%a' "${file_path}")"
+  (( (8#${file_mode} & 0022) == 0 )) || \
+    fail "${description} is writable by its group or other users: ${file_path}"
+}
+
+require_safe_private_directory() {
+  local directory_path="$1"
+  local directory_mode
+  local directory_owner
+
+  [[ -d "${directory_path}" && ! -L "${directory_path}" ]] || \
+    fail "expected private directory at ${directory_path}"
+  directory_owner="$(stat -c '%u:%g' "${directory_path}")"
+  [[ "${directory_owner}" == '0:0' ]] || \
+    fail "private directory is not owned by root:root: ${directory_path}"
+  directory_mode="$(stat -c '%a' "${directory_path}")"
+  [[ "${directory_mode}" == '700' ]] || \
+    fail "private directory is not mode 0700: ${directory_path}"
+}
+
+acquire_operation_lock() {
+  require_command "${flock_binary}"
+  require_safe_private_directory "${backup_dir}"
+  exec 9<"${backup_dir}"
+  "${flock_binary}" --exclusive 9
+}
+
+require_private_root_file() {
+  local file_path="$1"
+  local file_mode
+  local file_owner
+
+  require_regular_file "${file_path}"
+  file_owner="$(stat -c '%u:%g' "${file_path}")"
+  [[ "${file_owner}" == '0:0' ]] || \
+    fail "private file is not owned by root:root: ${file_path}"
+  file_mode="$(stat -c '%a' "${file_path}")"
+  [[ "${file_mode}" == '600' ]] || \
+    fail "private file is not mode 0600: ${file_path}"
+}
+
+require_safe_refresh_dependency() {
+  [[ -n "${refresh_dependency_path}" ]] || return 0
+
+  require_safe_root_file "${refresh_dependency_path}" \
+    'firmware-refresh dependency'
+  [[ -x "${refresh_dependency_path}" ]] || \
+    fail "firmware-refresh dependency is not executable: ${refresh_dependency_path}"
+}
+
+require_reboot_mode() {
+  local active_reboot_mode
+
+  [[ -n "${reboot_mode_path}" ]] || return 0
+  require_safe_root_file "${reboot_mode_path}" 'active reboot-mode control'
+  active_reboot_mode="$(<"${reboot_mode_path}")"
+  [[ "${active_reboot_mode}" == "${required_reboot_mode}" ]] || \
+    fail "active reboot mode is ${active_reboot_mode}, expected ${required_reboot_mode}"
+}
+
+require_safe_backups() {
+  local backup_path
+  local backup_identity
+  local config_identity
+  local expected_manifest
+  local managed_identity
+  local manifest_identity
+  local reboot_identity
+  local retained_manifest
+  local source_identity
+  local source_state_identity
+  local -a backup_hashes=()
+  local -a backup_identities=()
+
+  require_command "${fdtget_binary}"
+  require_command "${sha256sum_binary}"
+  require_safe_private_directory "${backup_dir}"
+  for backup_path in \
+    "${config_backup_path}" "${vendor_backup_path}" "${backup_manifest_path}"; do
+    require_private_root_file "${backup_path}"
+  done
+  config_identity="$(stat -c '%d:%i' "${config_path}")"
+  reboot_identity=''
+  if [[ -n "${reboot_mode_path}" ]]; then
+    reboot_identity="$(stat -c '%d:%i' "${reboot_mode_path}")"
+  fi
+  source_identity=''
+  if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
+    source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+  fi
+  managed_identity=''
+  if [[ -f "${managed_dtb_path}" && ! -L "${managed_dtb_path}" ]]; then
+    managed_identity="$(stat -c '%d:%i' "${managed_dtb_path}")"
+  fi
+  source_state_identity=''
+  if [[ -e "${source_state_path}" || -L "${source_state_path}" ]]; then
+    require_private_root_file "${source_state_path}"
+    source_state_identity="$(stat -c '%d:%i' "${source_state_path}")"
+  fi
+  [[ -z "${reboot_identity}" || ( \
+    "${reboot_identity}" != "${config_identity}" && \
+    "${reboot_identity}" != "${source_identity}" && \
+    "${reboot_identity}" != "${managed_identity}" && \
+    "${reboot_identity}" != "${source_state_identity}" ) ]] || \
+    fail 'active reboot-mode control aliases a live boot artifact'
+  for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
+    [[ -s "${backup_path}" ]] || fail "boot backup is empty: ${backup_path}"
+    backup_identity="$(stat -c '%d:%i' "${backup_path}")"
+    [[ "${backup_identity}" != "${config_identity}" ]] || \
+      fail "boot backup aliases firmware configuration: ${backup_path}"
+    [[ -z "${source_identity}" || "${backup_identity}" != "${source_identity}" ]] || \
+      fail "boot backup aliases vendor Device Tree: ${backup_path}"
+    [[ -z "${reboot_identity}" || "${backup_identity}" != "${reboot_identity}" ]] || \
+      fail "boot backup aliases active reboot-mode control: ${backup_path}"
+    [[ -z "${managed_identity}" || "${backup_identity}" != "${managed_identity}" ]] || \
+      fail "boot backup aliases managed Device Tree: ${backup_path}"
+    [[ -z "${source_state_identity}" || \
+      "${backup_identity}" != "${source_state_identity}" ]] || \
+      fail "boot backup aliases current source state: ${backup_path}"
+    backup_identities+=("${backup_identity}")
+    backup_hashes+=("$("${sha256sum_binary}" "${backup_path}" | awk '{print $1}')")
+  done
+  [[ "${backup_identities[0]}" != "${backup_identities[1]}" ]] || \
+    fail 'boot backups alias each other'
+  manifest_identity="$(stat -c '%d:%i' "${backup_manifest_path}")"
+  [[ "${manifest_identity}" != "${config_identity}" && \
+    "${manifest_identity}" != "${source_identity}" && \
+    "${manifest_identity}" != "${reboot_identity}" && \
+    "${manifest_identity}" != "${managed_identity}" && \
+    "${manifest_identity}" != "${source_state_identity}" && \
+    "${manifest_identity}" != "${backup_identities[0]}" && \
+    "${manifest_identity}" != "${backup_identities[1]}" ]] || \
+    fail 'boot backup checksum manifest aliases a protected artifact'
+  expected_manifest="$(printf '%s  %s\n%s  %s\n\034' \
+    "${backup_hashes[0]}" "${config_backup_path##*/}" \
+    "${backup_hashes[1]}" "${vendor_backup_path##*/}")"
+  retained_manifest="$(cat "${backup_manifest_path}"; printf '\034')"
+  [[ "${retained_manifest}" == "${expected_manifest}" ]] || \
+    fail 'boot backup checksum manifest does not match retained artifacts'
+  [[ -z "${source_state_identity}" || ( \
+    "${source_state_identity}" != "${config_identity}" && \
+    "${source_state_identity}" != "${source_identity}" && \
+    "${source_state_identity}" != "${reboot_identity}" && \
+    "${source_state_identity}" != "${managed_identity}" && \
+    "${source_state_identity}" != "${backup_identities[0]}" && \
+    "${source_state_identity}" != "${backup_identities[1]}" && \
+    "${source_state_identity}" != "${manifest_identity}" ) ]] || \
+    fail 'current source state aliases a protected artifact'
+  "${fdtget_binary}" -p "${vendor_backup_path}" / >/dev/null
+}
+
+require_recovery_for_managed_state() {
+  if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+    require_safe_backups
+    require_reboot_mode
+  fi
+}
+
+require_safe_managed_target() {
+  local config_identity
+  local source_identity
+  local target_identity
+
+  if [[ -e "${managed_dtb_path}" || -L "${managed_dtb_path}" ]]; then
+    require_safe_root_file "${managed_dtb_path}" 'managed Device Tree'
+
+    target_identity="$(stat -c '%d:%i' "${managed_dtb_path}")"
+    if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
+      source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+      [[ "${target_identity}" != "${source_identity}" ]] || \
+        fail 'managed Device Tree aliases the vendor Device Tree'
+    fi
+    if [[ -f "${config_path}" && ! -L "${config_path}" ]]; then
+      config_identity="$(stat -c '%d:%i' "${config_path}")"
+      [[ "${target_identity}" != "${config_identity}" ]] || \
+        fail 'managed Device Tree aliases the firmware configuration'
+    fi
+  fi
+}
+
+inspect_config_markers() {
+  local begin_count
+  local begin_line
+  local end_count
+  local end_line
+  local managed_line
+  local managed_line_count
+
+  require_safe_root_file "${config_path}" 'firmware configuration'
+  begin_count="$(grep -Fxc "${begin_marker}" "${config_path}" || true)"
+  end_count="$(grep -Fxc "${end_marker}" "${config_path}" || true)"
+  managed_line_count="$(grep -Fxc "${managed_config_line}" "${config_path}" || true)"
+  [[ "${begin_count}" == "${end_count}" ]] || \
+    fail 'managed config markers are incomplete; refusing to edit firmware configuration'
+  [[ "${begin_count}" -le 1 ]] || \
+    fail 'managed config markers are duplicated; refusing to edit firmware configuration'
+
+  marker_count="${begin_count}"
+  if [[ "${marker_count}" == '1' ]]; then
+    begin_line="$(grep -Fnx "${begin_marker}" "${config_path}" | cut -d: -f1)"
+    end_line="$(grep -Fnx "${end_marker}" "${config_path}" | cut -d: -f1)"
+    ((begin_line < end_line)) || \
+      fail 'managed config markers are reversed; refusing to edit firmware configuration'
+    [[ "${managed_line_count}" == '1' ]] || \
+      fail 'managed Device Tree selection must appear exactly once inside its markers'
+    managed_line="$(grep -Fnx "${managed_config_line}" "${config_path}" | cut -d: -f1)"
+    ((begin_line < managed_line && managed_line < end_line)) || \
+      fail 'managed Device Tree selection appears outside its markers'
+  else
+    [[ "${managed_line_count}" == '0' ]] || \
+      fail 'managed Device Tree selection appears without its markers'
+  fi
+}
+
+prepare_managed_config() {
+  local desired_state="$1"
+
+  config_temp="$(mktemp "${config_path}.cgroup-memory-controller.XXXXXX")"
+
+  awk -v begin="${begin_marker}" -v end="${end_marker}" \
+    -v reset="${managed_filter_line}" '
+    $0 == begin {
+      inside = 1
+      next
+    }
+    $0 == end {
+      inside = 0
+      pending_reset = 1
+      next
+    }
+    inside { next }
+    pending_reset {
+      if ($0 == reset) {
+        pending_reset = 0
+        deferred_reset = 1
+        next
+      }
+      print reset
+      pending_reset = 0
+    }
+    deferred_reset {
+      print reset
+      deferred_reset = 0
+    }
+    { print }
+  ' "${config_path}" > "${config_temp}"
+
+  if [[ "${desired_state}" == 'present' ]]; then
+    printf '%s\n%s\n%s\n%s\n%s\n' \
+      "${begin_marker}" "${managed_filter_line}" "${managed_config_line}" \
+      "${end_marker}" "${managed_filter_line}" >> "${config_temp}"
+  fi
+
+  if cmp -s "${config_temp}" "${config_path}"; then
+    rm -f -- "${config_temp}"
+    config_temp=''
+    config_changed=false
+  else
+    config_changed=true
+  fi
+}
+
+install_managed_config() {
+  [[ "${config_changed}" == true ]] || return 0
+
+  chown --reference="${config_path}" "${config_temp}"
+  chmod --reference="${config_path}" "${config_temp}"
+  mv -f -- "${config_temp}" "${config_path}"
+  config_temp=''
+}
+
+inspect_source_bootargs() {
+  local argument
+  local disabled_argument_count=0
+  local snapshot_captured=false
+  local snapshot_sha256
+  local source_metadata_after_copy
+  local source_metadata_after_hash
+  local source_metadata_before
+  local source_sha256_after
+  local -a source_arguments
+  local -a replacement_arguments
+
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+  require_command "${fdtget_binary}"
+  require_command "${sha256sum_binary}"
+
+  work_directory="$(mktemp -d /run/cgroup-memory-controller.XXXXXX)"
+  chmod 0700 "${work_directory}"
+  source_snapshot_path="${work_directory}/source.dtb"
+  for _ in 1 2 3; do
+    source_metadata_before="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    cp --no-dereference -- "${source_dtb}" "${source_snapshot_path}"
+    require_regular_file "${source_snapshot_path}"
+    chmod 0600 "${source_snapshot_path}"
+    require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+    source_metadata_after_copy="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    snapshot_sha256="$("${sha256sum_binary}" \
+      "${source_snapshot_path}" | awk '{print $1}')"
+    source_sha256_after="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
+    require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+    source_metadata_after_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+    if [[ "${source_metadata_before}" == "${source_metadata_after_copy}" && \
+      "${source_metadata_before}" == "${source_metadata_after_hash}" && \
+      "${snapshot_sha256}" == "${source_sha256_after}" ]]; then
+      source_sha256="${snapshot_sha256}"
+      source_metadata="${source_metadata_before}"
+      snapshot_captured=true
+      break
+    fi
+    rm -f -- "${source_snapshot_path}"
+  done
+  [[ "${snapshot_captured}" == true ]] || \
+    fail 'vendor Device Tree changed during snapshot capture after 3 attempts'
+
+  source_bootargs="$("${fdtget_binary}" --type s \
+    "${source_snapshot_path}" /chosen bootargs)"
+  [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
+  [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
+
+  read -r -a source_arguments <<< "${source_bootargs}"
+  for argument in "${source_arguments[@]}"; do
+    if [[ "${argument}" == "${disabled_argument}" ]]; then
+      ((disabled_argument_count += 1))
+    else
+      replacement_arguments+=("${argument}")
+    fi
+  done
+
+  case "${disabled_argument_count}" in
+    0)
+      controller_status='vendor-enabled'
+      ;;
+    1)
+      controller_status='managed-dtb-required'
+      ;;
+    *)
+      fail "vendor boot arguments contain ${disabled_argument_count} copies of ${disabled_argument}"
+      ;;
+  esac
+
+  [[ -n "${replacement_arguments[*]}" ]] || \
+    fail "removing ${disabled_argument} would leave boot arguments empty"
+  replacement_bootargs="${replacement_arguments[*]}"
+}
+
+prepare_managed_dtb() {
+  local candidate_bootargs
+
+  [[ "${controller_status}" == 'managed-dtb-required' ]] || \
+    fail 'cannot prepare a managed DTB when the vendor already enables memory cgroups'
+  require_command "${fdtput_binary}"
+
+  candidate_dtb_path="${work_directory}/managed.dtb"
+  cp -- "${source_snapshot_path}" "${candidate_dtb_path}"
+  "${fdtput_binary}" --type s "${candidate_dtb_path}" /chosen bootargs \
+    "${replacement_bootargs}"
+  candidate_bootargs="$("${fdtget_binary}" --type s \
+    "${candidate_dtb_path}" /chosen bootargs)"
+  [[ "${candidate_bootargs}" == "${replacement_bootargs}" ]] || \
+    fail 'managed Device Tree does not contain the expected boot arguments'
+  [[ " ${candidate_bootargs} " != *" ${disabled_argument} "* ]] || \
+    fail "managed Device Tree retained ${disabled_argument}"
+}
+
+print_status() {
+  local changed="$1"
+
+  printf 'status=%s\n' "${controller_status}"
+  printf 'changed=%s\n' "${changed}"
+  printf 'source_dtb_sha256=%s\n' "${source_sha256}"
+}
+
+prepare_source_state() {
+  local state_mode
+  local state_owner
+
+  source_state_temp="$(mktemp "${source_state_path}.XXXXXX")"
+  printf 'status=%s\nsource_dtb_sha256=%s\n' \
+    "${controller_status}" "${source_sha256}" > "${source_state_temp}"
+  chown root:root "${source_state_temp}"
+  chmod 0600 "${source_state_temp}"
+  if [[ -f "${source_state_path}" && ! -L "${source_state_path}" ]]; then
+    state_owner="$(stat -c '%u:%g' "${source_state_path}")"
+    state_mode="$(stat -c '%a' "${source_state_path}")"
+    if [[ "${state_owner}" == '0:0' && "${state_mode}" == '600' ]] && \
+      cmp -s "${source_state_temp}" "${source_state_path}"; then
+      rm -f -- "${source_state_temp}"
+      source_state_temp=''
+      return 0
+    fi
+    source_state_previous="$(mktemp "${source_state_path}.previous.XXXXXX")"
+    cp --preserve=all -- "${source_state_path}" "${source_state_previous}"
+    sync -f "${source_state_previous}"
+  fi
+  sync -f "${source_state_temp}"
+}
+
+require_current_source_generation() {
+  local current_metadata_after_hash
+  local current_metadata_before_hash
+  local current_sha256
+
+  [[ -n "${source_metadata}" ]] || \
+    fail 'accepted vendor Device Tree metadata is unavailable'
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+  current_metadata_before_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+  current_sha256="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+  current_metadata_after_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+  [[ "${current_metadata_before_hash}" == "${source_metadata}" && \
+    "${current_metadata_after_hash}" == "${source_metadata}" && \
+    "${current_sha256}" == "${source_sha256}" ]] || \
+    fail 'vendor Device Tree changed before boot transaction commit'
+}
+
+commit_boot_transaction() {
+  if [[ -n "${source_state_temp}" ]]; then
+    restore_source_state=true
+    mv -f -- "${source_state_temp}" "${source_state_path}"
+    source_state_temp=''
+    sync -f "${backup_dir}"
+    source_state_changed=true
+  fi
+  require_current_source_generation
+  restore_config=false
+  restore_managed_dtb=false
+  restore_source_state=false
+  if [[ -n "${config_previous}" ]]; then
+    rm -f -- "${config_previous}"
+    config_previous=''
+  fi
+  if [[ -n "${managed_dtb_previous}" ]]; then
+    rm -f -- "${managed_dtb_previous}"
+    managed_dtb_previous=''
+  fi
+  if [[ -n "${source_state_previous}" ]]; then
+    rm -f -- "${source_state_previous}"
+    source_state_previous=''
+  fi
+}
+
+preserve_managed_config() {
+  [[ "${config_changed}" == true ]] || return 0
+
+  config_previous="$(mktemp "${config_path}.previous.XXXXXX")"
+  cp --preserve=all -- "${config_path}" "${config_previous}"
+  sync -f "${config_previous}"
+}
+
+preserve_managed_dtb() {
+  [[ -f "${managed_dtb_path}" ]] || return 0
+
+  managed_dtb_previous="$(mktemp "${managed_dtb_path}.previous.XXXXXX")"
+  cp --preserve=all -- "${managed_dtb_path}" "${managed_dtb_previous}"
+  sync -f "${managed_dtb_previous}"
+}
+
+disable_managed_dtb() {
+  local record_source_state="${1:-false}"
+  local changed=false
+
+  if [[ "${marker_count}" == '1' ]]; then
+    prepare_managed_config absent
+    if [[ "${record_source_state}" == true ]]; then
+      preserve_managed_config
+    fi
+    install_managed_config
+    if [[ "${record_source_state}" == true && "${config_changed}" == true ]]; then
+      restore_config=true
+    fi
+    if [[ "${config_changed}" == true ]]; then
+      changed=true
+    fi
+  fi
+  if [[ -e "${managed_dtb_path}" ]]; then
+    if [[ "${record_source_state}" == true ]]; then
+      preserve_managed_dtb
+      restore_managed_dtb=true
+    fi
+    rm -f -- "${managed_dtb_path}"
+    changed=true
+  fi
+  if [[ "${changed}" == true ]]; then
+    sync -f "${config_path}"
+  fi
+  if [[ "${record_source_state}" == true ]]; then
+    commit_boot_transaction
+    if [[ "${source_state_changed}" == true ]]; then
+      changed=true
+    fi
+  fi
+  controller_status='disabled'
+  print_status "${changed}"
+}
+
+check_disable_managed_dtb() {
+  local changed=false
+
+  if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+    changed=true
+  fi
+  controller_status='rollback-required'
+  print_status "${changed}"
+}
+
+apply_managed_dtb() {
+  local installed_bootargs
+  local changed=false
+  local managed_dtb_changed=false
+
+  prepare_managed_dtb
+  if [[ ! -f "${managed_dtb_path}" ]] || \
+    ! cmp -s "${candidate_dtb_path}" "${managed_dtb_path}"; then
+    managed_dtb_temp="$(mktemp "${managed_dtb_path}.XXXXXX")"
+    install -m 0644 "${candidate_dtb_path}" "${managed_dtb_temp}"
+    installed_bootargs="$("${fdtget_binary}" --type s \
+      "${managed_dtb_temp}" /chosen bootargs)"
+    [[ "${installed_bootargs}" == "${replacement_bootargs}" ]] || \
+      fail 'staged managed Device Tree does not contain the expected boot arguments'
+    sync -f "${managed_dtb_temp}"
+    managed_dtb_changed=true
+  fi
+  prepare_managed_config present
+
+  if [[ "${managed_dtb_changed}" == true ]]; then
+    preserve_managed_dtb
+    mv -f -- "${managed_dtb_temp}" "${managed_dtb_path}"
+    managed_dtb_temp=''
+    restore_managed_dtb=true
+    sync -f "$(dirname "${managed_dtb_path}")"
+    changed=true
+  fi
+  preserve_managed_config
+  install_managed_config
+  if [[ "${config_changed}" == true ]]; then
+    restore_config=true
+    changed=true
+  fi
+  if [[ "${changed}" == true ]]; then
+    sync -f "${config_path}"
+  fi
+  commit_boot_transaction
+  if [[ "${source_state_changed}" == true ]]; then
+    changed=true
+  fi
+  print_status "${changed}"
+}
+
+check_managed_dtb() {
+  local changed=false
+  if [[ "${controller_status}" == 'vendor-enabled' ]]; then
+    if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
+      changed=true
+    fi
+    print_status "${changed}"
+    return
+  fi
+
+  prepare_managed_dtb
+  prepare_managed_config present
+  if [[ ! -f "${managed_dtb_path}" ]] || \
+    ! cmp -s "${candidate_dtb_path}" "${managed_dtb_path}" || \
+    [[ "${config_changed}" == true ]]; then
+    changed=true
+  fi
+  print_status "${changed}"
+}
+
+run_mode() {
+  local mode="$1"
+
+  require_safe_managed_target
+  inspect_config_markers
+
+  case "${mode}" in
+    --check-disable)
+      require_recovery_for_managed_state
+      check_disable_managed_dtb
+      ;;
+    --disable)
+      require_recovery_for_managed_state
+      disable_managed_dtb
+      ;;
+    --check|--apply)
+      inspect_source_bootargs
+      if [[ "${mode}" == '--check' ]]; then
+        check_managed_dtb
+      else
+        require_safe_refresh_dependency
+        require_safe_backups
+        require_reboot_mode
+        prepare_source_state
+        if [[ "${controller_status}" == 'vendor-enabled' ]]; then
+          disable_managed_dtb true
+        else
+          apply_managed_dtb
+        fi
+      fi
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+refresh_managed_dtb() {
+  local apply_status
+  local result
+  local rollback_status
+  local rollback_result
+
+  set +e
+  result="$(set -e; trap cleanup EXIT; run_mode --apply 2>&1)"
+  apply_status=$?
+  set -e
+  if (( apply_status == 0 )); then
+    printf '%s\n' "${result}"
+    return
+  fi
+  printf '%s\n' "${result}" >&2
+  set +e
+  rollback_result="$(set -e; trap cleanup EXIT; run_mode --disable 2>&1)"
+  rollback_status=$?
+  set -e
+  if (( rollback_status == 0 )); then
+    printf '%s\n' "${rollback_result}" >&2
+    printf '%s\n' \
+      'The managed cgroup memory Device Tree was disabled after regeneration failed.' >&2
+  else
+    printf '%s\n' "${rollback_result}" >&2
+    printf '%s\n' \
+      'The managed cgroup memory Device Tree could not be disabled after regeneration failed.' >&2
+  fi
+  return 1
+}
+
+main() {
+  local mode="${1:-}"
+
+  [[ $# -eq 1 ]] || {
+    usage
+    exit 2
+  }
+  trap cleanup EXIT
+  if [[ "${mode}" == '--apply' || "${mode}" == '--refresh' || \
+    "${mode}" == '--disable' ]]; then
+    acquire_operation_lock
+  fi
+  if [[ "${mode}" == '--refresh' ]]; then
+    refresh_managed_dtb
+  else
+    run_mode "${mode}"
+  fi
+}
+
+main "$@"

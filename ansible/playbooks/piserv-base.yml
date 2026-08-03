@@ -86,3 +86,4 @@
         base_cloud_init_disabled_marker_content: |
           Disabled by PiServ hardening on 2026-07-08.
           Configuration is managed by Ansible after SSH is reachable.
+    - role: cgroup_memory_controller

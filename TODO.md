@@ -2,6 +2,21 @@
 
 ## Current
 
+- [ ] **Enable the cgroup v2 memory controller**
+  - Assessment: The full PiServ-managed DTB, marked `device_tree` selection,
+    initial boot-artifact backup, and kernel post-install refresh hook are
+    deployed. The managed copy passed `fdtget` validation after removing exactly
+    `cgroup_disable=memory`. It will take effect only after an operator-approved
+    reboot. The current kernel still exposes
+    `cgroup_disable=memory`, so systemd and Docker cannot yet enforce their
+    configured memory controls. Hermes retains its `LimitAS` fallback.
+  - Actions:
+    - Schedule an operator-approved reboot, then verify `memory` appears in
+      `cgroup.controllers`, Docker exposes `memory.events`, and all managed
+      services recover normally.
+    - Keep the Hermes `LimitAS` guard in place and record the observed memory
+      overhead and service limits after the change.
+
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
@@ -56,6 +71,24 @@
       exposing the service.
     - Codify the final install, configuration, and service health checks in
       Ansible after live validation.
+
+- [ ] **Define service-level cgroup v2 memory policy**
+  - Assessment: Enabling the memory controller only makes memory accounting,
+    pressure signals, and enforcement available. PiServ needs evidence-based
+    policies for Hermes, local model servers, Docker workloads, and core
+    services before `MemoryHigh`, `MemoryMax`, or swap limits are applied.
+  - Actions:
+    - After the controller is active, record baseline `memory.current`,
+      `memory.events`, memory pressure, and restart behavior for each managed
+      service under representative load.
+    - Classify services into protected core services, bounded workloads, and
+      burstable workloads; document the proposed `MemoryHigh`, `MemoryMax`,
+      `MemorySwapMax`, and any required systemd slice hierarchy.
+    - Implement approved systemd unit drop-ins and Docker/container limits in
+      their owning Ansible roles, retaining `LimitAS` only where it remains a
+      justified complementary guard.
+    - Validate limit enforcement, OOM behavior, recovery, and continued SSH
+      reachability before applying policies to additional services.
 
 - [ ] **Evaluate and deploy Google Drive access and synchronization**
   - Assessment: Google Drive for Desktop is unavailable on Linux. `rclone`

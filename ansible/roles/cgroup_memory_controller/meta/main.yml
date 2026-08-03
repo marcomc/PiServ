@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: cgroup_memory_controller
+  author: Marco Massari Calderone <marco@marcomc.com>
+  description: Enable the cgroup v2 memory controller through a managed Device Tree.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - cgroup
+    - containers
+    - debian
+    - devicetree
+    - linux
+    - raspberrypi
+    - systemd
+dependencies: []

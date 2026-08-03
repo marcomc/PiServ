@@ -1,0 +1,115 @@
+---
+- name: Reset fresh provenance fixture
+  check_mode: false
+  ansible.builtin.file:
+    path: "{{ cgroup_memory_controller_provenance_root }}"
+    state: absent
+
+- name: Create fresh provenance backup directory
+  check_mode: false
+  ansible.builtin.file:
+    path: "{{ cgroup_memory_controller_provenance_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Prepare fresh provenance boot sources
+  check_mode: false
+  ansible.builtin.copy:
+    src: "{{ item.src | default(omit) }}"
+    content: "{{ item.content | default(omit) }}"
+    dest: "{{ item.dest }}"
+    remote_src: "{{ item.remote_src | default(omit) }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - src: "{{ cgroup_memory_controller_valid_dtb }}"
+      dest: "{{ cgroup_memory_controller_provenance_vendor_dtb }}"
+      remote_src: true
+    - content: "{{ cgroup_memory_controller_provenance_case.config }}"
+      dest: "{{ cgroup_memory_controller_provenance_config }}"
+
+- name: Prepare managed Device Tree provenance input
+  when: cgroup_memory_controller_provenance_case.managed_dtb
+  check_mode: false
+  ansible.builtin.copy:
+    src: "{{ cgroup_memory_controller_valid_dtb }}"
+    dest: "{{ cgroup_memory_controller_provenance_managed_dtb }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Read fresh provenance boot inputs
+  check_mode: false
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - "{{ cgroup_memory_controller_provenance_vendor_dtb }}"
+    - "{{ cgroup_memory_controller_provenance_config }}"
+    - "{{ cgroup_memory_controller_provenance_managed_dtb }}"
+  register: cgroup_memory_controller_boot_artifacts
+  changed_when: false
+
+- name: Initialize fresh provenance result
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_provenance_failed: false
+    cgroup_memory_controller_provenance_failure_message: ""
+
+- name: Exercise fresh recovery provenance validation
+  block:
+    - name: Create provenance recovery set
+      ansible.builtin.include_tasks: ../tasks/manage-backups.yml
+  rescue:
+    - name: Record fresh provenance rejection
+      ansible.builtin.set_fact:
+        cgroup_memory_controller_provenance_failed: true
+        cgroup_memory_controller_provenance_failure_message: >-
+          {{ ansible_failed_result.msg | default(ansible_failed_result | string) }}
+
+- name: Read fresh provenance outputs
+  check_mode: false
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - "{{ cgroup_memory_controller_provenance_vendor_dtb }}"
+    - "{{ cgroup_memory_controller_provenance_config }}"
+    - "{{ cgroup_memory_controller_provenance_managed_dtb }}"
+    - "{{ cgroup_memory_controller_provenance_backup_dir }}/config.backup"
+    - "{{ cgroup_memory_controller_provenance_backup_dir }}/vendor.backup"
+    - "{{ cgroup_memory_controller_provenance_backup_dir }}/backup-checksums.sha256"
+  register: cgroup_memory_controller_provenance_outputs
+  changed_when: false
+
+- name: Require fresh provenance result and input preservation
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_provenance_failed
+        == cgroup_memory_controller_provenance_case.rejected
+      - >-
+        not cgroup_memory_controller_provenance_case.rejected
+        or 'Fresh recovery backups require unmodified pre-policy boot artifacts.'
+           in cgroup_memory_controller_provenance_failure_message
+      - >-
+        cgroup_memory_controller_provenance_outputs.results[3:]
+        | selectattr('stat.exists') | list | length
+        == (0 if ansible_check_mode or cgroup_memory_controller_provenance_case.rejected else 3)
+      - >-
+        cgroup_memory_controller_boot_artifacts.results[0].stat.checksum
+        == cgroup_memory_controller_provenance_outputs.results[0].stat.checksum
+      - >-
+        cgroup_memory_controller_boot_artifacts.results[1].stat.checksum
+        == cgroup_memory_controller_provenance_outputs.results[1].stat.checksum
+      - >-
+        cgroup_memory_controller_boot_artifacts.results[2].stat.exists
+        == cgroup_memory_controller_provenance_outputs.results[2].stat.exists
+      - >-
+        not cgroup_memory_controller_boot_artifacts.results[2].stat.exists
+        or cgroup_memory_controller_boot_artifacts.results[2].stat.checksum
+           == cgroup_memory_controller_provenance_outputs.results[2].stat.checksum

@@ -1,0 +1,541 @@
+---
+- name: Validate cgroup memory-controller configuration
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_packages | length > 0
+      - "'device-tree-compiler' in cgroup_memory_controller_packages"
+      - cgroup_memory_controller_vendor_dtb | length > 0
+      - cgroup_memory_controller_vendor_dtb is match('^/[A-Za-z0-9_./-]+\\.dtb\\Z')
+      - "'..' not in cgroup_memory_controller_vendor_dtb"
+      - cgroup_memory_controller_config_path is match('^/[A-Za-z0-9_./-]+\\Z')
+      - "'..' not in cgroup_memory_controller_config_path"
+      - >-
+        cgroup_memory_controller_managed_dtb_path
+        is match('^/[A-Za-z0-9_./-]+\\.dtb\\Z')
+      - "'..' not in cgroup_memory_controller_managed_dtb_path"
+      - >-
+        (cgroup_memory_controller_managed_dtb_path | dirname)
+        == (cgroup_memory_controller_config_path | dirname)
+      - cgroup_memory_controller_disabled_argument | length > 0
+      - >-
+        cgroup_memory_controller_disabled_argument
+        is match('^[A-Za-z0-9_.-]+=[A-Za-z0-9_.-]+\\Z')
+      - >-
+        cgroup_memory_controller_helper_path
+        is match('^/usr/local/libexec/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\Z')
+      - "'..' not in cgroup_memory_controller_helper_path"
+      - >-
+        cgroup_memory_controller_kernel_hook_path
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+\\Z')
+      - >-
+        cgroup_memory_controller_kernel_refresh_dependency_path == ''
+        or cgroup_memory_controller_kernel_refresh_dependency_path
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+\\Z')
+      - >-
+        (cgroup_memory_controller_reboot_mode_path == '')
+        == (cgroup_memory_controller_required_reboot_mode == '')
+      - >-
+        cgroup_memory_controller_reboot_mode_path == ''
+        or cgroup_memory_controller_reboot_mode_path
+        is match('^/[A-Za-z0-9_./-]+\\Z')
+      - "'..' not in cgroup_memory_controller_reboot_mode_path"
+      - >-
+        cgroup_memory_controller_required_reboot_mode == ''
+        or cgroup_memory_controller_required_reboot_mode
+        is match('^[A-Za-z0-9_.-]+\\Z')
+      - cgroup_memory_controller_backup_dir is match('^/var/lib/[A-Za-z0-9_./-]+\\Z')
+      - "'..' not in cgroup_memory_controller_backup_dir"
+      - >-
+        cgroup_memory_controller_config_backup_filename
+        is match('^[A-Za-z0-9._-]+\\Z')
+      - >-
+        cgroup_memory_controller_config_backup_filename
+        not in ['.', '..', 'current-source-state', 'backup-checksums.sha256']
+      - >-
+        cgroup_memory_controller_vendor_dtb_backup_filename
+        is match('^[A-Za-z0-9._-]+\\Z')
+      - >-
+        cgroup_memory_controller_vendor_dtb_backup_filename
+        not in ['.', '..', 'current-source-state', 'backup-checksums.sha256']
+      - >-
+        cgroup_memory_controller_config_backup_filename
+        != cgroup_memory_controller_vendor_dtb_backup_filename
+      - >-
+        cgroup_memory_controller_config_marker
+        is match('^[A-Za-z0-9 _:.-]+\\Z')
+      - >-
+        cgroup_memory_controller_runtime_systemd_service == ''
+        or cgroup_memory_controller_runtime_systemd_service
+        is match('^[A-Za-z0-9@_.-]+\\.service\\Z')
+    fail_msg: >-
+      The cgroup memory-controller policy requires safe absolute paths, a
+      non-empty vendor DTB, an exact disabled boot argument, and valid optional
+      kernel-hook, reboot-mode, and systemd-service declarations.
+
+- name: Validate cgroup memory-controller helper path
+  ansible.builtin.import_tasks: validate-helper-path.yml
+
+- name: Configure enabled cgroup memory-controller boot policy
+  when: cgroup_memory_controller_enabled | bool
+  block:
+    - name: Read cgroup memory-controller boot artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ cgroup_memory_controller_vendor_dtb }}"
+        - "{{ cgroup_memory_controller_config_path }}"
+        - "{{ cgroup_memory_controller_managed_dtb_path | dirname }}"
+      register: cgroup_memory_controller_boot_artifacts
+      changed_when: false
+      become: true
+
+    - name: Require safe cgroup memory-controller boot artifacts
+      ansible.builtin.assert:
+        that:
+          - cgroup_memory_controller_boot_artifacts.results[0].stat.isreg
+          - not cgroup_memory_controller_boot_artifacts.results[0].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[0].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[0].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[0].stat.mode[-1]
+            not in ['2', '3', '6', '7']
+          - cgroup_memory_controller_boot_artifacts.results[1].stat.isreg
+          - not cgroup_memory_controller_boot_artifacts.results[1].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[1].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[0].stat.dev
+            != cgroup_memory_controller_boot_artifacts.results[1].stat.dev
+            or cgroup_memory_controller_boot_artifacts.results[0].stat.inode
+            != cgroup_memory_controller_boot_artifacts.results[1].stat.inode
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[1].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[1].stat.mode[-1]
+            not in ['2', '3', '6', '7']
+          - cgroup_memory_controller_boot_artifacts.results[2].stat.isdir
+          - not cgroup_memory_controller_boot_artifacts.results[2].stat.islnk
+          - cgroup_memory_controller_boot_artifacts.results[2].stat.uid == 0
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[2].stat.mode[-2]
+            not in ['2', '3', '6', '7']
+          - >-
+            cgroup_memory_controller_boot_artifacts.results[2].stat.mode[-1]
+            not in ['2', '3', '6', '7']
+        fail_msg: >-
+          The vendor DTB, firmware configuration, and managed-DTB directory must
+          exist before the cgroup memory-controller boot policy is managed.
+
+    - name: Validate cgroup memory-controller kernel hook path
+      ansible.builtin.include_tasks: validate-kernel-hook-path.yml
+
+    - name: Validate declared firmware-refresh kernel hook
+      when: cgroup_memory_controller_kernel_refresh_dependency_path | length > 0
+      block:
+        - name: Read declared firmware-refresh kernel hook
+          ansible.builtin.stat:
+            path: "{{ cgroup_memory_controller_kernel_refresh_dependency_path }}"
+          register: cgroup_memory_controller_kernel_refresh_dependency
+          changed_when: false
+          become: true
+
+        - name: Validate the declared firmware-refresh hook
+          ansible.builtin.include_tasks: validate-kernel-refresh-dependency.yml
+
+    - name: Create missing cgroup memory-controller helper directories
+      when: not item.stat.exists
+      ansible.builtin.file:
+        path: "{{ item.item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ cgroup_memory_controller_helper_directories.results[2:] }}"
+      become: true
+
+    - name: Create missing cgroup memory-controller kernel hook directory
+      when: >-
+        not cgroup_memory_controller_kernel_hook_paths.results[2].stat.exists
+      ansible.builtin.file:
+        path: /etc/kernel/postinst.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Validate and create cgroup memory-controller backup parent
+      ansible.builtin.include_tasks: manage-backup-parent.yml
+
+    - name: Read cgroup memory-controller backup directory
+      ansible.builtin.stat:
+        path: "{{ cgroup_memory_controller_backup_dir }}"
+        follow: false
+      register: cgroup_memory_controller_backup_directory
+      changed_when: false
+      become: true
+      check_mode: false
+
+    - name: Require a safe existing cgroup memory-controller backup directory
+      when: cgroup_memory_controller_backup_directory.stat.exists
+      ansible.builtin.assert:
+        that:
+          - cgroup_memory_controller_backup_directory.stat.isdir
+          - not cgroup_memory_controller_backup_directory.stat.islnk
+          - cgroup_memory_controller_backup_directory.stat.uid == 0
+          - cgroup_memory_controller_backup_directory.stat.gid == 0
+          - cgroup_memory_controller_backup_directory.stat.mode == '0700'
+        fail_msg: >-
+          The existing cgroup memory-controller backup directory must be a
+          private 0700 directory owned by root:root.
+
+    - name: Create missing cgroup memory-controller backup directory
+      when: not cgroup_memory_controller_backup_directory.stat.exists
+      ansible.builtin.file:
+        path: "{{ cgroup_memory_controller_backup_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      become: true
+
+    - name: Install cgroup memory-controller Device Tree tooling
+      ansible.builtin.apt:
+        name: "{{ cgroup_memory_controller_packages }}"
+        state: present
+        install_recommends: false
+        update_cache: true
+        cache_valid_time: 3600
+      register: cgroup_memory_controller_packages_install
+      become: true
+
+    - name: Manage cgroup memory-controller recovery backups
+      ansible.builtin.include_tasks: manage-backups.yml
+
+    - name: Install cgroup memory-controller Device Tree helper
+      ansible.builtin.template:
+        src: manage-cgroup-memory-dtb.sh.j2
+        dest: "{{ cgroup_memory_controller_helper_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      register: cgroup_memory_controller_helper_install
+      become: true
+
+    - name: Validate and configure cgroup boot policy when helper is available
+      when:
+        - >-
+          not ansible_check_mode or
+          not cgroup_memory_controller_packages_install.changed
+        - >-
+          not ansible_check_mode or
+          not cgroup_memory_controller_helper_install.changed
+      block:
+        - name: Preflight cgroup memory-controller managed Device Tree
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --check
+          register: cgroup_memory_controller_preflight
+          changed_when: false
+          check_mode: false
+          become: true
+
+        - name: Require a known cgroup memory-controller vendor state
+          ansible.builtin.assert:
+            that:
+              - >-
+                'status=managed-dtb-required'
+                in cgroup_memory_controller_preflight.stdout
+                or 'status=vendor-enabled'
+                in cgroup_memory_controller_preflight.stdout
+            fail_msg: >-
+              The vendor DTB cannot produce the managed Device Tree and does
+              not already enable the configured controller.
+
+        - name: Predict cgroup memory-controller boot changes in check mode
+          when: ansible_check_mode
+          ansible.builtin.debug:
+            msg: "{{ cgroup_memory_controller_preflight.stdout }}"
+          changed_when: "'changed=true' in cgroup_memory_controller_preflight.stdout"
+
+        - name: Reconcile cgroup memory-controller managed Device Tree
+          when: not ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --apply
+          register: cgroup_memory_controller_apply
+          changed_when: "'changed=true' in cgroup_memory_controller_apply.stdout"
+          become: true
+
+        - name: Install cgroup memory-controller kernel refresh hook
+          ansible.builtin.template:
+            src: cgroup-memory-controller-kernel-hook.sh.j2
+            dest: "{{ cgroup_memory_controller_kernel_hook_path }}"
+            owner: root
+            group: root
+            mode: "0755"
+          become: true
+
+        - name: Verify cgroup memory-controller reconciliation
+          when: not ansible_check_mode
+          block:
+            - name: Verify reconciled cgroup memory-controller boot policy
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_helper_path }}"
+                  - --check
+              register: cgroup_memory_controller_postflight
+              changed_when: false
+              check_mode: false
+              become: true
+
+            - name: Require an idempotent cgroup memory-controller postflight
+              ansible.builtin.assert:
+                that:
+                  - "'changed=false' in cgroup_memory_controller_postflight.stdout"
+                  - >-
+                    'status=managed-dtb-required'
+                    in cgroup_memory_controller_postflight.stdout
+                    or 'status=vendor-enabled'
+                    in cgroup_memory_controller_postflight.stdout
+                fail_msg: >-
+                  The cgroup memory-controller managed Device Tree did not pass
+                  its postflight verification.
+
+- name: Remove disabled cgroup memory-controller boot policy
+  when: not (cgroup_memory_controller_enabled | bool)
+  block:
+    - name: Read cgroup memory-controller boot artifacts before rollback
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ cgroup_memory_controller_config_path }}"
+        - "{{ cgroup_memory_controller_helper_path }}"
+        - "{{ cgroup_memory_controller_managed_dtb_path }}"
+        - "{{ cgroup_memory_controller_kernel_hook_path }}"
+      register: cgroup_memory_controller_artifacts_before_rollback
+      changed_when: false
+      become: true
+      check_mode: false
+
+    - name: Read firmware configuration before rollback
+      when:
+        - cgroup_memory_controller_artifacts_before_rollback.results[0].stat.exists
+      ansible.builtin.slurp:
+        path: "{{ cgroup_memory_controller_config_path }}"
+      register: cgroup_memory_controller_config_before_rollback
+      become: true
+      check_mode: false
+
+    - name: Validate cgroup memory-controller kernel hook path before rollback
+      when: cgroup_memory_controller_artifacts_before_rollback.results[3].stat.exists
+      ansible.builtin.include_tasks: validate-kernel-hook-path.yml
+
+    - name: Detect managed cgroup memory-controller rollback state
+      ansible.builtin.set_fact:
+        cgroup_memory_controller_rollback_required: >-
+          {{
+            cgroup_memory_controller_artifacts_before_rollback.results[2].stat.exists
+            or (
+              cgroup_memory_controller_artifacts_before_rollback.results[0].stat.exists
+              and (
+                ('# BEGIN ' ~ cgroup_memory_controller_config_marker)
+                in (
+                  cgroup_memory_controller_config_before_rollback.content
+                  | default('')
+                  | b64decode
+                )
+                or ('# END ' ~ cgroup_memory_controller_config_marker)
+                in (
+                  cgroup_memory_controller_config_before_rollback.content
+                  | default('')
+                  | b64decode
+                )
+                or (
+                  'device_tree='
+                  ~ (cgroup_memory_controller_managed_dtb_path | basename)
+                )
+                in (
+                  cgroup_memory_controller_config_before_rollback.content
+                  | default('')
+                  | b64decode
+                )
+              )
+            )
+          }}
+
+    - name: Create missing rollback-helper directories
+      when:
+        - cgroup_memory_controller_rollback_required | bool
+        - not item.stat.exists
+      ansible.builtin.file:
+        path: "{{ item.item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ cgroup_memory_controller_helper_directories.results[2:] }}"
+      become: true
+
+    - name: Prepare trusted cgroup memory-controller rollback helper
+      when:
+        - cgroup_memory_controller_rollback_required | bool
+        - >-
+          not ansible_check_mode or
+          (
+            cgroup_memory_controller_helper_directories.results[2].stat.exists
+            and cgroup_memory_controller_helper_directories.results[3].stat.exists
+          )
+      ansible.builtin.template:
+        src: manage-cgroup-memory-dtb.sh.j2
+        dest: "{{ cgroup_memory_controller_helper_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      register: cgroup_memory_controller_rollback_helper_install
+      become: true
+
+    - name: Roll back managed cgroup memory-controller artifacts
+      when:
+        - cgroup_memory_controller_rollback_required | bool
+        - >-
+          not ansible_check_mode or (
+            cgroup_memory_controller_rollback_helper_install is defined
+            and not (cgroup_memory_controller_rollback_helper_install.skipped | default(false))
+            and not (cgroup_memory_controller_rollback_helper_install.changed | default(true))
+          )
+      block:
+        - name: Preflight managed cgroup memory-controller rollback
+          when: ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --check-disable
+          register: cgroup_memory_controller_rollback_preflight
+          changed_when: >-
+            'changed=true' in cgroup_memory_controller_rollback_preflight.stdout
+          check_mode: false
+          become: true
+
+        - name: Disable managed cgroup memory-controller Device Tree
+          when: not ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --disable
+          register: cgroup_memory_controller_disable
+          changed_when: "'changed=true' in cgroup_memory_controller_disable.stdout"
+          become: true
+
+        - name: Verify managed cgroup memory-controller rollback
+          when: not ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --check-disable
+          register: cgroup_memory_controller_rollback_postflight
+          changed_when: false
+          become: true
+
+        - name: Require a completed cgroup memory-controller rollback
+          when: not ansible_check_mode
+          ansible.builtin.assert:
+            that:
+              - "'changed=false' in cgroup_memory_controller_rollback_postflight.stdout"
+              - >-
+                'status=rollback-required'
+                in cgroup_memory_controller_rollback_postflight.stdout
+            fail_msg: >-
+              The cgroup memory-controller rollback did not pass its postflight
+              verification; preserving the helper and kernel hook for recovery.
+
+    - name: Remove verified cgroup memory-controller boot artifacts
+      when:
+        - item.remove | bool
+        - >-
+          not cgroup_memory_controller_rollback_required or
+          not ansible_check_mode or (
+            cgroup_memory_controller_rollback_helper_install is defined
+            and not (cgroup_memory_controller_rollback_helper_install.skipped | default(false))
+            and not (cgroup_memory_controller_rollback_helper_install.changed | default(true))
+          )
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop:
+        - path: "{{ cgroup_memory_controller_kernel_hook_path }}"
+          remove: >-
+            {{ cgroup_memory_controller_artifacts_before_rollback.results[3].stat.exists }}
+        - path: "{{ cgroup_memory_controller_helper_path }}"
+          remove: >-
+            {{
+              cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
+              or cgroup_memory_controller_rollback_required
+            }}
+      become: true
+
+- name: Validate active cgroup memory-controller runtime
+  when:
+    - cgroup_memory_controller_enabled | bool
+    - cgroup_memory_controller_require_runtime | bool
+  block:
+    - name: Read available cgroup v2 controllers
+      ansible.builtin.command:
+        argv:
+          - /bin/cat
+          - /sys/fs/cgroup/cgroup.controllers
+      register: cgroup_memory_controller_runtime_controllers
+      changed_when: false
+      check_mode: false
+      become: true
+
+    - name: Require the active cgroup v2 memory controller
+      ansible.builtin.assert:
+        that:
+          - >-
+            'memory'
+            in cgroup_memory_controller_runtime_controllers.stdout.split()
+        fail_msg: >-
+          The cgroup v2 memory controller is not active. Reboot after applying
+          the managed Device Tree, then rerun this validation.
+
+    - name: Validate configured systemd service cgroup memory events
+      when: cgroup_memory_controller_runtime_systemd_service | length > 0
+      block:
+        - name: Read configured systemd service cgroup path
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/systemctl
+              - show
+              - "{{ cgroup_memory_controller_runtime_systemd_service }}"
+              - --property=ControlGroup
+              - --value
+          register: cgroup_memory_controller_runtime_service_cgroup
+          changed_when: false
+          check_mode: false
+          become: true
+
+        - name: Read configured systemd service cgroup memory events
+          ansible.builtin.stat:
+            path: >-
+              /sys/fs/cgroup{{ cgroup_memory_controller_runtime_service_cgroup.stdout | trim }}/memory.events
+          register: cgroup_memory_controller_runtime_service_memory_events
+          changed_when: false
+          become: true
+
+        - name: Assert configured systemd service exposes cgroup memory events
+          ansible.builtin.assert:
+            that:
+              - >-
+                cgroup_memory_controller_runtime_service_cgroup.stdout
+                | trim is match('^/')
+              - cgroup_memory_controller_runtime_service_memory_events.stat.isreg
+            fail_msg: >-
+              The configured systemd service does not expose memory.events after
+              enabling the cgroup v2 memory controller.
