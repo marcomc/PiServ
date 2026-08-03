@@ -58,14 +58,103 @@
         - name: refresh dependency
           managed_path: /etc/kernel/postinst.d/zz-valid
           dependency_path: /etc/kernel/postinst.d/z50-invalid.sh
+        - name: managed hook trailing newline
+          managed_path: "/etc/kernel/postinst.d/zz-invalid\n"
+          dependency_path: ""
+        - name: dependency hook trailing newline
+          managed_path: /etc/kernel/postinst.d/zz-valid
+          dependency_path: "/etc/kernel/postinst.d/z50-invalid\n"
       loop_control:
         loop_var: cgroup_memory_controller_invalid_kernel_hook_case
+
+    - name: Accept a safe firmware-refresh dependency fixture
+      ansible.builtin.include_tasks: >-
+        ../tasks/validate-kernel-refresh-dependency.yml
+      vars:
+        cgroup_memory_controller_kernel_hook_path: >-
+          /etc/kernel/postinst.d/zz-valid
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          /etc/kernel/postinst.d/z50-valid
+        cgroup_memory_controller_kernel_refresh_dependency:
+          stat:
+            isreg: true
+            islnk: false
+            uid: 0
+            mode: "0755"
+            executable: true
+
+    - name: Reject unsafe firmware-refresh dependency fixtures
+      ansible.builtin.include_tasks: >-
+        assert-invalid-kernel-refresh-dependency.yml
+      loop:
+        - name: symlink
+          stat:
+            isreg: true
+            islnk: true
+            uid: 0
+            mode: "0755"
+            executable: true
+        - name: non-root owner
+          stat:
+            isreg: true
+            islnk: false
+            uid: 1000
+            mode: "0755"
+            executable: true
+        - name: writable mode
+          stat:
+            isreg: true
+            islnk: false
+            uid: 0
+            mode: "0775"
+            executable: true
+        - name: non-executable
+          stat:
+            isreg: true
+            islnk: false
+            uid: 0
+            mode: "0644"
+            executable: false
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_dependency_case
+
+    - name: Reject unsafe cgroup memory-controller markers
+      ansible.builtin.include_tasks: assert-invalid-config-marker.yml
+      loop:
+        - name: literal awk escape
+          value: 'ANSIBLE MANAGED: invalid\nmarker'
+        - name: actual trailing newline
+          value: "ANSIBLE MANAGED: invalid\n"
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_marker_case
 
     - name: Reject reserved cgroup memory-controller backup filenames
       ansible.builtin.include_tasks: assert-invalid-backup-filename.yml
       loop:
-        - .
-        - ..
+        - name: config dot
+          config_filename: .
+          vendor_filename: vendor.backup
+        - name: config dot-dot
+          config_filename: ..
+          vendor_filename: vendor.backup
+        - name: config internal state
+          config_filename: current-source-state
+          vendor_filename: vendor.backup
+        - name: config trailing newline
+          config_filename: "config.backup\n"
+          vendor_filename: vendor.backup
+        - name: vendor dot
+          config_filename: config.backup
+          vendor_filename: .
+        - name: vendor dot-dot
+          config_filename: config.backup
+          vendor_filename: ..
+        - name: vendor internal state
+          config_filename: config.backup
+          vendor_filename: current-source-state
+        - name: vendor trailing newline
+          config_filename: config.backup
+          vendor_filename: "vendor.backup\n"
       loop_control:
         loop_var: cgroup_memory_controller_invalid_backup_filename
 

@@ -5,16 +5,16 @@
       - cgroup_memory_controller_packages | length > 0
       - "'device-tree-compiler' in cgroup_memory_controller_packages"
       - cgroup_memory_controller_vendor_dtb | length > 0
-      - cgroup_memory_controller_vendor_dtb is match('^/[A-Za-z0-9_./-]+\\.dtb$')
+      - cgroup_memory_controller_vendor_dtb is match('^/[A-Za-z0-9_./-]+\\.dtb\\Z')
       - "'..' not in cgroup_memory_controller_vendor_dtb"
-      - cgroup_memory_controller_config_path is match('^/[A-Za-z0-9_./-]+$')
+      - cgroup_memory_controller_config_path is match('^/[A-Za-z0-9_./-]+\\Z')
       - "'..' not in cgroup_memory_controller_config_path"
       - >-
         cgroup_memory_controller_managed_dtb_name
-        is match('^[A-Za-z0-9._-]+\\.dtb$')
+        is match('^[A-Za-z0-9._-]+\\.dtb\\Z')
       - >-
         cgroup_memory_controller_managed_dtb_path
-        is match('^/[A-Za-z0-9_./-]+\\.dtb$')
+        is match('^/[A-Za-z0-9_./-]+\\.dtb\\Z')
       - "'..' not in cgroup_memory_controller_managed_dtb_path"
       - >-
         (cgroup_memory_controller_managed_dtb_path | basename)
@@ -25,37 +25,42 @@
       - cgroup_memory_controller_disabled_argument | length > 0
       - >-
         cgroup_memory_controller_disabled_argument
-        is match('^[A-Za-z0-9_.-]+=[A-Za-z0-9_.-]+$')
+        is match('^[A-Za-z0-9_.-]+=[A-Za-z0-9_.-]+\\Z')
       - >-
         cgroup_memory_controller_helper_path
-        is match('^/usr/local/libexec/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+        is match('^/usr/local/libexec/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\Z')
       - "'..' not in cgroup_memory_controller_helper_path"
       - >-
         cgroup_memory_controller_kernel_hook_path
-        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+$')
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+\\Z')
       - >-
         cgroup_memory_controller_kernel_refresh_dependency_path == ''
         or cgroup_memory_controller_kernel_refresh_dependency_path
-        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+$')
-      - cgroup_memory_controller_backup_dir is match('^/var/lib/[A-Za-z0-9_./-]+$')
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+\\Z')
+      - cgroup_memory_controller_backup_dir is match('^/var/lib/[A-Za-z0-9_./-]+\\Z')
       - "'..' not in cgroup_memory_controller_backup_dir"
       - >-
         cgroup_memory_controller_config_backup_filename
-        is match('^[A-Za-z0-9._-]+$')
-      - cgroup_memory_controller_config_backup_filename not in ['.', '..']
+        is match('^[A-Za-z0-9._-]+\\Z')
+      - >-
+        cgroup_memory_controller_config_backup_filename
+        not in ['.', '..', 'current-source-state']
       - >-
         cgroup_memory_controller_vendor_dtb_backup_filename
-        is match('^[A-Za-z0-9._-]+$')
-      - cgroup_memory_controller_vendor_dtb_backup_filename not in ['.', '..']
+        is match('^[A-Za-z0-9._-]+\\Z')
+      - >-
+        cgroup_memory_controller_vendor_dtb_backup_filename
+        not in ['.', '..', 'current-source-state']
       - >-
         cgroup_memory_controller_config_backup_filename
         != cgroup_memory_controller_vendor_dtb_backup_filename
-      - cgroup_memory_controller_config_marker | length > 0
-      - "'\n' not in cgroup_memory_controller_config_marker"
+      - >-
+        cgroup_memory_controller_config_marker
+        is match('^[A-Za-z0-9 _:.-]+\\Z')
       - >-
         cgroup_memory_controller_runtime_systemd_service == ''
         or cgroup_memory_controller_runtime_systemd_service
-        is match('^[A-Za-z0-9@_.-]+\\.service$')
+        is match('^[A-Za-z0-9@_.-]+\\.service\\Z')
     fail_msg: >-
       The cgroup memory-controller policy requires safe absolute paths, a
       non-empty vendor DTB, an exact disabled boot argument, and valid optional
@@ -161,17 +166,9 @@
           root-executed kernel hook. Mandatory ancestors must already exist.
       loop: "{{ cgroup_memory_controller_kernel_hook_directories.results }}"
 
-    - name: Require the declared firmware-refresh hook to run before this role hook
+    - name: Validate the declared firmware-refresh hook
       when: cgroup_memory_controller_kernel_refresh_dependency_path | length > 0
-      ansible.builtin.assert:
-        that:
-          - cgroup_memory_controller_kernel_refresh_dependency.stat.isreg
-          - >-
-            (cgroup_memory_controller_kernel_hook_path | basename)
-            > (cgroup_memory_controller_kernel_refresh_dependency_path | basename)
-        fail_msg: >-
-          The declared firmware-refresh hook must exist and sort before the
-          managed cgroup memory-controller kernel hook.
+      ansible.builtin.include_tasks: validate-kernel-refresh-dependency.yml
 
     - name: Create missing cgroup memory-controller helper directories
       when: not item.stat.exists

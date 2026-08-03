@@ -8,11 +8,15 @@
       vars:
         cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
         cgroup_memory_controller_config_backup_filename: >-
-          {{ cgroup_memory_controller_invalid_backup_filename }}
+          {{ cgroup_memory_controller_invalid_backup_filename.config_filename }}
+        cgroup_memory_controller_vendor_dtb_backup_filename: >-
+          {{ cgroup_memory_controller_invalid_backup_filename.vendor_filename }}
 
     - name: Require reserved backup filename to fail validation
       ansible.builtin.fail:
-        msg: The reserved backup filename unexpectedly passed validation.
+        msg: >-
+          The {{ cgroup_memory_controller_invalid_backup_filename.name }}
+          filename unexpectedly passed validation.
   rescue:
     - name: Assert reserved backup filename failed validation
       ansible.builtin.assert:

@@ -120,8 +120,9 @@ the backup for comparison.
 The optional kernel-refresh dependency lets a consumer declare the hook that
 copies a new DTB into the boot filesystem. The role requires it to exist and to
 sort before its own `zz-` hook. Both basenames are restricted to characters
-accepted by Debian `run-parts`. On each kernel update, the managed hook rebuilds
-the managed DTB from the current vendor DTB. It removes the managed DTB and
+accepted by Debian `run-parts`, and the dependency must be a safe root-owned
+executable. On each kernel update, the managed hook rebuilds the managed DTB
+from the current vendor DTB. It removes the managed DTB and
 configuration block if the argument is no longer present. If validation fails,
 the hook attempts to remove the managed selection and DTB, then fails the
 package operation visibly. A rollback failure is reported explicitly and
