@@ -1,0 +1,24 @@
+---
+- name: Reject run-parts-incompatible kernel hook path
+  block:
+    - name: Validate run-parts-incompatible kernel hook path
+      ansible.builtin.include_role:
+        name: "{{ cgroup_memory_controller_test_role_path }}"
+        tasks_from: configuration.yml
+      vars:
+        cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+        cgroup_memory_controller_kernel_hook_path: >-
+          {{ cgroup_memory_controller_invalid_kernel_hook_case.managed_path }}
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          {{ cgroup_memory_controller_invalid_kernel_hook_case.dependency_path }}
+
+    - name: Require run-parts-incompatible kernel hook path to fail validation
+      ansible.builtin.fail:
+        msg: >-
+          The {{ cgroup_memory_controller_invalid_kernel_hook_case.name }} path
+          unexpectedly passed validation.
+  rescue:
+    - name: Assert run-parts-incompatible kernel hook path failed validation
+      ansible.builtin.assert:
+        that:
+          - "'policy requires safe absolute paths' in ansible_failed_result.msg"

@@ -49,6 +49,18 @@
                 'policy requires safe absolute paths'
                 in ansible_failed_result.msg
 
+    - name: Reject kernel hook paths skipped by run-parts
+      ansible.builtin.include_tasks: assert-invalid-kernel-hook-path.yml
+      loop:
+        - name: managed hook
+          managed_path: /etc/kernel/postinst.d/zz-invalid.sh
+          dependency_path: ""
+        - name: refresh dependency
+          managed_path: /etc/kernel/postinst.d/zz-valid
+          dependency_path: /etc/kernel/postinst.d/z50-invalid.sh
+      loop_control:
+        loop_var: cgroup_memory_controller_invalid_kernel_hook_case
+
     - name: Reject reserved cgroup memory-controller backup filenames
       ansible.builtin.include_tasks: assert-invalid-backup-filename.yml
       loop:

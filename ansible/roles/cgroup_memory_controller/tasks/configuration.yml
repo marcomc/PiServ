@@ -32,11 +32,11 @@
       - "'..' not in cgroup_memory_controller_helper_path"
       - >-
         cgroup_memory_controller_kernel_hook_path
-        is match('^/etc/kernel/postinst.d/[A-Za-z0-9._-]+$')
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+$')
       - >-
         cgroup_memory_controller_kernel_refresh_dependency_path == ''
         or cgroup_memory_controller_kernel_refresh_dependency_path
-        is match('^/etc/kernel/postinst.d/[A-Za-z0-9._-]+$')
+        is match('^/etc/kernel/postinst[.]d/[A-Za-z0-9_-]+$')
       - cgroup_memory_controller_backup_dir is match('^/var/lib/[A-Za-z0-9_./-]+$')
       - "'..' not in cgroup_memory_controller_backup_dir"
       - >-
