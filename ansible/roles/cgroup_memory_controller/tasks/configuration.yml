@@ -510,26 +510,6 @@
       become: true
       check_mode: false
 
-    - name: Reject unsafe cgroup memory-controller rollback artifacts
-      when:
-        - cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
-        - item.stat.exists
-      ansible.builtin.assert:
-        that:
-          - item.stat.isreg | default(false)
-          - not (item.stat.islnk | default(false))
-          - (item.stat.uid | default(-1)) == 0
-          - >-
-            (item.stat.mode | default('0000'))[-2]
-            not in ['2', '3', '6', '7']
-          - >-
-            (item.stat.mode | default('0000'))[-1]
-            not in ['2', '3', '6', '7']
-        fail_msg: >-
-          Refusing to change an unsafe cgroup memory-controller boot artifact
-          at {{ item.item }}.
-      loop: "{{ cgroup_memory_controller_artifacts_before_rollback.results }}"
-
     - name: Read firmware configuration before rollback
       when:
         - cgroup_memory_controller_artifacts_before_rollback.results[0].stat.exists

@@ -38,6 +38,8 @@ PiServ consumer values:
 The helper copies the complete vendor DTB, removes exactly one
 `cgroup_disable=memory` token with `fdtput`, and validates with `fdtget` that the
 managed `bootargs` match the vendor arguments except for that token.
+Before each apply, it also revalidates the retained backups and requires a
+root-owned vendor DTB that is not writable by unprivileged users.
 
 ## Apply and Preflight
 

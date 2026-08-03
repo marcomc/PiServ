@@ -4,68 +4,54 @@
   gather_facts: false
   vars:
     cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+    cgroup_memory_controller_valid_dependency_stat:
+      isreg: true
+      islnk: false
+      uid: 0
+      mode: "0755"
+      executable: true
   tasks:
-    - name: Reject a managed DTB path that does not match its configured name
-      block:
-        - name: Validate inconsistent cgroup memory-controller DTB input
-          ansible.builtin.include_role:
-            name: "{{ cgroup_memory_controller_test_role_path }}"
-            tasks_from: configuration.yml
-          vars:
-            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
-            cgroup_memory_controller_managed_dtb_name: expected.dtb
-            cgroup_memory_controller_managed_dtb_path: >-
-              /boot/firmware/different.dtb
-
-        - name: Require inconsistent managed DTB input to fail validation
-          ansible.builtin.fail:
-            msg: The inconsistent managed DTB input unexpectedly passed validation.
-      rescue:
-        - name: Assert inconsistent managed DTB input failed validation
-          ansible.builtin.assert:
-            that:
-              - >-
-                'policy requires safe absolute paths'
-                in ansible_failed_result.msg
-
-    - name: Reject a non-atomic disabled boot argument
-      block:
-        - name: Validate malformed cgroup memory-controller boot argument
-          ansible.builtin.include_role:
-            name: "{{ cgroup_memory_controller_test_role_path }}"
-            tasks_from: configuration.yml
-          vars:
-            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
-            cgroup_memory_controller_disabled_argument: cgroup_disable memory
-
-        - name: Require malformed boot argument to fail validation
-          ansible.builtin.fail:
-            msg: The malformed boot argument unexpectedly passed validation.
-      rescue:
-        - name: Assert malformed boot argument failed validation
-          ansible.builtin.assert:
-            that:
-              - >-
-                'policy requires safe absolute paths'
-                in ansible_failed_result.msg
-
-    - name: Reject kernel hook paths skipped by run-parts
-      ansible.builtin.include_tasks: assert-invalid-kernel-hook-path.yml
+    - name: Reject invalid cgroup memory-controller role inputs
+      ansible.builtin.include_tasks: assert-invalid-role-input.yml
       loop:
-        - name: managed hook
-          managed_path: /etc/kernel/postinst.d/zz-invalid.sh
-          dependency_path: ""
-        - name: refresh dependency
-          managed_path: /etc/kernel/postinst.d/zz-valid
+        - name: inconsistent managed DTB path
+          managed_name: expected.dtb
+          managed_path: /boot/firmware/different.dtb
+        - name: non-atomic disabled argument
+          disabled_argument: cgroup_disable memory
+        - name: managed hook skipped by run-parts
+          kernel_hook_path: /etc/kernel/postinst.d/zz-invalid.sh
+        - name: dependency hook skipped by run-parts
           dependency_path: /etc/kernel/postinst.d/z50-invalid.sh
         - name: managed hook trailing newline
-          managed_path: "/etc/kernel/postinst.d/zz-invalid\n"
-          dependency_path: ""
+          kernel_hook_path: "/etc/kernel/postinst.d/zz-invalid\n"
         - name: dependency hook trailing newline
-          managed_path: /etc/kernel/postinst.d/zz-valid
           dependency_path: "/etc/kernel/postinst.d/z50-invalid\n"
+        - name: marker literal awk escape
+          config_marker: 'ANSIBLE MANAGED: invalid\nmarker'
+        - name: marker trailing newline
+          config_marker: "ANSIBLE MANAGED: invalid\n"
+        - name: config backup dot
+          config_backup_filename: "."
+        - name: config backup dot-dot
+          config_backup_filename: ".."
+        - name: config backup internal state
+          config_backup_filename: current-source-state
+        - name: config backup trailing newline
+          config_backup_filename: "config.backup\n"
+        - name: vendor backup dot
+          vendor_backup_filename: "."
+        - name: vendor backup dot-dot
+          vendor_backup_filename: ".."
+        - name: vendor backup internal state
+          vendor_backup_filename: current-source-state
+        - name: vendor backup trailing newline
+          vendor_backup_filename: "vendor.backup\n"
+        - name: aliased backup filenames
+          config_backup_filename: shared.backup
+          vendor_backup_filename: shared.backup
       loop_control:
-        loop_var: cgroup_memory_controller_invalid_kernel_hook_case
+        loop_var: cgroup_memory_controller_invalid_input_case
 
     - name: Accept a safe firmware-refresh dependency fixture
       ansible.builtin.include_tasks: >-
@@ -76,104 +62,27 @@
         cgroup_memory_controller_kernel_refresh_dependency_path: >-
           /etc/kernel/postinst.d/z50-valid
         cgroup_memory_controller_kernel_refresh_dependency:
-          stat:
-            isreg: true
-            islnk: false
-            uid: 0
-            mode: "0755"
-            executable: true
+          stat: "{{ cgroup_memory_controller_valid_dependency_stat }}"
 
     - name: Reject unsafe firmware-refresh dependency fixtures
       ansible.builtin.include_tasks: >-
         assert-invalid-kernel-refresh-dependency.yml
       loop:
         - name: symlink
-          stat:
-            isreg: true
-            islnk: true
-            uid: 0
-            mode: "0755"
-            executable: true
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'islnk': true}) }}
         - name: non-root owner
-          stat:
-            isreg: true
-            islnk: false
-            uid: 1000
-            mode: "0755"
-            executable: true
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'uid': 1000}) }}
         - name: writable mode
-          stat:
-            isreg: true
-            islnk: false
-            uid: 0
-            mode: "0775"
-            executable: true
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'mode': '0775'}) }}
         - name: non-executable
-          stat:
-            isreg: true
-            islnk: false
-            uid: 0
-            mode: "0644"
-            executable: false
+          stat: >-
+            {{ cgroup_memory_controller_valid_dependency_stat
+               | combine({'executable': false}) }}
       loop_control:
         loop_var: cgroup_memory_controller_invalid_dependency_case
-
-    - name: Reject unsafe cgroup memory-controller markers
-      ansible.builtin.include_tasks: assert-invalid-config-marker.yml
-      loop:
-        - name: literal awk escape
-          value: 'ANSIBLE MANAGED: invalid\nmarker'
-        - name: actual trailing newline
-          value: "ANSIBLE MANAGED: invalid\n"
-      loop_control:
-        loop_var: cgroup_memory_controller_invalid_marker_case
-
-    - name: Reject reserved cgroup memory-controller backup filenames
-      ansible.builtin.include_tasks: assert-invalid-backup-filename.yml
-      loop:
-        - name: config dot
-          config_filename: .
-          vendor_filename: vendor.backup
-        - name: config dot-dot
-          config_filename: ..
-          vendor_filename: vendor.backup
-        - name: config internal state
-          config_filename: current-source-state
-          vendor_filename: vendor.backup
-        - name: config trailing newline
-          config_filename: "config.backup\n"
-          vendor_filename: vendor.backup
-        - name: vendor dot
-          config_filename: config.backup
-          vendor_filename: .
-        - name: vendor dot-dot
-          config_filename: config.backup
-          vendor_filename: ..
-        - name: vendor internal state
-          config_filename: config.backup
-          vendor_filename: current-source-state
-        - name: vendor trailing newline
-          config_filename: config.backup
-          vendor_filename: "vendor.backup\n"
-      loop_control:
-        loop_var: cgroup_memory_controller_invalid_backup_filename
-
-    - name: Reject aliased cgroup memory-controller backup filenames
-      block:
-        - name: Validate aliased cgroup memory-controller backup filenames
-          ansible.builtin.include_role:
-            name: "{{ cgroup_memory_controller_test_role_path }}"
-            tasks_from: configuration.yml
-          vars:
-            cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
-            cgroup_memory_controller_config_backup_filename: shared.backup
-            cgroup_memory_controller_vendor_dtb_backup_filename: shared.backup
-
-        - name: Require aliased backup filenames to fail validation
-          ansible.builtin.fail:
-            msg: The aliased backup filenames unexpectedly passed validation.
-      rescue:
-        - name: Assert aliased backup filenames failed validation
-          ansible.builtin.assert:
-            that:
-              - "'policy requires safe absolute paths' in ansible_failed_result.msg"

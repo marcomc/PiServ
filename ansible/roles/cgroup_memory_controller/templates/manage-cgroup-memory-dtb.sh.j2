@@ -6,8 +6,11 @@ config_path={{ cgroup_memory_controller_config_path | quote }}
 managed_dtb_path={{ cgroup_memory_controller_managed_dtb_path | quote }}
 managed_dtb_name={{ cgroup_memory_controller_managed_dtb_name | quote }}
 disabled_argument={{ cgroup_memory_controller_disabled_argument | quote }}
+config_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_config_backup_filename) | quote }}
+vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_vendor_dtb_backup_filename) | quote }}
 
 readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
+readonly config_backup_path vendor_backup_path
 readonly fdtget_binary=/usr/bin/fdtget
 readonly fdtput_binary=/usr/bin/fdtput
 readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
@@ -59,21 +62,61 @@ require_command() {
   [[ -x "${command_path}" ]] || fail "required command is unavailable: ${command_path}"
 }
 
+require_safe_root_file() {
+  local file_path="$1"
+  local description="$2"
+  local file_mode
+  local file_uid
+
+  require_regular_file "${file_path}"
+  (( EUID == 0 )) || return 0
+  file_uid="$(stat -c '%u' "${file_path}")"
+  [[ "${file_uid}" == '0' ]] || \
+    fail "${description} is not root-owned: ${file_path}"
+  file_mode="$(stat -c '%a' "${file_path}")"
+  (( (8#${file_mode} & 0022) == 0 )) || \
+    fail "${description} is writable by its group or other users: ${file_path}"
+}
+
+require_safe_backups() {
+  local backup_path
+  local backup_identity
+  local backup_mode
+  local backup_owner
+  local config_identity
+  local source_identity
+  local -a backup_identities=()
+
+  config_identity="$(stat -c '%d:%i' "${config_path}")"
+  source_identity="$(stat -c '%d:%i' "${source_dtb}")"
+  for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
+    require_regular_file "${backup_path}"
+    backup_owner="$(stat -c '%u:%g' "${backup_path}")"
+    [[ "${backup_owner}" == '0:0' ]] || \
+      fail "boot backup is not owned by root:root: ${backup_path}"
+    backup_mode="$(stat -c '%a' "${backup_path}")"
+    [[ "${backup_mode}" == '600' ]] || \
+      fail "boot backup is not private mode 0600: ${backup_path}"
+    [[ -s "${backup_path}" ]] || fail "boot backup is empty: ${backup_path}"
+    backup_identity="$(stat -c '%d:%i' "${backup_path}")"
+    [[ "${backup_identity}" != "${config_identity}" ]] || \
+      fail "boot backup aliases firmware configuration: ${backup_path}"
+    [[ "${backup_identity}" != "${source_identity}" ]] || \
+      fail "boot backup aliases vendor Device Tree: ${backup_path}"
+    backup_identities+=("${backup_identity}")
+  done
+  [[ "${backup_identities[0]}" != "${backup_identities[1]}" ]] || \
+    fail 'boot backups alias each other'
+  "${fdtget_binary}" -p "${vendor_backup_path}" / >/dev/null
+}
+
 require_safe_managed_target() {
   local config_identity
   local source_identity
   local target_identity
-  local target_mode
-  local target_uid
 
   if [[ -e "${managed_dtb_path}" || -L "${managed_dtb_path}" ]]; then
-    require_regular_file "${managed_dtb_path}"
-    target_uid="$(stat -c '%u' "${managed_dtb_path}")"
-    [[ "${target_uid}" == '0' ]] || \
-      fail "managed Device Tree is not root-owned: ${managed_dtb_path}"
-    target_mode="$(stat -c '%a' "${managed_dtb_path}")"
-    (( (8#${target_mode} & 0022) == 0 )) || \
-      fail "managed Device Tree is writable by its group or other users: ${managed_dtb_path}"
+    require_safe_root_file "${managed_dtb_path}" 'managed Device Tree'
 
     target_identity="$(stat -c '%d:%i' "${managed_dtb_path}")"
     if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
@@ -97,7 +140,7 @@ inspect_config_markers() {
   local managed_line
   local managed_line_count
 
-  require_regular_file "${config_path}"
+  require_safe_root_file "${config_path}" 'firmware configuration'
   begin_count="$(grep -Fxc "${begin_marker}" "${config_path}" || true)"
   end_count="$(grep -Fxc "${end_marker}" "${config_path}" || true)"
   managed_line_count="$(grep -Fxc "${managed_config_line}" "${config_path}" || true)"
@@ -123,15 +166,9 @@ inspect_config_markers() {
   fi
 }
 
-write_managed_config() {
+prepare_managed_config() {
   local desired_state="$1"
-  local config_gid
-  local config_mode
-  local config_uid
 
-  config_uid="$(stat -c '%u' "${config_path}")"
-  config_gid="$(stat -c '%g' "${config_path}")"
-  config_mode="$(stat -c '%a' "${config_path}")"
   config_temp="$(mktemp "${config_path}.cgroup-memory-controller.XXXXXX")"
 
   awk -v begin="${begin_marker}" -v end="${end_marker}" \
@@ -170,14 +207,18 @@ write_managed_config() {
     rm -f -- "${config_temp}"
     config_temp=''
     config_changed=false
-    return
+  else
+    config_changed=true
   fi
+}
 
-  chown "${config_uid}:${config_gid}" "${config_temp}"
-  chmod "${config_mode}" "${config_temp}"
+install_managed_config() {
+  [[ "${config_changed}" == true ]] || return 0
+
+  chown --reference="${config_path}" "${config_temp}"
+  chmod --reference="${config_path}" "${config_temp}"
   mv -f -- "${config_temp}" "${config_path}"
   config_temp=''
-  config_changed=true
 }
 
 inspect_source_bootargs() {
@@ -187,7 +228,7 @@ inspect_source_bootargs() {
   local -a source_arguments
   local -a replacement_arguments
 
-  require_regular_file "${source_dtb}"
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
   require_command "${fdtget_binary}"
 
   source_bootargs="$("${fdtget_binary}" --type s "${source_dtb}" /chosen bootargs)"
@@ -258,10 +299,9 @@ print_status() {
 disable_managed_dtb() {
   local changed=false
 
-  require_safe_managed_target
-  inspect_config_markers
   if [[ "${marker_count}" == '1' ]]; then
-    write_managed_config absent
+    prepare_managed_config absent
+    install_managed_config
     if [[ "${config_changed}" == true ]]; then
       changed=true
     fi
@@ -306,7 +346,8 @@ apply_managed_dtb() {
     sync -f "$(dirname "${managed_dtb_path}")"
     changed=true
   fi
-  write_managed_config present
+  prepare_managed_config present
+  install_managed_config
   if [[ "${config_changed}" == true ]]; then
     changed=true
   fi
@@ -318,10 +359,6 @@ apply_managed_dtb() {
 
 check_managed_dtb() {
   local changed=false
-  local end_line=''
-  local managed_block=''
-  local reset_line=''
-
   if [[ "${controller_status}" == 'vendor-enabled' ]]; then
     if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
       changed=true
@@ -331,20 +368,10 @@ check_managed_dtb() {
   fi
 
   prepare_managed_dtb
-  if [[ "${marker_count}" == '1' ]]; then
-    managed_block="$(awk -v begin="${begin_marker}" -v end="${end_marker}" '
-      $0 == begin { inside = 1; next }
-      $0 == end { inside = 0; next }
-      inside { print }
-    ' "${config_path}")"
-    end_line="$(grep -Fnx "${end_marker}" "${config_path}" | cut -d: -f1)"
-    reset_line="$(sed -n "$((end_line + 1))p" "${config_path}")"
-  fi
+  prepare_managed_config present
   if [[ ! -f "${managed_dtb_path}" ]] || \
     ! cmp -s "${candidate_dtb_path}" "${managed_dtb_path}" || \
-    [[ "${marker_count}" == '0' ]] || \
-    [[ "${managed_block}" != "${managed_filter_line}"$'\n'"${managed_config_line}" ]] || \
-    [[ "${reset_line}" != "${managed_filter_line}" ]]; then
+    [[ "${config_changed}" == true ]]; then
     changed=true
   fi
   print_status "${changed}"
@@ -372,10 +399,13 @@ main() {
       inspect_source_bootargs
       if [[ "${mode}" == '--check' ]]; then
         check_managed_dtb
-      elif [[ "${controller_status}" == 'vendor-enabled' ]]; then
-        disable_managed_dtb
       else
-        apply_managed_dtb
+        require_safe_backups
+        if [[ "${controller_status}" == 'vendor-enabled' ]]; then
+          disable_managed_dtb
+        else
+          apply_managed_dtb
+        fi
       fi
       ;;
     *)
