@@ -46,6 +46,8 @@ ln -s "$role_root" "$tmp_dir/roles/cgroup_memory_controller"
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook --syntax-check tests/test.yml
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook tests/test-input-validation.yml
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook tests/test-rendered-helpers.yml
+ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook tests/test-disabled-role-cleanup.yml
+ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-playbook --check tests/test-disabled-role-cleanup.yml
 ANSIBLE_ROLES_PATH="$tmp_dir/roles" ansible-lint .
 rm -rf "$tmp_dir"
 rg -n 'password|secret|token|private' . --glob '!docs/releasing.md'

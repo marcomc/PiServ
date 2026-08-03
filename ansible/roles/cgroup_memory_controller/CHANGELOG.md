@@ -21,7 +21,9 @@ documented here.
   fallback rollback.
 - Added verified private source snapshots with bounded retries so each
   reconciliation derives status, checksum, and managed boot artifacts from one
-  stable firmware generation.
+  stable firmware generation through transaction finalization.
+- Added attested disabled-role rollback with postflight verification before
+  removing the helper and kernel hook.
 - Added consumer input checks for managed-DTB name/path consistency, atomic
   boot arguments, and trusted root-owned paths used by privileged helpers.
 - Added Galaxy-ready metadata, role documentation, validation, and release

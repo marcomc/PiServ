@@ -36,6 +36,7 @@ source_state_temp=''
 source_state_previous=''
 source_bootargs=''
 source_sha256='not-inspected'
+source_metadata=''
 source_state_changed=false
 replacement_bootargs=''
 controller_status=''
@@ -432,6 +433,7 @@ inspect_source_bootargs() {
       "${source_metadata_before}" == "${source_metadata_after_hash}" && \
       "${snapshot_sha256}" == "${source_sha256_after}" ]]; then
       source_sha256="${snapshot_sha256}"
+      source_metadata="${source_metadata_before}"
       snapshot_captured=true
       break
     fi
@@ -523,6 +525,24 @@ prepare_source_state() {
   sync -f "${source_state_temp}"
 }
 
+require_current_source_generation() {
+  local current_metadata_after_hash
+  local current_metadata_before_hash
+  local current_sha256
+
+  [[ -n "${source_metadata}" ]] || \
+    fail 'accepted vendor Device Tree metadata is unavailable'
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+  current_metadata_before_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+  current_sha256="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
+  require_safe_root_file "${source_dtb}" 'vendor Device Tree'
+  current_metadata_after_hash="$(stat -c '%d:%i:%s:%y:%z' -- "${source_dtb}")"
+  [[ "${current_metadata_before_hash}" == "${source_metadata}" && \
+    "${current_metadata_after_hash}" == "${source_metadata}" && \
+    "${current_sha256}" == "${source_sha256}" ]] || \
+    fail 'vendor Device Tree changed before boot transaction commit'
+}
+
 commit_boot_transaction() {
   if [[ -n "${source_state_temp}" ]]; then
     restore_source_state=true
@@ -531,6 +551,7 @@ commit_boot_transaction() {
     sync -f "${backup_dir}"
     source_state_changed=true
   fi
+  require_current_source_generation
   restore_config=false
   restore_managed_dtb=false
   restore_source_state=false

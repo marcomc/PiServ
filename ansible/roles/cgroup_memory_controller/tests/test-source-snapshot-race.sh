@@ -57,6 +57,44 @@ if [[ "${0##*/}" == cp ]]; then
   exec /usr/bin/cp "$@"
 fi
 
+if [[ "${0##*/}" == mv ]]; then
+  : "${COMMIT_CHANGE_MODE:=}"
+  : "${COMMIT_MARKER:=}"
+  : "${COMMIT_PAYLOAD:=}"
+  : "${COMMIT_SOURCE:=}"
+  : "${COMMIT_STATE:=}"
+  arguments=("$@")
+  argument_count=${#arguments[@]}
+  if ((argument_count >= 2)); then
+    source_path="${arguments[argument_count - 2]}"
+    destination="${arguments[argument_count - 1]}"
+    if [[ -n "${COMMIT_CHANGE_MODE}" && \
+      "${destination}" == "${COMMIT_STATE}" && \
+      "${source_path}" == "${COMMIT_STATE}."* && \
+      "${source_path}" != "${COMMIT_STATE}.previous."* && \
+      ! -e "${COMMIT_MARKER}" ]]; then
+      /usr/bin/mv "$@"
+      case "${COMMIT_CHANGE_MODE}" in
+        replace)
+          /usr/bin/mv "${COMMIT_PAYLOAD}" "${COMMIT_SOURCE}"
+          ;;
+        in-place)
+          /usr/bin/fdtput --type s "${COMMIT_SOURCE}" /chosen bootargs \
+            "${COMMIT_PAYLOAD}"
+          ;;
+        *)
+          printf 'unknown commit mutation mode: %s\n' \
+            "${COMMIT_CHANGE_MODE}" >&2
+          exit 2
+          ;;
+      esac
+      /usr/bin/touch "${COMMIT_MARKER}"
+      exit 0
+    fi
+  fi
+  exec /usr/bin/mv "$@"
+fi
+
 [[ $# -eq 5 ]] || {
   printf 'Usage: %s HELPER VENDOR_DTB MANAGED_DTB CONFIG SOURCE_STATE\n' "$0" >&2
   exit 2
@@ -69,8 +107,10 @@ readonly config_path=$4
 readonly source_state_path=$5
 readonly replacement_dtb="${vendor_dtb}.replacement"
 readonly snapshot_marker="${vendor_dtb}.snapshot-marker"
+readonly commit_marker="${vendor_dtb}.commit-marker"
 fake_bin="$(dirname "${vendor_dtb}")/snapshot-bin"
 readonly fake_bin
+commit_payload=''
 
 fail() {
   printf 'source snapshot test: %s\n' "$*" >&2
@@ -99,6 +139,76 @@ source_state_checksum() {
 restore_baseline() {
   set_bootargs "${vendor_dtb}" 'reboot=w cgroup_disable=memory quiet'
   "${helper}" --apply >/dev/null
+}
+
+run_commit_failure_case() {
+  local change_mode=$1
+  local helper_mode=$2
+  local snapshot_bootargs=$3
+  local commit_bootargs=$4
+  local actual_bootargs
+  local after_state
+  local before_state
+  local failure_output
+  local failure_status
+  local identity_after
+  local identity_before
+
+  restore_baseline
+  set_bootargs "${vendor_dtb}" "${snapshot_bootargs}"
+  commit_payload="${commit_bootargs}"
+  if [[ "${change_mode}" == replace ]]; then
+    /usr/bin/cp "${vendor_dtb}" "${replacement_dtb}"
+    set_bootargs "${replacement_dtb}" "${commit_bootargs}"
+    commit_payload="${replacement_dtb}"
+  fi
+  rm -f -- "${commit_marker}"
+  identity_before="$(/usr/bin/stat -c '%d:%i' "${vendor_dtb}")"
+  if [[ "${helper_mode}" == --apply ]]; then
+    before_state="$(artifact_checksums)"
+  else
+    before_state="$(source_state_checksum)"
+  fi
+  set +e
+  failure_output="$(PATH="${fake_bin}:${PATH}" \
+    COMMIT_CHANGE_MODE="${change_mode}" \
+    COMMIT_MARKER="${commit_marker}" \
+    COMMIT_PAYLOAD="${commit_payload}" \
+    COMMIT_SOURCE="${vendor_dtb}" \
+    COMMIT_STATE="${source_state_path}" \
+    "${helper}" "${helper_mode}" 2>&1)"
+  failure_status=$?
+  set -e
+  ((failure_status != 0)) || \
+    fail "${change_mode} commit-time ${helper_mode} unexpectedly succeeded"
+  require_contains "${failure_output}" \
+    'vendor Device Tree changed before boot transaction commit'
+  actual_bootargs="$(/usr/bin/fdtget --type s \
+    "${vendor_dtb}" /chosen bootargs)"
+  [[ "${actual_bootargs}" == "${commit_bootargs}" ]] || \
+    fail 'commit-time vendor mutation did not occur'
+  identity_after="$(/usr/bin/stat -c '%d:%i' "${vendor_dtb}")"
+  if [[ "${change_mode}" == in-place ]]; then
+    [[ "${identity_after}" == "${identity_before}" ]] || \
+      fail 'commit-time in-place mutation replaced the vendor inode'
+  else
+    [[ "${identity_after}" != "${identity_before}" ]] || \
+      fail 'commit-time atomic replacement retained the vendor inode'
+  fi
+  if [[ "${helper_mode}" == --apply ]]; then
+    after_state="$(artifact_checksums)"
+    [[ "${after_state}" == "${before_state}" ]] || \
+      fail "${change_mode} commit-time apply changed managed state"
+  else
+    require_contains "${failure_output}" \
+      'was disabled after regeneration failed'
+    [[ ! -e "${managed_dtb}" ]] || \
+      fail "${change_mode} commit-time fallback retained managed DTB"
+    after_state="$(source_state_checksum)"
+    [[ "${after_state}" == "${before_state}" ]] || \
+      fail "${change_mode} commit-time fallback changed source state"
+  fi
+  restore_baseline
 }
 
 run_retry() {
@@ -214,7 +324,8 @@ mkdir -p "${fake_bin}"
 script_path="$(readlink -f "$0")"
 readonly script_path
 ln -sf "${script_path}" "${fake_bin}/cp"
-trap 'rm -rf -- "${fake_bin}" "${replacement_dtb}" "${snapshot_marker}"' EXIT
+ln -sf "${script_path}" "${fake_bin}/mv"
+trap 'rm -rf -- "${fake_bin}" "${replacement_dtb}" "${snapshot_marker}" "${commit_marker}"' EXIT
 
 run_retry --check replace-once \
   'reboot=w cgroup_disable=memory quiet snapshot-check-old' \
@@ -236,3 +347,16 @@ run_retry --apply in-place-once \
 run_failure_case fail 'injected source snapshot failure'
 run_failure_case unstable \
   'vendor Device Tree changed during snapshot capture after 3 attempts'
+
+run_commit_failure_case replace --apply \
+  'reboot=w cgroup_disable=memory quiet commit-apply-old' \
+  'reboot=w cgroup_disable=memory quiet commit-apply-new'
+run_commit_failure_case in-place --refresh \
+  'reboot=w cgroup_disable=memory quiet commit-apply-in-place-old' \
+  'reboot=w cgroup_disable=memory quiet commit-apply-in-place-new'
+run_commit_failure_case replace --refresh \
+  'reboot=w quiet commit-disable-old' \
+  'reboot=w quiet commit-disable-new'
+run_commit_failure_case in-place --apply \
+  'reboot=w quiet commit-disable-in-place-old' \
+  'reboot=w quiet commit-disable-in-place-new'
