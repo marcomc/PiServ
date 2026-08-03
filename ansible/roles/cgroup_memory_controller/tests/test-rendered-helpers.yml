@@ -513,17 +513,21 @@
                 dest: "{{ cgroup_memory_controller_test_reboot_mode }}"
                 mode: "0644"
 
-            - name: Reject apply with a drifted active reboot mode
+            - name: Reject boot mutations with a drifted active reboot mode
               ansible.builtin.command:
                 argv:
                   - "{{ cgroup_memory_controller_test_helper }}"
-                  - --apply
-              register: cgroup_memory_controller_reboot_mode_drift_apply
+                  - "{{ item }}"
+              loop:
+                - --apply
+                - --check-disable
+                - --disable
+              register: cgroup_memory_controller_reboot_mode_drift_operations
               changed_when: false
               failed_when: >-
-                cgroup_memory_controller_reboot_mode_drift_apply.rc == 0
+                cgroup_memory_controller_reboot_mode_drift_operations.rc == 0
                 or 'active reboot mode is warm, expected cold'
-                not in cgroup_memory_controller_reboot_mode_drift_apply.stderr
+                not in cgroup_memory_controller_reboot_mode_drift_operations.stderr
 
             - name: Rechecksum boot artifacts after reboot-mode rejection
               ansible.builtin.command:

@@ -247,6 +247,7 @@ require_safe_backups() {
 require_recovery_for_managed_state() {
   if [[ "${marker_count}" == '1' || -e "${managed_dtb_path}" ]]; then
     require_safe_backups
+    require_reboot_mode
   fi
 }
 
