@@ -41,125 +41,39 @@
     cgroup_memory_controller_backup_set_fresh: >-
       {{ not cgroup_memory_controller_initial_recovery_set.results[0].stat.exists }}
 
-- name: Preserve initial cgroup memory-controller boot artifacts
-  when: cgroup_memory_controller_backup_set_fresh
-  ansible.builtin.copy:
-    src: "{{ item.source }}"
-    dest: "{{ item.path }}"
-    remote_src: true
-    force: false
-    owner: root
-    group: root
-    mode: "0600"
-  loop: "{{ cgroup_memory_controller_backup_artifacts }}"
-  become: true
-
-- name: Validate retained cgroup memory-controller recovery artifacts
-  when: not (cgroup_memory_controller_backup_set_fresh and ansible_check_mode)
+- name: Create and validate cgroup memory-controller recovery set
   block:
-    - name: Read retained cgroup memory-controller backups
-      ansible.builtin.stat:
-        path: "{{ item.path }}"
-        follow: false
-        checksum_algorithm: sha256
-      loop: "{{ cgroup_memory_controller_backup_artifacts }}"
-      register: cgroup_memory_controller_retained_backups
-      changed_when: false
-      become: true
-      check_mode: false
-
-    - name: Require usable cgroup memory-controller backups
-      ansible.builtin.assert:
-        that:
-          - item.stat.exists
-          - item.stat.isreg
-          - not item.stat.islnk
-          - item.stat.uid == 0
-          - item.stat.gid == 0
-          - item.stat.mode == '0600'
-          - item.stat.size > 0
-          - >-
-            not cgroup_memory_controller_backup_set_fresh
-            or item.stat.checksum
-               == cgroup_memory_controller_boot_artifacts.results[item.item.source_index].stat.checksum
-        fail_msg: >-
-          Backups must be non-empty private root-owned copies. Fresh copies must
-          match their source byte-for-byte.
-      loop: "{{ cgroup_memory_controller_retained_backups.results | default([]) }}"
-
-    - name: Define cgroup memory-controller backup manifest content
-      ansible.builtin.set_fact:
-        cgroup_memory_controller_backup_manifest_content: |
-          {{ cgroup_memory_controller_retained_backups.results[0].stat.checksum }}  {{ cgroup_memory_controller_config_backup_filename }}
-          {{ cgroup_memory_controller_retained_backups.results[1].stat.checksum }}  {{ cgroup_memory_controller_vendor_dtb_backup_filename }}
-
-    - name: Create initial cgroup memory-controller backup manifest
-      when: cgroup_memory_controller_backup_set_fresh
-      ansible.builtin.copy:
-        content: "{{ cgroup_memory_controller_backup_manifest_content }}"
-        dest: "{{ cgroup_memory_controller_backup_manifest_path }}"
-        owner: root
-        group: root
-        mode: "0600"
+    - name: Run cgroup memory-controller recovery-set transaction
+      ansible.builtin.include_tasks: create-and-validate-recovery-set.yml
+  rescue:
+    - name: Remove failed fresh cgroup memory-controller recovery set
+      when:
+        - cgroup_memory_controller_backup_set_fresh
+        - not ansible_check_mode
+      ansible.builtin.file:
+        path: "{{ cgroup_memory_controller_failed_backup_path }}"
+        state: absent
+      loop: >-
+        {{
+          cgroup_memory_controller_backup_artifacts | map(attribute='path') | list
+          + [cgroup_memory_controller_backup_manifest_path]
+        }}
+      loop_control:
+        loop_var: cgroup_memory_controller_failed_backup_path
       become: true
 
-    - name: Read retained cgroup memory-controller backup manifest
-      ansible.builtin.stat:
-        path: "{{ cgroup_memory_controller_backup_manifest_path }}"
-        follow: false
-      register: cgroup_memory_controller_retained_backup_manifest
-      changed_when: false
-      become: true
-      check_mode: false
-
-    - name: Require private cgroup memory-controller backup manifest
-      ansible.builtin.assert:
-        that:
-          - cgroup_memory_controller_retained_backup_manifest.stat.isreg
-          - not cgroup_memory_controller_retained_backup_manifest.stat.islnk
-          - cgroup_memory_controller_retained_backup_manifest.stat.uid == 0
-          - cgroup_memory_controller_retained_backup_manifest.stat.gid == 0
-          - cgroup_memory_controller_retained_backup_manifest.stat.mode == '0600'
-        fail_msg: The checksum manifest must be a private root-owned regular file.
-
-    - name: Read cgroup memory-controller backup manifest content
-      ansible.builtin.slurp:
-        path: "{{ cgroup_memory_controller_backup_manifest_path }}"
-      register: cgroup_memory_controller_retained_backup_manifest_content
-      become: true
-      check_mode: false
-
-    - name: Require a valid cgroup memory-controller backup manifest
-      ansible.builtin.assert:
-        that:
-          - >-
-            (cgroup_memory_controller_retained_backup_manifest_content.content | b64decode)
-            == cgroup_memory_controller_backup_manifest_content
-          - >-
-            [
-              cgroup_memory_controller_boot_artifacts.results[0].stat.dev
-              ~ ':' ~ cgroup_memory_controller_boot_artifacts.results[0].stat.inode,
-              cgroup_memory_controller_boot_artifacts.results[1].stat.dev
-              ~ ':' ~ cgroup_memory_controller_boot_artifacts.results[1].stat.inode,
-              cgroup_memory_controller_retained_backups.results[0].stat.dev
-              ~ ':' ~ cgroup_memory_controller_retained_backups.results[0].stat.inode,
-              cgroup_memory_controller_retained_backups.results[1].stat.dev
-              ~ ':' ~ cgroup_memory_controller_retained_backups.results[1].stat.inode,
-              cgroup_memory_controller_retained_backup_manifest.stat.dev
-              ~ ':' ~ cgroup_memory_controller_retained_backup_manifest.stat.inode
-            ] | unique | list | length == 5
-        fail_msg: >-
-          The checksum manifest must be an exact private record of both retained
-          backup filenames and SHA-256 digests. Recovery artifacts and live sources
-          must not alias each other.
-
-    - name: Validate retained cgroup memory-controller Device Tree backup
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/fdtget
-          - -p
-          - "{{ cgroup_memory_controller_backup_artifacts[1].path }}"
-          - /
-      changed_when: false
-      check_mode: false
-      become: true
+    - name: Rethrow cgroup memory-controller recovery-set failure
+      ansible.builtin.fail:
+        msg: >-
+          {{
+            (
+              ansible_failed_result.results | default([])
+              | selectattr('failed', 'defined')
+              | selectattr('failed')
+              | map(attribute='msg')
+              | first
+            )
+            | default(ansible_failed_result.msg, true)
+            | default(ansible_failed_result.stderr, true)
+            | default(ansible_failed_result | string, true)
+          }}
