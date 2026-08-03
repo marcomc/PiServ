@@ -158,10 +158,12 @@ require_safe_backups() {
   local backup_identity
   local config_identity
   local expected_manifest
+  local managed_identity
   local manifest_identity
   local reboot_identity
   local retained_manifest
   local source_identity
+  local source_state_identity
   local -a backup_hashes=()
   local -a backup_identities=()
 
@@ -181,6 +183,21 @@ require_safe_backups() {
   if [[ -f "${source_dtb}" && ! -L "${source_dtb}" ]]; then
     source_identity="$(stat -c '%d:%i' "${source_dtb}")"
   fi
+  managed_identity=''
+  if [[ -f "${managed_dtb_path}" && ! -L "${managed_dtb_path}" ]]; then
+    managed_identity="$(stat -c '%d:%i' "${managed_dtb_path}")"
+  fi
+  source_state_identity=''
+  if [[ -e "${source_state_path}" || -L "${source_state_path}" ]]; then
+    require_private_root_file "${source_state_path}"
+    source_state_identity="$(stat -c '%d:%i' "${source_state_path}")"
+  fi
+  [[ -z "${reboot_identity}" || ( \
+    "${reboot_identity}" != "${config_identity}" && \
+    "${reboot_identity}" != "${source_identity}" && \
+    "${reboot_identity}" != "${managed_identity}" && \
+    "${reboot_identity}" != "${source_state_identity}" ) ]] || \
+    fail 'active reboot-mode control aliases a live boot artifact'
   for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
     [[ -s "${backup_path}" ]] || fail "boot backup is empty: ${backup_path}"
     backup_identity="$(stat -c '%d:%i' "${backup_path}")"
@@ -190,6 +207,11 @@ require_safe_backups() {
       fail "boot backup aliases vendor Device Tree: ${backup_path}"
     [[ -z "${reboot_identity}" || "${backup_identity}" != "${reboot_identity}" ]] || \
       fail "boot backup aliases active reboot-mode control: ${backup_path}"
+    [[ -z "${managed_identity}" || "${backup_identity}" != "${managed_identity}" ]] || \
+      fail "boot backup aliases managed Device Tree: ${backup_path}"
+    [[ -z "${source_state_identity}" || \
+      "${backup_identity}" != "${source_state_identity}" ]] || \
+      fail "boot backup aliases current source state: ${backup_path}"
     backup_identities+=("${backup_identity}")
     backup_hashes+=("$("${sha256sum_binary}" "${backup_path}" | awk '{print $1}')")
   done
@@ -199,6 +221,8 @@ require_safe_backups() {
   [[ "${manifest_identity}" != "${config_identity}" && \
     "${manifest_identity}" != "${source_identity}" && \
     "${manifest_identity}" != "${reboot_identity}" && \
+    "${manifest_identity}" != "${managed_identity}" && \
+    "${manifest_identity}" != "${source_state_identity}" && \
     "${manifest_identity}" != "${backup_identities[0]}" && \
     "${manifest_identity}" != "${backup_identities[1]}" ]] || \
     fail 'boot backup checksum manifest aliases a protected artifact'
@@ -208,6 +232,15 @@ require_safe_backups() {
   retained_manifest="$(cat "${backup_manifest_path}"; printf '\034')"
   [[ "${retained_manifest}" == "${expected_manifest}" ]] || \
     fail 'boot backup checksum manifest does not match retained artifacts'
+  [[ -z "${source_state_identity}" || ( \
+    "${source_state_identity}" != "${config_identity}" && \
+    "${source_state_identity}" != "${source_identity}" && \
+    "${source_state_identity}" != "${reboot_identity}" && \
+    "${source_state_identity}" != "${managed_identity}" && \
+    "${source_state_identity}" != "${backup_identities[0]}" && \
+    "${source_state_identity}" != "${backup_identities[1]}" && \
+    "${source_state_identity}" != "${manifest_identity}" ) ]] || \
+    fail 'current source state aliases a protected artifact'
   "${fdtget_binary}" -p "${vendor_backup_path}" / >/dev/null
 }
 
@@ -549,8 +582,8 @@ main() {
         check_managed_dtb
       else
         require_safe_refresh_dependency
-        require_reboot_mode
         require_safe_backups
+        require_reboot_mode
         write_source_state
         if [[ "${controller_status}" == 'vendor-enabled' ]]; then
           disable_managed_dtb

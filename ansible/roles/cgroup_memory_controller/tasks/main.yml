@@ -1,8 +1,9 @@
 ---
-- name: Validate cgroup memory-controller target
-  ansible.builtin.import_tasks: validate-target.yml
+- name: Manage cgroup memory-controller policy
   when: cgroup_memory_controller_manage | bool
+  block:
+    - name: Validate cgroup memory-controller target
+      ansible.builtin.import_tasks: validate-target.yml
 
-- name: Configure cgroup memory-controller policy
-  ansible.builtin.import_tasks: configuration.yml
-  when: cgroup_memory_controller_manage | bool
+    - name: Configure cgroup memory-controller policy
+      ansible.builtin.import_tasks: configuration.yml

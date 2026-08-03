@@ -56,6 +56,8 @@ ansible-playbook ansible/playbooks/piserv-base.yml
 ssh admin@PiServ.local \
   'sudo /usr/local/libexec/piserv/manage-cgroup-memory-dtb --check'
 ssh admin@PiServ.local \
+  'printf "reboot_mode="; sudo cat /sys/kernel/reboot/mode'
+ssh admin@PiServ.local \
   "sudo grep -A2 -B1 'PiServ cgroup v2 memory controller' /boot/firmware/config.txt"
 ```
 

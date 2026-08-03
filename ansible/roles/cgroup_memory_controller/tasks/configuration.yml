@@ -389,30 +389,31 @@
             mode: "0755"
           become: true
 
-        - name: Verify reconciled cgroup memory-controller boot policy
+        - name: Verify cgroup memory-controller reconciliation
           when: not ansible_check_mode
-          ansible.builtin.command:
-            argv:
-              - "{{ cgroup_memory_controller_helper_path }}"
-              - --check
-          register: cgroup_memory_controller_postflight
-          changed_when: false
-          check_mode: false
-          become: true
+          block:
+            - name: Verify reconciled cgroup memory-controller boot policy
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_helper_path }}"
+                  - --check
+              register: cgroup_memory_controller_postflight
+              changed_when: false
+              check_mode: false
+              become: true
 
-        - name: Require an idempotent cgroup memory-controller postflight
-          when: not ansible_check_mode
-          ansible.builtin.assert:
-            that:
-              - "'changed=false' in cgroup_memory_controller_postflight.stdout"
-              - >-
-                'status=managed-dtb-required'
-                in cgroup_memory_controller_postflight.stdout
-                or 'status=vendor-enabled'
-                in cgroup_memory_controller_postflight.stdout
-            fail_msg: >-
-              The cgroup memory-controller managed Device Tree did not pass its
-              postflight verification.
+            - name: Require an idempotent cgroup memory-controller postflight
+              ansible.builtin.assert:
+                that:
+                  - "'changed=false' in cgroup_memory_controller_postflight.stdout"
+                  - >-
+                    'status=managed-dtb-required'
+                    in cgroup_memory_controller_postflight.stdout
+                    or 'status=vendor-enabled'
+                    in cgroup_memory_controller_postflight.stdout
+                fail_msg: >-
+                  The cgroup memory-controller managed Device Tree did not pass
+                  its postflight verification.
 
 - name: Remove disabled cgroup memory-controller boot policy
   when: not (cgroup_memory_controller_enabled | bool)
@@ -487,43 +488,40 @@
           rollback helper is absent. Restore the helper before disabling the
           role so marker validation and artifact removal remain coordinated.
 
-    - name: Preflight managed cgroup memory-controller rollback
-      when:
-        - ansible_check_mode
-        - cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
-      ansible.builtin.command:
-        argv:
-          - "{{ cgroup_memory_controller_helper_path }}"
-          - --check-disable
-      register: cgroup_memory_controller_rollback_preflight
-      changed_when: >-
-        'changed=true' in cgroup_memory_controller_rollback_preflight.stdout
-      check_mode: false
-      become: true
+    - name: Roll back managed cgroup memory-controller artifacts
+      when: cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
+      block:
+        - name: Preflight managed cgroup memory-controller rollback
+          when: ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --check-disable
+          register: cgroup_memory_controller_rollback_preflight
+          changed_when: >-
+            'changed=true' in cgroup_memory_controller_rollback_preflight.stdout
+          check_mode: false
+          become: true
 
-    - name: Disable managed cgroup memory-controller Device Tree
-      when:
-        - cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
-        - not ansible_check_mode
-      ansible.builtin.command:
-        argv:
-          - "{{ cgroup_memory_controller_helper_path }}"
-          - --disable
-      register: cgroup_memory_controller_disable
-      changed_when: "'changed=true' in cgroup_memory_controller_disable.stdout"
-      become: true
+        - name: Disable managed cgroup memory-controller Device Tree
+          when: not ansible_check_mode
+          ansible.builtin.command:
+            argv:
+              - "{{ cgroup_memory_controller_helper_path }}"
+              - --disable
+          register: cgroup_memory_controller_disable
+          changed_when: "'changed=true' in cgroup_memory_controller_disable.stdout"
+          become: true
 
-    - name: Remove cgroup memory-controller boot artifacts
-      when:
-        - cgroup_memory_controller_artifacts_before_rollback.results[1].stat.exists
-        - item.stat.exists
-      ansible.builtin.file:
-        path: "{{ item.item }}"
-        state: absent
-      loop:
-        - "{{ cgroup_memory_controller_artifacts_before_rollback.results[3] }}"
-        - "{{ cgroup_memory_controller_artifacts_before_rollback.results[1] }}"
-      become: true
+        - name: Remove cgroup memory-controller boot artifacts
+          when: item.stat.exists
+          ansible.builtin.file:
+            path: "{{ item.item }}"
+            state: absent
+          loop:
+            - "{{ cgroup_memory_controller_artifacts_before_rollback.results[3] }}"
+            - "{{ cgroup_memory_controller_artifacts_before_rollback.results[1] }}"
+          become: true
 
 - name: Validate active cgroup memory-controller runtime
   when:
@@ -550,35 +548,37 @@
           The cgroup v2 memory controller is not active. Reboot after applying
           the managed Device Tree, then rerun this validation.
 
-    - name: Read configured systemd service cgroup path
+    - name: Validate configured systemd service cgroup memory events
       when: cgroup_memory_controller_runtime_systemd_service | length > 0
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/systemctl
-          - show
-          - "{{ cgroup_memory_controller_runtime_systemd_service }}"
-          - --property=ControlGroup
-          - --value
-      register: cgroup_memory_controller_runtime_service_cgroup
-      changed_when: false
-      check_mode: false
-      become: true
+      block:
+        - name: Read configured systemd service cgroup path
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/systemctl
+              - show
+              - "{{ cgroup_memory_controller_runtime_systemd_service }}"
+              - --property=ControlGroup
+              - --value
+          register: cgroup_memory_controller_runtime_service_cgroup
+          changed_when: false
+          check_mode: false
+          become: true
 
-    - name: Read configured systemd service cgroup memory events
-      when: cgroup_memory_controller_runtime_systemd_service | length > 0
-      ansible.builtin.stat:
-        path: >-
-          /sys/fs/cgroup{{ cgroup_memory_controller_runtime_service_cgroup.stdout | trim }}/memory.events
-      register: cgroup_memory_controller_runtime_service_memory_events
-      changed_when: false
-      become: true
+        - name: Read configured systemd service cgroup memory events
+          ansible.builtin.stat:
+            path: >-
+              /sys/fs/cgroup{{ cgroup_memory_controller_runtime_service_cgroup.stdout | trim }}/memory.events
+          register: cgroup_memory_controller_runtime_service_memory_events
+          changed_when: false
+          become: true
 
-    - name: Assert configured systemd service exposes cgroup memory events
-      when: cgroup_memory_controller_runtime_systemd_service | length > 0
-      ansible.builtin.assert:
-        that:
-          - cgroup_memory_controller_runtime_service_cgroup.stdout | trim is match('^/')
-          - cgroup_memory_controller_runtime_service_memory_events.stat.isreg
-        fail_msg: >-
-          The configured systemd service does not expose memory.events after
-          enabling the cgroup v2 memory controller.
+        - name: Assert configured systemd service exposes cgroup memory events
+          ansible.builtin.assert:
+            that:
+              - >-
+                cgroup_memory_controller_runtime_service_cgroup.stdout
+                | trim is match('^/')
+              - cgroup_memory_controller_runtime_service_memory_events.stat.isreg
+            fail_msg: >-
+              The configured systemd service does not expose memory.events after
+              enabling the cgroup v2 memory controller.

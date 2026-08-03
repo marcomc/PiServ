@@ -434,6 +434,53 @@
                       | b64decode
                     )
 
+            - name: Alias reboot-mode control to firmware configuration
+              ansible.builtin.file:
+                src: "{{ cgroup_memory_controller_test_config }}"
+                path: "{{ cgroup_memory_controller_test_reboot_mode }}"
+                state: hard
+                force: true
+                mode: "0640"
+
+            - name: Reject reboot-mode control alias to a live boot artifact
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_helper }}"
+                  - --apply
+              register: cgroup_memory_controller_live_reboot_alias_apply
+              changed_when: false
+              failed_when: >-
+                cgroup_memory_controller_live_reboot_alias_apply.rc == 0
+                or 'active reboot-mode control aliases a live boot artifact'
+                not in cgroup_memory_controller_live_reboot_alias_apply.stderr
+
+            - name: Remove aliased reboot-mode control
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_reboot_mode }}"
+                state: absent
+
+            - name: Restore active reboot-mode control after live alias test
+              ansible.builtin.copy:
+                content: "cold\n"
+                dest: "{{ cgroup_memory_controller_test_reboot_mode }}"
+                mode: "0644"
+
+            - name: Rechecksum boot artifacts after live reboot alias rejection
+              ansible.builtin.command:
+                argv:
+                  - sha256sum
+                  - "{{ cgroup_memory_controller_test_config }}"
+                  - "{{ cgroup_memory_controller_test_managed_dtb }}"
+              register: cgroup_memory_controller_live_reboot_alias_artifacts
+              changed_when: false
+
+            - name: Require live reboot alias rejection to preserve boot artifacts
+              ansible.builtin.assert:
+                that:
+                  - >-
+                    cgroup_memory_controller_lifecycle_artifacts.stdout
+                    == cgroup_memory_controller_live_reboot_alias_artifacts.stdout
+
             - name: Alias a retained backup to the reboot-mode control
               ansible.builtin.file:
                 src: "{{ cgroup_memory_controller_test_reboot_mode }}"
@@ -501,6 +548,29 @@
                 mode: "0644"
 
             - name: Remove recorded cgroup memory-controller source state
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
+                state: absent
+
+            - name: Create invalid source-state directory
+              ansible.builtin.file:
+                path: "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
+                state: directory
+                mode: "0700"
+
+            - name: Reject a directory at the source-state destination
+              ansible.builtin.command:
+                argv:
+                  - "{{ cgroup_memory_controller_test_helper }}"
+                  - --apply
+              register: cgroup_memory_controller_directory_source_state_apply
+              changed_when: false
+              failed_when: >-
+                cgroup_memory_controller_directory_source_state_apply.rc == 0
+                or 'expected regular file'
+                not in cgroup_memory_controller_directory_source_state_apply.stderr
+
+            - name: Remove invalid source-state directory
               ansible.builtin.file:
                 path: "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
                 state: absent
