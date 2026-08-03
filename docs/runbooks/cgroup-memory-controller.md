@@ -33,7 +33,7 @@ PiServ consumer values:
 | `/boot/firmware/config.txt` | A marked `[all]` and `device_tree=piserv-cgroup-memory.dtb` block |
 | `/usr/local/libexec/piserv/manage-cgroup-memory-dtb` | Root-owned preflight, generation, validation, and disable helper |
 | `/etc/kernel/postinst.d/zz-piserv-cgroup-memory-controller` | Refreshes the managed DTB after Raspberry Pi's firmware-copy hook |
-| `/var/lib/piserv/boot-backups/cgroup-memory-controller` | Root-only initial boot-artifact backups and current source state |
+| `/var/lib/piserv/boot-backups/cgroup-memory-controller` | Root-only initial boot-artifact backups, SHA-256 manifest, and current source state |
 
 The helper copies the complete vendor DTB, removes exactly one
 `cgroup_disable=memory` token with `fdtput`, and validates with `fdtget` that the
@@ -42,6 +42,8 @@ Before each apply, it also revalidates the retained backups and requires a
 root-owned vendor DTB that is not writable by unprivileged users. The helper
 also revalidates the firmware-refresh dependency, keeps its managed selection
 last in `config.txt`, and atomically refreshes `current-source-state`.
+The role creates `backup-checksums.sha256` only with a fresh pair of backups;
+partial or unmanifested existing sets fail without being modified.
 
 ## Apply and Preflight
 
@@ -62,6 +64,10 @@ status=managed-dtb-required
 changed=false
 source_dtb_sha256=4186c583885d0337494d9c8e4533a2d387e948ac00c2e4ae4c7e12b5c49ebe35
 ```
+
+Before adding the manifest, the retained configuration matched a reconstruction
+of the pre-managed `config.txt` byte-for-byte and `fdtget` parsed the retained
+vendor DTB. The migrated manifest then passed normal and check-mode role runs.
 
 `changed=false` proves the installed managed DTB matches the current vendor DTB
 and the marked firmware selection is correct.

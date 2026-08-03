@@ -263,17 +263,33 @@
                 state: directory
                 mode: "0700"
 
-            - name: Create cgroup memory-controller lifecycle backups
-              ansible.builtin.copy:
-                src: "{{ item.source }}"
-                dest: "{{ cgroup_memory_controller_test_backup_dir }}/{{ item.name }}"
-                remote_src: true
-                mode: "0600"
+            - name: Read cgroup memory-controller lifecycle sources
+              ansible.builtin.stat:
+                path: "{{ item }}"
+                checksum_algorithm: sha256
               loop:
-                - name: config.backup
-                  source: "{{ cgroup_memory_controller_test_config }}"
-                - name: vendor.backup
-                  source: "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                - "{{ cgroup_memory_controller_test_vendor_dtb }}"
+                - "{{ cgroup_memory_controller_test_config }}"
+              register: cgroup_memory_controller_boot_artifacts
+              changed_when: false
+
+            - name: Exercise fresh and retained cgroup memory-controller backups
+              ansible.builtin.include_tasks: ../tasks/manage-backups.yml
+              loop:
+                - fresh
+                - retained
+              loop_control:
+                label: "{{ cgroup_memory_controller_recovery_pass }}"
+                loop_var: cgroup_memory_controller_recovery_pass
+              vars:
+                cgroup_memory_controller_vendor_dtb: >-
+                  {{ cgroup_memory_controller_test_vendor_dtb }}
+                cgroup_memory_controller_config_path: >-
+                  {{ cgroup_memory_controller_test_config }}
+                cgroup_memory_controller_backup_dir: >-
+                  {{ cgroup_memory_controller_test_backup_dir }}
+                cgroup_memory_controller_config_backup_filename: config.backup
+                cgroup_memory_controller_vendor_dtb_backup_filename: vendor.backup
 
             - name: Make vendor Device Tree fixture untrusted
               ansible.builtin.file:
@@ -506,34 +522,33 @@
                     'changed=false'
                     in cgroup_memory_controller_drift_repair.results[2].stdout
 
-            - name: Empty retained firmware configuration backup
+            - name: Corrupt retained firmware configuration backup
               ansible.builtin.copy:
-                content: ""
+                content: "x\n"
                 dest: "{{ cgroup_memory_controller_test_backup_dir }}/config.backup"
                 mode: "0600"
 
-            - name: Reject apply with an empty retained backup
+            - name: Reject apply with a corrupted retained backup
               ansible.builtin.command:
                 argv:
                   - "{{ cgroup_memory_controller_test_helper }}"
                   - --apply
-              register: cgroup_memory_controller_empty_backup_apply
+              register: cgroup_memory_controller_corrupt_backup_apply
               changed_when: false
               failed_when: false
 
-            - name: Require empty retained backup rejection
+            - name: Require corrupted retained backup rejection
               ansible.builtin.assert:
                 that:
-                  - cgroup_memory_controller_empty_backup_apply.rc != 0
+                  - cgroup_memory_controller_corrupt_backup_apply.rc != 0
                   - >-
-                    'boot backup is empty'
-                    in cgroup_memory_controller_empty_backup_apply.stderr
+                    'checksum manifest does not match'
+                    in cgroup_memory_controller_corrupt_backup_apply.stderr
 
             - name: Restore retained firmware configuration backup
               ansible.builtin.copy:
-                src: "{{ cgroup_memory_controller_test_config }}"
+                content: "base=1\n"
                 dest: "{{ cgroup_memory_controller_test_backup_dir }}/config.backup"
-                remote_src: true
                 mode: "0600"
 
             - name: Append a competing Device Tree selection

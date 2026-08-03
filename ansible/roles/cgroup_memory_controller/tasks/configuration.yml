@@ -44,13 +44,13 @@
         is match('^[A-Za-z0-9._-]+\\Z')
       - >-
         cgroup_memory_controller_config_backup_filename
-        not in ['.', '..', 'current-source-state']
+        not in ['.', '..', 'current-source-state', 'backup-checksums.sha256']
       - >-
         cgroup_memory_controller_vendor_dtb_backup_filename
         is match('^[A-Za-z0-9._-]+\\Z')
       - >-
         cgroup_memory_controller_vendor_dtb_backup_filename
-        not in ['.', '..', 'current-source-state']
+        not in ['.', '..', 'current-source-state', 'backup-checksums.sha256']
       - >-
         cgroup_memory_controller_config_backup_filename
         != cgroup_memory_controller_vendor_dtb_backup_filename
@@ -75,6 +75,7 @@
     - name: Read cgroup memory-controller boot artifacts
       ansible.builtin.stat:
         path: "{{ item }}"
+        checksum_algorithm: sha256
       loop:
         - "{{ cgroup_memory_controller_vendor_dtb }}"
         - "{{ cgroup_memory_controller_config_path }}"
@@ -284,6 +285,9 @@
       register: cgroup_memory_controller_packages_install
       become: true
 
+    - name: Manage cgroup memory-controller recovery backups
+      ansible.builtin.include_tasks: manage-backups.yml
+
     - name: Install cgroup memory-controller Device Tree helper
       ansible.builtin.template:
         src: manage-cgroup-memory-dtb.sh.j2
@@ -324,110 +328,6 @@
             fail_msg: >-
               The vendor DTB cannot produce the managed Device Tree and does
               not already enable the configured controller.
-
-        - name: Define cgroup memory-controller backup artifacts
-          ansible.builtin.set_fact:
-            cgroup_memory_controller_backup_artifacts:
-              - path: >-
-                  {{ cgroup_memory_controller_backup_dir }}/{{ cgroup_memory_controller_config_backup_filename }}
-                source: "{{ cgroup_memory_controller_config_path }}"
-                source_index: 1
-              - path: >-
-                  {{ cgroup_memory_controller_backup_dir }}/{{ cgroup_memory_controller_vendor_dtb_backup_filename }}
-                source: "{{ cgroup_memory_controller_vendor_dtb }}"
-                source_index: 0
-
-        - name: Read existing cgroup memory-controller backups
-          ansible.builtin.stat:
-            path: "{{ item.path }}"
-            follow: false
-          loop: "{{ cgroup_memory_controller_backup_artifacts }}"
-          register: cgroup_memory_controller_existing_backups
-          changed_when: false
-          become: true
-          check_mode: false
-
-        - name: Reject unsafe existing cgroup memory-controller backups
-          when: item.stat.exists
-          ansible.builtin.assert:
-            that:
-              - item.stat.isreg | default(false)
-              - not (item.stat.islnk | default(false))
-              - (item.stat.uid | default(-1)) == 0
-              - (item.stat.gid | default(-1)) == 0
-              - (item.stat.mode | default('')) == '0600'
-            fail_msg: >-
-              Existing backup paths must be private root-owned regular files
-              before they can be retained.
-          loop: "{{ cgroup_memory_controller_existing_backups.results }}"
-
-        - name: Preserve initial cgroup memory-controller boot artifacts
-          ansible.builtin.copy:
-            src: "{{ item.source }}"
-            dest: "{{ item.path }}"
-            remote_src: true
-            force: false
-            owner: root
-            group: root
-            mode: "0600"
-          loop: "{{ cgroup_memory_controller_backup_artifacts }}"
-          become: true
-
-        - name: Read retained cgroup memory-controller backups
-          when: not ansible_check_mode
-          ansible.builtin.stat:
-            path: "{{ item.path }}"
-            follow: false
-          loop: "{{ cgroup_memory_controller_backup_artifacts }}"
-          register: cgroup_memory_controller_retained_backups
-          changed_when: false
-          become: true
-          check_mode: false
-
-        - name: Require usable cgroup memory-controller backups
-          when: not ansible_check_mode
-          ansible.builtin.assert:
-            that:
-              - item.stat.exists
-              - item.stat.isreg
-              - not item.stat.islnk
-              - item.stat.uid == 0
-              - item.stat.gid == 0
-              - item.stat.mode == '0600'
-              - item.stat.size > 0
-              - >-
-                item.stat.dev
-                != cgroup_memory_controller_boot_artifacts.results[item.item.source_index].stat.dev
-                or item.stat.inode
-                != cgroup_memory_controller_boot_artifacts.results[item.item.source_index].stat.inode
-            fail_msg: >-
-              Backups must be non-empty private root-owned regular files that
-              are distinct from their sources before boot policy mutation.
-          loop: "{{ cgroup_memory_controller_retained_backups.results }}"
-
-        - name: Require distinct cgroup memory-controller backups
-          when: not ansible_check_mode
-          ansible.builtin.assert:
-            that:
-              - >-
-                cgroup_memory_controller_retained_backups.results[0].stat.dev
-                != cgroup_memory_controller_retained_backups.results[1].stat.dev
-                or cgroup_memory_controller_retained_backups.results[0].stat.inode
-                != cgroup_memory_controller_retained_backups.results[1].stat.inode
-            fail_msg: The retained backups must not alias each other.
-
-        - name: Validate retained cgroup memory-controller Device Tree backup
-          when: not ansible_check_mode
-          ansible.builtin.command:
-            argv:
-              - /usr/bin/fdtget
-              - -p
-              - >-
-                {{ cgroup_memory_controller_backup_artifacts[1].path }}
-              - /
-          changed_when: false
-          check_mode: false
-          become: true
 
         - name: Predict cgroup memory-controller boot changes in check mode
           when: ansible_check_mode

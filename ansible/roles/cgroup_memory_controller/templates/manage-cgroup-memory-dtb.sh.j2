@@ -10,13 +10,15 @@ refresh_dependency_path={{ cgroup_memory_controller_kernel_refresh_dependency_pa
 backup_dir={{ cgroup_memory_controller_backup_dir | quote }}
 config_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_config_backup_filename) | quote }}
 vendor_backup_path={{ (cgroup_memory_controller_backup_dir ~ '/' ~ cgroup_memory_controller_vendor_dtb_backup_filename) | quote }}
+backup_manifest_path={{ (cgroup_memory_controller_backup_dir ~ '/backup-checksums.sha256') | quote }}
 source_state_path={{ (cgroup_memory_controller_backup_dir ~ '/current-source-state') | quote }}
 
 readonly source_dtb config_path managed_dtb_path managed_dtb_name disabled_argument
 readonly refresh_dependency_path backup_dir config_backup_path vendor_backup_path
-readonly source_state_path
+readonly backup_manifest_path source_state_path
 readonly fdtget_binary=/usr/bin/fdtget
 readonly fdtput_binary=/usr/bin/fdtput
+readonly sha256sum_binary=/usr/bin/sha256sum
 readonly begin_marker={{ ('# BEGIN ' ~ cgroup_memory_controller_config_marker) | quote }}
 readonly end_marker={{ ('# END ' ~ cgroup_memory_controller_config_marker) | quote }}
 readonly managed_config_line="device_tree=${managed_dtb_name}"
@@ -103,6 +105,20 @@ require_safe_private_directory() {
     fail "private directory is not mode 0700: ${directory_path}"
 }
 
+require_private_root_file() {
+  local file_path="$1"
+  local file_mode
+  local file_owner
+
+  require_regular_file "${file_path}"
+  file_owner="$(stat -c '%u:%g' "${file_path}")"
+  [[ "${file_owner}" == '0:0' ]] || \
+    fail "private file is not owned by root:root: ${file_path}"
+  file_mode="$(stat -c '%a' "${file_path}")"
+  [[ "${file_mode}" == '600' ]] || \
+    fail "private file is not mode 0600: ${file_path}"
+}
+
 require_safe_refresh_dependency() {
   [[ -n "${refresh_dependency_path}" ]] || return 0
 
@@ -115,23 +131,22 @@ require_safe_refresh_dependency() {
 require_safe_backups() {
   local backup_path
   local backup_identity
-  local backup_mode
-  local backup_owner
   local config_identity
+  local expected_manifest
+  local manifest_identity
+  local retained_manifest
   local source_identity
+  local -a backup_hashes=()
   local -a backup_identities=()
 
   require_safe_private_directory "${backup_dir}"
+  for backup_path in \
+    "${config_backup_path}" "${vendor_backup_path}" "${backup_manifest_path}"; do
+    require_private_root_file "${backup_path}"
+  done
   config_identity="$(stat -c '%d:%i' "${config_path}")"
   source_identity="$(stat -c '%d:%i' "${source_dtb}")"
   for backup_path in "${config_backup_path}" "${vendor_backup_path}"; do
-    require_regular_file "${backup_path}"
-    backup_owner="$(stat -c '%u:%g' "${backup_path}")"
-    [[ "${backup_owner}" == '0:0' ]] || \
-      fail "boot backup is not owned by root:root: ${backup_path}"
-    backup_mode="$(stat -c '%a' "${backup_path}")"
-    [[ "${backup_mode}" == '600' ]] || \
-      fail "boot backup is not private mode 0600: ${backup_path}"
     [[ -s "${backup_path}" ]] || fail "boot backup is empty: ${backup_path}"
     backup_identity="$(stat -c '%d:%i' "${backup_path}")"
     [[ "${backup_identity}" != "${config_identity}" ]] || \
@@ -139,9 +154,22 @@ require_safe_backups() {
     [[ "${backup_identity}" != "${source_identity}" ]] || \
       fail "boot backup aliases vendor Device Tree: ${backup_path}"
     backup_identities+=("${backup_identity}")
+    backup_hashes+=("$("${sha256sum_binary}" "${backup_path}" | awk '{print $1}')")
   done
   [[ "${backup_identities[0]}" != "${backup_identities[1]}" ]] || \
     fail 'boot backups alias each other'
+  manifest_identity="$(stat -c '%d:%i' "${backup_manifest_path}")"
+  [[ "${manifest_identity}" != "${config_identity}" && \
+    "${manifest_identity}" != "${source_identity}" && \
+    "${manifest_identity}" != "${backup_identities[0]}" && \
+    "${manifest_identity}" != "${backup_identities[1]}" ]] || \
+    fail 'boot backup checksum manifest aliases a protected artifact'
+  expected_manifest="$(printf '%s  %s\n%s  %s\n\034' \
+    "${backup_hashes[0]}" "${config_backup_path##*/}" \
+    "${backup_hashes[1]}" "${vendor_backup_path##*/}")"
+  retained_manifest="$(cat "${backup_manifest_path}"; printf '\034')"
+  [[ "${retained_manifest}" == "${expected_manifest}" ]] || \
+    fail 'boot backup checksum manifest does not match retained artifacts'
   "${fdtget_binary}" -p "${vendor_backup_path}" / >/dev/null
 }
 
@@ -267,9 +295,10 @@ inspect_source_bootargs() {
 
   require_safe_root_file "${source_dtb}" 'vendor Device Tree'
   require_command "${fdtget_binary}"
+  require_command "${sha256sum_binary}"
 
   source_bootargs="$("${fdtget_binary}" --type s "${source_dtb}" /chosen bootargs)"
-  source_sha256="$(sha256sum "${source_dtb}" | awk '{print $1}')"
+  source_sha256="$("${sha256sum_binary}" "${source_dtb}" | awk '{print $1}')"
   [[ -n "${source_bootargs}" ]] || fail 'vendor DTB has empty boot arguments'
   [[ "${source_bootargs}" != *$'\n'* ]] || fail 'vendor boot arguments contain a newline'
 

@@ -37,6 +37,8 @@
           config_backup_filename: ".."
         - name: config backup internal state
           config_backup_filename: current-source-state
+        - name: config backup internal manifest
+          config_backup_filename: backup-checksums.sha256
         - name: config backup trailing newline
           config_backup_filename: "config.backup\n"
         - name: vendor backup dot
@@ -45,6 +47,8 @@
           vendor_backup_filename: ".."
         - name: vendor backup internal state
           vendor_backup_filename: current-source-state
+        - name: vendor backup internal manifest
+          vendor_backup_filename: backup-checksums.sha256
         - name: vendor backup trailing newline
           vendor_backup_filename: "vendor.backup\n"
         - name: aliased backup filenames
