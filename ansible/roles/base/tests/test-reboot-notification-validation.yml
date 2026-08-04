@@ -71,9 +71,9 @@
             base_reboot_notification_retry_delay_seconds: 15
             base_reboot_notification_delivery_timeout_seconds: 20
 
-        - name: Mark zero retry budget as unexpectedly accepted
-          ansible.builtin.set_fact:
-            base_test_invalid_reboot_policy_accepted: true
+        - name: Fail when zero retry budget is unexpectedly accepted
+          ansible.builtin.fail:
+            msg: The zero retry budget was unexpectedly accepted.
       rescue:
         - name: Assert zero retry budget was rejected
           ansible.builtin.assert:
@@ -89,9 +89,9 @@
             base_reboot_notification_retry_delay_seconds: 60
             base_reboot_notification_delivery_timeout_seconds: 60
 
-        - name: Mark excessive retry duration as unexpectedly accepted
-          ansible.builtin.set_fact:
-            base_test_invalid_reboot_policy_accepted: true
+        - name: Fail when excessive retry duration is unexpectedly accepted
+          ansible.builtin.fail:
+            msg: The excessive retry duration was unexpectedly accepted.
       rescue:
         - name: Assert excessive retry duration was rejected
           ansible.builtin.assert:
@@ -107,9 +107,9 @@
             base_reboot_notification_retry_delay_seconds: invalid
             base_reboot_notification_delivery_timeout_seconds: 20
 
-        - name: Mark non-integer retry delay as unexpectedly accepted
-          ansible.builtin.set_fact:
-            base_test_invalid_reboot_policy_accepted: true
+        - name: Fail when non-integer retry delay is unexpectedly accepted
+          ansible.builtin.fail:
+            msg: The non-integer retry delay was unexpectedly accepted.
       rescue:
         - name: Assert non-integer retry delay was rejected
           ansible.builtin.assert:
