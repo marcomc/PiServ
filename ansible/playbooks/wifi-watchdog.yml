@@ -2,9 +2,28 @@
 - name: Configure PiServ Wi-Fi connectivity watchdog
   hosts: piserv
   gather_facts: true
+  vars_files:
+    -
+      - ../vars/wifi-watchdog.yml
+      - ../vars/wifi-watchdog.yml.example
+  pre_tasks:
+    - name: Require a local Wi-Fi connection profile
+      ansible.builtin.assert:
+        that:
+          - piserv_wifi_watchdog_connection | length > 0
+        fail_msg: >-
+          Set piserv_wifi_watchdog_connection in ansible/vars/wifi-watchdog.yml
+          before applying the PiServ Wi-Fi watchdog playbook.
   roles:
     - role: wifi_watchdog
       vars:
         wifi_watchdog_interface: wlan0
+        wifi_watchdog_connection: "{{ piserv_wifi_watchdog_connection }}"
         wifi_watchdog_service_name: piserv-wifi-watchdog.service
         wifi_watchdog_script_path: /usr/local/sbin/piserv-wifi-watchdog
+        wifi_watchdog_reboot_after_seconds: 900
+        wifi_watchdog_internet_probe_addresses:
+          - 1.1.1.1
+          - 8.8.8.8
+        wifi_watchdog_reboot_mode_path: /sys/kernel/reboot/mode
+        wifi_watchdog_required_reboot_mode: cold

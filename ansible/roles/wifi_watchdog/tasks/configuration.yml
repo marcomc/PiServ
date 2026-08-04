@@ -65,6 +65,50 @@
       by its group or other users before installing a root-executed watchdog.
   when: wifi_watchdog_service_parent.stat.exists
 
+- name: Inspect configured active reboot-mode control
+  ansible.builtin.stat:
+    path: "{{ wifi_watchdog_reboot_mode_path }}"
+    follow: false
+  register: wifi_watchdog_reboot_mode_control
+  changed_when: false
+  check_mode: false
+  when: wifi_watchdog_required_reboot_mode | length > 0
+  become: true
+
+- name: Require a safe configured active reboot-mode control
+  ansible.builtin.assert:
+    that:
+      - wifi_watchdog_reboot_mode_control.stat.exists
+      - wifi_watchdog_reboot_mode_control.stat.isreg
+      - not wifi_watchdog_reboot_mode_control.stat.islnk
+      - wifi_watchdog_reboot_mode_control.stat.uid == 0
+      - wifi_watchdog_reboot_mode_control.stat.mode[-2] not in ['2', '3', '6', '7']
+      - wifi_watchdog_reboot_mode_control.stat.mode[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      The configured active reboot-mode control must be a root-owned,
+      non-symlink regular file that is not writable by group or other users.
+  when: wifi_watchdog_required_reboot_mode | length > 0
+
+- name: Read configured active reboot mode
+  ansible.builtin.slurp:
+    path: "{{ wifi_watchdog_reboot_mode_path }}"
+  register: wifi_watchdog_reboot_mode
+  changed_when: false
+  check_mode: false
+  when: wifi_watchdog_required_reboot_mode | length > 0
+  become: true
+
+- name: Require configured active reboot mode before enabling automatic reboot
+  ansible.builtin.assert:
+    that:
+      - >-
+        wifi_watchdog_reboot_mode.content | b64decode | trim ==
+        wifi_watchdog_required_reboot_mode
+    fail_msg: >-
+      Automatic reboot requires {{ wifi_watchdog_reboot_mode_path }} to report
+      {{ wifi_watchdog_required_reboot_mode }} before the watchdog is enabled.
+  when: wifi_watchdog_required_reboot_mode | length > 0
+
 - name: Create missing Wi-Fi watchdog service parent
   ansible.builtin.file:
     path: "{{ wifi_watchdog_service_path | dirname }}"

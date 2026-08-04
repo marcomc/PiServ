@@ -1,0 +1,11 @@
+---
+- name: Reject incomplete Wi-Fi watchdog reboot-mode configuration
+  hosts: localhost
+  gather_facts: false
+  vars:
+    wifi_watchdog_reboot_mode_path: /sys/kernel/reboot/mode
+  tasks:
+    - name: Validate role input
+      ansible.builtin.include_role:
+        name: wifi_watchdog
+        tasks_from: validate-input.yml

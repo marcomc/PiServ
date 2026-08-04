@@ -18,7 +18,8 @@ The local `wifi_watchdog` role is warranted because it owns a distinct and
 operationally important policy: it verifies a connected NetworkManager Wi-Fi
 interface, a reachable gateway, and DNS resolution, then escalates from the
 connection to NetworkManager. Host reboot remains disabled unless a consumer
-explicitly enables it.
+explicitly enables it, and then uses a separate route-agnostic internet probe
+instead of the Wi-Fi interface state.
 
 ## Evidence
 

@@ -28,7 +28,9 @@ The role installs a root-owned service that continuously verifies:
   responds to an interface-bound ping.
 
 After a continuous offline period it restarts the NetworkManager connection,
-then NetworkManager itself. Host reboot is deliberately disabled by default.
+then NetworkManager itself. When reboot escalation is enabled, a separate,
+route-agnostic public-reachability check must fail continuously before the host
+reboots. Host reboot is deliberately disabled by default.
 When `/usr/local/sbin` does not exist, the role creates it as `root:root` mode
 `0755`; existing script and service directories are left unchanged. The role
 requires `/usr`, `/usr/local`, `/usr/local/sbin`, and the system unit directory
@@ -74,9 +76,12 @@ ansible-galaxy role install marcomc.wifi_watchdog,0.1.0
 | `wifi_watchdog_check_interval_seconds` | `30` | Check interval while connectivity is healthy |
 | `wifi_watchdog_connection_recovery_after_seconds` | `300` | Offline duration before connection restart |
 | `wifi_watchdog_networkmanager_recovery_after_seconds` | `600` | Offline duration before NetworkManager restart |
-| `wifi_watchdog_reboot_after_seconds` | `0` | Offline duration before reboot; `0` disables it |
+| `wifi_watchdog_reboot_after_seconds` | `0` | General internet-outage duration before reboot; `0` disables it |
+| `wifi_watchdog_internet_probe_addresses` | `1.1.1.1`, `8.8.8.8` | Route-agnostic public IPv4 probes used only for reboot escalation |
 | `wifi_watchdog_networkmanager_service_name` | `NetworkManager.service` | Service restarted at the second escalation level |
 | `wifi_watchdog_monotonic_clock_path` | `/proc/uptime` | Linux kernel monotonic-uptime file used for recovery timing |
+| `wifi_watchdog_reboot_mode_path` | `""` | Optional active kernel reboot-mode control checked before reboot |
+| `wifi_watchdog_required_reboot_mode` | `""` | Required mode when `reboot_mode_path` is set |
 
 Set `wifi_watchdog_reboot_after_seconds` only after observing the lower
 recovery levels on the target network. A reboot can hide a router or mesh
@@ -96,14 +101,17 @@ problem and can interrupt work running on the host.
         wifi_watchdog_connection: office-wifi
         wifi_watchdog_connection_recovery_after_seconds: 300
         wifi_watchdog_networkmanager_recovery_after_seconds: 600
-        wifi_watchdog_reboot_after_seconds: 0
+        wifi_watchdog_reboot_after_seconds: 900
+        wifi_watchdog_reboot_mode_path: /sys/kernel/reboot/mode
+        wifi_watchdog_required_reboot_mode: cold
 ```
 
-To let NetworkManager select any available saved Wi-Fi profile, omit
-`wifi_watchdog_connection` as shown above. A profile must remain eligible for
-automatic activation and have usable saved credentials. When the variable is
-set, link health requires that exact profile to be active on the monitored
-interface before the watchdog resets its offline timer.
+Set `wifi_watchdog_connection` when deterministic reconnect behaviour is
+required. An empty value delegates saved-profile selection to NetworkManager;
+a named profile is preferable when its identity is known. A configured profile
+must remain eligible for automatic activation and have usable saved credentials.
+When the variable is set, link health requires that exact profile to be active
+on the monitored interface before the watchdog resets its offline timer.
 
 To preserve an existing local service identity during migration, override the
 service name and script filename in the consumer playbook. The script must
@@ -114,22 +122,21 @@ required by the role.
 ## Recovery Policy
 
 ```text
-link + gateway + DNS healthy
-        |
-        v
-reset offline timer
-
-offline for configured duration
+Wi-Fi link + gateway + DNS unhealthy
         |
         +-- connection restart
         |
         +-- NetworkManager restart
+
+all route-agnostic public probes unreachable
         |
-        +-- optional host reboot
+        +-- optional host reboot after a separate outage timer
 ```
 
-The timer resets only when all enabled checks succeed. Recovery messages are
-logged with the `wifi-connectivity-watchdog` journal identifier.
+The Wi-Fi recovery timer resets only when all Wi-Fi checks succeed. The reboot
+timer resets when any configured public address responds through normal routing
+or any IPv4 default-route interface. Recovery messages are logged with the
+`wifi-connectivity-watchdog` journal identifier.
 
 A connection activation or NetworkManager restart marks its recovery level
 complete only after it succeeds. Failed commands retry on later checks while
@@ -141,9 +148,13 @@ The `nmcli` status command uses the C locale before its output is parsed. The
 offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so
 wall-clock corrections cannot skip or delay an escalation level. The DNS probe
 requires an IPv4 response through the monitored interface; use a hostname whose
-resolved addresses allow ICMP echo replies. Recovery durations are limited to
-`2147483647` seconds so they remain valid for Bash arithmetic on supported
-hosts.
+resolved addresses allow ICMP echo replies. Reboot probes first use normal host
+routing, then bind each probe to every IPv4 default-route interface so a
+higher-metric healthy route prevents reboot when the preferred route is broken.
+If a reboot mode is required, the script rechecks it immediately before
+requesting the reboot.
+Recovery durations are limited to `2147483647` seconds so they remain valid for
+Bash arithmetic on supported hosts.
 
 ## Supported Platforms
 
@@ -170,17 +181,21 @@ startup state.
 Render the script with representative variables before running ShellCheck:
 
 ```sh
+test_dir=$(mktemp -d)
+trap 'rm -rf "$test_dir"' EXIT
 ansible localhost -c local -m ansible.builtin.template \
-  -a 'src=templates/wifi-connectivity-watchdog.sh.j2 dest=/tmp/wifi-watchdog.sh' \
+  -a "src=templates/wifi-connectivity-watchdog.sh.j2 dest=${test_dir}/wifi-watchdog.sh" \
   -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=test-wifi' \
   -e 'wifi_watchdog_gateway_probe="" wifi_watchdog_dns_probe=example.com' \
   -e 'wifi_watchdog_check_interval_seconds=30' \
   -e 'wifi_watchdog_connection_recovery_after_seconds=300' \
   -e 'wifi_watchdog_networkmanager_recovery_after_seconds=600' \
   -e 'wifi_watchdog_reboot_after_seconds=0' \
+  -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
   -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
-  -e 'wifi_watchdog_monotonic_clock_path=/proc/uptime'
-shellcheck --enable=all /tmp/wifi-watchdog.sh
+  -e 'wifi_watchdog_monotonic_clock_path=/proc/uptime' \
+  -e 'wifi_watchdog_reboot_mode_path="" wifi_watchdog_required_reboot_mode=""'
+shellcheck --enable=all "${test_dir}/wifi-watchdog.sh"
 ```
 
 ## Release Notes

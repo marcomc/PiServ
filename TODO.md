@@ -17,6 +17,19 @@
     - Keep the Hermes `LimitAS` guard in place and record the observed memory
       overhead and service limits after the change.
 
+- [ ] **Validate automatic total-internet-outage recovery**
+  - Assessment: PiServ's watchdog is configured to recover its locally
+    configured NetworkManager profile and to request a cold reboot after 15
+    minutes only when normal routing and every IPv4 default-route interface
+    fail to reach either public probe. Its healthy-path deployment can be
+    verified without risk; the actual outage path needs an approved alternate
+    access route.
+  - Actions:
+    - With alternate access available, prove that a Wi-Fi-only outage does not
+      reboot the host while another interface reaches a public probe.
+    - Prove one controlled total-outage reboot, then validate Wi-Fi recovery,
+      SSH, storage mounts, and the watchdog journal after the next boot.
+
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
