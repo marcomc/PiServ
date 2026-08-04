@@ -14,6 +14,7 @@ from unittest.mock import call, patch
 
 ROLE_DIRECTORY = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = ROLE_DIRECTORY / "templates" / "piserv-reboot-notify.py.j2"
+SERVICE_TEMPLATE_PATH = ROLE_DIRECTORY / "templates" / "piserv-reboot-notify.service.j2"
 
 
 def load_notification_module() -> object:
@@ -79,6 +80,18 @@ class RebootNotificationTests(unittest.TestCase):
         )
         self.assertEqual(subprocess_module.run.call_args_list, [expected_call] * 2)
         sleep.assert_called_once_with(15)
+
+    def test_service_timeout_covers_retry_budget(self) -> None:
+        service_template = SERVICE_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("TimeoutStartSec=", service_template)
+        self.assertIn("base_reboot_notification_retry_attempts", service_template)
+        self.assertIn(
+            "base_reboot_notification_delivery_timeout_seconds", service_template
+        )
+        self.assertIn(
+            "base_reboot_notification_retry_delay_seconds", service_template
+        )
 
     def test_permanent_failure_is_not_retried(self) -> None:
         permanent_failure = subprocess.CalledProcessError(

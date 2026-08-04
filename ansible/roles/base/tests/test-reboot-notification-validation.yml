@@ -32,7 +32,7 @@
         - name: Assert zero retry budget was rejected
           ansible.builtin.assert:
             that:
-              - not (base_test_invalid_reboot_policy_accepted | default(false))
+              - ansible_failed_task.name == "Validate bounded reboot notification retry policy"
 
     - name: Reject an excessive reboot notification retry duration
       block:
@@ -50,7 +50,7 @@
         - name: Assert excessive retry duration was rejected
           ansible.builtin.assert:
             that:
-              - not (base_test_invalid_reboot_policy_accepted | default(false))
+              - ansible_failed_task.name == "Validate bounded reboot notification retry policy"
 
     - name: Reject a non-integer reboot notification delay
       block:
@@ -68,4 +68,4 @@
         - name: Assert non-integer retry delay was rejected
           ansible.builtin.assert:
             that:
-              - not (base_test_invalid_reboot_policy_accepted | default(false))
+              - ansible_failed_task.name == "Validate bounded reboot notification retry policy"

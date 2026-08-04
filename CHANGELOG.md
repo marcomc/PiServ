@@ -19,7 +19,8 @@
   journal correlation for nearby `sudo` evidence.
 - Retried boot notification delivery only for bounded temporary mail failures,
   avoiding a boot-time DNS race while preserving permanent SMTP errors as
-  visible systemd failures.
+  visible systemd failures. The generated systemd start timeout now covers the
+  full retry budget, and negative policy tests fail when validation is bypassed.
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.
