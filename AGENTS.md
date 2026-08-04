@@ -51,6 +51,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Before rendering a configurable timeout, retry, interval, or escalation value
+  into shell or service configuration, assert its explicit range and every
+  required relationship to related values; cover invalid values and ordering.
 - Name every top-level `import_playbook` entry in orchestration playbooks so
   Ansible Lint validates the full entry point.
 - When a PiServ playbook overrides a generic role's package or plugin set,
@@ -107,6 +110,19 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   files with valid content. Reject both path and inode aliases before mutation,
   then activate and verify any required current-kernel reboot mode before
   changing the persistent command line or scheduling an automatic reboot.
+- For a managed vendor adaptation, render a separate deterministic runtime
+  artifact instead of editing the delivered source. Select it only in the
+  enabled service path, remove it when disabled, compare content and metadata,
+  and use structural validation plus enable/disable, unrelated-match, and
+  permission-drift regressions before restarting the service.
+- Normalize journal-derived command, user, and other fields to bounded
+  single-line text before interpolating them into plain-text notifications.
+  Bound the record count and accept command attribution only for the intended
+  operation class.
+- Before increasing local-model address-space limits, verify that the cgroup v2
+  memory controller and effective systemd limits are enforcing containment.
+  Keep an independently effective `LimitAS` cap when cgroup memory controls
+  are unavailable.
 
 ## pCloud / FUSE Rules
 
@@ -137,6 +153,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Run `markdownlint --config "$HOME/.markdownlint.json"` on every
   Markdown file created or changed.
 - Run `shellcheck --enable=all` on every shell script created or changed.
+- Render every new Jinja shell template and run ShellCheck on the rendered
+  output before deployment; avoid or isolate Jinja delimiter sequences in
+  embedded shell syntax.
 - Set `check_mode: false` on read-only command tasks whose output is used by
   assertions, so `ansible-playbook --check` evaluates live state rather than
   skipped task results.

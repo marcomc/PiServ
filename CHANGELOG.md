@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.4.0] - Unreleased
 
 ### Reliability
 
@@ -63,8 +63,6 @@
 - Preserved the vendor DTB while retaining initial boot-artifact backups,
   explicit rollback, and refresh after vendor DTB updates; activation remains
   pending an operator-approved reboot.
-
-## [0.4.0] - Unreleased
 
 ### Hermes Agent
 

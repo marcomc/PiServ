@@ -23,10 +23,12 @@ not model weights. Direct Hermes Chat is this service's browser interface.
 PiServ cannot be assumed to host a suitable local inference provider. Hermes
 requires a 64K context window for its agentic workflow, which excludes the
 compact 32K models that were plausible candidates for PiServ's 4 GB memory
-budget. The live 64K benchmark shows both Granite 3.3 2B and Gemma 4 E2B can
-serve a visible response, although Granite leaves tight memory headroom. This
-does not prevent Hermes itself from running on PiServ while the model provider
-runs elsewhere.
+budget. The active vendor boot policy disables the cgroup memory controller:
+Granite started only after its safe address-space guard was relaxed and made
+PiServ unreachable before a usable response, while Gemma remained stable but
+did not yield visible output within the tested completion budget. This does not
+prevent Hermes itself from running on PiServ while the model provider runs
+elsewhere.
 
 The recommended first deployment is therefore **Nous Hermes Agent on PiServ
 with Codex authenticated through ChatGPT Pro as its provider**. It gives the
@@ -50,7 +52,7 @@ The following observations are current as of 2026-07-31:
 | Area | Evidence | Implication |
 | --- | --- | --- |
 | PiServ | The recorded 2026-07-08 baseline is Debian 13 `trixie`, `arm64`, with 4.0 GiB RAM and 2.0 GiB zram. | There is no realistic headroom for a general 3B+ model beside existing services. |
-| Hermes local models | Both models completed a live 64K loopback benchmark with a 3.2 GiB cgroup limit and q4_0 KV cache. | Granite returned visible content with about 650 MiB available; Gemma required a 128-token completion budget because it emits a reasoning channel before its visible response. |
+| Hermes local models | `cgroup_disable=memory` prevents the configured 3.2 GiB systemd controls from taking effect. Granite made the host unreachable after temporarily raising its fallback address-space cap; Gemma did not return visible output in the tested budget. | Neither model is a provider candidate until the controller is enabled and a bounded full capability test succeeds. |
 | Local alternatives | Granite 3.3 2B Instruct has 128K context and function-calling support; Llama 3.2 1B has 128K native context but needs license acceptance. | Test Granite provider migration; keep Llama as a separately authorized low-memory baseline. |
 | Hermes learning | Hermes persists curated memory and skills independently of its provider selection. | Retain Hermes service data on PiServ while switching backends. |
 | Hermes providers | Hermes supports OpenAI Codex, custom OpenAI-compatible endpoints, and configured fallbacks. | Codex can be the initial provider and a future LAN model can replace it. |
@@ -82,9 +84,10 @@ The runtime and authenticated provider flow were validated live on 2026-07-31:
 - The deployment is codified in `ansible/roles/hermes_agent` and
   `ansible/playbooks/hermes-agent.yml`.
 - llama.cpp b9637 serves checksum-pinned Gemma 4 E2B and Granite 3.3 2B only
-  on loopback. The 2026-07-31 64K test left about 650 MiB available for Granite
-  and 1.3 GiB for Gemma. Both returned visible content and stopped cleanly;
-  Gemma requires 128 completion tokens because it emits reasoning first.
+  on loopback. Granite's full 64K test made PiServ unreachable after its
+  fallback address-space cap was temporarily raised; Gemma remained stable but
+  did not produce visible output in the tested completion budget. Neither is
+  enabled as a Hermes provider.
 
 The full upstream web dependency installation reported eight high severity npm
 audit findings; a production-only audit reported three high severity findings.
