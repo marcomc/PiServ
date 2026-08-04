@@ -60,7 +60,7 @@ The `base` role configures mail consumers:
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
-| boot notification delivery | Retry only `sendmail` temporary failure (`75`), up to six attempts with a 15-second delay and 20-second per-attempt timeout; generated `TimeoutStartSec` covers the full budget plus 10 seconds |
+| boot notification delivery | Uses the local hostname without DNS lookup; retries only `sendmail` temporary failure (`75`), up to six attempts with a 15-second delay and 20-second per-attempt timeout; generated `TimeoutStartSec` covers the full budget plus 10 seconds |
 | shutdown notification service | `piserv-shutdown-notify.service` |
 | shutdown notification recipient | `root` |
 | shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |

@@ -80,6 +80,26 @@ class RebootNotificationTests(unittest.TestCase):
         self.assertEqual(subprocess_module.run.call_args_list, [expected_call] * 2)
         sleep.assert_called_once_with(15)
 
+    def test_main_uses_local_hostname_without_dns_lookup(self) -> None:
+        with (
+            patch.object(
+                self.notification.socket,
+                "getfqdn",
+                side_effect=AssertionError("DNS lookup must not run"),
+            ),
+            patch.object(
+                self.notification.socket,
+                "gethostname",
+                return_value="PiServ",
+            ),
+            patch.object(self.notification, "boot_time", return_value="booted-at"),
+            patch.object(self.notification, "deliver") as deliver,
+        ):
+            self.assertEqual(self.notification.main(), 0)
+
+        deliver.assert_called_once()
+        self.assertIn("Host: PiServ", deliver.call_args.args[0])
+
     def test_permanent_failure_is_not_retried(self) -> None:
         permanent_failure = subprocess.CalledProcessError(
             77, ["/usr/sbin/sendmail", "-t"]

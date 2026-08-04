@@ -123,8 +123,9 @@ recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 The boot notification service is enabled by default, but systemd skips it until
 `base_reboot_notification_condition_path` exists. It retries only `sendmail`
 temporary-failure exit `75` with a bounded policy; permanent mail errors remain
-failed and visible to systemd. Its generated `TimeoutStartSec` covers the
-configured attempt budget plus a ten-second margin. The shutdown notification
+failed and visible to systemd. It uses the local hostname without a DNS lookup.
+Its generated `TimeoutStartSec` covers the configured attempt budget plus a
+ten-second margin. The shutdown notification
 service remains active until `systemd` enters a shutdown transaction and sends
 before the network is stopped when
 `base_shutdown_notification_condition_path` exists. For the latest authenticated
