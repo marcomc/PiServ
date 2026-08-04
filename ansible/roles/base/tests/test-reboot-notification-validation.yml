@@ -1,4 +1,50 @@
 ---
+- name: Test rendered reboot notification service timeout
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    base_reboot_notification_condition_path: /etc/msmtprc
+    base_reboot_notification_script_path: /usr/local/sbin/piserv-reboot-notify
+    base_reboot_notification_retry_attempts: 2
+    base_reboot_notification_retry_delay_seconds: 3
+    base_reboot_notification_delivery_timeout_seconds: 5
+  tasks:
+    - name: Create reboot notification service test directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: reboot-notification-service
+      register: base_test_reboot_notification_service_directory
+
+    - name: Render and verify reboot notification service timeout
+      block:
+        - name: Render reboot notification service
+          ansible.builtin.template:
+            src: "{{ playbook_dir | dirname }}/templates/piserv-reboot-notify.service.j2"
+            dest: >-
+              {{ base_test_reboot_notification_service_directory.path }}/
+              piserv-reboot-notify.service
+            mode: "0600"
+
+        - name: Read rendered reboot notification service
+          ansible.builtin.slurp:
+            src: >-
+              {{ base_test_reboot_notification_service_directory.path }}/
+              piserv-reboot-notify.service
+          register: base_test_reboot_notification_service
+
+        - name: Assert rendered reboot notification timeout covers retry budget
+          ansible.builtin.assert:
+            that:
+              - >-
+                'TimeoutStartSec=23s' in
+                (base_test_reboot_notification_service.content | b64decode)
+      always:
+        - name: Remove reboot notification service test directory
+          ansible.builtin.file:
+            path: "{{ base_test_reboot_notification_service_directory.path }}"
+            state: absent
+
 - name: Test valid reboot notification retry policy
   hosts: localhost
   connection: local
