@@ -45,7 +45,7 @@ def deliver(payload: str) -> None:
 
 
 def main() -> int:
-    hostname = socket.getfqdn() or socket.gethostname()
+    hostname = socket.gethostname()
     subject = f"{SUBJECT_PREFIX} booted: {hostname}"
     payload = "\n".join(
         [
