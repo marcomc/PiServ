@@ -23,7 +23,7 @@
 - Configured PiServ to reboot after 15 continuous minutes without a route to
   either public internet probe, while preventing a Wi-Fi outage from rebooting
   a host that remains online through another interface.
-- Required PiServ's verified `HAL9000` Wi-Fi profile for deterministic recovery
+- Required PiServ's locally configured Wi-Fi profile for deterministic recovery
   and required the active cold reboot mode immediately before automatic reboot.
 - Extracted the watchdog into the reusable `wifi_watchdog` role with
   Galaxy-ready metadata, standalone documentation, tests, and release guidance.

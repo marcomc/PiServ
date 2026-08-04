@@ -1,3 +1,4 @@
 vendor/freenove/
 .ansible/
 ansible/vars/external-storage.yml
+ansible/vars/wifi-watchdog.yml

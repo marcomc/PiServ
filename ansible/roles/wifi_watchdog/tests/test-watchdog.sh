@@ -122,6 +122,8 @@ run_watchdog() {
     local device_connect_failure="${6:-0}"
     local networkmanager_restart_failure="${7:-0}"
     local internet_probe_failure="${8:-0}"
+    local primary_internet_probe_failure="${9:-0}"
+    local secondary_internet_probe_failure="${10:-0}"
     local watchdog_status
 
     : > "${test_log}"
@@ -134,6 +136,8 @@ run_watchdog() {
         WIFI_WATCHDOG_TEST_DEVICE_CONNECT_FAILURE="${device_connect_failure}" \
         WIFI_WATCHDOG_TEST_NETWORKMANAGER_RESTART_FAILURE="${networkmanager_restart_failure}" \
         WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE="${internet_probe_failure}" \
+        WIFI_WATCHDOG_TEST_PRIMARY_INTERNET_PROBE_FAILURE="${primary_internet_probe_failure}" \
+        WIFI_WATCHDOG_TEST_SECONDARY_INTERNET_PROBE_FAILURE="${secondary_internet_probe_failure}" \
         "${watchdog_script}" &
     watchdog_pid=$!
 
@@ -270,6 +274,14 @@ grep -Fxq 'restart NetworkManager.service' "${test_log}"
 grep -Fxq 'ping -c 1 -W 2 1.1.1.1' "${test_log}"
 if grep -Fxq reboot "${test_log}"; then
     printf 'watchdog rebooted despite general internet reachability\n' >&2
+    exit 1
+fi
+
+run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1 0 1
+
+grep -Fxq 'ping -c 1 -W 2 8.8.8.8' "${test_log}"
+if grep -Fxq reboot "${test_log}"; then
+    printf 'watchdog rebooted when its secondary internet probe succeeded\n' >&2
     exit 1
 fi
 

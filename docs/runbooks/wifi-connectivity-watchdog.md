@@ -34,12 +34,18 @@ PiServ configures the reusable role in
 | Variable | Default |
 | --- | --- |
 | `wifi_watchdog_interface` | `wlan0` |
-| `wifi_watchdog_connection` | `HAL9000` |
+| `wifi_watchdog_connection` | `piserv_wifi_watchdog_connection` from ignored local vars |
 | `wifi_watchdog_gateway_probe` | IPv4 default gateway on `wifi_watchdog_interface` |
 | `wifi_watchdog_dns_probe` | `example.com` |
 | `wifi_watchdog_reboot_after_seconds` | `900` |
 | `wifi_watchdog_internet_probe_addresses` | `1.1.1.1`, `8.8.8.8` |
 | `wifi_watchdog_required_reboot_mode` | `cold` |
+
+Before applying the playbook, copy
+`ansible/vars/wifi-watchdog.yml.example` to the ignored
+`ansible/vars/wifi-watchdog.yml` and set `piserv_wifi_watchdog_connection` to
+the saved NetworkManager profile. The playbook fails before host changes when
+the value is empty.
 
 ## Validation
 
