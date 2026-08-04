@@ -101,6 +101,28 @@ class RebootNotificationTests(unittest.TestCase):
         self.assertEqual(subprocess_module.run.call_count, 1)
         sleep.assert_not_called()
 
+    def test_delivery_timeout_is_not_retried(self) -> None:
+        timeout_failure = subprocess.TimeoutExpired(
+            ["/usr/sbin/sendmail", "-t"], 20
+        )
+
+        with (
+            patch.object(
+                self.notification,
+                "subprocess",
+            ) as subprocess_module,
+            patch.object(self.notification.time, "sleep") as sleep,
+        ):
+            subprocess_module.CalledProcessError = subprocess.CalledProcessError
+            subprocess_module.TimeoutExpired = subprocess.TimeoutExpired
+            subprocess_module.run.side_effect = timeout_failure
+
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.notification.deliver("payload")
+
+        self.assertEqual(subprocess_module.run.call_count, 1)
+        sleep.assert_not_called()
+
     def test_temporary_failure_stays_visible_after_retry_budget(self) -> None:
         temporary_failure = subprocess.CalledProcessError(
             75, ["/usr/sbin/sendmail", "-t"]
