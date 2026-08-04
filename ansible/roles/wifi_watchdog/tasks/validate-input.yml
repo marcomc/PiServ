@@ -14,6 +14,11 @@
       - wifi_watchdog_connection_recovery_after_seconds | string is match('^[1-9][0-9]*$')
       - wifi_watchdog_networkmanager_recovery_after_seconds | string is match('^[1-9][0-9]*$')
       - wifi_watchdog_reboot_after_seconds | string is match('^(0|[1-9][0-9]*)$')
+      - wifi_watchdog_internet_probe_addresses | length > 0
+      - >-
+        wifi_watchdog_internet_probe_addresses
+        | select('match', '^(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:[.](?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}\\Z')
+        | list | length == wifi_watchdog_internet_probe_addresses | length
       - (wifi_watchdog_check_interval_seconds | int) <= 2147483647
       - (wifi_watchdog_connection_recovery_after_seconds | int) <= 2147483647
       - (wifi_watchdog_networkmanager_recovery_after_seconds | int) <= 2147483647
@@ -28,12 +33,22 @@
         (wifi_watchdog_reboot_after_seconds | int) == 0 or
         (wifi_watchdog_reboot_after_seconds | int) >=
         (wifi_watchdog_networkmanager_recovery_after_seconds | int)
+      - >-
+        (wifi_watchdog_reboot_mode_path | length > 0) ==
+        (wifi_watchdog_required_reboot_mode | length > 0)
+      - >-
+        wifi_watchdog_reboot_mode_path == '' or
+        wifi_watchdog_reboot_mode_path is match('^/[A-Za-z0-9_./-]+$')
+      - "'..' not in wifi_watchdog_reboot_mode_path"
+      - >-
+        wifi_watchdog_required_reboot_mode == '' or
+        wifi_watchdog_required_reboot_mode in ['default', 'warm', 'cold']
     fail_msg: >-
       Configure positive integer check and recovery intervals, with connection
       recovery no shorter than the check interval, NetworkManager recovery
       after connection recovery, and reboot disabled or no earlier than the
-      NetworkManager recovery threshold. Durations must not exceed 2147483647
-      seconds. The script path must be a direct child of /usr/local/sbin, the
-      service path filename must equal the service name and live directly in
-      /etc/systemd/system, the monotonic clock path must be absolute, and the
-      service name must end in .service.
+      NetworkManager recovery threshold. Internet probes must be IPv4 literals.
+      Durations must not exceed 2147483647 seconds. The script path must be a
+      direct child of /usr/local/sbin, the service path filename must equal the
+      service name and live directly in /etc/systemd/system, the monotonic clock
+      path must be absolute, and reboot-mode inputs must be supplied together.

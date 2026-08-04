@@ -9,10 +9,18 @@ check_interval={{ wifi_watchdog_check_interval_seconds | int }}
 connection_recovery_after={{ wifi_watchdog_connection_recovery_after_seconds | int }}
 networkmanager_recovery_after={{ wifi_watchdog_networkmanager_recovery_after_seconds | int }}
 reboot_after={{ wifi_watchdog_reboot_after_seconds | int }}
+internet_probe_addresses=(
+{% for address in wifi_watchdog_internet_probe_addresses %}
+    {{ address | quote }}
+{% endfor %}
+)
 networkmanager_service={{ wifi_watchdog_networkmanager_service_name | quote }}
 monotonic_clock_path={{ wifi_watchdog_monotonic_clock_path | quote }}
+reboot_mode_path={{ wifi_watchdog_reboot_mode_path | quote }}
+required_reboot_mode={{ wifi_watchdog_required_reboot_mode | quote }}
 
 offline_since=-1
+internet_offline_since=-1
 connection_restarted=0
 networkmanager_restarted=0
 
@@ -63,6 +71,25 @@ dns_ok() {
     return 1
 }
 
+internet_ok() {
+    local probe_address
+
+    for probe_address in "${internet_probe_addresses[@]}"; do
+        if ping -c 1 -W 2 "${probe_address}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+reboot_mode_ok() {
+    local active_reboot_mode
+
+    [[ -z "${required_reboot_mode}" ]] && return 0
+    read -r active_reboot_mode < "${reboot_mode_path}" || return 1
+    [[ "${active_reboot_mode}" == "${required_reboot_mode}" ]]
+}
+
 recover_connection() {
     if [[ -n "${connection}" ]]; then
         log "connectivity offline for ${connection_recovery_after}s; restarting connection ${connection}"
@@ -94,15 +121,43 @@ recover_networkmanager() {
 }
 
 recover_host() {
-    if (( reboot_after > 0 )); then
-        log "connectivity offline for ${reboot_after}s; rebooting host"
-        systemctl reboot
-    else
-        log "connectivity remains offline; host reboot escalation is disabled"
+    local internet_offline_for="$1"
+
+    if ! reboot_mode_ok; then
+        log "general internet outage for ${internet_offline_for}s; reboot skipped because ${reboot_mode_path} is not ${required_reboot_mode}"
+        return
+    fi
+    log "general internet outage for ${internet_offline_for}s; rebooting host"
+    if ! systemctl reboot; then
+        log "host reboot request failed; retrying while the general internet outage continues"
     fi
 }
 
 while :; do
+    now=""
+    if (( reboot_after > 0 )); then
+        if internet_ok; then
+            if (( internet_offline_since >= 0 )); then
+                log "general internet connectivity restored"
+            fi
+            internet_offline_since=-1
+        else
+            now=$(monotonic_seconds) || {
+                log "unable to read the kernel monotonic clock; deferring recovery"
+                sleep "${check_interval}"
+                continue
+            }
+            if (( internet_offline_since < 0 )); then
+                internet_offline_since=${now}
+                log "general internet connectivity check failed; starting reboot timer"
+            fi
+            internet_offline_for=$((now - internet_offline_since))
+            if (( internet_offline_for >= reboot_after )); then
+                recover_host "${internet_offline_for}"
+            fi
+        fi
+    fi
+
     if wifi_link_ok && gateway_ok && dns_ok; then
         if (( offline_since >= 0 )); then
             log "connectivity restored"
@@ -114,11 +169,13 @@ while :; do
         continue
     fi
 
-    now=$(monotonic_seconds) || {
-        log "unable to read the kernel monotonic clock; deferring recovery"
-        sleep "${check_interval}"
-        continue
-    }
+    if [[ -z "${now}" ]]; then
+        now=$(monotonic_seconds) || {
+            log "unable to read the kernel monotonic clock; deferring recovery"
+            sleep "${check_interval}"
+            continue
+        }
+    fi
     if (( offline_since < 0 )); then
         offline_since=${now}
         log "connectivity check failed; starting recovery timer"
@@ -130,9 +187,6 @@ while :; do
     fi
     if (( networkmanager_restarted == 0 && offline_for >= networkmanager_recovery_after )); then
         recover_networkmanager
-    fi
-    if (( offline_for >= reboot_after && reboot_after > 0 )); then
-        recover_host
     fi
     sleep "${check_interval}"
 done

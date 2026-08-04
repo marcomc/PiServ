@@ -6,7 +6,7 @@ argument_specs:
       - Installs a systemd watchdog for a NetworkManager Wi-Fi interface.
       - Checks link state, gateway reachability, and optional DNS resolution.
       - Escalates from connection restart to NetworkManager restart.
-      - Leaves host reboot disabled unless explicitly configured.
+      - Reboots only after a route-agnostic internet outage when explicitly configured.
     options:
       wifi_watchdog_service_name:
         type: str
@@ -51,7 +51,14 @@ argument_specs:
       wifi_watchdog_reboot_after_seconds:
         type: int
         default: 0
-        description: Offline duration before reboot; zero disables reboot escalation.
+        description: General internet-outage duration before reboot; zero disables reboot escalation.
+      wifi_watchdog_internet_probe_addresses:
+        type: list
+        elements: str
+        default:
+          - 1.1.1.1
+          - 8.8.8.8
+        description: Public IPv4 addresses probed without an interface binding before reboot escalation.
       wifi_watchdog_networkmanager_service_name:
         type: str
         default: NetworkManager.service
@@ -60,3 +67,16 @@ argument_specs:
         type: path
         default: /proc/uptime
         description: Linux kernel monotonic-uptime file used for recovery timing.
+      wifi_watchdog_reboot_mode_path:
+        type: path
+        default: ""
+        description: Optional root-owned active kernel reboot-mode control checked before reboot.
+      wifi_watchdog_required_reboot_mode:
+        type: str
+        default: ""
+        choices:
+          - ""
+          - default
+          - warm
+          - cold
+        description: Required active kernel reboot mode; requires reboot_mode_path when non-empty.

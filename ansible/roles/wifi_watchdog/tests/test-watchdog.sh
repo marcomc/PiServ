@@ -8,10 +8,14 @@ rendered_script="${test_dir}/wifi-connectivity-watchdog"
 named_connection_script="${test_dir}/wifi-connectivity-watchdog-named"
 recovery_retry_script="${test_dir}/wifi-connectivity-watchdog-recovery-retry"
 escalation_retry_script="${test_dir}/wifi-connectivity-watchdog-escalation-retry"
+reboot_guard_script="${test_dir}/wifi-connectivity-watchdog-reboot-guard"
 test_log="${test_dir}/calls.log"
 invalid_service_path_output="${test_dir}/invalid-service-path.log"
 invalid_recovery_range_output="${test_dir}/invalid-recovery-range.log"
+invalid_reboot_mode_output="${test_dir}/invalid-reboot-mode.log"
+invalid_internet_probe_output="${test_dir}/invalid-internet-probe.log"
 monotonic_clock_file="${test_dir}/uptime"
+reboot_mode_file="${test_dir}/reboot-mode"
 watchdog_pid=""
 monotonic_clock_writer_pid=""
 
@@ -60,6 +64,22 @@ fi
 
 grep -Fq '2147483647' "${invalid_recovery_range_output}"
 
+if ansible-playbook "${role_root}/tests/test-invalid-reboot-mode.yml" \
+    > "${invalid_reboot_mode_output}" 2>&1; then
+    printf 'incomplete reboot-mode configuration unexpectedly passed\n' >&2
+    exit 1
+fi
+
+grep -Fq 'reboot-mode inputs must be supplied together' "${invalid_reboot_mode_output}"
+
+if ansible-playbook "${role_root}/tests/test-invalid-internet-probe.yml" \
+    > "${invalid_internet_probe_output}" 2>&1; then
+    printf 'invalid internet probe configuration unexpectedly passed\n' >&2
+    exit 1
+fi
+
+grep -Fq 'Internet probes must be IPv4 literals' "${invalid_internet_probe_output}"
+
 ansible localhost -c local -m ansible.builtin.template \
     -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${rendered_script} mode=0750" \
     -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \
@@ -68,8 +88,10 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
     -e 'wifi_watchdog_networkmanager_recovery_after_seconds=10' \
     -e 'wifi_watchdog_reboot_after_seconds=0' \
+    -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
-    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" \
+    -e 'wifi_watchdog_reboot_mode_path="" wifi_watchdog_required_reboot_mode=""' >/dev/null
 
 grep -Fq "monotonic_clock_path=${monotonic_clock_file}" "${rendered_script}"
 if grep -Fq 'SECONDS' "${rendered_script}"; then
@@ -99,6 +121,7 @@ run_watchdog() {
     local active_connection="${5:-}"
     local device_connect_failure="${6:-0}"
     local networkmanager_restart_failure="${7:-0}"
+    local internet_probe_failure="${8:-0}"
     local watchdog_status
 
     : > "${test_log}"
@@ -110,6 +133,7 @@ run_watchdog() {
         WIFI_WATCHDOG_TEST_ACTIVE_CONNECTION="${active_connection}" \
         WIFI_WATCHDOG_TEST_DEVICE_CONNECT_FAILURE="${device_connect_failure}" \
         WIFI_WATCHDOG_TEST_NETWORKMANAGER_RESTART_FAILURE="${networkmanager_restart_failure}" \
+        WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE="${internet_probe_failure}" \
         "${watchdog_script}" &
     watchdog_pid=$!
 
@@ -171,8 +195,10 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
     -e 'wifi_watchdog_networkmanager_recovery_after_seconds=10' \
     -e 'wifi_watchdog_reboot_after_seconds=0' \
+    -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
-    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" \
+    -e 'wifi_watchdog_reboot_mode_path="" wifi_watchdog_required_reboot_mode=""' >/dev/null
 
 run_watchdog "${named_connection_script}" 'wlan0:connected' 2 0 'fallback-wifi'
 
@@ -200,8 +226,10 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
     -e 'wifi_watchdog_networkmanager_recovery_after_seconds=2' \
     -e 'wifi_watchdog_reboot_after_seconds=0' \
+    -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
-    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" \
+    -e 'wifi_watchdog_reboot_mode_path="" wifi_watchdog_required_reboot_mode=""' >/dev/null
 
 run_watchdog "${recovery_retry_script}" 'wlan0:disconnected' 4 0 '' 1
 
@@ -231,10 +259,48 @@ ansible localhost -c local -m ansible.builtin.template \
     -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
     -e 'wifi_watchdog_networkmanager_recovery_after_seconds=2' \
     -e 'wifi_watchdog_reboot_after_seconds=3' \
+    -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
     -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
-    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" >/dev/null
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" \
+    -e 'wifi_watchdog_reboot_mode_path="" wifi_watchdog_required_reboot_mode=""' >/dev/null
 
 run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1
 
 grep -Fxq 'restart NetworkManager.service' "${test_log}"
+grep -Fxq 'ping -c 1 -W 2 1.1.1.1' "${test_log}"
+if grep -Fxq reboot "${test_log}"; then
+    printf 'watchdog rebooted despite general internet reachability\n' >&2
+    exit 1
+fi
+
+run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1 1
+
+grep -Fxq reboot "${test_log}"
+
+printf '%s\n' warm > "${reboot_mode_file}"
+
+ansible localhost -c local -m ansible.builtin.template \
+    -a "src=${role_root}/templates/wifi-connectivity-watchdog.sh.j2 dest=${reboot_guard_script} mode=0750" \
+    -e 'wifi_watchdog_interface=wlan0 wifi_watchdog_connection=""' \
+    -e 'wifi_watchdog_gateway_probe="" wifi_watchdog_dns_probe=example.com' \
+    -e 'wifi_watchdog_check_interval_seconds=1' \
+    -e 'wifi_watchdog_connection_recovery_after_seconds=1' \
+    -e 'wifi_watchdog_networkmanager_recovery_after_seconds=2' \
+    -e 'wifi_watchdog_reboot_after_seconds=3' \
+    -e '{"wifi_watchdog_internet_probe_addresses": ["1.1.1.1", "8.8.8.8"]}' \
+    -e 'wifi_watchdog_networkmanager_service_name=NetworkManager.service' \
+    -e "wifi_watchdog_monotonic_clock_path=${monotonic_clock_file}" \
+    -e "wifi_watchdog_reboot_mode_path=${reboot_mode_file} wifi_watchdog_required_reboot_mode=cold" >/dev/null
+
+run_watchdog "${reboot_guard_script}" 'wlan0:disconnected' 5 0 '' 0 0 1
+
+if grep -Fxq reboot "${test_log}"; then
+    printf 'watchdog rebooted without the required active reboot mode\n' >&2
+    exit 1
+fi
+
+printf '%s\n' cold > "${reboot_mode_file}"
+
+run_watchdog "${reboot_guard_script}" 'wlan0:disconnected' 5 0 '' 0 0 1
+
 grep -Fxq reboot "${test_log}"

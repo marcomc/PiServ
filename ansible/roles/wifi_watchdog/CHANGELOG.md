@@ -38,3 +38,8 @@ All notable changes for the Wi-Fi Watchdog Ansible role are documented here.
   `/etc/systemd/system`.
 - Restricted the root-executed script to `/usr/local/sbin` and validated its
   system-directory ancestors.
+- Separated host reboot escalation from Wi-Fi health: it now requires a
+  continuous, route-agnostic public-reachability outage and is still disabled
+  by default.
+- Added optional active reboot-mode verification immediately before an automatic
+  reboot, with input and regression coverage for incomplete or unsafe policy.

@@ -6,5 +6,12 @@
     - role: wifi_watchdog
       vars:
         wifi_watchdog_interface: wlan0
+        wifi_watchdog_connection: HAL9000
         wifi_watchdog_service_name: piserv-wifi-watchdog.service
         wifi_watchdog_script_path: /usr/local/sbin/piserv-wifi-watchdog
+        wifi_watchdog_reboot_after_seconds: 900
+        wifi_watchdog_internet_probe_addresses:
+          - 1.1.1.1
+          - 8.8.8.8
+        wifi_watchdog_reboot_mode_path: /sys/kernel/reboot/mode
+        wifi_watchdog_required_reboot_mode: cold
