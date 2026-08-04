@@ -71,14 +71,33 @@ dns_ok() {
     return 1
 }
 
+default_route_interfaces() {
+    local default_routes
+
+    default_routes=$(ip -4 route show default) || return 1
+    awk '{ for (field_index = 1; field_index <= NF; field_index++) if ($field_index == "dev" && field_index < NF) { print $(field_index + 1); break } }' <<<"${default_routes}"
+}
+
 internet_ok() {
     local probe_address
+    local route_interface
+    local route_interfaces
 
     for probe_address in "${internet_probe_addresses[@]}"; do
         if ping -c 1 -W 2 "${probe_address}" >/dev/null 2>&1; then
             return 0
         fi
     done
+
+    route_interfaces=$(default_route_interfaces) || return 1
+    while read -r route_interface; do
+        [[ -n "${route_interface}" ]] || continue
+        for probe_address in "${internet_probe_addresses[@]}"; do
+            if ping -I "${route_interface}" -c 1 -W 2 "${probe_address}" >/dev/null 2>&1; then
+                return 0
+            fi
+        done
+    done <<<"${route_interfaces}"
     return 1
 }
 

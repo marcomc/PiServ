@@ -134,9 +134,9 @@ all route-agnostic public probes unreachable
 ```
 
 The Wi-Fi recovery timer resets only when all Wi-Fi checks succeed. The reboot
-timer resets when any configured public address responds without an interface
-binding. Recovery messages are logged with the `wifi-connectivity-watchdog`
-journal identifier.
+timer resets when any configured public address responds through normal routing
+or any IPv4 default-route interface. Recovery messages are logged with the
+`wifi-connectivity-watchdog` journal identifier.
 
 A connection activation or NetworkManager restart marks its recovery level
 complete only after it succeeds. Failed commands retry on later checks while
@@ -148,9 +148,11 @@ The `nmcli` status command uses the C locale before its output is parsed. The
 offline timer reads Linux kernel monotonic uptime from `/proc/uptime`, so
 wall-clock corrections cannot skip or delay an escalation level. The DNS probe
 requires an IPv4 response through the monitored interface; use a hostname whose
-resolved addresses allow ICMP echo replies. Reboot probes deliberately omit an
-interface binding, so any usable host route prevents reboot. If a reboot mode is
-required, the script rechecks it immediately before requesting the reboot.
+resolved addresses allow ICMP echo replies. Reboot probes first use normal host
+routing, then bind each probe to every IPv4 default-route interface so a
+higher-metric healthy route prevents reboot when the preferred route is broken.
+If a reboot mode is required, the script rechecks it immediately before
+requesting the reboot.
 Recovery durations are limited to `2147483647` seconds so they remain valid for
 Bash arithmetic on supported hosts.
 

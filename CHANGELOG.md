@@ -22,7 +22,7 @@
   NetworkManager restart. Host reboot escalation is opt-in.
 - Configured PiServ to reboot after 15 continuous minutes without a route to
   either public internet probe, while preventing a Wi-Fi outage from rebooting
-  a host that remains online through another interface.
+  a host that remains online through another IPv4 default-route interface.
 - Required PiServ's locally configured Wi-Fi profile for deterministic recovery
   and required the active cold reboot mode immediately before automatic reboot.
 - Extracted the watchdog into the reusable `wifi_watchdog` role with

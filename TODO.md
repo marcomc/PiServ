@@ -20,9 +20,10 @@
 - [ ] **Validate automatic total-internet-outage recovery**
   - Assessment: PiServ's watchdog is configured to recover its locally
     configured NetworkManager profile and to request a cold reboot after 15
-    minutes only when no host route reaches either public probe. Its healthy-path
-    deployment can be verified without risk; the actual outage path needs an
-    approved alternate access route.
+    minutes only when normal routing and every IPv4 default-route interface
+    fail to reach either public probe. Its healthy-path deployment can be
+    verified without risk; the actual outage path needs an approved alternate
+    access route.
   - Actions:
     - With alternate access available, prove that a Wi-Fi-only outage does not
       reboot the host while another interface reaches a public probe.

@@ -58,7 +58,7 @@ argument_specs:
         default:
           - 1.1.1.1
           - 8.8.8.8
-        description: Public IPv4 addresses probed without an interface binding before reboot escalation.
+        description: Public IPv4 addresses probed through normal routing and every IPv4 default-route interface before reboot escalation.
       wifi_watchdog_networkmanager_service_name:
         type: str
         default: NetworkManager.service

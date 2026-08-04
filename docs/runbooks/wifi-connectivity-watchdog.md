@@ -5,7 +5,8 @@
 The local `wifi_watchdog` role installs `piserv-wifi-watchdog.service` for the
 `wlan0` connection used by PiServ. It checks the Wi-Fi link, the active default
 gateway, and DNS before starting recovery. PiServ also checks public IPv4
-reachability without an interface binding before considering a host reboot.
+reachability through normal routing and every IPv4 default-route interface
+before considering a host reboot.
 
 ## Recovery policy
 
@@ -17,13 +18,14 @@ reachability without an interface binding before considering a host reboot.
 
 The Wi-Fi recovery timer resets as soon as link, gateway, and DNS pass through
 `wlan0`. The reboot timer resets as soon as either public IP responds through
-any host route. Before each automatic reboot, the service requires the live
-kernel reboot mode to still be `cold`. Recovery events are written to the
-system journal with the `wifi-connectivity-watchdog` identifier. A failed
-connection activation or NetworkManager restart is retried on later checks
-while the outage continues, without blocking a higher recovery level whose
-threshold has elapsed. A successful NetworkManager restart enables another
-connection recovery attempt until health checks pass.
+normal routing or any IPv4 default-route interface. Before each automatic
+reboot, the service requires the live kernel reboot mode to still be `cold`.
+Recovery events are written to the system journal with the
+`wifi-connectivity-watchdog` identifier. A failed connection activation or
+NetworkManager restart is retried on later checks while the outage continues,
+without blocking a higher recovery level whose threshold has elapsed. A
+successful NetworkManager restart enables another connection recovery attempt
+until health checks pass.
 
 ## Configuration
 

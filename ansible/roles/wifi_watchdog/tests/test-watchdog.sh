@@ -124,6 +124,8 @@ run_watchdog() {
     local internet_probe_failure="${8:-0}"
     local primary_internet_probe_failure="${9:-0}"
     local secondary_internet_probe_failure="${10:-0}"
+    local default_routes="${11:-default via 192.0.2.1 dev wlan0 proto dhcp metric 600}"
+    local alternate_route_probe_failure="${12:-0}"
     local watchdog_status
 
     : > "${test_log}"
@@ -138,6 +140,8 @@ run_watchdog() {
         WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE="${internet_probe_failure}" \
         WIFI_WATCHDOG_TEST_PRIMARY_INTERNET_PROBE_FAILURE="${primary_internet_probe_failure}" \
         WIFI_WATCHDOG_TEST_SECONDARY_INTERNET_PROBE_FAILURE="${secondary_internet_probe_failure}" \
+        WIFI_WATCHDOG_TEST_DEFAULT_ROUTES="${default_routes}" \
+        WIFI_WATCHDOG_TEST_ALTERNATE_ROUTE_PROBE_FAILURE="${alternate_route_probe_failure}" \
         "${watchdog_script}" &
     watchdog_pid=$!
 
@@ -282,6 +286,15 @@ run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1 0 1
 grep -Fxq 'ping -c 1 -W 2 8.8.8.8' "${test_log}"
 if grep -Fxq reboot "${test_log}"; then
     printf 'watchdog rebooted when its secondary internet probe succeeded\n' >&2
+    exit 1
+fi
+
+run_watchdog "${escalation_retry_script}" 'wlan0:disconnected' 5 0 '' 0 1 1 0 $'default via 192.0.2.1 dev wlan0 proto dhcp metric 600\ndefault via 198.51.100.1 dev eth0 proto dhcp metric 700'
+
+grep -Fxq 'ip -4 route show default' "${test_log}"
+grep -Fxq 'ping -I eth0 -c 1 -W 2 1.1.1.1' "${test_log}"
+if grep -Fxq reboot "${test_log}"; then
+    printf 'watchdog rebooted despite an alternate default route reaching a probe\n' >&2
     exit 1
 fi
 
