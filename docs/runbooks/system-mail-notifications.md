@@ -60,6 +60,7 @@ The `base` role configures mail consumers:
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| boot notification delivery | Retry only `sendmail` temporary failure (`75`), up to six attempts with a 15-second delay and 20-second per-attempt timeout |
 | shutdown notification service | `piserv-shutdown-notify.service` |
 | shutdown notification recipient | `root` |
 | shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
@@ -197,6 +198,15 @@ ssh admin@PiServ.local 'sudo test -f /etc/unattended-upgrades/plugins/Unattended
 ssh admin@PiServ.local 'sudo grep -R "^Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
 ```
 
+To retry a previous boot-notification failure after network and DNS are ready,
+run the service manually. This sends one boot notification email.
+
+```sh
+ssh admin@PiServ.local \
+  'sudo systemctl reset-failed piserv-reboot-notify.service && sudo systemctl start piserv-reboot-notify.service'
+ssh admin@PiServ.local 'systemctl is-system-running && systemctl --failed --no-legend'
+```
+
 When the digest plugin is enabled, the third command shows `MailReport
 "only-on-error"`: the plugin sends routine messages and native mail preserves
 an unexpected-failure fallback. Routine messages show status, reboot state,
@@ -244,3 +254,4 @@ Remove email keys from the RaiPlaySound config to make it skip summaries again.
 | 2026-07-08 | Role split | Mail transport moved to the dedicated local `msmtp` role |
 | 2026-07-08 | Final base playbook apply | Create-only `msmtp` role and `base` role completed with `changed=0` |
 | 2026-07-16 | Mobile upgrade digest | Plugin installed, routine raw mail removed, dry run passed, and test digest delivered through the root alias |
+| 2026-08-04 | Boot notification retry repair | A boot-time DNS `EX_TEMPFAIL` was repaired with bounded retry handling; a manual service retry completed successfully and returned systemd to `running` with no failed units |

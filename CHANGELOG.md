@@ -17,6 +17,9 @@
   unmanaged, and exits cleanly during system shutdown.
 - Added a pre-network-teardown shutdown email with bounded, authenticated
   journal correlation for nearby `sudo` evidence.
+- Retried boot notification delivery only for bounded temporary mail failures,
+  avoiding a boot-time DNS race while preserving permanent SMTP errors as
+  visible systemd failures.
 - Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
   link, gateway, and DNS, then escalates from connection restart to
   NetworkManager restart. Host reboot escalation is opt-in.

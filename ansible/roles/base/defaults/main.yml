@@ -83,6 +83,9 @@ base_reboot_notification_script_path: /usr/local/sbin/piserv-reboot-notify
 base_reboot_notification_recipient: root
 base_reboot_notification_subject_prefix: "[PiServ]"
 base_reboot_notification_condition_path: /etc/msmtprc
+base_reboot_notification_retry_attempts: 6
+base_reboot_notification_retry_delay_seconds: 15
+base_reboot_notification_delivery_timeout_seconds: 20
 
 base_manage_kernel_reboot_mode: false
 base_kernel_reboot_mode: default
