@@ -83,6 +83,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - For numeric role settings rendered into timeout, retry, or recovery logic,
   validate the uncast value and cross-setting ordering before applying an
   `int` filter; invalid input must not silently become zero.
+- For boot-time services that deliver through an external DNS-dependent
+  transport, treat `network-online.target` as insufficient readiness. Retry
+  only identified temporary delivery failures with a bounded policy, and leave
+  permanent failures visible to systemd.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
 - Keep real Wi-Fi SSIDs and NetworkManager profile names in ignored local vars;

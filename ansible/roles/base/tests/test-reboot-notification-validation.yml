@@ -1,0 +1,71 @@
+---
+- name: Test valid reboot notification retry policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    base_reboot_notification_retry_attempts: 6
+    base_reboot_notification_retry_delay_seconds: 15
+    base_reboot_notification_delivery_timeout_seconds: 20
+  tasks:
+    - name: Validate accepted reboot notification retry policy
+      ansible.builtin.import_tasks: ../tasks/validate-reboot-notification.yml
+
+- name: Test rejected reboot notification retry policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Reject a zero reboot notification retry budget
+      block:
+        - name: Validate zero retry budget
+          ansible.builtin.import_tasks: ../tasks/validate-reboot-notification.yml
+          vars:
+            base_reboot_notification_retry_attempts: 0
+            base_reboot_notification_retry_delay_seconds: 15
+            base_reboot_notification_delivery_timeout_seconds: 20
+
+        - name: Mark zero retry budget as unexpectedly accepted
+          ansible.builtin.set_fact:
+            base_test_invalid_reboot_policy_accepted: true
+      rescue:
+        - name: Assert zero retry budget was rejected
+          ansible.builtin.assert:
+            that:
+              - not (base_test_invalid_reboot_policy_accepted | default(false))
+
+    - name: Reject an excessive reboot notification retry duration
+      block:
+        - name: Validate excessive retry duration
+          ansible.builtin.import_tasks: ../tasks/validate-reboot-notification.yml
+          vars:
+            base_reboot_notification_retry_attempts: 10
+            base_reboot_notification_retry_delay_seconds: 60
+            base_reboot_notification_delivery_timeout_seconds: 60
+
+        - name: Mark excessive retry duration as unexpectedly accepted
+          ansible.builtin.set_fact:
+            base_test_invalid_reboot_policy_accepted: true
+      rescue:
+        - name: Assert excessive retry duration was rejected
+          ansible.builtin.assert:
+            that:
+              - not (base_test_invalid_reboot_policy_accepted | default(false))
+
+    - name: Reject a non-integer reboot notification delay
+      block:
+        - name: Validate non-integer retry delay
+          ansible.builtin.import_tasks: ../tasks/validate-reboot-notification.yml
+          vars:
+            base_reboot_notification_retry_attempts: 6
+            base_reboot_notification_retry_delay_seconds: invalid
+            base_reboot_notification_delivery_timeout_seconds: 20
+
+        - name: Mark non-integer retry delay as unexpectedly accepted
+          ansible.builtin.set_fact:
+            base_test_invalid_reboot_policy_accepted: true
+      rescue:
+        - name: Assert non-integer retry delay was rejected
+          ansible.builtin.assert:
+            that:
+              - not (base_test_invalid_reboot_policy_accepted | default(false))

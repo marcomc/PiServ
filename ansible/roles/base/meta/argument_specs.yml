@@ -204,6 +204,18 @@ argument_specs:
         type: path
         default: /etc/msmtprc
         description: Path that must exist before the boot notification service runs.
+      base_reboot_notification_retry_attempts:
+        type: int
+        default: 6
+        description: Maximum boot-notification delivery attempts for temporary mail failures.
+      base_reboot_notification_retry_delay_seconds:
+        type: int
+        default: 15
+        description: Delay between temporary boot-notification delivery attempts.
+      base_reboot_notification_delivery_timeout_seconds:
+        type: int
+        default: 20
+        description: Per-attempt boot-notification mail delivery timeout.
       base_manage_kernel_reboot_mode:
         type: bool
         default: false

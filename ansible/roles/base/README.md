@@ -69,6 +69,9 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
 | `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
 | `base_reboot_notification_condition_path` | `/etc/msmtprc` | Path required before boot notification runs |
+| `base_reboot_notification_retry_attempts` | `6` | Maximum attempts after temporary mail delivery failure |
+| `base_reboot_notification_retry_delay_seconds` | `15` | Delay between temporary delivery attempts |
+| `base_reboot_notification_delivery_timeout_seconds` | `20` | Per-attempt mail delivery timeout |
 | `base_manage_kernel_reboot_mode` | `false` | Manage the kernel command-line reboot mode |
 | `base_kernel_reboot_mode` | `default` | Use `default`, `warm`, or `cold` reboot mode |
 | `base_kernel_cmdline_path` | `/boot/firmware/cmdline.txt` | Managed single-line kernel command line |
@@ -118,7 +121,9 @@ cannot reach the plugin. Set `base_unattended_mail_to` to the required local
 recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 
 The boot notification service is enabled by default, but systemd skips it until
-`base_reboot_notification_condition_path` exists. The shutdown notification
+`base_reboot_notification_condition_path` exists. It retries only `sendmail`
+temporary-failure exit `75` with a bounded policy; permanent mail errors remain
+failed and visible to systemd. The shutdown notification
 service remains active until `systemd` enters a shutdown transaction and sends
 before the network is stopped when
 `base_shutdown_notification_condition_path` exists. For the latest authenticated

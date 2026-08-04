@@ -1,4 +1,7 @@
 ---
+- name: Validate reboot notification retry policy
+  ansible.builtin.import_tasks: validate-reboot-notification.yml
+
 - name: Install reboot notification helper
   ansible.builtin.template:
     src: piserv-reboot-notify.py.j2
