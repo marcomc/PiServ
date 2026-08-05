@@ -99,17 +99,8 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - On a future 8 GB-or-larger PiServ host, re-enable the retained local-model
-      framework and repeat guarded 64K full-provider proofs for Gemma 4 E2B and
-      Granite 3.3 2B. Both crossed the 1.5 GiB host-reserve guard on the current
-      4 GB host and are not installed there.
-    - On a future 8 GB-or-larger PiServ host, repeat the Llama 3.2 1B full
-      Hermes provider proof with memory and skill loading. Its guarded 64K
-      synthetic loopback test passed on the current 4 GB host, but the
-      full-provider proof ended in an unclean host stop while processing the
-      Hermes prompt, so it is not a managed or default provider.
-    - Verify the prepared Home Assistant MCP capability gateway after supplying
-      the Home Assistant URL, dedicated token, and permitted entity set.
+    - Select and validate one reversible Home Assistant write operation through
+      the connected MCP capability gateway before relying on unattended actions.
     - Review the pinned dashboard's three production and eight total high
       severity npm audit findings before exposing it beyond loopback and its
       SSH tunnel.

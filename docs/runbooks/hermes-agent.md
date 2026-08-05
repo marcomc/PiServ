@@ -7,6 +7,7 @@
 - [Planned Inference Routing](#planned-inference-routing)
 - [Model Selection and Escalation](#model-selection-and-escalation)
 - [Home Assistant Capability Gateway](#home-assistant-capability-gateway)
+- [Configure the Home Assistant Token](#configure-the-home-assistant-token)
 - [Local Model Benchmarks](#local-model-benchmarks)
 - [Verify Persistence](#verify-persistence)
 - [Deploy](#deploy)
@@ -104,19 +105,36 @@ content.
 
 ## Home Assistant Capability Gateway
 
-The managed integration is intentionally disabled until its three external
-inputs are available: the Home Assistant base URL, an access token, and a
-small initial set of entities exposed only for state queries. It connects Hermes
-to Home Assistant's official MCP endpoint at `/api/mcp`; it does not enable
-Hermes' broader built-in `homeassistant` toolset.
+The managed integration connects Hermes to Home Assistant's official MCP
+endpoint at `/api/mcp`; it does not enable Hermes' broader built-in
+`homeassistant` toolset.
 
 Home Assistant controls which entities and operations its MCP server exposes.
 PiServ does not add a second write restriction, so approved Home Assistant MCP
 tools can perform available actions through the same audited Hermes runtime.
 
-On Home Assistant, first enable the **MCP Server** integration and expose only
-read-only entities for the initial test. Create a dedicated long-lived access
-token. On PiServ, store it without printing it:
+On 2026-08-05, PiServ authenticated to its configured Home Assistant host,
+discovered 21 MCP tools, and completed a Hermes `GetLiveContext` call. The
+response carried the Codex provenance note and produced a content-free inference
+audit record. No write operation has been invoked yet; select a reversible
+operation for the first mutation proof.
+
+## Configure the Home Assistant Token
+
+Create a dedicated long-lived token in Home Assistant rather than reusing a
+personal integration token:
+
+1. Open Home Assistant and select your user profile in the sidebar.
+2. Open the **Security** tab.
+3. Under **Long-lived access tokens**, select **Create token**.
+4. Name it `PiServ Hermes MCP`, create it, and copy it immediately. Home
+   Assistant displays the secret only once.
+5. Enable the **Model Context Protocol Server** integration under
+   **Settings > Devices & services**. Home Assistant controls the entities and
+   operations exposed through that server.
+
+On PiServ, create or replace the private runtime environment file. Do not put
+the token in Ansible variables, Git, shell history, or chat:
 
 ```sh
 sudo install -o hermes-agent -g hermes-agent -m 0600 /dev/null \
@@ -130,10 +148,29 @@ The file must contain exactly one assignment:
 HASS_MCP_TOKEN=<long-lived-access-token>
 ```
 
-Then set `hermes_agent_manage_home_assistant_mcp: true` and the full endpoint
-URL in the PiServ playbook, apply it, and prove authentication plus a state
-query. Do not add controllable entities or service-call policies until that
-read-only proof and its audit trail have been reviewed.
+Copy `ansible/vars/hermes-agent.yml.example` to the ignored
+`ansible/vars/hermes-agent.yml`, set
+`piserv_hermes_agent_manage_home_assistant_mcp: true`, and set the local MCP
+URL ending in `/api/mcp`. Then apply the role. Verify the token without
+displaying it:
+
+```sh
+sudo -u hermes-agent -H bash -c '
+set -a
+. /var/lib/hermes-agent/home-assistant-mcp.env
+set +a
+test -n "$HASS_MCP_TOKEN"
+curl --fail --silent --show-error --max-time 10 \
+  -H "Authorization: Bearer $HASS_MCP_TOKEN" \
+  http://<home-assistant-host>:8123/api/ >/dev/null
+'
+echo HOME_ASSISTANT_AUTH_OK
+```
+
+For a different Home Assistant host, replace only the final URL. Rotate the
+token by generating a replacement in Home Assistant, replacing the single file
+assignment, restarting `hermes-agent-dashboard.service`, then revoking the old
+token in Home Assistant.
 
 ## Local Model Benchmarks
 

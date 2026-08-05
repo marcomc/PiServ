@@ -75,8 +75,9 @@
   session-scoped Terra and Sol selectors.
 - Added a managed Hermes provenance plugin, validated it with a live Luna
   response, and stored only private, content-free inference audit metadata.
-- Added an opt-in official Home Assistant Assist MCP gateway configuration that
-  reads its dedicated token only from a private runtime environment file.
+- Added an official Home Assistant MCP gateway configuration that reads its
+  dedicated token only from a private runtime environment file, then validated
+  authenticated tool discovery and a `GetLiveContext` call through Hermes.
 - Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
   release, completed ChatGPT device authorization for both Codex CLI and
   Hermes, and validated direct and Hermes-mediated responses without an API key.

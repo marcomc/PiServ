@@ -3,6 +3,9 @@
   hosts: piserv
   gather_facts: true
   become: true
+  vars_files:
+    - ../vars/hermes-agent.yml.example
+    - ../vars/hermes-agent.yml
   roles:
     - role: hermes_agent
       vars:
@@ -28,9 +31,10 @@
             provider: openai-codex
             model: gpt-5.6-sol
         hermes_agent_manage_inference_provenance: true
-        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_manage_home_assistant_mcp: >-
+          {{ piserv_hermes_agent_manage_home_assistant_mcp }}
         hermes_agent_home_assistant_mcp_url: >-
-          http://home.piguard.home.arpa:8123/api/mcp
+          {{ piserv_hermes_agent_home_assistant_mcp_url }}
         hermes_agent_manage_backup: true
         hermes_agent_backup_group: external-data
         hermes_agent_backup_dir: /mnt/external-data/backups/hermes-agent

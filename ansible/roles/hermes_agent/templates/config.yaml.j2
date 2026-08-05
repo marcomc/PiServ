@@ -46,7 +46,7 @@ platform_toolsets:
     - "{{ toolset }}"
 {% endfor %}
 {% if hermes_agent_manage_home_assistant_mcp %}
-    - "mcp-{{ hermes_agent_home_assistant_mcp_name }}"
+    - "{{ hermes_agent_home_assistant_mcp_name }}"
 {% endif %}
 
 agent:

@@ -276,23 +276,20 @@ The remaining gates are:
    service data, then verify audit continuity and rollback of a changed skill.
 2. **Codex:** test modality-aware routing and graceful handling of plan usage
    limits.
-3. **Local-provider selection:** after an 8 GB-or-larger upgrade, repeat the
-   representative capability and coexistence suite for Gemma, Granite, and
-   Llama 3.2 1B.
-4. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
+3. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
    switch Hermes from Codex to it, and rerun a fixed suite of conversations and
    read-only tools. The future model must offer at least 64K context.
-5. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
+4. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-6. **Home Assistant:** enable the prepared MCP gateway with a dedicated token,
-   confirm the exposed entity and control policy, and verify authentication,
-   state reads, and one reversible service call.
-7. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
+5. **Home Assistant:** the MCP gateway is authenticated and a `GetLiveContext`
+   read completed through Hermes. Select and validate one reversible service
+   call before relying on unattended actions.
+6. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
-8. **Network and identity:** retain loopback plus SSH tunneling until an
+7. **Network and identity:** retain loopback plus SSH tunneling until an
    authenticated LAN/Tailnet policy is implemented and tested.
-9. **Dashboard dependencies:** review the three production and eight total high
+8. **Dashboard dependencies:** review the three production and eight total high
    severity npm audit findings from the pinned upstream web dependency tree
    before widening the dashboard listener.
 
