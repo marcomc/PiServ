@@ -41,6 +41,29 @@
 
 ## Propositions
 
+- [ ] **Automate ASM246X USB 3 link recovery before mount**
+  - Priority: **High**
+  - Assessment: The external ASM246X bridge can enumerate on the same physical
+    Raspberry Pi USB 3 port at either `5000` or `480` Mbps. A bounded pre-mount
+    gate can attempt one logical xHCI recovery without touching a mounted
+    filesystem, then preserve availability by allowing a clearly reported
+    degraded mount if the link remains at `480` Mbps.
+  - Plan: [External SSD USB link recovery](docs/tracks/external-storage-usb-link-recovery.md)
+  - Actions:
+    - [ ] Implement a read-only link and device-identity classifier that runs
+      after USB enumeration but before filesystem checks or mounting.
+    - [ ] Implement one bounded, lock-protected recovery attempt with controller
+      isolation, identity revalidation, timeouts, and bind restoration.
+    - [ ] Gate both `systemd-fsck` and `/mnt/external-data` mounting on the
+      preflight result while retaining the existing absent-disk `nofail` path.
+    - [ ] Mount the verified device at `480` Mbps with a persistent warning when
+      recovery fails or is refused for safety; block mounting on identity or
+      layout mismatch.
+    - [ ] Codify the helper, systemd ordering, policy variables, and disable path
+      in Ansible without resetting USB during normal convergence or check mode.
+    - [ ] Complete the validation matrix and staged live rollout, then update
+      Decision 0017, the external-storage runbook, changelog, and this task.
+
 - [ ] **Build Apple Home-compatible Python camera streaming service**
   - Assessment: A small Python stream service can expose the camera as MJPEG,
     HTTP, or RTSP, but Apple Home support needs a HomeKit-compatible path rather
@@ -85,12 +108,8 @@
       synthetic loopback test passed on the current 4 GB host, but the
       full-provider proof ended in an unclean host stop while processing the
       Hermes prompt, so it is not a managed or default provider.
-    - Implement pre-authorized Codex routing with a per-response inference
-      provenance notice and audit records that exclude request and response
-      contents.
-    - Define the Home Assistant connection method for an instance on the same
-      network, including a capability gateway, token storage, and allowed
-      entities and operations.
+    - Verify the prepared Home Assistant MCP capability gateway after supplying
+      the Home Assistant URL, dedicated token, and permitted entity set.
     - Review the pinned dashboard's three production and eight total high
       severity npm audit findings before exposing it beyond loopback and its
       SSH tunnel.

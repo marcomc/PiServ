@@ -42,6 +42,11 @@ The default CLI allowlist contains only `memory` and `skills`. Their write paths
 still require operator approval. Terminal, file, browser, code execution, Home
 Assistant, and all other bundled toolsets are disabled.
 
+When enabled explicitly, the optional Home Assistant capability uses only the
+official Assist MCP endpoint. It does not enable Hermes' built-in Home
+Assistant toolset, which has direct service-call tools. The Home Assistant
+instance remains the authority for the exposed-entity policy.
+
 Hermes runs as the non-login `hermes-agent` system user. Its systemd services
 use a private state directory, `NoNewPrivileges`, a cleared capability set, and
 a strict read-only system filesystem with explicit writable paths.
@@ -88,6 +93,19 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_packages` | role list | Debian package prerequisites. |
 | `hermes_agent_model` | `gpt-5.5` | Hermes default model. |
 | `hermes_agent_provider` | `openai-codex` | Provider accepted by role policy. |
+| `hermes_agent_fallback_providers` | `[]` | Ordered provider/model pairs used only after primary-provider failures. |
+| `hermes_agent_reasoning_effort` | `medium` | Default reasoning effort for Hermes model calls. |
+| `hermes_agent_reasoning_overrides` | `{}` | Per-model reasoning-effort overrides. |
+| `hermes_agent_model_aliases` | `{}` | Named session model selectors with provider and model values. |
+| `hermes_agent_manage_inference_provenance` | `false` | Install and enable the managed response-provenance audit plugin. |
+| `hermes_agent_inference_provenance_plugin_name` | `piserv-inference-provenance` | Managed response-provenance plugin identifier. |
+| `hermes_agent_manage_home_assistant_mcp` | `false` | Enable the official Home Assistant Assist MCP capability gateway. |
+| `hermes_agent_home_assistant_mcp_name` | `home-assistant-assist` | MCP server identifier. |
+| `hermes_agent_home_assistant_mcp_url` | empty | Full Home Assistant MCP URL, ending in `/api/mcp`. |
+| `hermes_agent_home_assistant_mcp_token_env_file` | `{{ hermes_agent_home }}/home-assistant-mcp.env` | Private, operator-managed `KEY=value` token file. |
+| `hermes_agent_home_assistant_mcp_token_env_var` | `HASS_MCP_TOKEN` | Token variable name referenced from the managed config. |
+| `hermes_agent_home_assistant_mcp_timeout` | `30` | Per-request MCP timeout in seconds. |
+| `hermes_agent_home_assistant_mcp_connect_timeout` | `15` | Initial MCP connection timeout in seconds. |
 | `hermes_agent_enabled_toolsets` | `memory`, `skills` | Explicit CLI allowlist. |
 | `hermes_agent_disabled_toolsets` | role list | Explicitly disabled bundled toolsets. |
 | `hermes_agent_dashboard_host` | `127.0.0.1` | Dashboard bind address. |

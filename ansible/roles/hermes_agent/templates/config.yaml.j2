@@ -2,15 +2,62 @@
 model:
   default: "{{ hermes_agent_model }}"
   provider: "{{ hermes_agent_provider }}"
+{% if hermes_agent_fallback_providers | length > 0 %}
+
+fallback_providers:
+{% for fallback_provider in hermes_agent_fallback_providers %}
+  - provider: "{{ fallback_provider.provider }}"
+    model: "{{ fallback_provider.model }}"
+{% endfor %}
+{% endif %}
+
+{% if hermes_agent_model_aliases | length > 0 %}
+model_aliases:
+{% for alias_name, alias_target in hermes_agent_model_aliases | dictsort %}
+  "{{ alias_name }}":
+    provider: "{{ alias_target.provider }}"
+    model: "{{ alias_target.model }}"
+{% endfor %}
+{% endif %}
+
+{% if hermes_agent_manage_inference_provenance %}
+plugins:
+  enabled:
+    - "{{ hermes_agent_inference_provenance_plugin_name }}"
+{% endif %}
+{% if hermes_agent_manage_home_assistant_mcp %}
+
+mcp_servers:
+  {{ hermes_agent_home_assistant_mcp_name }}:
+    url: "{{ hermes_agent_home_assistant_mcp_url }}"
+    headers:
+      Authorization: "Bearer ${{ '{' }}{{ hermes_agent_home_assistant_mcp_token_env_var }}{{ '}' }}"
+    timeout: {{ hermes_agent_home_assistant_mcp_timeout }}
+    connect_timeout: {{ hermes_agent_home_assistant_mcp_connect_timeout }}
+    supports_parallel_tool_calls: false
+    tools:
+      resources: false
+      prompts: false
+{% endif %}
 
 platform_toolsets:
   cli:
 {% for toolset in hermes_agent_enabled_toolsets %}
     - "{{ toolset }}"
 {% endfor %}
+{% if hermes_agent_manage_home_assistant_mcp %}
+    - "mcp-{{ hermes_agent_home_assistant_mcp_name }}"
+{% endif %}
 
 agent:
   max_turns: 90
+  reasoning_effort: "{{ hermes_agent_reasoning_effort }}"
+{% if hermes_agent_reasoning_overrides | length > 0 %}
+  reasoning_overrides:
+{% for model_name, reasoning_effort in hermes_agent_reasoning_overrides | dictsort %}
+    "{{ model_name }}": "{{ reasoning_effort }}"
+{% endfor %}
+{% endif %}
   disabled_toolsets:
 {% for toolset in hermes_agent_disabled_toolsets %}
     - "{{ toolset }}"

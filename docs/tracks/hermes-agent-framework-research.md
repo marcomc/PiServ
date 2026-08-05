@@ -186,7 +186,7 @@ Use Home Assistant's official MCP Server integration and the built-in Assist
 API instead of giving the PiServ agent a broad REST token. Home Assistant
 documents the Assist API as equivalent to the exposed entities available to the
 built-in conversation agent and states that it cannot perform administrative
-tasks. The MCP endpoint is `/api/mcp/assist`.
+tasks. The MCP Server integration endpoint is `/api/mcp`.
 
 This provides a natural per-entity boundary through Home Assistant's exposed
 entities configuration. Start with state-only queries; add tightly scoped
@@ -267,15 +267,15 @@ mount, OAuth, storage, backup, and restore decisions.
 ## Implementation Gates
 
 The runtime installation, ARM64 binary smoke test, authenticated provider
-response, loopback dashboard, toolset allowlist, and first backup are complete.
+response, loopback dashboard, toolset allowlist, first backup, and content-free
+Codex provenance audit are complete. The remaining gates are:
 The remaining gates are:
 
 1. **Learning persistence:** prove that a curated memory entry and a reviewed
    skill survive a Hermes restart and a provider change. Back up and restore the
    service data, then verify audit continuity and rollback of a changed skill.
-2. **Codex:** prove pre-authorized route selection, sandbox isolation,
-   provenance notice, content-free audit capture, result redaction, and
-   graceful handling of plan usage limits.
+2. **Codex:** test modality-aware routing and graceful handling of plan usage
+   limits.
 3. **Local-provider selection:** after an 8 GB-or-larger upgrade, repeat the
    representative capability and coexistence suite for Gemma, Granite, and
    Llama 3.2 1B.
@@ -285,8 +285,9 @@ The remaining gates are:
 5. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-6. **Home Assistant:** expose a small entity set, verify MCP authentication and
-   state reads, then test one reversible service call with a confirmation.
+6. **Home Assistant:** enable the prepared MCP gateway with a dedicated token,
+   confirm the exposed entity and control policy, and verify authentication,
+   state reads, and one reversible service call.
 7. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
 8. **Network and identity:** retain loopback plus SSH tunneling until an

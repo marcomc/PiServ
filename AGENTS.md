@@ -130,6 +130,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   single-line text before interpolating them into plain-text notifications.
   Bound the record count and accept command attribution only for the intended
   operation class.
+- For an abrupt host stop, classify the last journal entry as correlation only
+  until retained pre-stop CPU, memory, temperature, I/O, and power or reset
+  telemetry establishes causation. Capture that bounded evidence before further
+  high-memory or hardware-stability testing.
 - Before increasing local-model address-space limits, verify that the cgroup v2
   memory controller and effective systemd limits are enforcing containment.
   Keep an independently effective `LimitAS` cap when cgroup memory controls

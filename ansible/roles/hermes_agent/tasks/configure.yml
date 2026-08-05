@@ -12,6 +12,58 @@
     - "{{ hermes_agent_home }}/workspace"
   when: hermes_agent_runtime_user_available
 
+- name: Create managed inference provenance plugin directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  loop:
+    - "{{ hermes_agent_home }}/plugins"
+    - "{{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}"
+    - "{{ hermes_agent_home }}/audit"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Install managed inference provenance plugin manifest
+  ansible.builtin.template:
+    src: inference-provenance-plugin.yaml.j2
+    dest: >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Install managed inference provenance plugin
+  ansible.builtin.template:
+    src: inference-provenance-plugin.py.j2
+    dest: >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Create private Home Assistant MCP token file
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+    state: touch
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+    access_time: preserve
+    modification_time: preserve
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+
 - name: Install locked-down Hermes configuration
   ansible.builtin.template:
     src: config.yaml.j2

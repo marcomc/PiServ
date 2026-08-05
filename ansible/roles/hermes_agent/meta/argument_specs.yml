@@ -68,6 +68,67 @@ argument_specs:
         choices:
           - openai-codex
         description: Hermes provider configured by this locked-down role.
+      hermes_agent_fallback_providers:
+        type: list
+        elements: dict
+        default: []
+        description: Ordered provider/model pairs used only after primary-provider failures.
+      hermes_agent_reasoning_effort:
+        type: str
+        default: medium
+        choices:
+          - none
+          - minimal
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+          - ultra
+        description: Default reasoning effort for Hermes model calls.
+      hermes_agent_reasoning_overrides:
+        type: dict
+        default: {}
+        description: Per-model reasoning-effort overrides.
+      hermes_agent_model_aliases:
+        type: dict
+        default: {}
+        description: Named session model selectors with provider and model values.
+      hermes_agent_manage_inference_provenance:
+        type: bool
+        default: false
+        description: Install and enable the managed response-provenance audit plugin.
+      hermes_agent_inference_provenance_plugin_name:
+        type: str
+        default: piserv-inference-provenance
+        description: Managed Hermes plugin identifier for response provenance.
+      hermes_agent_manage_home_assistant_mcp:
+        type: bool
+        default: false
+        description: Enable the Home Assistant Assist MCP capability gateway.
+      hermes_agent_home_assistant_mcp_name:
+        type: str
+        default: home-assistant-assist
+        description: Hermes MCP server name for the Home Assistant Assist API.
+      hermes_agent_home_assistant_mcp_url:
+        type: str
+        default: ""
+        description: Full Home Assistant Assist MCP endpoint URL.
+      hermes_agent_home_assistant_mcp_token_env_file:
+        type: path
+        description: Private environment file containing the Home Assistant token.
+      hermes_agent_home_assistant_mcp_token_env_var:
+        type: str
+        default: HASS_MCP_TOKEN
+        description: Environment variable name used for the Home Assistant token.
+      hermes_agent_home_assistant_mcp_timeout:
+        type: int
+        default: 30
+        description: Maximum seconds for an individual Home Assistant MCP request.
+      hermes_agent_home_assistant_mcp_connect_timeout:
+        type: int
+        default: 15
+        description: Maximum seconds for initial Home Assistant MCP connection.
       hermes_agent_enabled_toolsets:
         type: list
         elements: str

@@ -13,6 +13,9 @@ SupplementaryGroups={{ hermes_agent_backup_group }}
 Environment=HOME={{ hermes_agent_home }}
 Environment=HERMES_HOME={{ hermes_agent_home }}
 Environment=CODEX_HOME={{ hermes_agent_codex_home }}
+{% if hermes_agent_manage_home_assistant_mcp %}
+EnvironmentFile=-{{ hermes_agent_home_assistant_mcp_token_env_file }}
+{% endif %}
 WorkingDirectory={{ hermes_agent_home }}/workspace
 ExecStart={{ hermes_agent_binary_path }} dashboard --host {{ hermes_agent_dashboard_host }} --port {{ hermes_agent_dashboard_port }} --no-open --skip-build
 Restart=on-failure

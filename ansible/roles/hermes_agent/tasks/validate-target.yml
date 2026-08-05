@@ -13,8 +13,31 @@
       - "'code_execution' in hermes_agent_disabled_toolsets"
       - "'homeassistant' in hermes_agent_disabled_toolsets"
       - not hermes_agent_manage_backup or hermes_agent_backup_group | length > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_name is match('^[a-z][a-z0-9-]*$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_url is match('^https?://[^/@]+/api/mcp$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_token_env_file is match('^/')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_token_env_var is match('^[A-Z][A-Z0-9_]*$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_timeout > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout <=
+        hermes_agent_home_assistant_mcp_timeout
     fail_msg: >-
       This role currently supports Debian architectures declared in
       hermes_agent_supported_architectures, a loopback dashboard,
       the openai-codex provider, memory/skills-only access, an explicit backup
-      group when backups are enabled.
+      group when backups are enabled, and a valid Assist MCP endpoint with a
+      private token file when Home Assistant access is enabled.

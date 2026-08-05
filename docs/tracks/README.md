@@ -15,6 +15,7 @@ checklists. Use them for active work that is not yet fully automated.
 
 | Track | Status |
 | --- | --- |
+| [External SSD USB link recovery](external-storage-usb-link-recovery.md) | High-priority plan |
 | [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
 | [Google Drive and external storage](google-drive-and-external-storage.md) | Proposal |
 | [Hermes Agent framework](hermes-agent-framework-research.md) | Authenticated runtime; capability integration pending |

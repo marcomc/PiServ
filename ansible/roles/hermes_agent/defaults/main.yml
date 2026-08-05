@@ -25,6 +25,20 @@ hermes_agent_packages:
   - ripgrep
 hermes_agent_model: gpt-5.5
 hermes_agent_provider: openai-codex
+hermes_agent_fallback_providers: []
+hermes_agent_reasoning_effort: medium
+hermes_agent_reasoning_overrides: {}
+hermes_agent_model_aliases: {}
+hermes_agent_manage_inference_provenance: false
+hermes_agent_inference_provenance_plugin_name: piserv-inference-provenance
+hermes_agent_manage_home_assistant_mcp: false
+hermes_agent_home_assistant_mcp_name: home-assistant-assist
+hermes_agent_home_assistant_mcp_url: ""
+hermes_agent_home_assistant_mcp_token_env_file: >-
+  {{ hermes_agent_home }}/home-assistant-mcp.env
+hermes_agent_home_assistant_mcp_token_env_var: HASS_MCP_TOKEN
+hermes_agent_home_assistant_mcp_timeout: 30
+hermes_agent_home_assistant_mcp_connect_timeout: 15
 hermes_agent_enabled_toolsets:
   - memory
   - skills

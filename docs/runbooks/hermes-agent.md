@@ -5,6 +5,8 @@
 - [Purpose](#purpose)
 - [Current State](#current-state)
 - [Planned Inference Routing](#planned-inference-routing)
+- [Model Selection and Escalation](#model-selection-and-escalation)
+- [Home Assistant Capability Gateway](#home-assistant-capability-gateway)
 - [Local Model Benchmarks](#local-model-benchmarks)
 - [Verify Persistence](#verify-persistence)
 - [Deploy](#deploy)
@@ -64,8 +66,74 @@ classification, timestamp, request ID, and outcome without persisting request
 or response contents. Provider routing does not authorize a write operation or
 enable any currently disabled toolset.
 
-The current deployment has no automatic route selection and keeps the vision
-toolset disabled. This is a planned policy, not an active routing feature.
+The current deployment uses ordered provider-failure fallback, not
+task-complexity routing, and keeps the vision toolset disabled.
+
+## Model Selection and Escalation
+
+The Ansible deployment configures `gpt-5.6-luna` as the default model and uses
+`gpt-5.3-codex-spark`, `gpt-5.6-terra`, then `gpt-5.6-sol`, only after a Luna
+provider failure (for example, rate limit, overload, connection failure, or
+authentication failure). This failure fallback does not classify task
+complexity. Spark is text-only and uses its separate ChatGPT Pro preview
+allowance; an image request must continue to a vision-capable fallback.
+
+The default effort is `medium`. Model-specific overrides set Spark to `low`,
+Terra to `high`, and Sol to `xhigh`. `max` and `ultra` are not configured:
+they are explicit operator choices, and Ultra is inconsistent with the current
+disabled `delegation` toolset.
+
+For a deliberately more capable one-turn response in an interactive Hermes
+session, select one of these configured aliases:
+
+```text
+/model terra
+/model sol
+```
+
+These changes apply only to the current session. Use `--global` only for a
+deliberate persistent default change. Start a new session to return to Luna.
+Do not enable `smart_model_routing`: its task-complexity policy is not verified
+for this Hermes release.
+
+Every completed model response carries a compact provider/model note. The
+managed provenance plugin also appends one private JSONL audit record containing
+only timestamp, event ID, session ID, provider, model, route reason, data
+classification, platform, and outcome. It does not store prompt or response
+content.
+
+## Home Assistant Capability Gateway
+
+The managed integration is intentionally disabled until its three external
+inputs are available: the Home Assistant base URL, an access token, and a
+small initial set of entities exposed only for state queries. It connects Hermes
+to Home Assistant's official MCP endpoint at `/api/mcp`; it does not enable
+Hermes' broader built-in `homeassistant` toolset.
+
+Home Assistant controls which entities and operations its MCP server exposes.
+PiServ does not add a second write restriction, so approved Home Assistant MCP
+tools can perform available actions through the same audited Hermes runtime.
+
+On Home Assistant, first enable the **MCP Server** integration and expose only
+read-only entities for the initial test. Create a dedicated long-lived access
+token. On PiServ, store it without printing it:
+
+```sh
+sudo install -o hermes-agent -g hermes-agent -m 0600 /dev/null \
+  /var/lib/hermes-agent/home-assistant-mcp.env
+sudoedit /var/lib/hermes-agent/home-assistant-mcp.env
+```
+
+The file must contain exactly one assignment:
+
+```text
+HASS_MCP_TOKEN=<long-lived-access-token>
+```
+
+Then set `hermes_agent_manage_home_assistant_mcp: true` and the full endpoint
+URL in the PiServ playbook, apply it, and prove authentication plus a state
+query. Do not add controllable entities or service-call policies until that
+read-only proof and its audit trail have been reviewed.
 
 ## Local Model Benchmarks
 

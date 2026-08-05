@@ -70,6 +70,13 @@
 
 - Installed Nous Hermes Agent `0.19.0` at a pinned upstream revision under a
   root-owned code path and an unprivileged `hermes-agent` runtime identity.
+- Configured `gpt-5.6-luna` as the default Codex provider with tested Spark,
+  Terra, and Sol fallback order, bounded reasoning-effort overrides, and
+  session-scoped Terra and Sol selectors.
+- Added a managed Hermes provenance plugin, validated it with a live Luna
+  response, and stored only private, content-free inference audit metadata.
+- Added an opt-in official Home Assistant Assist MCP gateway configuration that
+  reads its dedicated token only from a private runtime environment file.
 - Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
   release, completed ChatGPT device authorization for both Codex CLI and
   Hermes, and validated direct and Hermes-mediated responses without an API key.
