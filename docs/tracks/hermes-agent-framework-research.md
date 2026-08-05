@@ -282,9 +282,10 @@ The remaining gates are:
 4. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-5. **Home Assistant:** the MCP gateway is authenticated and a `GetLiveContext`
-   read completed through Hermes. Select and validate one reversible service
-   call before relying on unattended actions.
+5. **Home Assistant:** the MCP gateway is authenticated and tools are
+   discovered. Expose an intended entity, validate a state read, then select
+   and validate one reversible service call before relying on unattended
+   actions.
 6. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
 7. **Network and identity:** retain loopback plus SSH tunneling until an

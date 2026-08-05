@@ -99,8 +99,9 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Select and validate one reversible Home Assistant write operation through
-      the connected MCP capability gateway before relying on unattended actions.
+    - Expose the intended Home Assistant entity to the MCP Server, validate a
+      state read, then select and validate one reversible write operation before
+      relying on unattended actions.
     - Review the pinned dashboard's three production and eight total high
       severity npm audit findings before exposing it beyond loopback and its
       SSH tunnel.
