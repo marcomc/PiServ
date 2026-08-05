@@ -31,11 +31,11 @@ argument_specs:
         description: Hermes CLI path created by the upstream installer.
       hermes_agent_repo_version:
         type: str
-        default: 240afd0b70a016ba17568d597e0f2c32f94f4cfd
+        default: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
         description: Full upstream Hermes Git commit to install.
       hermes_agent_version:
         type: str
-        default: "0.19.0"
+        default: "0.20.0"
         description: Expected Hermes version reported by the CLI.
       hermes_agent_installer_url:
         type: str
@@ -47,6 +47,14 @@ argument_specs:
       hermes_agent_installer_checksum:
         type: str
         description: SHA-256 checksum for the Hermes installer.
+      hermes_agent_uv_python_install_dir:
+        type: path
+        default: /usr/local/share/uv/python
+        description: System-readable directory for uv-managed Python runtimes.
+      hermes_agent_uv_python_bin_dir:
+        type: path
+        default: /usr/local/share/uv/bin
+        description: System-readable directory for uv-managed Python binaries.
       hermes_agent_supported_architectures:
         type: list
         elements: str

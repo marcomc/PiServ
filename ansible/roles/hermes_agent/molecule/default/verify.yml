@@ -64,5 +64,5 @@
           - hermes_agent_dashboard_state.stdout | trim == 'active'
           - hermes_agent_backup_timer_state.stdout | trim == 'enabled'
           - hermes_agent_backup_archives.matched | int == 1
-          - hermes_agent_version.stdout | trim == 'Hermes Agent v0.19.0'
+          - hermes_agent_version.stdout | trim == 'Hermes Agent v0.20.0'
           - hermes_agent_codex_version.stdout | trim == 'codex-cli 0.145.0'

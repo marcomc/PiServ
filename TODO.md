@@ -99,9 +99,8 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Review the pinned dashboard's three production and eight total high
-      severity npm audit findings before exposing it beyond loopback and its
-      SSH tunnel.
+    - Pin the next Hermes upstream release that upgrades transitive `undici` to
+      `6.28.0` or newer, then repeat the production dependency audit.
     - Add authenticated Tailnet access only after defining the identity and
       firewall policy.
 

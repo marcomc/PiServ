@@ -60,8 +60,8 @@ The following observations are current as of 2026-08-05:
 
 The runtime and authenticated provider flow were validated live on 2026-07-31:
 
-- Hermes `0.19.0` is pinned to upstream commit
-  `240afd0b70a016ba17568d597e0f2c32f94f4cfd`.
+- Hermes `0.20.0` is pinned to upstream release commit
+  `3c27eb6234bf91b8ceee9e9071591b31e9b148cb` (`v2026.8.3`).
 - The service runs as the unprivileged `hermes-agent` identity with private
   state under `/var/lib/hermes-agent`.
 - Codex CLI `0.145.0` was installed from the official Linux ARM64 release
@@ -90,10 +90,13 @@ The runtime and authenticated provider flow were validated live on 2026-07-31:
   processing. Its temporary deployment was removed and Codex remains the only
   provider on the current hardware.
 
-The full upstream web dependency installation reported eight high severity npm
-audit findings; a production-only audit reported three high severity findings.
-The dashboard remains loopback-only while those upstream dependencies are
-reviewed.
+On 2026-08-05, a reproducible audit of the deployed `v2026.8.3` lockfile found
+one moderate transitive production vulnerability in `undici` below `6.28.0`.
+Upstream `main` has already advanced to `undici` `7.28.0`, but no newer release
+tag is available to pin. The dashboard serves prebuilt assets through a
+loopback-only Python service; it does not execute Node or npm in production.
+Keep the loopback policy until the separate Tailnet identity and firewall work
+is complete.
 
 ## Selected Architecture
 
@@ -271,7 +274,6 @@ mount, OAuth, storage, backup, and restore decisions.
 The runtime installation, ARM64 binary smoke test, authenticated provider
 response, loopback dashboard, toolset allowlist, first backup, and content-free
 Codex provenance audit are complete. The remaining gates are:
-The remaining gates are:
 
 1. **Learning persistence:** prove that a curated memory entry and a reviewed
    skill survive a Hermes restart and a provider change. Back up and restore the
@@ -292,9 +294,6 @@ The remaining gates are:
    documents without leaking credentials into prompts or logs.
 7. **Network and identity:** retain loopback plus SSH tunneling until an
    authenticated LAN/Tailnet policy is implemented and tested.
-8. **Dashboard dependencies:** review the three production and eight total high
-   severity npm audit findings from the pinned upstream web dependency tree
-   before widening the dashboard listener.
 
 After the gates pass, codify the capability gateway, credential references,
 firewall policy, and authenticated health checks in Ansible.

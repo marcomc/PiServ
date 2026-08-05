@@ -49,7 +49,7 @@ set -eu
 
 case "${1:-}" in
   --version)
-    printf '%s\n' 'Hermes Agent v0.19.0'
+    printf '%s\n' 'Hermes Agent v0.20.0'
     ;;
   tools)
     printf '\342\234\223 enabled  memory\n'

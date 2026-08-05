@@ -4,14 +4,16 @@ hermes_agent_group: hermes-agent
 hermes_agent_home: /var/lib/hermes-agent
 hermes_agent_install_dir: /usr/local/lib/hermes-agent
 hermes_agent_binary_path: /usr/local/bin/hermes
-hermes_agent_repo_version: 240afd0b70a016ba17568d597e0f2c32f94f4cfd
-hermes_agent_version: "0.19.0"
+hermes_agent_repo_version: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
+hermes_agent_version: "0.20.0"
 hermes_agent_installer_url: >-
   https://raw.githubusercontent.com/NousResearch/hermes-agent/{{
   hermes_agent_repo_version }}/scripts/install.sh
 hermes_agent_installer_path: /usr/local/libexec/hermes-agent-installer
 hermes_agent_installer_checksum: >-
-  sha256:ab3e6ae1a1bda828941df8911ae44ed5de68412805124f338f157aa0360eb660
+  sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
+hermes_agent_uv_python_install_dir: /usr/local/share/uv/python
+hermes_agent_uv_python_bin_dir: /usr/local/share/uv/bin
 hermes_agent_supported_architectures:
   - aarch64
   - arm64

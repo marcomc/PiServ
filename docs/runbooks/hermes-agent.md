@@ -29,7 +29,7 @@ Live state observed on 2026-07-31:
 
 | Item | State |
 | --- | --- |
-| Hermes | `0.19.0`, upstream commit `240afd0b70a016ba17568d597e0f2c32f94f4cfd` |
+| Hermes | `0.20.0`, upstream release `v2026.8.3` commit `3c27eb6234bf91b8ceee9e9071591b31e9b148cb` |
 | Runtime identity | `hermes-agent`, system account with no login shell |
 | Persistent data | `/var/lib/hermes-agent`, mode `0700` |
 | Codex CLI | `0.145.0`, official ARM64 archive with SHA-256 verification |

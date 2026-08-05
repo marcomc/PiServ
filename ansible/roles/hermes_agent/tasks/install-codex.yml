@@ -66,6 +66,14 @@
       }}/{{ hermes_agent_codex_archive_binary_name }}
     state: absent
 
+- name: Ensure Codex CLI is executable by the Hermes runtime account
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_dir }}/codex"
+    owner: root
+    group: root
+    mode: "0755"
+  when: hermes_agent_codex_binary.stat.exists
+
 - name: Link active Codex CLI
   ansible.builtin.file:
     src: "{{ hermes_agent_codex_install_dir }}/codex"

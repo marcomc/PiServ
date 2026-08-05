@@ -68,8 +68,9 @@
 
 ### Hermes Agent
 
-- Installed Nous Hermes Agent `0.19.0` at a pinned upstream revision under a
-  root-owned code path and an unprivileged `hermes-agent` runtime identity.
+- Updated Nous Hermes Agent to the pinned upstream `v2026.8.3` release
+  (`0.20.0`) under a root-owned code path and an unprivileged `hermes-agent`
+  runtime identity.
 - Configured `gpt-5.6-luna` as the default Codex provider with tested Spark,
   Terra, and Sol fallback order, bounded reasoning-effort overrides, and
   session-scoped Terra and Sol selectors.
@@ -87,6 +88,9 @@
   all other bundled toolsets.
 - Added a loopback-only Hermes dashboard, SSH-tunnel operator workflow, and
   hardened systemd service.
+- Reduced the deployed dashboard production audit to one moderate transitive
+  `undici` finding; the dashboard remains a loopback Python service serving
+  prebuilt assets.
 - Added daily full Hermes state backups to the external SSD with 30-day
   retention and validated the first live archive.
 - Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health

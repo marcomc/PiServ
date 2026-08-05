@@ -34,6 +34,18 @@
   check_mode: false
   when: hermes_agent_checkout.stat.exists
 
+- name: Resolve installed Hermes virtual environment interpreter
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -f
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+  register: hermes_agent_venv_interpreter
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
 - name: Install Hermes at the pinned revision
   ansible.builtin.command:
     argv:
@@ -52,14 +64,19 @@
   environment:
     HOME: /root
     HERMES_HOME: "{{ hermes_agent_home }}"
+    UV_PYTHON_INSTALL_DIR: "{{ hermes_agent_uv_python_install_dir }}"
+    UV_PYTHON_BIN_DIR: "{{ hermes_agent_uv_python_bin_dir }}"
   register: hermes_agent_install
   changed_when: true
+  notify: Restart Hermes Agent dashboard
   when:
     - not ansible_check_mode
     - >-
       not hermes_agent_checkout.stat.exists or
       hermes_agent_installed_revision.stdout | default("") !=
-      hermes_agent_repo_version
+      hermes_agent_repo_version or
+      hermes_agent_venv_interpreter.rc | default(1) != 0 or
+      hermes_agent_venv_interpreter.stdout is match("^/root/")
 
 - name: Refresh Hermes source checkout state
   ansible.builtin.stat:
@@ -83,7 +100,28 @@
   ansible.builtin.assert:
     that:
       - hermes_agent_installed_revision.stdout == hermes_agent_repo_version
+  when:
+    - hermes_agent_checkout.stat.exists
+    - not ansible_check_mode
+
+- name: Resolve refreshed Hermes virtual environment interpreter
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -f
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+  register: hermes_agent_venv_interpreter
+  changed_when: false
+  check_mode: false
   when: hermes_agent_checkout.stat.exists
+
+- name: Assert Hermes runtime interpreter is available to its service account
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_venv_interpreter.stdout is not match("^/root/")
+  when:
+    - hermes_agent_checkout.stat.exists
+    - not ansible_check_mode
 
 - name: Hand Hermes persistent state to the runtime identity
   ansible.builtin.file:

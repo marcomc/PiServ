@@ -64,6 +64,11 @@
     argv:
       - "{{ hermes_agent_codex_binary_path }}"
       - --version
+  environment:
+    HOME: "{{ hermes_agent_home }}"
+    CODEX_HOME: "{{ hermes_agent_codex_home }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
   register: hermes_agent_codex_version_output
   changed_when: false
   check_mode: false
