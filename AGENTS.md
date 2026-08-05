@@ -87,9 +87,20 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   validate the uncast value and cross-setting ordering before applying an
   `int` filter; invalid input must not silently become zero.
 - For boot-time services that deliver through an external DNS-dependent
-  transport, treat `network-online.target` as insufficient readiness. Retry
-  only identified temporary delivery failures with a bounded policy, and leave
-  permanent failures visible to systemd.
+  transport, treat `network-online.target` as insufficient readiness. Do not
+  perform unbounded DNS or metadata work before the bounded delivery path; use
+  local identity where sufficient, otherwise include the prerequisite work in
+  the service timeout. Retry only identified temporary delivery failures with
+  a bounded policy, and leave permanent failures visible to systemd.
+- Before escalating an interface-recovery failure to an automatic host reboot,
+  distinguish the normal policy route from every eligible IPv4 default-route
+  interface. Prove that each route is unavailable, and cover the failed
+  preferred-route plus healthy alternate-route case in regression tests.
+- Negative Ansible tests that rely on `block`/`rescue` must fail explicitly
+  after an unexpected success and assert that the rescued failure came from
+  the intended validation task. For configurable systemd units, render a
+  non-default policy and assert the effective consuming directive, not only
+  template source text.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
 - Keep real Wi-Fi SSIDs and NetworkManager profile names in ignored local vars;

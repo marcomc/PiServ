@@ -2,21 +2,6 @@
 
 ## Current
 
-- [ ] **Enable the cgroup v2 memory controller**
-  - Assessment: The full PiServ-managed DTB, marked `device_tree` selection,
-    initial boot-artifact backup, and kernel post-install refresh hook are
-    deployed. The managed copy passed `fdtget` validation after removing exactly
-    `cgroup_disable=memory`. It will take effect only after an operator-approved
-    reboot. The current kernel still exposes
-    `cgroup_disable=memory`, so systemd and Docker cannot yet enforce their
-    configured memory controls. Hermes retains its `LimitAS` fallback.
-  - Actions:
-    - Schedule an operator-approved reboot, then verify `memory` appears in
-      `cgroup.controllers`, Docker exposes `memory.events`, and all managed
-      services recover normally.
-    - Keep the Hermes `LimitAS` guard in place and record the observed memory
-      overhead and service limits after the change.
-
 - [ ] **Validate automatic total-internet-outage recovery**
   - Assessment: PiServ's watchdog is configured to recover its locally
     configured NetworkManager profile and to request a cold reboot after 15
@@ -29,6 +14,21 @@
       reboot the host while another interface reaches a public probe.
     - Prove one controlled total-outage reboot, then validate Wi-Fi recovery,
       SSH, storage mounts, and the watchdog journal after the next boot.
+
+- [ ] **Implement scheduled RTC wake-up**
+  - Assessment: Raspberry Pi 5 provides `rtc0` through its built-in `rpi-rtc`.
+    With continuous USB-C power, an RTC alarm can wake PiServ from a low-power
+    halt at a scheduled time; this must not be confused with recovery after an
+    external power loss.
+  - Actions:
+    - Add a managed, backed-up, and reversible EEPROM configuration for RTC
+      wake-up, including `POWER_OFF_ON_HALT=1`.
+    - Implement a systemd service and timer that sets `rtc0/wakealarm`, then
+      performs a clean halt at the configured schedule.
+    - Prove a short, operator-approved wake-up cycle before enabling a daily
+      schedule; verify boot, SSH, storage mounts, and scheduled services.
+    - Document the continuous-power requirement and recommend an RTC battery
+      where time must survive a complete USB-C power loss.
 
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
@@ -76,12 +76,15 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Enable the cgroup v2 memory controller and validate bounded resource
-      policy before repeating full 64K local-provider capability tests. Granite
-      3.3 2B made PiServ unreachable during the initial full test; Gemma 4 E2B
-      has not yet received a full capability test.
-    - Add Llama 3.2 1B only after accepting Meta's upstream model terms and
-      recording a checksum-pinned official GGUF source.
+    - On a future 8 GB-or-larger PiServ host, re-enable the retained local-model
+      framework and repeat guarded 64K full-provider proofs for Gemma 4 E2B and
+      Granite 3.3 2B. Both crossed the 1.5 GiB host-reserve guard on the current
+      4 GB host and are not installed there.
+    - On a future 8 GB-or-larger PiServ host, repeat the Llama 3.2 1B full
+      Hermes provider proof with memory and skill loading. Its guarded 64K
+      synthetic loopback test passed on the current 4 GB host, but the
+      full-provider proof ended in an unclean host stop while processing the
+      Hermes prompt, so it is not a managed or default provider.
     - Implement pre-authorized Codex routing with a per-response inference
       provenance notice and audit records that exclude request and response
       contents.
@@ -111,6 +114,33 @@
       justified complementary guard.
     - Validate limit enforcement, OOM behavior, recovery, and continued SSH
       reachability before applying policies to additional services.
+
+- [ ] **Instrument local-model freeze diagnostics**
+  - Assessment: The 64K Llama full-provider proof ended with an unclean host
+    stop while the model processed the Hermes prompt. Persistent PiServ logs
+    contained no OOM, NVMe, PCIe, thermal, undervoltage, or kernel-panic record;
+    the internal NVMe SMART log is healthy. A controlled retry needs independent
+    controller-side telemetry to distinguish CPU or memory starvation, NVMe I/O
+    faults, and a selective network failure from a complete host freeze.
+  - Actions:
+    - Create a controller-side monitor that writes timestamped reachability
+      samples to the MacBook: ICMP, bounded SSH command, and dashboard HTTP
+      health, without relying on `PiServ.local` mDNS.
+    - Create a bounded PiServ-side collector with durable samples for cgroup
+      `memory.current`, `memory.events`, `memory.swap.current`, PSI memory and
+      I/O pressure, host RAM and swap, CPU load, temperature, `get_throttled`,
+      NVMe `/proc/diskstats`, and service PID RSS.
+    - Synchronize both clocks and record boot ID, kernel version, model unit
+      limits, and test start and stop markers so post-reboot evidence can be
+      correlated without assuming journal timestamps survived the failure.
+    - Run one loopback-only, cgroup-contained local-model proof with the
+      collector enabled and no concurrent model service; stop immediately on
+      memory-limit events, sustained pressure, or lost controller-side health.
+    - After any interruption, collect prior-boot journal, SMART and PCIe/NVMe
+      errors, filesystem recovery records, watchdog evidence, and both telemetry
+      logs before attempting another model run.
+    - Document the result and only reconsider a local default provider after a
+      complete proof, clean cleanup, and sustained SSH/dashboard availability.
 
 - [ ] **Evaluate and deploy Google Drive access and synchronization**
   - Assessment: Google Drive for Desktop is unavailable on Linux. `rclone`

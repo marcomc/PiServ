@@ -61,8 +61,10 @@
   `cgroup_disable=memory` with `fdtput`, validates the result with `fdtget`, and
   is selected through a marked `device_tree=piserv-cgroup-memory.dtb` entry.
 - Preserved the vendor DTB while retaining initial boot-artifact backups,
-  explicit rollback, and refresh after vendor DTB updates; activation remains
-  pending an operator-approved reboot.
+  explicit rollback, and refresh after vendor DTB updates.
+- Activated the controller after an approved reboot and verified `memory` in
+  the live cgroup v2 controller list before testing enforced model-service
+  limits.
 
 ### Hermes Agent
 
@@ -89,6 +91,19 @@
 - Added an isolated persistence verifier for a dashboard restart, Hermes
   backup/restore, reviewed local-skill discovery, and provider-transport
   migration to a bounded Granite loopback endpoint.
+- Enabled cgroup v2 memory control and proved that guarded 64K full-provider
+  tests for Gemma 4 E2B and Granite 3.3 2B exceed the 4 GB host's 1.5 GiB
+  reserve. The guard stopped only the model service and preserved dashboard
+  health, so PiServ now disables local-model deployment while retaining the
+  reusable framework for future hardware.
+- Validated a locally generated Llama 3.2 1B Instruct Q4_K_M artifact with a
+  loopback-only 64K synthetic response test. It used about 1.50 GiB cgroup
+  memory, produced the expected visible response in 1.2 seconds, and left the
+  dashboard healthy; it is not yet the managed Hermes provider.
+- Rejected Llama 3.2 1B Instruct as a local Hermes provider on the 4 GB host:
+  its isolated 64K memory-and-skill proof left PiServ unreachable while
+  processing the Hermes prompt, followed by an unclean boot recovery. Removed
+  the temporary model deployment and retained Codex as the only provider.
 
 ## [0.3.0] - 2026-07-29
 

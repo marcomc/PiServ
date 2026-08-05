@@ -79,6 +79,41 @@ provider until it passes the benchmark and a separate provider-migration test.
 | --- | --- | ---: | --- |
 | `gemma-4-e2b` | Gemma 4 E2B text-only Q4_0 | 64K configured | Primary PiServ candidate |
 | `granite-3-3-2b` | Granite 3.3 2B Instruct Q4_K_M | 64K configured | Direct open-license comparison |
+| `llama-3.2-1b-instruct` | Llama 3.2 1B Instruct Q4_K_M | 64K configured | Lightweight comparison |
+
+### Current 4 GB Host Result
+
+The live cgroup v2 memory controller is active. Guarded 64K full-provider
+tests stopped Gemma 4 E2B and Granite 3.3 2B after each crossed PiServ's
+1.5 GiB host-reserve threshold. The guards stopped only the relevant model
+service and the dashboard remained reachable with HTTP `200`, but neither
+model has sufficient headroom for a safe 64K Hermes provider on this 4 GB
+host. Their GGUF files and systemd units have been removed from PiServ.
+
+The reusable benchmark and deployment framework remains in the repository but
+`hermes_agent_manage_local_models` is disabled in the PiServ playbook. Re-enable
+it only on a host with at least 8 GB RAM, then repeat the guarded full-provider
+proof before selecting either model. Codex remains the current provider.
+
+On 2026-08-04, a Q4_K_M Llama 3.2 1B artifact generated locally from Meta's approved official source revision
+`9213176726f574b556790deb65791e0c5aa438b6` passed a loopback-only 64K synthetic
+response test. Its SHA-256 is
+`257a0a37301cd78f6dab4ed2a65d0ace8e1d0fc43d4f1070b0cf595a0426208f`; it returned
+`HERMES_LOCAL_MODEL_OK` in 1.2 seconds with about 1.50 GiB cgroup memory, no
+cgroup memory events, and dashboard HTTP `200`. The test service was stopped
+afterwards.
+
+The subsequent isolated full-provider proof cloned Hermes state, loaded a
+read-only skill and memory marker, and used a loopback-only Llama service with
+`MemoryHigh=2 GiB`, `MemoryMax=2500 MiB`, and `MemorySwapMax=512 MiB`. While
+processing the 2,038-token Hermes prompt, the model reached 47% prompt progress;
+the Pi then became unreachable and the next boot reported unclean journal and
+filesystem recovery. No OOM, cgroup `memory.events`, thermal, undervoltage, or
+kernel-panic record survived before the interruption. The evidence is therefore
+insufficient to assign a physical cause, but sufficient to reject Llama as a
+safe default provider on this 4 GB host. The temporary unit and copied model
+artifact were removed. Repeat the complete proof only after upgrading to at
+least 8 GB RAM.
 
 The model files consume about 4.1 GiB. Deployment checks the filesystem that
 contains the configured model directory and refuses to download unless it has
@@ -87,10 +122,9 @@ this is the root filesystem; the external `/dev/sda1` SSD is not used for
 model files. Keeping the weights outside `HERMES_HOME` prevents Hermes state
 backups from archiving reproducible, checksum-pinned model files. Both server units bind only to
 `127.0.0.1`, use a `q4_0` KV cache for the 64K benchmark, set a 4 GiB process
-address-space cap, and conflict with each other. The configured cgroup memory
-values are not currently enforced on PiServ because its boot arguments disable
-the memory controller; `LimitAS` remains active. A failed 64K Gemma start must
-therefore stop rather than enable a fallback or keep a model resident.
+address-space cap, and conflict with each other. The cgroup values are enforced
+on PiServ. A failed 64K model start must stop rather than enable a fallback or
+keep a model resident.
 
 Live benchmarks on 2026-07-31 used a synthetic non-sensitive response check:
 
@@ -105,22 +139,54 @@ benchmark now uses 128 completion tokens, records the completion reason and
 reasoning-channel metadata without storing that reasoning, and fails when a
 model finishes without visible content. Both models are provider-migration
 candidates for endpoint-only transport; neither is selected as Hermes'
-provider. A full Hermes capability test with Granite at 64K required about
-2.7 GiB resident memory, left about 440 MiB available while consuming swap,
-and made the host unreachable over SSH. The 4 GiB address-space cap therefore
-remains in place and rejects Granite's full 64K KV-cache allocation before that
-operationally unsafe state. Do not repeat a full local-provider test or start a
-resident local provider until the cgroup memory controller is enabled and a
-bounded resource policy has been validated. Gemma has not passed the full
-capability test.
+provider. The later guarded full-provider tests showed that both models cross
+the 1.5 GiB host reserve on this 4 GB host. Do not start either model here;
+repeat the proof only after upgrading to at least 8 GB RAM.
 
 Llama 3.2 1B remains a possible lower-memory comparison but is not included in
-the automated download because Meta gates the official GGUF repository behind
-its license acceptance. Do not substitute an unverified community conversion;
-add it only after the operator accepts the upstream terms and provides an
-independently checksum-pinned source.
+the automated download because Meta gates its official source weights behind
+licence acceptance. Do not substitute an unverified community conversion; add
+it only after the operator accepts the upstream terms, retrieves checksum-pinned
+official weights, and records the SHA-256 of a locally generated GGUF artifact.
 
-Run one benchmark at a time:
+### Obtain Official Llama 3.2 Source Weights
+
+1. Sign in to Hugging Face and request access at
+   <https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct>. Wait until Meta
+   approves the request; token authentication alone is insufficient.
+2. Create a read-only Hugging Face token with permission to read the approved
+   gated repository. Do not store it in Ansible variables, shell history, or
+   the repository.
+3. On PiServ, install the official client in `admin`'s isolated `pipx`
+   environment, then authenticate interactively:
+
+   ```sh
+   sudo apt-get install --yes pipx
+   pipx install huggingface_hub
+   ~/.local/bin/hf auth login
+   ```
+
+   Paste the token only into the interactive prompt and decline Git credential
+   storage when offered.
+4. Confirm both identity and gated-repository access without printing the
+   token:
+
+   ```sh
+   ~/.local/bin/hf auth whoami
+   HF_HUB_DISABLE_PROGRESS_BARS=1 \
+     ~/.local/bin/hf download meta-llama/Llama-3.2-1B-Instruct --dry-run
+   ```
+
+5. Download the official source snapshot to the Hugging Face cache, convert it
+   locally with the pinned llama.cpp converter, record the source revision and
+   generated GGUF SHA-256 in the model record, then run the guarded 64K proof.
+
+The client stores the active token under `admin`'s private Hugging Face cache.
+Remove it with `~/.local/bin/hf auth logout` when the Pi no longer needs to
+download gated models.
+
+After re-enabling local-model management on a future 8 GB-or-larger host, run
+one benchmark at a time:
 
 ```sh
 ssh admin@PiServ.local \
@@ -146,7 +212,9 @@ loopback Granite OpenAI-compatible endpoint:
 scripts/verify-hermes-persistence.sh
 ```
 
-The verifier uses only a generated non-sensitive marker. It restarts the
+The verifier uses only a generated non-sensitive marker. It requires a selected
+and deployed local model, so it is not runnable while local-model management is
+disabled on the current 4 GB host. It restarts the
 production dashboard without modifying its state, then imports a temporary
 clone below `/run` before creating the memory and skill fixtures. Both backup
 archives, cloned homes, dashboard, and local model are removed during cleanup;
