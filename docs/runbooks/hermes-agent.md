@@ -114,9 +114,10 @@ PiServ does not add a second write restriction, so approved Home Assistant MCP
 tools can perform available actions through the same audited Hermes runtime.
 
 On 2026-08-05, PiServ authenticated to its configured Home Assistant host and
-discovered 21 MCP tools. The gateway read the state of the exposed upstairs
-stairs light and completed a reversible four-second on/off test. The remaining
-proof is an end-to-end Hermes chat that invokes those available MCP tools.
+discovered 21 MCP tools. An end-to-end Hermes chat read the state of the
+exposed upstairs stairs light, then invoked `HassTurnOn` and `HassTurnOff` in
+separate requests with a controlled four-second interval. Home Assistant
+confirmed both actions and the final state was `off`.
 
 ## Configure the Home Assistant Token
 

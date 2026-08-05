@@ -77,8 +77,8 @@
   response, and stored only private, content-free inference audit metadata.
 - Added an official Home Assistant MCP gateway configuration that reads its
   dedicated token only from a private runtime environment file, then validated
-  authenticated tool discovery through Hermes and direct MCP state-read plus
-  reversible four-second light on/off operations.
+  authenticated tool discovery plus an end-to-end Hermes state read and
+  reversible four-second light on/off operation.
 - Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
   release, completed ChatGPT device authorization for both Codex CLI and
   Hermes, and validated direct and Hermes-mediated responses without an API key.

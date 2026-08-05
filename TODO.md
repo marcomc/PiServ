@@ -99,9 +99,6 @@
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Validate an end-to-end Hermes chat invokes the Home Assistant MCP tools.
-      The authenticated gateway has already completed a state read and a
-      reversible four-second light on/off test.
     - Review the pinned dashboard's three production and eight total high
       severity npm audit findings before exposing it beyond loopback and its
       SSH tunnel.
