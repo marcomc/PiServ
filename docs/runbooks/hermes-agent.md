@@ -114,9 +114,9 @@ PiServ does not add a second write restriction, so approved Home Assistant MCP
 tools can perform available actions through the same audited Hermes runtime.
 
 On 2026-08-05, PiServ authenticated to its configured Home Assistant host and
-discovered 21 MCP tools. Entity state and control remain unavailable until each
-intended entity is exposed to the Home Assistant MCP Server. No write operation
-has been invoked yet.
+discovered 21 MCP tools. The gateway read the state of the exposed upstairs
+stairs light and completed a reversible four-second on/off test. The remaining
+proof is an end-to-end Hermes chat that invokes those available MCP tools.
 
 ## Configure the Home Assistant Token
 
@@ -131,9 +131,9 @@ personal integration token:
 5. Enable the **Model Context Protocol Server** integration under
    **Settings > Devices & services**. Home Assistant controls the entities and
    operations exposed through that server.
-6. In that integration's configuration, explicitly expose the intended device
-   or entity. The automatic-add option affects newly discovered entities; it
-   does not make an existing entity available retroactively.
+6. Open **Settings > Voice assistants > Expose**, then expose the intended
+   entity to **Assist**. The MCP Server uses the Assist exposure list; it has
+   no separate per-entity configuration page.
 
 On PiServ, create or replace the private runtime environment file. Do not put
 the token in Ansible variables, Git, shell history, or chat:

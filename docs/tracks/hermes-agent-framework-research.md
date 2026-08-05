@@ -189,8 +189,10 @@ built-in conversation agent and states that it cannot perform administrative
 tasks. The MCP Server integration endpoint is `/api/mcp`.
 
 This provides a natural per-entity boundary through Home Assistant's exposed
-entities configuration. Start with state-only queries; add tightly scoped
-service calls only after testing them through the same gateway.
+entities configuration. A direct authenticated MCP probe completed a state
+read and a reversible four-second upstairs-stairs light on/off test on
+2026-08-05. The next proof is an end-to-end Hermes chat invocation through the
+same gateway.
 
 ### Phase 2: Home Assistant Assist channel
 
@@ -282,10 +284,10 @@ The remaining gates are:
 4. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
    reads, unapproved operation IDs, and malformed Home Assistant targets fail
    closed and are audited.
-5. **Home Assistant:** the MCP gateway is authenticated and tools are
-   discovered. Expose an intended entity, validate a state read, then select
-   and validate one reversible service call before relying on unattended
-   actions.
+5. **Home Assistant:** prove an end-to-end Hermes chat invokes the authenticated
+   MCP gateway. Direct MCP state-read and reversible service-call tests have
+   passed; do not rely on unattended actions until the Hermes-mediated proof is
+   complete.
 6. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
 7. **Network and identity:** retain loopback plus SSH tunneling until an
