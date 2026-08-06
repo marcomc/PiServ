@@ -65,6 +65,51 @@
       MemoryMax, and keep LimitAS above MemoryMax.
   when: hermes_agent_manage_local_models
 
+- name: Resolve local-model benchmark helper path through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_local_model_benchmark_helper_path }}"
+  register: hermes_agent_local_model_benchmark_helper_identity
+  changed_when: false
+  check_mode: false
+
+- name: Require a dedicated local-model benchmark helper path
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_model_benchmark_helper_identity.stdout ==
+        hermes_agent_local_model_benchmark_helper_path
+      - >-
+        hermes_agent_local_model_benchmark_helper_identity.stdout
+        is not match('^/(tmp|var/tmp)(/|$)')
+    fail_msg: >-
+      The local-model benchmark helper must use a canonical path outside shared
+      temporary directories.
+
+- name: Inspect local-model benchmark helper parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_model_benchmark_helper_path | dirname }}"
+    follow: false
+  register: hermes_agent_local_model_benchmark_helper_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe local-model benchmark helper parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_local_model_benchmark_helper_parent.stat.exists or
+        (hermes_agent_local_model_benchmark_helper_parent.stat.isdir and
+        not hermes_agent_local_model_benchmark_helper_parent.stat.islnk and
+        hermes_agent_local_model_benchmark_helper_parent.stat.pw_name == 'root' and
+        hermes_agent_local_model_benchmark_helper_parent.stat.gr_name == 'root' and
+        hermes_agent_local_model_benchmark_helper_parent.stat.mode
+        is match('^0?[0-7][0-5][0-5]$'))
+    fail_msg: >-
+      An existing local-model benchmark helper parent must be a root-owned
+      directory that is not writable by its group or other users.
+
 - name: Inspect configured local-model directories
   ansible.builtin.stat:
     path: "{{ item }}"

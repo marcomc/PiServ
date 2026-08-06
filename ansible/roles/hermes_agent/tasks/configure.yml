@@ -408,6 +408,7 @@
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
     follow: false
+    checksum_algorithm: sha256
   register: hermes_agent_dashboard_bootstrap_password_file
   changed_when: false
   check_mode: false
@@ -416,13 +417,68 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_dashboard_manage_basic_auth
 
-- name: Require a regular Hermes dashboard bootstrap password file
+- name: Inspect Hermes dashboard bootstrap password managed state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    follow: false
+  register: hermes_agent_dashboard_bootstrap_password_managed_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Read Hermes dashboard bootstrap password managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_bootstrap_password_managed_state_contents
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.isreg | default(false)
+    - not hermes_agent_dashboard_bootstrap_password_managed_state.stat.islnk | default(true)
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.pw_name | default('') == 'root'
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.gr_name | default('') == 'root'
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.mode | default('') == '0600'
+
+- name: Load Hermes dashboard bootstrap password managed state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_bootstrap_password_managed_record: >-
+      {{
+        ((hermes_agent_dashboard_bootstrap_password_managed_state_contents |
+        default({})).content | default('') | b64decode | from_yaml) or {}
+      }}
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a recognized Hermes dashboard bootstrap password file
   ansible.builtin.assert:
     that:
       - >-
-        not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+        (not hermes_agent_dashboard_bootstrap_password_file.stat.exists and
+        not hermes_agent_dashboard_bootstrap_password_managed_state.stat.exists) or
         (hermes_agent_dashboard_bootstrap_password_file.stat.isreg and
-        not hermes_agent_dashboard_bootstrap_password_file.stat.islnk)
+        not hermes_agent_dashboard_bootstrap_password_file.stat.islnk and
+        hermes_agent_dashboard_bootstrap_password_file.stat.pw_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_file.stat.gr_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_file.stat.mode == '0600' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.isreg and
+        not hermes_agent_dashboard_bootstrap_password_managed_state.stat.islnk and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.pw_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.gr_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.mode == '0600' and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('path', '') ==
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('sha256', '') ==
+        hermes_agent_dashboard_bootstrap_password_file.stat.checksum)
+    fail_msg: >-
+      An existing Hermes dashboard bootstrap password target must match its
+      root-owned managed-state record before it can be replaced.
   no_log: true
   when:
     - hermes_agent_runtime_user_available
@@ -482,7 +538,60 @@
       not hermes_agent_dashboard_basic_auth_state.stat.exists or
       hermes_agent_dashboard_rotate_basic_auth | bool
 
-- name: Store private Hermes dashboard authentication state
+- name: Store root-only proposed Hermes dashboard password
+  ansible.builtin.copy:
+    content: >-
+      {{ (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Inspect stored Hermes dashboard bootstrap password
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_stored_bootstrap_password
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Record managed Hermes dashboard bootstrap password state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'path': hermes_agent_dashboard_basic_auth_bootstrap_password_file,
+        'sha256': hermes_agent_dashboard_stored_bootstrap_password.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Commit private Hermes dashboard authentication state
   ansible.builtin.copy:
     content: >-
       {{ {
@@ -494,23 +603,6 @@
     dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
     owner: "{{ hermes_agent_user }}"
     group: "{{ hermes_agent_group }}"
-    mode: "0600"
-  no_log: true
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_dashboard_manage_basic_auth
-    - not ansible_check_mode
-    - >-
-      not hermes_agent_dashboard_basic_auth_state.stat.exists or
-      hermes_agent_dashboard_rotate_basic_auth | bool
-
-- name: Store root-only proposed Hermes dashboard password
-  ansible.builtin.copy:
-    content: >-
-      {{ (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password }}
-    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
-    owner: root
-    group: root
     mode: "0600"
   no_log: true
   when:

@@ -136,7 +136,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |
-| `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file. |
+| `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file tracked by a sibling managed-state record. |
 | `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
 | `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
 | `hermes_agent_codex_version` | `0.145.0` | Codex CLI release version. |
@@ -177,7 +177,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_models_memory_high` | `2500M` | systemd memory pressure threshold. |
 | `hermes_agent_local_models_memory_max` | `3200M` | systemd memory hard limit. |
 | `hermes_agent_local_models_memory_swap_max` | `512M` | systemd swap limit. |
-| `hermes_agent_local_model_benchmark_helper_path` | `/usr/local/libexec/hermes-agent/benchmark-local-model` | Benchmark helper path. |
+| `hermes_agent_local_model_benchmark_helper_path` | `/usr/local/libexec/hermes-agent/benchmark-local-model` | Root-owned benchmark helper path outside shared temporary directories. |
 | `hermes_agent_local_models` | role list | Model records and their checksum-pinned sources. |
 | `hermes_agent_local_models_benchmark_request_timeout` | `120` | Bounded synthetic completion request timeout in seconds (1-600). |
 

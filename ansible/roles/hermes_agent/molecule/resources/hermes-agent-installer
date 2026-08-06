@@ -33,8 +33,14 @@ rm -rf "${install_dir}"
 git clone /usr/local/src/hermes-agent-fixture/upstream "${install_dir}"
 git -C "${install_dir}" checkout --detach "${commit}"
 mkdir -p "${hermes_home}/node/bin" "${install_dir}/node_modules" \
-  "${install_dir}/venv/bin"
+  "${install_dir}/venv/bin" "${install_dir}/plugins/dashboard_auth"
 ln -sf /usr/bin/python3 "${install_dir}/venv/bin/python"
+touch "${install_dir}/plugins/__init__.py" \
+  "${install_dir}/plugins/dashboard_auth/__init__.py"
+cat > "${install_dir}/plugins/dashboard_auth/basic.py" <<'PY'
+def hash_password(password):
+    return "fixture:" + password
+PY
 mkdir -p "${install_dir}/ui-tui"
 printf '%s\n' '{"name":"hermes-tui-fixture"}' > "${install_dir}/ui-tui/package.json"
 

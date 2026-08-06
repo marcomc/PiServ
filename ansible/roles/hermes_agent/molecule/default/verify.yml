@@ -260,6 +260,249 @@
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
 
+    - name: Create foreign dashboard bootstrap password target fixture
+      ansible.builtin.copy:
+        content: foreign bootstrap canary
+        dest: /root/hermes-foreign-bootstrap-target
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject foreign dashboard bootstrap password target
+      block:
+        - name: Apply role with foreign dashboard bootstrap password target
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-foreign-bootstrap-target
+
+        - name: Fail if foreign dashboard bootstrap target was accepted
+          ansible.builtin.fail:
+            msg: Foreign dashboard bootstrap targets must be rejected.
+      rescue:
+        - name: Assert foreign dashboard bootstrap target failed before overwrite
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a recognized Hermes dashboard bootstrap password file'
+
+    - name: Read foreign dashboard bootstrap target after rejection
+      ansible.builtin.slurp:
+        src: /root/hermes-foreign-bootstrap-target
+      register: hermes_agent_molecule_foreign_bootstrap_target
+      changed_when: false
+
+    - name: Inspect foreign dashboard bootstrap managed-state canary
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_foreign_bootstrap_marker
+
+    - name: Assert foreign dashboard bootstrap target is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_bootstrap_target.content |
+            b64decode == 'foreign bootstrap canary'
+          - not hermes_agent_molecule_foreign_bootstrap_marker.stat.exists
+
+    - name: Remove foreign dashboard bootstrap target fixture
+      ansible.builtin.file:
+        path: /root/hermes-foreign-bootstrap-target
+        state: absent
+
+    - name: Create marker-only dashboard bootstrap partial state
+      ansible.builtin.copy:
+        content: |
+          path: /root/hermes-foreign-bootstrap-target
+          sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        dest: /root/hermes-foreign-bootstrap-target.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject marker-only dashboard bootstrap partial state
+      block:
+        - name: Apply role with marker-only dashboard bootstrap state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: &dashboard_auth_fixture_vars
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-foreign-bootstrap-target
+
+        - name: Fail if marker-only dashboard bootstrap state was accepted
+          ansible.builtin.fail:
+            msg: Marker-only dashboard bootstrap state must be rejected.
+      rescue:
+        - name: Assert marker-only dashboard bootstrap state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a recognized Hermes dashboard bootstrap password file'
+
+    - name: Read marker-only dashboard bootstrap state after rejection
+      ansible.builtin.slurp:
+        src: /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_marker_only_bootstrap_state
+      changed_when: false
+
+    - name: Assert marker-only dashboard bootstrap state is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            'sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' in
+            (hermes_agent_molecule_marker_only_bootstrap_state.content | b64decode)
+
+    - name: Create malformed dashboard bootstrap partial state
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - path: /root/hermes-foreign-bootstrap-target
+          content: partial password canary
+        - path: /root/hermes-foreign-bootstrap-target.managed.yml
+          content: "path: [malformed\n"
+
+    - name: Reject malformed dashboard bootstrap managed state
+      block:
+        - name: Apply role with malformed dashboard bootstrap managed state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if malformed dashboard bootstrap state was accepted
+          ansible.builtin.fail:
+            msg: Malformed dashboard bootstrap state must be rejected.
+      rescue:
+        - name: Assert malformed dashboard bootstrap state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Load Hermes dashboard bootstrap password managed state'
+
+    - name: Read malformed dashboard bootstrap partial state after rejection
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_malformed_bootstrap_state
+      changed_when: false
+
+    - name: Inspect dashboard authentication commit point after partial-state refusal
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_partial_bootstrap_auth_state
+
+    - name: Assert malformed dashboard bootstrap partial state is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_malformed_bootstrap_state.results[0].content |
+            b64decode == 'partial password canary'
+          - >-
+            hermes_agent_molecule_malformed_bootstrap_state.results[1].content |
+            b64decode == 'path: [malformed\n'
+          - not hermes_agent_molecule_partial_bootstrap_auth_state.stat.exists
+
+    - name: Remove dashboard bootstrap partial-state fixtures for recovery
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+
+    - name: Initialize managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: *dashboard_auth_fixture_vars
+
+    - name: Inspect initialized dashboard bootstrap password target
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_initialized_bootstrap_target
+
+    - name: Rotate managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        <<: *dashboard_auth_fixture_vars
+        hermes_agent_dashboard_rotate_basic_auth: true
+
+    - name: Inspect rotated dashboard bootstrap password artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_rotated_bootstrap_artifacts
+
+    - name: Read rotated dashboard bootstrap password managed state
+      ansible.builtin.slurp:
+        src: /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_rotated_bootstrap_marker
+      changed_when: false
+
+    - name: Assert managed dashboard bootstrap rotation is recognized
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum !=
+            hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
+          - hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_rotated_bootstrap_artifacts.results[1].stat.mode == '0600'
+          - >-
+            (hermes_agent_molecule_rotated_bootstrap_marker.content |
+            b64decode | from_yaml).path == '/root/hermes-foreign-bootstrap-target'
+          - >-
+            (hermes_agent_molecule_rotated_bootstrap_marker.content |
+            b64decode | from_yaml).sha256 ==
+            hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
+
+    - name: Reset dashboard authentication fixture controls
+      ansible.builtin.set_fact:
+        hermes_agent_dashboard_manage_basic_auth: false
+        hermes_agent_dashboard_rotate_basic_auth: false
+
     - name: Reject privileged Hermes runtime identity during preflight
       block:
         - name: Preflight privileged Hermes runtime identity
@@ -639,6 +882,51 @@
           - hermes_agent_molecule_preflight_command_canaries.results[3].rc != 0
           - hermes_agent_molecule_preflight_command_canaries.results[4].rc != 0
           - hermes_agent_molecule_preflight_command_canaries.results[5].rc != 0
+
+    - name: Inspect shared temporary directory before benchmark-helper validation
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_benchmark_tmp_before
+
+    - name: Reject local-model benchmark helper beneath shared temporary storage
+      block:
+        - name: Validate shared temporary benchmark helper path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_model_benchmark_helper_path: /tmp/hermes-benchmark
+            hermes_agent_local_models: []
+
+        - name: Fail if shared temporary benchmark helper path was accepted
+          ansible.builtin.fail:
+            msg: Shared temporary benchmark helper paths must be rejected.
+      rescue:
+        - name: Assert shared temporary benchmark helper failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a dedicated local-model benchmark helper path'
+
+    - name: Inspect shared temporary directory after benchmark-helper validation
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_benchmark_tmp_after
+
+    - name: Assert rejected benchmark helper made no temporary-directory mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.mode ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.mode
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.pw_name ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.pw_name
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.gr_name ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.gr_name
 
     - name: Create foreign local-model storage fixture
       ansible.builtin.file:

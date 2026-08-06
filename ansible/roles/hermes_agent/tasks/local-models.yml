@@ -196,6 +196,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: not hermes_agent_local_model_benchmark_helper_parent.stat.exists
 
 - name: Install local-model benchmark helper
   ansible.builtin.template:
