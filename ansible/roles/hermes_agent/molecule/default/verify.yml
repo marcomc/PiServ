@@ -260,6 +260,40 @@
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
 
+    - name: Reject an unsafe Codex archive binary name
+      block:
+        - name: Validate unsafe Codex archive binary name
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_codex_archive_binary_name: ../codex
+
+        - name: Fail if unsafe Codex archive binary name was accepted
+          ansible.builtin.fail:
+            msg: Codex archive binary names must be safe relative basenames.
+      rescue:
+        - name: Assert unsafe Codex archive binary name failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Reject the normalized Codex archive binary name
+      block:
+        - name: Validate normalized Codex archive binary name
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_codex_archive_binary_name: codex
+
+        - name: Fail if normalized Codex archive binary name was accepted
+          ansible.builtin.fail:
+            msg: The archive source must not alias the normalized Codex binary.
+      rescue:
+        - name: Assert normalized Codex archive binary name failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
     - name: Reject duplicate local-model filenames
       block:
         - name: Validate duplicate local-model filenames
@@ -676,6 +710,49 @@
       loop:
         - /root/hermes-foreign-bootstrap-target
         - /root/hermes-foreign-bootstrap-target.managed.yml
+
+    - name: Create foreign dashboard authentication state fixture
+      ansible.builtin.copy:
+        content: foreign dashboard authentication state
+        dest: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject foreign dashboard authentication state before overwrite
+      block:
+        - name: Apply role with foreign dashboard authentication state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if foreign dashboard authentication state was accepted
+          ansible.builtin.fail:
+            msg: Foreign dashboard authentication state must not be normalized.
+      rescue:
+        - name: Assert foreign dashboard authentication state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a regular Hermes dashboard authentication state file'
+
+    - name: Read foreign dashboard authentication state after rejection
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_foreign_dashboard_auth_state
+
+    - name: Assert foreign dashboard authentication state is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_dashboard_auth_state.content |
+            b64decode == 'foreign dashboard authentication state'
+
+    - name: Remove foreign dashboard authentication state fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        state: absent
 
     - name: Initialize managed dashboard bootstrap password target
       ansible.builtin.include_role:
@@ -1386,6 +1463,7 @@
         hermes_agent_manage_dashboard: false
         hermes_agent_manage_backup: false
         hermes_agent_manage_inference_provenance: true
+        hermes_agent_inference_provenance_label: Fixture Codex provenance
 
     - name: Inspect managed inference provenance plugin files
       ansible.builtin.stat:
@@ -1409,6 +1487,41 @@
             hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.gr_name ==
             'root'
           - hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.mode == '0600'
+
+    - name: Exercise provenance response when audit persistence fails
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import importlib.util
+            import pathlib
+
+            path = pathlib.Path(
+                "/var/lib/hermes-agent/plugins/inference-provenance/__init__.py"
+            )
+            spec = importlib.util.spec_from_file_location("provenance_fixture", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            def fail_audit(_record):
+                raise OSError("fixture audit write failure")
+
+            module._append_audit = fail_audit
+            result = module.add_provenance("fixture response", "session", "model", "platform")
+            assert result.endswith("[Inference: Fixture Codex provenance, model]")
+      register: hermes_agent_molecule_provenance_audit_failure
+      changed_when: false
+
+    - name: Assert audit write failure remains visible with provenance response
+      ansible.builtin.assert:
+        that:
+          - >-
+            'Failed to append inference provenance audit record' in
+            hermes_agent_molecule_provenance_audit_failure.stderr
+          - >-
+            'fixture audit write failure' in
+            hermes_agent_molecule_provenance_audit_failure.stderr
 
     - name: Modify a role-managed inference provenance plugin file
       ansible.builtin.copy:

@@ -350,7 +350,13 @@
       - >-
         not hermes_agent_dashboard_basic_auth_state.stat.exists or
         (hermes_agent_dashboard_basic_auth_state.stat.isreg and
-        not hermes_agent_dashboard_basic_auth_state.stat.islnk)
+        not hermes_agent_dashboard_basic_auth_state.stat.islnk and
+        hermes_agent_dashboard_basic_auth_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_dashboard_basic_auth_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_dashboard_basic_auth_state.stat.mode == '0600')
+    fail_msg: >-
+      An existing dashboard authentication state file must already be a private,
+      role-owned regular file; foreign state is never normalized or overwritten.
   no_log: true
   when:
     - hermes_agent_runtime_user_available

@@ -114,6 +114,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_model_aliases` | `{}` | Named session model selectors with provider and model values. |
 | `hermes_agent_manage_inference_provenance` | `false` | Install and enable the managed response-provenance audit plugin. |
 | `hermes_agent_inference_provenance_plugin_name` | `inference-provenance` | Managed response-provenance plugin identifier. |
+| `hermes_agent_inference_provenance_label` | `Codex` | Deployment-specific response provenance label. |
 | `hermes_agent_inference_provenance_default_models` | `[]` | Models recorded as the configured default route. |
 | `hermes_agent_inference_provenance_fallback_models` | `[]` | Models recorded as fallback or operator-selected routes. |
 | `hermes_agent_manage_home_assistant_mcp` | `false` | Enable the official Home Assistant Assist MCP capability gateway. |

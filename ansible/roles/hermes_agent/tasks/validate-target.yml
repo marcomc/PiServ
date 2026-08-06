@@ -38,6 +38,13 @@
         not hermes_agent_dashboard_manage_basic_auth or
         hermes_agent_dashboard_basic_auth_session_ttl_seconds <= 86400
       - hermes_agent_inference_provenance_plugin_name is match('^[a-z][a-z0-9-]*$')
+      - hermes_agent_inference_provenance_label | length >= 1
+      - hermes_agent_inference_provenance_label | length <= 128
+      - hermes_agent_inference_provenance_label is not search('[\r\n]')
+      - >-
+        hermes_agent_codex_archive_binary_name is
+        match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - hermes_agent_codex_archive_binary_name != 'codex'
       - hermes_agent_provider == "openai-codex"
       - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
       - "'terminal' in hermes_agent_disabled_toolsets"

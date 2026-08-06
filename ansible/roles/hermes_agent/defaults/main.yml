@@ -35,6 +35,7 @@ hermes_agent_reasoning_overrides: {}
 hermes_agent_model_aliases: {}
 hermes_agent_manage_inference_provenance: false
 hermes_agent_inference_provenance_plugin_name: inference-provenance
+hermes_agent_inference_provenance_label: Codex
 hermes_agent_inference_provenance_default_models: []
 hermes_agent_inference_provenance_fallback_models: []
 hermes_agent_manage_home_assistant_mcp: false

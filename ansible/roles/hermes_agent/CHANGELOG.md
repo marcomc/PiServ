@@ -15,6 +15,8 @@ All notable changes to this role are documented here.
   bundle and revision marker.
 - Kept deployment-specific provenance plugin names and model-route
   classifications in the consuming playbook rather than role defaults.
+- Made the response provenance label deployment-configurable while retaining a
+  generic role default.
 - Kept local-model installation inert by default, gated enabled deployments on
   an active cgroup v2 memory controller, and validated bounded memory settings.
 

@@ -114,6 +114,10 @@ argument_specs:
         type: str
         default: inference-provenance
         description: Managed Hermes plugin identifier for response provenance.
+      hermes_agent_inference_provenance_label:
+        type: str
+        default: Codex
+        description: Deployment-specific provider label appended to responses.
       hermes_agent_inference_provenance_default_models:
         type: list
         elements: str
