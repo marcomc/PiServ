@@ -1,4 +1,31 @@
 ---
+- name: Inspect private Hermes runtime directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_home }}/workspace"
+  register: hermes_agent_runtime_directories
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_available
+
+- name: Require safe private Hermes runtime directories
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isdir and not item.stat.islnk)
+    fail_msg: >-
+      {{ item.item }} must be a directory rather than a symbolic link before
+      its ownership or permissions can be managed.
+  loop: "{{ hermes_agent_runtime_directories.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: hermes_agent_runtime_user_available
+
 - name: Create private Hermes runtime directories
   ansible.builtin.file:
     path: "{{ item }}"

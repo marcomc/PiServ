@@ -152,7 +152,7 @@ systemctl reset-failed "${service_name}" 2>/dev/null || true
 systemctl start "${service_name}"
 
 for _ in $(seq 1 120); do
-  if curl --fail --silent "${service_url}/health" >/dev/null 2>&1; then
+  if curl --fail --silent --max-time 5 "${service_url}/health" >/dev/null 2>&1; then
     break
   fi
   service_active_state="$(systemctl show "${service_name}" --property=ActiveState --value || true)"
@@ -164,8 +164,8 @@ for _ in $(seq 1 120); do
   sleep 5
 done
 
-curl --fail --silent --show-error "${service_url}/health" >/dev/null
-properties="$(curl --fail --silent --show-error "${service_url}/props")"
+curl --fail --silent --show-error --max-time 5 "${service_url}/health" >/dev/null
+properties="$(curl --fail --silent --show-error --max-time 5 "${service_url}/props")"
 model_control_group="$(systemctl show "${service_name}" --property=ControlGroup --value)"
 if [[ ! "${model_control_group}" =~ ^/system\.slice/hermes-local-model-[a-z0-9-]+\.service$ ]]; then
   printf 'Unexpected local model control group: %s\n' "${model_control_group}" >&2
