@@ -39,6 +39,37 @@
     - "{{ hermes_agent_home }}/workspace"
   when: hermes_agent_runtime_user_available
 
+- name: Inspect managed inference provenance plugin directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_home }}/plugins"
+    - "{{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}"
+    - "{{ hermes_agent_home }}/audit"
+  register: hermes_agent_inference_provenance_directories
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Require safe managed inference provenance plugin directories
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isdir and not item.stat.islnk)
+    fail_msg: >-
+      {{ item.item }} must be a directory rather than a symbolic link before
+      its ownership or permissions can be managed.
+  loop: "{{ hermes_agent_inference_provenance_directories.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
 - name: Create managed inference provenance plugin directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -112,6 +143,28 @@
     - hermes_agent_manage_home_assistant_mcp
     - not hermes_agent_home_assistant_mcp_token_parent.stat.exists
 
+- name: Inspect Home Assistant MCP token file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+    follow: false
+  register: hermes_agent_home_assistant_mcp_token_file
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+
+- name: Require a regular Home Assistant MCP token file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_home_assistant_mcp_token_file.stat.exists or
+        (hermes_agent_home_assistant_mcp_token_file.stat.isreg and
+        not hermes_agent_home_assistant_mcp_token_file.stat.islnk)
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+
 - name: Create private Home Assistant MCP token file
   ansible.builtin.file:
     path: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
@@ -128,8 +181,21 @@
 - name: Read Hermes dashboard authentication state
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    follow: false
   register: hermes_agent_dashboard_basic_auth_state
   changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a regular Hermes dashboard authentication state file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_basic_auth_state.stat.exists or
+        (hermes_agent_dashboard_basic_auth_state.stat.isreg and
+        not hermes_agent_dashboard_basic_auth_state.stat.islnk)
   no_log: true
   when:
     - hermes_agent_runtime_user_available
@@ -179,6 +245,30 @@
   register: hermes_agent_dashboard_bootstrap_password_parent
   changed_when: false
   check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Inspect Hermes dashboard bootstrap password file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    follow: false
+  register: hermes_agent_dashboard_bootstrap_password_file
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a regular Hermes dashboard bootstrap password file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+        (hermes_agent_dashboard_bootstrap_password_file.stat.isreg and
+        not hermes_agent_dashboard_bootstrap_password_file.stat.islnk)
+  no_log: true
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_dashboard_manage_basic_auth
@@ -297,8 +387,7 @@
         b64decode | from_yaml).password_hash,
         'secret': (hermes_agent_dashboard_basic_auth_state_contents.content |
         b64decode | from_yaml).secret,
-        'session_ttl_seconds': (hermes_agent_dashboard_basic_auth_state_contents.content |
-        b64decode | from_yaml).session_ttl_seconds
+        'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
       } }}
   no_log: true
   when:
