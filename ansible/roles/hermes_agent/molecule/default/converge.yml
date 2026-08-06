@@ -35,6 +35,6 @@
         hermes_agent_codex_archive_checksum: >-
           sha256:{{ hermes_agent_fixture_codex.stat.checksum }}
         hermes_agent_manage_backup: true
-        hermes_agent_manage_dashboard_chat: false
+        hermes_agent_manage_dashboard_chat: true
         hermes_agent_backup_group: root
         hermes_agent_backup_dir: /var/backups/hermes-agent

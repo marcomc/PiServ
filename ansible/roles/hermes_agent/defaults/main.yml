@@ -33,7 +33,9 @@ hermes_agent_reasoning_effort: medium
 hermes_agent_reasoning_overrides: {}
 hermes_agent_model_aliases: {}
 hermes_agent_manage_inference_provenance: false
-hermes_agent_inference_provenance_plugin_name: piserv-inference-provenance
+hermes_agent_inference_provenance_plugin_name: inference-provenance
+hermes_agent_inference_provenance_default_models: []
+hermes_agent_inference_provenance_fallback_models: []
 hermes_agent_manage_home_assistant_mcp: false
 hermes_agent_home_assistant_mcp_name: home-assistant-assist
 hermes_agent_home_assistant_mcp_url: ""
@@ -81,6 +83,8 @@ hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
 hermes_agent_manage_dashboard: true
 hermes_agent_manage_dashboard_chat: false
 hermes_agent_dashboard_tui_runtime_dir: /usr/local/lib/hermes-agent-runtime/tui
+hermes_agent_dashboard_tui_runtime_revision_file: >-
+  {{ hermes_agent_dashboard_tui_runtime_dir }}/.hermes-revision
 hermes_agent_dashboard_manage_basic_auth: false
 hermes_agent_dashboard_basic_auth_username: ""
 hermes_agent_dashboard_basic_auth_state_file: >-

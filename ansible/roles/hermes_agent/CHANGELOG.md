@@ -10,5 +10,10 @@ All notable changes to this role are documented here.
   Molecule coverage, a release runbook, and an extraction-ready CI workflow.
 - Kept the role Debian ARM64, loopback-only, Codex-backed, and restricted to
   the memory and skills toolsets by default.
+- Rebuild the managed dashboard terminal UI when its recorded Hermes revision
+  differs from the pinned source revision, with Molecule coverage for the
+  bundle and revision marker.
+- Kept deployment-specific provenance plugin names and model-route
+  classifications in the consuming playbook rather than role defaults.
 
 [Unreleased]: https://github.com/marcomc/ansible-hermes-agent/compare/0.1.0...HEAD

@@ -1,4 +1,4 @@
-"""Managed response provenance for the locked-down PiServ Hermes profile."""
+"""Managed response provenance for a locked-down Hermes profile."""
 
 import datetime as dt
 import json
@@ -8,9 +8,9 @@ import uuid
 
 
 def _route_reason(model: str) -> str:
-    if model == "gpt-5.6-luna":
+    if model in {{ hermes_agent_inference_provenance_default_models | to_json }}:
         return "configured_default"
-    if model in {"gpt-5.3-codex-spark", "gpt-5.6-terra", "gpt-5.6-sol"}:
+    if model in {{ hermes_agent_inference_provenance_fallback_models | to_json }}:
         return "fallback_or_operator_selection"
     return "runtime_selection"
 

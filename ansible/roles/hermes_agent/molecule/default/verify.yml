@@ -58,6 +58,25 @@
       changed_when: false
       register: hermes_agent_codex_version
 
+    - name: Read fixture Hermes revision
+      ansible.builtin.slurp:
+        src: /usr/local/src/hermes-agent-fixture/revision
+      changed_when: false
+      register: hermes_agent_fixture_revision
+
+    - name: Read Hermes dashboard terminal UI runtime revision
+      ansible.builtin.command:
+        argv:
+          - cat
+          - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
+      changed_when: false
+      register: hermes_agent_dashboard_tui_revision
+
+    - name: Inspect Hermes dashboard terminal UI runtime bundle
+      ansible.builtin.stat:
+        path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+      register: hermes_agent_dashboard_tui_bundle
+
     - name: Assert installed role behavior
       ansible.builtin.assert:
         that:
@@ -66,3 +85,9 @@
           - hermes_agent_backup_archives.matched | int == 1
           - hermes_agent_version.stdout | trim == 'Hermes Agent v0.20.0'
           - hermes_agent_codex_version.stdout | trim == 'codex-cli 0.145.0'
+          - hermes_agent_dashboard_tui_revision.stdout | trim == (hermes_agent_fixture_revision.content | b64decode | trim)
+          - hermes_agent_dashboard_tui_bundle.stat.exists
+          - hermes_agent_dashboard_tui_bundle.stat.isreg
+          - hermes_agent_dashboard_tui_bundle.stat.pw_name == 'root'
+          - hermes_agent_dashboard_tui_bundle.stat.gr_name == 'root'
+          - hermes_agent_dashboard_tui_bundle.stat.mode == '0644'

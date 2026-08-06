@@ -108,8 +108,18 @@ argument_specs:
         description: Install and enable the managed response-provenance audit plugin.
       hermes_agent_inference_provenance_plugin_name:
         type: str
-        default: piserv-inference-provenance
+        default: inference-provenance
         description: Managed Hermes plugin identifier for response provenance.
+      hermes_agent_inference_provenance_default_models:
+        type: list
+        elements: str
+        default: []
+        description: Models recorded as the configured default route by the provenance plugin.
+      hermes_agent_inference_provenance_fallback_models:
+        type: list
+        elements: str
+        default: []
+        description: Models recorded as fallback or operator-selected routes by the provenance plugin.
       hermes_agent_manage_home_assistant_mcp:
         type: bool
         default: false
@@ -172,6 +182,9 @@ argument_specs:
         type: path
         default: /usr/local/lib/hermes-agent-runtime/tui
         description: Root-owned prebuilt terminal UI bundle directory.
+      hermes_agent_dashboard_tui_runtime_revision_file:
+        type: path
+        description: Root-owned marker recording the Hermes revision used to build the terminal UI bundle.
       hermes_agent_dashboard_manage_basic_auth:
         type: bool
         default: false

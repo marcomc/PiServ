@@ -64,6 +64,8 @@ When `hermes_agent_manage_dashboard_chat` is enabled, the role builds the
 terminal UI into a separate root-owned runtime directory and configures
 `HERMES_TUI_DIR` for the dashboard service. The unprivileged service therefore
 executes a prebuilt bundle instead of attempting an `npm install` at chat time.
+A root-owned revision marker rebuilds that bundle whenever the pinned Hermes
+revision changes.
 
 ## Installation
 
@@ -110,7 +112,9 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_reasoning_overrides` | `{}` | Per-model reasoning-effort overrides. |
 | `hermes_agent_model_aliases` | `{}` | Named session model selectors with provider and model values. |
 | `hermes_agent_manage_inference_provenance` | `false` | Install and enable the managed response-provenance audit plugin. |
-| `hermes_agent_inference_provenance_plugin_name` | `piserv-inference-provenance` | Managed response-provenance plugin identifier. |
+| `hermes_agent_inference_provenance_plugin_name` | `inference-provenance` | Managed response-provenance plugin identifier. |
+| `hermes_agent_inference_provenance_default_models` | `[]` | Models recorded as the configured default route. |
+| `hermes_agent_inference_provenance_fallback_models` | `[]` | Models recorded as fallback or operator-selected routes. |
 | `hermes_agent_manage_home_assistant_mcp` | `false` | Enable the official Home Assistant Assist MCP capability gateway. |
 | `hermes_agent_home_assistant_mcp_name` | `home-assistant-assist` | MCP server identifier. |
 | `hermes_agent_home_assistant_mcp_url` | empty | Full Home Assistant MCP URL, ending in `/api/mcp`. |
@@ -126,6 +130,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
+| `hermes_agent_dashboard_tui_runtime_revision_file` | runtime `.hermes-revision` file | Root-owned revision marker for the terminal UI bundle. |
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |

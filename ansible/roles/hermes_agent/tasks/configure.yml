@@ -269,6 +269,31 @@
   register: hermes_agent_dashboard_tui_dist
   when: hermes_agent_manage_dashboard_chat
 
+- name: Inspect Hermes dashboard terminal UI runtime revision
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_runtime_revision
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Read Hermes dashboard terminal UI runtime revision
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_runtime_revision_contents
+  changed_when: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_runtime_revision.stat.exists
+
+- name: Detect stale Hermes dashboard terminal UI runtime
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_runtime_stale: >-
+      {{
+        not hermes_agent_dashboard_tui_runtime_revision.stat.exists or
+        (hermes_agent_dashboard_tui_runtime_revision_contents.content | b64decode | trim) !=
+        hermes_agent_repo_version
+      }}
+  when: hermes_agent_manage_dashboard_chat
+
 - name: Create Hermes dashboard terminal UI runtime directory
   ansible.builtin.file:
     path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
@@ -298,7 +323,8 @@
     - not ansible_check_mode
     - >-
       hermes_agent_install is changed or
-      not hermes_agent_dashboard_tui_dist.stat.exists
+      not hermes_agent_dashboard_tui_dist.stat.exists or
+      hermes_agent_dashboard_tui_runtime_stale
 
 - name: Link Hermes terminal UI dependencies into its managed runtime
   ansible.builtin.file:
@@ -326,8 +352,20 @@
     - not ansible_check_mode
     - >-
       hermes_agent_install is changed or
-      not hermes_agent_dashboard_tui_dist.stat.exists
+      not hermes_agent_dashboard_tui_dist.stat.exists or
+      hermes_agent_dashboard_tui_runtime_stale
   notify: Restart Hermes Agent dashboard
+
+- name: Record Hermes dashboard terminal UI runtime revision
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_repo_version }}\n"
+    dest: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
 
 - name: Refresh Hermes dashboard terminal UI bundle state
   ansible.builtin.stat:

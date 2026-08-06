@@ -32,14 +32,23 @@ done
 rm -rf "${install_dir}"
 git clone /usr/local/src/hermes-agent-fixture/upstream "${install_dir}"
 git -C "${install_dir}" checkout --detach "${commit}"
-mkdir -p "${hermes_home}/node/bin"
+mkdir -p "${hermes_home}/node/bin" "${install_dir}/node_modules" \
+  "${install_dir}/venv/bin"
+ln -sf /usr/bin/python3 "${install_dir}/venv/bin/python"
+mkdir -p "${install_dir}/ui-tui"
+printf '%s\n' '{"name":"hermes-tui-fixture"}' > "${install_dir}/ui-tui/package.json"
 
 cat > "${hermes_home}/node/bin/npm" <<'EOF'
 #!/bin/sh
 set -eu
-mkdir -p "$PWD/hermes_cli/web_dist"
-printf '%s\n' '<!doctype html><title>Hermes fixture</title>' \
-  > "$PWD/hermes_cli/web_dist/index.html"
+if [ -f "$PWD/package.json" ]; then
+  mkdir -p "$PWD/dist"
+  printf '%s\n' 'export default {};' > "$PWD/dist/entry.js"
+else
+  mkdir -p "$PWD/hermes_cli/web_dist"
+  printf '%s\n' '<!doctype html><title>Hermes fixture</title>' \
+    > "$PWD/hermes_cli/web_dist/index.html"
+fi
 EOF
 chmod 0755 "${hermes_home}/node/bin/npm"
 
