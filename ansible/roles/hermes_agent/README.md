@@ -120,8 +120,8 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_home_assistant_mcp_url` | empty | Full Home Assistant MCP URL, ending in `/api/mcp`. |
 | `hermes_agent_home_assistant_mcp_token_env_file` | `{{ hermes_agent_home }}/home-assistant-mcp.env` | Private, operator-managed `KEY=value` token file. |
 | `hermes_agent_home_assistant_mcp_token_env_var` | `HASS_MCP_TOKEN` | Token variable name referenced from the managed config. |
-| `hermes_agent_home_assistant_mcp_timeout` | `30` | Per-request MCP timeout in seconds. |
-| `hermes_agent_home_assistant_mcp_connect_timeout` | `15` | Initial MCP connection timeout in seconds. |
+| `hermes_agent_home_assistant_mcp_timeout` | `30` | Per-request MCP timeout in seconds (`1`-`300`). |
+| `hermes_agent_home_assistant_mcp_connect_timeout` | `15` | Initial MCP connection timeout in seconds (`1`-`60`, no greater than the request timeout). |
 | `hermes_agent_enabled_toolsets` | `memory`, `skills` | Explicit CLI allowlist. |
 | `hermes_agent_disabled_toolsets` | role list | Explicitly disabled bundled toolsets. |
 | `hermes_agent_dashboard_host` | `127.0.0.1` | Dashboard bind address. |
@@ -131,6 +131,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
 | `hermes_agent_dashboard_tui_runtime_revision_file` | runtime `.hermes-revision` file | Root-owned revision marker for the terminal UI bundle. |
+| `hermes_agent_dashboard_tui_runtime_manifest_file` | runtime `.hermes-managed-state.yml` file | Root-owned content fingerprint for the terminal UI adaptation. |
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |

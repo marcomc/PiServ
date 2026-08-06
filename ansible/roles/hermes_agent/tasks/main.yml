@@ -2,6 +2,10 @@
 - name: Validate Hermes Agent target and policy
   ansible.builtin.import_tasks: validate-target.yml
 
+- name: Validate Hermes Agent local-model storage
+  ansible.builtin.import_tasks: validate-local-model-storage.yml
+  when: hermes_agent_manage_local_models
+
 - name: Install Hermes Agent system packages
   ansible.builtin.apt:
     name: "{{ hermes_agent_packages }}"
@@ -11,10 +15,6 @@
 
 - name: Configure Hermes Agent runtime identity
   ansible.builtin.import_tasks: runtime-user.yml
-
-- name: Validate Hermes Agent local-model storage
-  ansible.builtin.import_tasks: validate-local-model-storage.yml
-  when: hermes_agent_manage_local_models
 
 - name: Install pinned Hermes Agent runtime
   ansible.builtin.import_tasks: install-hermes.yml

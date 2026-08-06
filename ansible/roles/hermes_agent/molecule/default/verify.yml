@@ -119,6 +119,218 @@
       ansible.builtin.include_vars:
         file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
 
+    - name: Reject an excessive Home Assistant MCP request timeout
+      block:
+        - name: Validate an excessive Home Assistant MCP request timeout
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_timeout: 301
+            hermes_agent_home_assistant_mcp_connect_timeout: 15
+
+        - name: Fail if the excessive Home Assistant MCP request timeout was accepted
+          ansible.builtin.fail:
+            msg: The Home Assistant MCP request timeout must not exceed 300 seconds.
+      rescue:
+        - name: Assert excessive request timeout failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive Home Assistant MCP request timeout
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_request_timeout_rejected: true
+
+    - name: Reject an excessive Home Assistant MCP connection timeout
+      block:
+        - name: Validate an excessive Home Assistant MCP connection timeout
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_timeout: 60
+            hermes_agent_home_assistant_mcp_connect_timeout: 61
+
+        - name: Fail if the excessive Home Assistant MCP connection timeout was accepted
+          ansible.builtin.fail:
+            msg: The Home Assistant MCP connection timeout must not exceed 60 seconds.
+      rescue:
+        - name: Assert excessive connection timeout failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive Home Assistant MCP connection timeout
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_connection_timeout_rejected: true
+
+    - name: Assert Home Assistant MCP timeout limits are enforced
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_request_timeout_rejected | default(false)
+          - hermes_agent_molecule_connection_timeout_rejected | default(false)
+
+    - name: Create foreign local-model storage fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-local-storage-foreign
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Read unrelated package state before invalid local-model storage
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${db:Status-Status}
+          - sl
+      register: hermes_agent_molecule_local_storage_package_before
+      changed_when: false
+      failed_when: false
+
+    - name: Reject foreign local-model storage before installation
+      block:
+        - name: Apply role with foreign local-model storage
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-local-storage-fixture
+            hermes_agent_group: hermes-local-storage-fixture
+            hermes_agent_home: /var/lib/hermes-local-storage-fixture
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_local_models: true
+            hermes_agent_packages:
+              - sl
+            hermes_agent_local_models_dir: /var/lib/hermes-local-storage-foreign
+            hermes_agent_local_models_results_dir: >-
+              /var/lib/hermes-local-storage-foreign/results
+            hermes_agent_local_models: []
+
+        - name: Fail if foreign local-model storage was accepted
+          ansible.builtin.fail:
+            msg: Foreign local-model storage must fail before installation begins.
+      rescue:
+        - name: Assert foreign local-model storage failed preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require role-owned local-model directories when they already exist'
+
+        - name: Record rejection of foreign local-model storage
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_local_storage_rejected: true
+
+    - name: Inspect foreign local-model storage after preflight rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-local-storage-foreign
+      register: hermes_agent_molecule_local_storage_after
+
+    - name: Read unrelated package state after invalid local-model storage
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${db:Status-Status}
+          - sl
+      register: hermes_agent_molecule_local_storage_package_after
+      changed_when: false
+      failed_when: false
+
+    - name: Read invalid local-model runtime identity state
+      ansible.builtin.command:
+        argv:
+          - getent
+          - passwd
+          - hermes-local-storage-fixture
+      register: hermes_agent_molecule_local_storage_user_after
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid local-model storage made no installation mutation
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_local_storage_rejected | default(false)
+          - hermes_agent_molecule_local_storage_after.stat.pw_name == 'root'
+          - hermes_agent_molecule_local_storage_after.stat.gr_name == 'root'
+          - hermes_agent_molecule_local_storage_after.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_local_storage_package_after.rc ==
+            hermes_agent_molecule_local_storage_package_before.rc
+          - >-
+            hermes_agent_molecule_local_storage_package_after.stdout ==
+            hermes_agent_molecule_local_storage_package_before.stdout
+          - hermes_agent_molecule_local_storage_user_after.rc != 0
+
+    - name: Create foreign backup directory fixture
+      ansible.builtin.file:
+        path: /var/backups/hermes-agent-foreign
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign Hermes Agent backup directory before unit creation
+      block:
+        - name: Apply role with foreign Hermes Agent backup directory
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent-foreign
+            hermes_agent_backup_service_name: hermes-agent-foreign-backup.service
+            hermes_agent_backup_timer_name: hermes-agent-foreign-backup.timer
+
+        - name: Fail if foreign Hermes Agent backup directory was accepted
+          ansible.builtin.fail:
+            msg: Foreign Hermes Agent backup storage must fail before unit creation.
+      rescue:
+        - name: Assert foreign Hermes Agent backup directory failed preflight
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require a dedicated Hermes Agent backup directory'
+
+        - name: Record rejection of foreign Hermes Agent backup directory
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_backup_directory_rejected: true
+
+    - name: Inspect foreign Hermes Agent backup artifacts after rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/backups/hermes-agent-foreign
+        - /etc/systemd/system/hermes-agent-foreign-backup.service
+        - /etc/systemd/system/hermes-agent-foreign-backup.timer
+      register: hermes_agent_molecule_foreign_backup_artifacts
+
+    - name: Assert foreign Hermes Agent backup is unchanged without units
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_backup_directory_rejected | default(false)
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.mode == '0755'
+          - not hermes_agent_molecule_foreign_backup_artifacts.results[1].stat.exists
+          - not hermes_agent_molecule_foreign_backup_artifacts.results[2].stat.exists
+
     - name: Create local-model capacity fixture directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -194,12 +406,15 @@
         hermes_agent_manage_dashboard_chat: true
         hermes_agent_manage_home_assistant_mcp: true
         hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
 
     - name: Inspect enabled Home Assistant MCP artifacts
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /var/lib/hermes-agent/home-assistant-mcp.env
+        - /var/lib/hermes-agent/mcp-token-fixture
+        - /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
         - /var/lib/hermes-agent/config.yaml
       register: hermes_agent_molecule_mcp_artifacts
 
@@ -213,15 +428,234 @@
       ansible.builtin.assert:
         that:
           - hermes_agent_molecule_mcp_artifacts.results[0].stat.exists
-          - hermes_agent_molecule_mcp_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.mode == '0700'
           - hermes_agent_molecule_mcp_artifacts.results[0].stat.pw_name == 'hermes-agent'
           - hermes_agent_molecule_mcp_artifacts.results[0].stat.gr_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.exists
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.mode == '0600'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.gr_name == 'hermes-agent'
           - >-
             'Authorization: "Bearer ${HASS_MCP_TOKEN}"' in
             (hermes_agent_molecule_mcp_config.content | b64decode)
           - >-
             'http://home-assistant.example.test/api/mcp' in
             (hermes_agent_molecule_mcp_config.content | b64decode)
+
+    - name: Create existing system Home Assistant MCP token parent
+      ansible.builtin.file:
+        path: /var/lib/hermes-mcp-system-parent
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure Home Assistant MCP under an existing system parent
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-mcp-system-parent/home-assistant-mcp.env
+
+    - name: Inspect existing system Home Assistant MCP token parent
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-mcp-system-parent
+        - /var/lib/hermes-mcp-system-parent/home-assistant-mcp.env
+      register: hermes_agent_molecule_existing_mcp_parent_artifacts
+
+    - name: Assert existing system Home Assistant MCP token parent is unchanged
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.pw_name == 'root'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.gr_name == 'root'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.mode == '0755'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[1].stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[1].stat.gr_name == 'hermes-agent'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[1].stat.mode == '0600'
+
+    - name: Create Home Assistant MCP token-parent symlink fixture
+      ansible.builtin.file:
+        src: /var/lib/hermes-mcp-system-parent
+        dest: /var/lib/hermes-mcp-token-parent-link
+        state: link
+
+    - name: Reject Home Assistant MCP token-parent symlink
+      block:
+        - name: Apply role with Home Assistant MCP token-parent symlink
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-mcp-token-parent-link/home-assistant-mcp.env
+
+        - name: Fail if Home Assistant MCP token-parent symlink was accepted
+          ansible.builtin.fail:
+            msg: Home Assistant MCP token-parent symlinks must be rejected.
+      rescue:
+        - name: Assert Home Assistant MCP token-parent symlink failed preflight
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require a safe Home Assistant MCP token parent'
+
+        - name: Record rejection of Home Assistant MCP token-parent symlink
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_mcp_token_parent_rejected: true
+
+    - name: Inspect Home Assistant MCP token-parent symlink after rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-mcp-token-parent-link
+        follow: false
+      register: hermes_agent_molecule_mcp_token_parent_link
+
+    - name: Assert Home Assistant MCP token-parent symlink is untouched
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_mcp_token_parent_rejected | default(false)
+          - hermes_agent_molecule_mcp_token_parent_link.stat.islnk
+          - >-
+            hermes_agent_molecule_mcp_token_parent_link.stat.lnk_source ==
+            '/var/lib/hermes-mcp-system-parent'
+
+    - name: Corrupt managed Hermes dashboard terminal UI state
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - path: /usr/local/lib/hermes-agent-runtime/tui/package.json
+          content: '{"name":"corrupt-tui-fixture"}'
+        - path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+          content: 'export default { corrupt: true };'
+        - path: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+          content: 'not: [valid'
+
+    - name: Repair managed Hermes dashboard terminal UI state
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+    - name: Read repaired Hermes dashboard terminal UI state
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/package.json
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+      register: hermes_agent_molecule_repaired_tui_state
+      changed_when: false
+
+    - name: Assert managed Hermes dashboard terminal UI state is repaired
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_repaired_tui_state.results[0].content | b64decode | trim) ==
+            '{"name":"hermes-tui-fixture"}'
+          - >-
+            (hermes_agent_molecule_repaired_tui_state.results[1].content | b64decode | trim) ==
+            'export default {};'
+          - >-
+            'revision: ' ~ (hermes_agent_molecule_fixture_revision.content | b64decode | trim) in
+            (hermes_agent_molecule_repaired_tui_state.results[2].content | b64decode)
+
+    - name: Disable dashboard chat while the dashboard remains managed
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard: true
+        hermes_agent_manage_dashboard_chat: false
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+    - name: Inspect dashboard after dashboard chat cleanup
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui
+        - /etc/systemd/system/hermes-agent-dashboard.service
+      register: hermes_agent_molecule_dashboard_chat_cleanup
+
+    - name: Read dashboard unit after dashboard chat cleanup
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-agent-dashboard.service
+      register: hermes_agent_molecule_dashboard_without_chat
+      changed_when: false
+
+    - name: Assert dashboard chat cleanup preserves the dashboard service
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_dashboard_chat_cleanup.results[0].stat.exists
+          - hermes_agent_molecule_dashboard_chat_cleanup.results[1].stat.exists
+          - >-
+            'HERMES_TUI_DIR' not in
+            (hermes_agent_molecule_dashboard_without_chat.content | b64decode)
 
     - name: Disable dashboard and backup services in the fixture
       ansible.builtin.include_role:
@@ -239,6 +673,7 @@
           sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
         hermes_agent_manage_dashboard: false
         hermes_agent_manage_backup: false
+        hermes_agent_manage_dashboard_chat: false
 
     - name: Inspect disabled Hermes Agent units
       ansible.builtin.stat:
@@ -247,6 +682,7 @@
         - /etc/systemd/system/hermes-agent-dashboard.service
         - /etc/systemd/system/hermes-agent-backup.service
         - /etc/systemd/system/hermes-agent-backup.timer
+        - /usr/local/lib/hermes-agent-runtime/tui
       register: hermes_agent_molecule_disabled_units
 
     - name: Read disabled Hermes Agent dashboard state
@@ -273,3 +709,74 @@
             selectattr('stat.exists') | list | length == 0
           - hermes_agent_molecule_disabled_dashboard_state.rc != 0
           - "'hermes-agent' not in ansible_facts.getent_group.root[2]"
+
+    - name: Create foreign Hermes dashboard terminal UI runtime directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/foreign-tui
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create foreign Hermes dashboard terminal UI runtime fixture
+      ansible.builtin.copy:
+        content: foreign
+        dest: /usr/local/lib/hermes-agent-runtime/foreign-tui/unmanaged.txt
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Refuse removal of foreign Hermes dashboard terminal UI runtime
+      block:
+        - name: Apply role with foreign Hermes dashboard terminal UI runtime
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: false
+            hermes_agent_manage_backup: false
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui/.hermes-revision
+            hermes_agent_dashboard_tui_runtime_manifest_file: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui/.hermes-managed-state.yml
+
+        - name: Fail if foreign Hermes dashboard terminal UI runtime was accepted
+          ansible.builtin.fail:
+            msg: Foreign Hermes dashboard terminal UI runtime must not be removed.
+      rescue:
+        - name: Assert foreign Hermes dashboard terminal UI runtime was refused
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a recognized disabled Hermes dashboard terminal UI runtime'
+
+        - name: Record refusal of foreign Hermes dashboard terminal UI runtime
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_foreign_tui_rejected: true
+
+    - name: Inspect foreign Hermes dashboard terminal UI runtime after refusal
+      ansible.builtin.stat:
+        path: /usr/local/lib/hermes-agent-runtime/foreign-tui/unmanaged.txt
+      register: hermes_agent_molecule_foreign_tui_artifact
+
+    - name: Assert foreign Hermes dashboard terminal UI runtime is untouched
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_tui_rejected | default(false)
+          - hermes_agent_molecule_foreign_tui_artifact.stat.exists
+          - hermes_agent_molecule_foreign_tui_artifact.stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_tui_artifact.stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_tui_artifact.stat.mode == '0644'

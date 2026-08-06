@@ -85,6 +85,8 @@ hermes_agent_manage_dashboard_chat: false
 hermes_agent_dashboard_tui_runtime_dir: /usr/local/lib/hermes-agent-runtime/tui
 hermes_agent_dashboard_tui_runtime_revision_file: >-
   {{ hermes_agent_dashboard_tui_runtime_dir }}/.hermes-revision
+hermes_agent_dashboard_tui_runtime_manifest_file: >-
+  {{ hermes_agent_dashboard_tui_runtime_dir }}/.hermes-managed-state.yml
 hermes_agent_dashboard_manage_basic_auth: false
 hermes_agent_dashboard_basic_auth_username: ""
 hermes_agent_dashboard_basic_auth_state_file: >-

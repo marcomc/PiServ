@@ -7,6 +7,14 @@
       - hermes_agent_dashboard_host in ["127.0.0.1", "0.0.0.0"]
       - hermes_agent_dashboard_tui_runtime_dir is match('^/')
       - hermes_agent_dashboard_tui_runtime_revision_file is match('^/')
+      - hermes_agent_dashboard_tui_runtime_manifest_file is match('^/')
+      - hermes_agent_dashboard_tui_runtime_dir not in ['/', '/tmp', '/var', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - >-
+        hermes_agent_dashboard_tui_runtime_revision_file.startswith(
+        hermes_agent_dashboard_tui_runtime_dir ~ '/')
+      - >-
+        hermes_agent_dashboard_tui_runtime_manifest_file.startswith(
+        hermes_agent_dashboard_tui_runtime_dir ~ '/')
       - >-
         hermes_agent_dashboard_host == "127.0.0.1" or
         hermes_agent_dashboard_manage_basic_auth | bool
@@ -61,7 +69,13 @@
         hermes_agent_home_assistant_mcp_timeout > 0
       - >-
         not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_timeout <= 300
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
         hermes_agent_home_assistant_mcp_connect_timeout > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout <= 60
       - >-
         not hermes_agent_manage_home_assistant_mcp or
         hermes_agent_home_assistant_mcp_connect_timeout <=

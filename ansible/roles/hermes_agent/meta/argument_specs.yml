@@ -185,6 +185,9 @@ argument_specs:
       hermes_agent_dashboard_tui_runtime_revision_file:
         type: path
         description: Root-owned marker recording the Hermes revision used to build the terminal UI bundle.
+      hermes_agent_dashboard_tui_runtime_manifest_file:
+        type: path
+        description: Root-owned content fingerprint for the managed terminal UI runtime.
       hermes_agent_dashboard_manage_basic_auth:
         type: bool
         default: false

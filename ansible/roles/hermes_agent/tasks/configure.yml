@@ -51,6 +51,40 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_inference_provenance
 
+- name: Inspect Home Assistant MCP token parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file | dirname }}"
+    follow: false
+  register: hermes_agent_home_assistant_mcp_token_parent
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+
+- name: Require a safe Home Assistant MCP token parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_home_assistant_mcp_token_parent.stat.exists or
+        (hermes_agent_home_assistant_mcp_token_parent.stat.isdir and
+        not hermes_agent_home_assistant_mcp_token_parent.stat.islnk)
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+
+- name: Create missing private Home Assistant MCP token parent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file | dirname }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_home_assistant_mcp
+    - not hermes_agent_home_assistant_mcp_token_parent.stat.exists
+
 - name: Create private Home Assistant MCP token file
   ansible.builtin.file:
     path: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
@@ -266,6 +300,7 @@
 - name: Inspect built Hermes dashboard terminal UI bundle
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    checksum_algorithm: sha256
   register: hermes_agent_dashboard_tui_dist
   when: hermes_agent_manage_dashboard_chat
 
@@ -284,15 +319,86 @@
     - hermes_agent_manage_dashboard_chat
     - hermes_agent_dashboard_tui_runtime_revision.stat.exists
 
+- name: Inspect Hermes dashboard terminal UI managed state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_manifest
+  changed_when: false
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Read Hermes dashboard terminal UI managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_manifest_contents
+  changed_when: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_manifest.stat.exists
+
+- name: Calculate desired Hermes dashboard terminal UI source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_install_dir }}/ui-tui"
+  register: hermes_agent_dashboard_tui_source_fingerprint
+  changed_when: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+    - hermes_agent_checkout.stat.exists
+
+- name: Calculate managed Hermes dashboard terminal UI source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_runtime_source_fingerprint
+  changed_when: false
+  failed_when: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
 - name: Detect stale Hermes dashboard terminal UI runtime
   ansible.builtin.set_fact:
     hermes_agent_dashboard_tui_runtime_stale: >-
       {{
         not hermes_agent_dashboard_tui_runtime_revision.stat.exists or
+        not hermes_agent_dashboard_tui_manifest.stat.exists or
+        not hermes_agent_dashboard_tui_dist.stat.exists or
+        hermes_agent_dashboard_tui_source_fingerprint.rc != 0 or
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.rc != 0 or
+        hermes_agent_dashboard_tui_source_fingerprint.stdout | trim !=
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.stdout | trim or
+        ('revision: ' ~ hermes_agent_repo_version) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
+        ('entry_sha256: ' ~ hermes_agent_dashboard_tui_dist.stat.checksum) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
+        ('source_sha256: ' ~
+        (hermes_agent_dashboard_tui_source_fingerprint.stdout | trim)) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
         (hermes_agent_dashboard_tui_runtime_revision_contents.content | b64decode | trim) !=
         hermes_agent_repo_version
       }}
-  when: hermes_agent_manage_dashboard_chat
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
 
 - name: Create Hermes dashboard terminal UI runtime directory
   ansible.builtin.file:
@@ -382,6 +488,7 @@
 - name: Refresh Hermes dashboard terminal UI bundle state
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    checksum_algorithm: sha256
   register: hermes_agent_dashboard_tui_dist
   when: hermes_agent_manage_dashboard_chat
 
@@ -394,6 +501,22 @@
   when:
     - hermes_agent_manage_dashboard_chat
     - hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Record Hermes dashboard terminal UI managed state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'revision': hermes_agent_repo_version,
+        'source_sha256': hermes_agent_dashboard_tui_source_fingerprint.stdout | trim,
+        'entry_sha256': hermes_agent_dashboard_tui_dist.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
 
 - name: Refresh restricted Hermes dashboard terminal UI bundle state
   ansible.builtin.stat:
@@ -411,6 +534,139 @@
       - hermes_agent_dashboard_tui_dist.stat.mode == '0644'
   when:
     - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
+- name: Inspect disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_disabled_artifacts
+  changed_when: false
+  check_mode: false
+  when: not hermes_agent_manage_dashboard_chat
+
+- name: Read disabled Hermes dashboard terminal UI runtime revision
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_disabled_revision_contents
+  changed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.isreg
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.islnk
+
+- name: Read disabled Hermes dashboard terminal UI managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_disabled_manifest_contents
+  changed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.isreg
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.islnk
+
+- name: Calculate desired disabled Hermes dashboard terminal UI source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_install_dir }}/ui-tui"
+  register: hermes_agent_dashboard_tui_disabled_source_fingerprint
+  changed_when: false
+  failed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists
+
+- name: Calculate disabled Hermes dashboard terminal UI runtime source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint
+  changed_when: false
+  failed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.isdir
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.islnk
+
+- name: Require a recognized disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists or
+        (hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.isdir and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_source_fingerprint.rc == 0 and
+        hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.rc == 0 and
+        hermes_agent_dashboard_tui_disabled_source_fingerprint.stdout | trim ==
+        hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.stdout | trim and
+        ((hermes_agent_dashboard_tui_disabled_revision_contents | default({})).content |
+        default('') | b64decode | trim) == hermes_agent_repo_version and
+        ('revision: ' ~ hermes_agent_repo_version) in
+        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
+        default('') | b64decode) and
+        ('source_sha256: ' ~
+        (hermes_agent_dashboard_tui_disabled_source_fingerprint.stdout | trim)) in
+        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
+        default('') | b64decode) and
+        ('entry_sha256: ' ~
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.checksum) in
+        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
+        default('') | b64decode))
+  when: not hermes_agent_manage_dashboard_chat
+
+- name: Remove disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    state: absent
+  when:
+    - not hermes_agent_manage_dashboard_chat
     - not ansible_check_mode
 
 - name: Configure Hermes Agent dashboard service
@@ -466,6 +722,24 @@
   check_mode: false
   when: hermes_agent_manage_backup
 
+- name: Require a dedicated Hermes Agent backup directory
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_backup_dir is match('^/')
+      - hermes_agent_backup_dir not in ['/', '/tmp', '/var', '/var/backups', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - >-
+        not hermes_agent_backup_directory_state.stat.exists or
+        (hermes_agent_backup_directory_state.stat.isdir and
+        not hermes_agent_backup_directory_state.stat.islnk and
+        hermes_agent_backup_directory_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_backup_directory_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_backup_directory_state.stat.mode == '0700')
+    fail_msg: >-
+      hermes_agent_backup_dir must be a dedicated, non-symlinked directory owned
+      by the Hermes runtime user; system paths and directories owned by another
+      service are not safe backup targets.
+  when: hermes_agent_manage_backup
+
 - name: Configure Hermes Agent backups
   when:
     - hermes_agent_manage_backup
@@ -502,24 +776,6 @@
         state: started
         daemon_reload: true
       when: not ansible_check_mode
-
-- name: Require a dedicated Hermes Agent backup directory
-  ansible.builtin.assert:
-    that:
-      - hermes_agent_backup_dir is match('^/')
-      - hermes_agent_backup_dir not in ['/', '/tmp', '/var', '/var/backups', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
-      - >-
-        not hermes_agent_backup_directory_state.stat.exists or
-        (hermes_agent_backup_directory_state.stat.isdir and
-        not hermes_agent_backup_directory_state.stat.islnk and
-        hermes_agent_backup_directory_state.stat.pw_name == hermes_agent_user and
-        hermes_agent_backup_directory_state.stat.gr_name == hermes_agent_group and
-        hermes_agent_backup_directory_state.stat.mode == '0700')
-    fail_msg: >-
-      hermes_agent_backup_dir must be a dedicated, non-symlinked directory owned
-      by the Hermes runtime user; system paths and directories owned by another
-      service are not safe backup targets.
-  when: hermes_agent_manage_backup
 
 - name: Inspect disabled Hermes Agent backup units
   ansible.builtin.stat:
