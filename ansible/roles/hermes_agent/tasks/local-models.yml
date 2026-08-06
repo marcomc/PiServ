@@ -223,8 +223,10 @@
     mode: "0750"
   notify: Reload systemd daemon
 
-- name: Flush local-model unit changes
-  ansible.builtin.meta: flush_handlers
+- name: Reload local-model units before reading their limits
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Read effective local-model systemd limits
   ansible.builtin.command:

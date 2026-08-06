@@ -108,6 +108,43 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_dashboard_manage_basic_auth
 
+- name: Inspect Hermes dashboard authentication state parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file | dirname }}"
+    follow: false
+  register: hermes_agent_dashboard_authentication_state_parent
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a safe Hermes dashboard authentication state parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_authentication_state_parent.stat.exists or
+        (hermes_agent_dashboard_authentication_state_parent.stat.isdir and
+        not hermes_agent_dashboard_authentication_state_parent.stat.islnk)
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Create missing private Hermes dashboard authentication state parent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file | dirname }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not hermes_agent_dashboard_authentication_state_parent.stat.exists
+
 - name: Inspect Hermes dashboard bootstrap password parent
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file | dirname }}"
@@ -285,7 +322,29 @@
   when: hermes_agent_runtime_user_available
   notify: Restart Hermes Agent dashboard
 
-- name: Restrict Hermes environment file
+- name: Inspect Hermes environment file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}/.env"
+    follow: false
+  register: hermes_agent_environment_file
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Require a regular Hermes environment file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_environment_file.stat.exists or
+        (hermes_agent_environment_file.stat.isreg and
+        not hermes_agent_environment_file.stat.islnk)
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Restrict Hermes environment file metadata
   ansible.builtin.file:
     path: "{{ hermes_agent_home }}/.env"
     state: touch
@@ -296,6 +355,87 @@
     modification_time: preserve
   when:
     - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Resolve Hermes dashboard terminal UI source path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-existing
+      - "{{ hermes_agent_install_dir }}/ui-tui"
+  register: hermes_agent_dashboard_tui_source_path
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Resolve Hermes dashboard terminal UI runtime path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_runtime_path
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Inspect Hermes dashboard terminal UI runtime path
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    follow: false
+  register: hermes_agent_dashboard_tui_runtime_path_stat
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Read existing Hermes dashboard terminal UI path identities
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/stat
+      - --format=%d:%i
+      - "{{ hermes_agent_install_dir }}/ui-tui"
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_path_identities
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+    - hermes_agent_dashboard_tui_runtime_path_stat.stat.exists
+    - hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir
+    - not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk
+
+- name: Require separate Hermes dashboard terminal UI source and runtime paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_dashboard_tui_runtime_path.stdout | trim !=
+        hermes_agent_dashboard_tui_source_path.stdout | trim
+      - >-
+        not (hermes_agent_dashboard_tui_runtime_path.stdout | trim).startswith(
+        (hermes_agent_dashboard_tui_source_path.stdout | trim) ~ '/')
+      - >-
+        not (hermes_agent_dashboard_tui_source_path.stdout | trim).startswith(
+        (hermes_agent_dashboard_tui_runtime_path.stdout | trim) ~ '/')
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        (hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir and
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk)
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        hermes_agent_dashboard_tui_path_identities.stdout_lines | length == 2
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        hermes_agent_dashboard_tui_path_identities.stdout_lines[0] !=
+        hermes_agent_dashboard_tui_path_identities.stdout_lines[1]
+  when:
+    - hermes_agent_manage_dashboard_chat
     - not ansible_check_mode or hermes_agent_checkout.stat.exists
 
 - name: Inspect built Hermes dashboard
