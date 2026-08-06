@@ -1,7 +1,7 @@
 ---
 - name: Inspect private Hermes runtime directories
   ansible.builtin.stat:
-    path: "{{ item.path }}"
+    path: "{{ item }}"
     follow: false
   loop:
     - "{{ hermes_agent_home }}"
@@ -23,7 +23,7 @@
       its ownership or permissions can be managed.
   loop: "{{ hermes_agent_runtime_directories.results }}"
   loop_control:
-    label: "{{ item.item.path }}"
+    label: "{{ item.item }}"
   when: hermes_agent_runtime_user_available
 
 - name: Create private Hermes runtime directories
@@ -109,37 +109,102 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_inference_provenance
 
-- name: Inspect managed inference provenance plugin files for removal
+- name: Inspect installed inference provenance plugin files
   ansible.builtin.stat:
     path: "{{ item }}"
-    follow: false
   loop:
-    - path: >-
-        {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
-      template: inference-provenance-plugin.yaml.j2
-    - path: >-
-        {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
-      template: inference-provenance-plugin.py.j2
-  register: hermes_agent_inference_provenance_plugin_files
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+  register: hermes_agent_installed_inference_provenance_plugin_files
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Record managed inference provenance plugin state
+  ansible.builtin.copy:
+    content: |
+      plugin_name: {{ hermes_agent_inference_provenance_plugin_name }}
+      manifest_sha256: {{ hermes_agent_installed_inference_provenance_plugin_files.results[0].stat.checksum }}
+      implementation_sha256: {{ hermes_agent_installed_inference_provenance_plugin_files.results[1].stat.checksum }}
+    dest: >-
+      {{ hermes_agent_installer_path }}.inference-provenance.yml
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Inspect managed inference provenance state for removal
+  ansible.builtin.stat:
+    path: >-
+      {{ hermes_agent_installer_path }}.inference-provenance.yml
+    follow: false
+  register: hermes_agent_inference_provenance_managed_state_file
   changed_when: false
   check_mode: false
   when:
     - hermes_agent_runtime_user_available
     - not hermes_agent_manage_inference_provenance
 
-- name: Require removable inference provenance plugin files to be non-symlinked
-  ansible.builtin.assert:
-    that:
-      - >-
-        not item.stat.exists or
-        (item.stat.isreg and not item.stat.islnk and
-        item.stat.checksum == (lookup('template', item.item.template) | hash('sha256')))
-    fail_msg: >-
-      {{ item.item.path }} is not a recognized managed inference provenance
-      plugin file and cannot be removed.
-  loop: "{{ hermes_agent_inference_provenance_plugin_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
+- name: Read managed inference provenance state for removal
+  ansible.builtin.slurp:
+    src: >-
+      {{ hermes_agent_installer_path }}.inference-provenance.yml
+  register: hermes_agent_inference_provenance_managed_state_raw
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+    - hermes_agent_inference_provenance_managed_state_file.stat.isreg | default(false)
+    - not hermes_agent_inference_provenance_managed_state_file.stat.islnk | default(true)
+
+- name: Load managed inference provenance state for removal
+  ansible.builtin.set_fact:
+    hermes_agent_inference_provenance_managed_state: >-
+      {{
+        (hermes_agent_inference_provenance_managed_state_raw.content |
+        b64decode | from_yaml)
+        if hermes_agent_inference_provenance_managed_state_raw is not skipped
+        else {}
+      }}
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+
+- name: Select managed inference provenance plugin name for removal
+  ansible.builtin.set_fact:
+    hermes_agent_inference_provenance_removal_plugin_name: >-
+      {{
+        hermes_agent_inference_provenance_managed_state.get(
+          'plugin_name', hermes_agent_inference_provenance_plugin_name
+        )
+      }}
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+
+- name: Inspect managed inference provenance plugin files for removal
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: >-
+        {{ hermes_agent_home ~ '/plugins/' ~
+        hermes_agent_inference_provenance_removal_plugin_name ~
+        '/plugin.yaml' }}
+      checksum_key: manifest_sha256
+    - path: >-
+        {{ hermes_agent_home ~ '/plugins/' ~
+        hermes_agent_inference_provenance_removal_plugin_name ~
+        '/__init__.py' }}
+      checksum_key: implementation_sha256
+  register: hermes_agent_inference_provenance_plugin_files
+  changed_when: false
+  check_mode: false
   when:
     - hermes_agent_runtime_user_available
     - not hermes_agent_manage_inference_provenance
@@ -154,6 +219,39 @@
   when:
     - hermes_agent_runtime_user_available
     - not hermes_agent_manage_inference_provenance
+    - item.stat.exists
+    - item.stat.isreg
+    - not item.stat.islnk
+    - >-
+      item.stat.checksum ==
+      hermes_agent_inference_provenance_managed_state.get(item.item.checksum_key)
+    - >-
+      hermes_agent_inference_provenance_managed_state.get('plugin_name', '')
+      is match('^[a-z][a-z0-9-]*$')
+
+- name: Remove recognized managed inference provenance state when disabled
+  ansible.builtin.file:
+    path: >-
+      {{ hermes_agent_installer_path }}.inference-provenance.yml
+    state: absent
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+    - >-
+      hermes_agent_inference_provenance_managed_state.get('plugin_name', '')
+      is match('^[a-z][a-z0-9-]*$')
+    - >-
+      not hermes_agent_inference_provenance_plugin_files.results[0].stat.exists or
+      (hermes_agent_inference_provenance_plugin_files.results[0].stat.isreg and
+      not hermes_agent_inference_provenance_plugin_files.results[0].stat.islnk and
+      hermes_agent_inference_provenance_plugin_files.results[0].stat.checksum ==
+      hermes_agent_inference_provenance_managed_state.get('manifest_sha256'))
+    - >-
+      not hermes_agent_inference_provenance_plugin_files.results[1].stat.exists or
+      (hermes_agent_inference_provenance_plugin_files.results[1].stat.isreg and
+      not hermes_agent_inference_provenance_plugin_files.results[1].stat.islnk and
+      hermes_agent_inference_provenance_plugin_files.results[1].stat.checksum ==
+      hermes_agent_inference_provenance_managed_state.get('implementation_sha256'))
 
 - name: Inspect Home Assistant MCP token parent
   ansible.builtin.stat:

@@ -25,6 +25,10 @@ argument_specs:
         type: path
         default: /usr/local/lib/hermes-agent
         description: Root-owned Hermes source and runtime directory.
+      hermes_agent_expected_repo_origin:
+        type: str
+        default: https://github.com/NousResearch/hermes-agent.git
+        description: Exact Git remote origin required for an existing checkout.
       hermes_agent_binary_path:
         type: path
         default: /usr/local/bin/hermes

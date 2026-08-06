@@ -95,6 +95,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_group` | `hermes-agent` | Runtime group. |
 | `hermes_agent_home` | `/var/lib/hermes-agent` | Private persistent state. |
 | `hermes_agent_install_dir` | `/usr/local/lib/hermes-agent` | Root-owned Hermes checkout. |
+| `hermes_agent_expected_repo_origin` | canonical upstream URL | Required origin for an existing checkout. |
 | `hermes_agent_binary_path` | `/usr/local/bin/hermes` | Hermes CLI installed by upstream. |
 | `hermes_agent_repo_version` | pinned commit | Hermes upstream commit to install. |
 | `hermes_agent_version` | `0.20.0` | Expected Hermes CLI version. |

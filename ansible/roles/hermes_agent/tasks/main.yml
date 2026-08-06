@@ -6,6 +6,11 @@
   ansible.builtin.import_tasks: validate-local-model-storage.yml
   when: hermes_agent_manage_local_models
 
+- name: Preflight Hermes Agent runtime identity and persistent paths
+  ansible.builtin.include_tasks: runtime-user.yml
+  vars:
+    hermes_agent_runtime_user_phase: preflight
+
 - name: Install Hermes Agent system packages
   ansible.builtin.apt:
     name: "{{ hermes_agent_packages }}"
@@ -14,7 +19,9 @@
     cache_valid_time: 3600
 
 - name: Configure Hermes Agent runtime identity
-  ansible.builtin.import_tasks: runtime-user.yml
+  ansible.builtin.include_tasks: runtime-user.yml
+  vars:
+    hermes_agent_runtime_user_phase: mutate
 
 - name: Install pinned Hermes Agent runtime
   ansible.builtin.import_tasks: install-hermes.yml

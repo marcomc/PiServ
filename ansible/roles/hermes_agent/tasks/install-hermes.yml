@@ -123,14 +123,48 @@
     - hermes_agent_checkout.stat.exists
     - not ansible_check_mode
 
-- name: Hand Hermes persistent state to the runtime identity
+- name: Inspect installer-created Hermes node runtime
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}/node"
+    follow: false
+  register: hermes_agent_node_runtime_state
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Require a safe installer-created Hermes node runtime
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_node_runtime_state.stat.isdir
+      - not hermes_agent_node_runtime_state.stat.islnk
+    fail_msg: >-
+      The Hermes installer-created node runtime must be a real directory before
+      its bounded ownership handoff.
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Hand Hermes persistent state root to the runtime identity
   ansible.builtin.file:
     path: "{{ hermes_agent_home }}"
     state: directory
     owner: "{{ hermes_agent_user }}"
     group: "{{ hermes_agent_group }}"
     mode: "0700"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Hand installer-created Hermes node runtime to the runtime identity
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home }}/node"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
     recurse: true
+    follow: false
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_install is changed

@@ -1,8 +1,12 @@
 ---
-- name: Verify
+- name: Verify  # noqa complexity[play] - one ordered lifecycle regression scenario
   hosts: all
   become: true
   tasks:
+    - name: Pin expected fixture origin across dynamic role inclusions
+      ansible.builtin.set_fact:
+        hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
+
     - name: Read Hermes Agent service state
       ansible.builtin.command:
         argv:
@@ -86,6 +90,11 @@
         path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
       register: hermes_agent_molecule_dashboard_tui_bundle
 
+    - name: Inspect installer-created Hermes node runtime file
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/node/bin/npm
+      register: hermes_agent_molecule_node_runtime_file
+
     - name: Verify local-model capability is inert by default
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -111,6 +120,10 @@
           - hermes_agent_molecule_dashboard_tui_bundle.stat.pw_name == 'root'
           - hermes_agent_molecule_dashboard_tui_bundle.stat.gr_name == 'root'
           - hermes_agent_molecule_dashboard_tui_bundle.stat.mode == '0644'
+          - hermes_agent_molecule_node_runtime_file.stat.isreg
+          - hermes_agent_molecule_node_runtime_file.stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_node_runtime_file.stat.gr_name == 'hermes-agent'
+          - hermes_agent_molecule_node_runtime_file.stat.mode == '0755'
           - >-
             hermes_agent_molecule_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
@@ -224,7 +237,7 @@
           ansible.builtin.include_tasks:
             file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
           vars:
-            hermes_agent_manage_inference_provenance: true
+            hermes_agent_manage_inference_provenance: false
             hermes_agent_inference_provenance_plugin_name: ../etc
 
         - name: Fail if unsafe inference provenance plugin name was accepted
@@ -246,6 +259,339 @@
           - hermes_agent_molecule_backup_randomized_delay_rejected | default(false)
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
+
+    - name: Reject privileged Hermes runtime identity during preflight
+      block:
+        - name: Preflight privileged Hermes runtime identity
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_user: root
+            hermes_agent_group: root
+            hermes_agent_home: /var/lib/hermes-root-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-root-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-root-fixture
+
+        - name: Fail if privileged Hermes runtime identity was accepted
+          ansible.builtin.fail:
+            msg: Privileged runtime identities must fail preflight.
+      rescue:
+        - name: Assert privileged identity failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Assert Hermes Agent runtime identity names are unprivileged'
+
+    - name: Reject a system-root Hermes install path during preflight
+      block:
+        - name: Preflight system-root Hermes install path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_install_dir: /usr/local
+
+        - name: Fail if system-root Hermes install path was accepted
+          ansible.builtin.fail:
+            msg: System-root install paths must fail preflight.
+      rescue:
+        - name: Assert system-root path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Assert Hermes Agent runtime identity names are unprivileged'
+
+    - name: Create disposable UID-zero alias fixture group
+      ansible.builtin.group:
+        name: hermes-uid-zero-fixture
+        gid: 3450
+        state: present
+
+    - name: Create disposable non-root-named UID-zero alias
+      ansible.builtin.user:
+        name: hermes-uid-zero-fixture
+        uid: 0
+        non_unique: true
+        group: hermes-uid-zero-fixture
+        home: /var/lib/hermes-uid-zero-fixture
+        shell: /usr/sbin/nologin
+        create_home: false
+        state: present
+
+    - name: Create disposable non-root-named GID-zero alias
+      ansible.builtin.group:
+        name: hermes-gid-zero-fixture
+        gid: 0
+        non_unique: true
+        state: present
+
+    - name: Create disposable GID-zero runtime user
+      ansible.builtin.user:
+        name: hermes-gid-zero-fixture
+        uid: 3451
+        group: hermes-gid-zero-fixture
+        home: /var/lib/hermes-gid-zero-fixture
+        shell: /usr/sbin/nologin
+        create_home: false
+        state: present
+
+    - name: Reject disposable UID-zero alias before mutation
+      block:
+        - name: Apply role with UID-zero identity alias
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-uid-zero-fixture
+            hermes_agent_group: hermes-uid-zero-fixture
+            hermes_agent_home: /var/lib/hermes-uid-zero-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-uid-zero-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-uid-zero-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if UID-zero identity alias was accepted
+          ansible.builtin.fail:
+            msg: UID-zero aliases must fail preflight.
+      rescue:
+        - name: Assert UID-zero identity alias failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Reject disposable GID-zero alias before mutation
+      block:
+        - name: Apply role with GID-zero identity alias
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-gid-zero-fixture
+            hermes_agent_group: hermes-gid-zero-fixture
+            hermes_agent_home: /var/lib/hermes-gid-zero-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-gid-zero-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-gid-zero-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if GID-zero identity alias was accepted
+          ansible.builtin.fail:
+            msg: GID-zero aliases must fail preflight.
+      rescue:
+        - name: Assert GID-zero identity alias failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create foreign Hermes Git checkout fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - init
+          - /usr/local/lib/hermes-foreign-checkout-fixture
+      changed_when: true
+
+    - name: Configure foreign Hermes Git checkout origin
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/lib/hermes-foreign-checkout-fixture
+          - remote
+          - add
+          - origin
+          - https://example.invalid/foreign/hermes.git
+      changed_when: true
+
+    - name: Reject foreign Hermes Git checkout before mutation
+      block:
+        - name: Apply role with foreign Hermes Git checkout
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-foreign-checkout-fixture
+            hermes_agent_group: hermes-foreign-checkout-fixture
+            hermes_agent_home: /var/lib/hermes-foreign-checkout-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-foreign-checkout-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-foreign-checkout-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if foreign Hermes Git checkout was accepted
+          ansible.builtin.fail:
+            msg: Foreign Git checkout origins must fail preflight.
+      rescue:
+        - name: Assert foreign checkout origin failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require expected Hermes Agent checkout origin'
+
+    - name: Create incompatible runtime identity fixture group
+      ansible.builtin.group:
+        name: hermes-incompatible-fixture
+        gid: 2345
+        state: present
+
+    - name: Create incompatible runtime identity fixture user
+      ansible.builtin.user:
+        name: hermes-incompatible-fixture
+        uid: 2345
+        group: hermes-incompatible-fixture
+        home: /var/lib/hermes-incompatible-wrong-home
+        shell: /bin/sh
+        create_home: false
+        state: present
+
+    - name: Reject incompatible existing Hermes runtime identity
+      block:
+        - name: Apply role with incompatible existing runtime identity
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-incompatible-fixture
+            hermes_agent_group: hermes-incompatible-fixture
+            hermes_agent_home: /var/lib/hermes-incompatible-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-incompatible-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-incompatible-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if incompatible existing runtime identity was accepted
+          ansible.builtin.fail:
+            msg: Incompatible existing identities must fail preflight.
+      rescue:
+        - name: Assert incompatible identity failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create foreign Hermes persistent home fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-foreign-home-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign existing Hermes persistent home
+      block:
+        - name: Apply role with foreign existing persistent home
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-foreign-home-fixture
+            hermes_agent_group: hermes-foreign-home-fixture
+            hermes_agent_home: /var/lib/hermes-foreign-home-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-foreign-home-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-foreign-home-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if foreign existing persistent home was accepted
+          ansible.builtin.fail:
+            msg: Foreign existing homes must fail preflight.
+      rescue:
+        - name: Assert foreign home failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create Hermes symlink-parent target fixture
+      ansible.builtin.file:
+        path: /var/tmp/hermes-symlink-parent-target
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Hermes symlink-parent alias fixture
+      ansible.builtin.file:
+        src: /var/tmp/hermes-symlink-parent-target
+        dest: /var/lib/hermes-symlink-parent
+        state: link
+
+    - name: Reject Hermes managed path beneath a symlinked parent
+      block:
+        - name: Apply role with symlink-parent persistent home
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-symlink-parent-fixture
+            hermes_agent_group: hermes-symlink-parent-fixture
+            hermes_agent_home: /var/lib/hermes-symlink-parent/home
+            hermes_agent_install_dir: /usr/local/lib/hermes-symlink-parent-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-symlink-parent-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if symlink-parent managed path was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent managed paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated Hermes Agent managed paths'
+
+    - name: Inspect preflight rejection mutation canaries
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/libexec/hermes-uid-zero-fixture
+        - /usr/local/libexec/hermes-gid-zero-fixture
+        - /usr/local/libexec/hermes-foreign-checkout-fixture
+        - /usr/local/libexec/hermes-incompatible-fixture
+        - /usr/local/libexec/hermes-foreign-home-fixture
+        - /usr/local/libexec/hermes-symlink-parent-fixture
+      register: hermes_agent_molecule_preflight_installer_canaries
+
+    - name: Read preflight rejection account and package canaries
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - ["getent", "passwd", "hermes-incompatible-fixture"]
+        - ["getent", "passwd", "hermes-foreign-home-fixture"]
+        - ["getent", "passwd", "hermes-symlink-parent-fixture"]
+        - ["getent", "group", "hermes-foreign-home-fixture"]
+        - ["getent", "group", "hermes-symlink-parent-fixture"]
+        - ["dpkg-query", "--show", "--showformat=${db:Status-Status}", "sl"]
+      register: hermes_agent_molecule_preflight_command_canaries
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unsafe preflights made no package account or install mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_preflight_installer_canaries.results |
+            selectattr('stat.exists') | list | length == 0
+          - >-
+            hermes_agent_molecule_preflight_command_canaries.results[0].stdout
+            is search(':/var/lib/hermes-incompatible-wrong-home:/bin/sh$')
+          - hermes_agent_molecule_preflight_command_canaries.results[1].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[2].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[3].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[4].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[5].rc != 0
 
     - name: Create foreign local-model storage fixture
       ansible.builtin.file:
@@ -484,6 +830,7 @@
       loop:
         - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
         - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
       register: hermes_agent_molecule_inference_provenance_plugin_files
 
     - name: Assert managed inference provenance plugin files are installed
@@ -491,7 +838,22 @@
         that:
           - >-
             hermes_agent_molecule_inference_provenance_plugin_files.results |
-            selectattr('stat.exists') | list | length == 2
+            selectattr('stat.exists') | list | length == 3
+          - >-
+            hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.pw_name ==
+            'root'
+          - >-
+            hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.gr_name ==
+            'root'
+          - hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.mode == '0600'
+
+    - name: Modify a role-managed inference provenance plugin file
+      ansible.builtin.copy:
+        content: operator-modified managed plugin
+        dest: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
 
     - name: Disable managed inference provenance plugin in the fixture
       ansible.builtin.include_role:
@@ -517,14 +879,73 @@
       loop:
         - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
         - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
       register: hermes_agent_molecule_disabled_inference_provenance_plugin_files
 
-    - name: Assert managed inference provenance plugin files are removed
+    - name: Read modified inference provenance plugin file after disable
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+      register: hermes_agent_molecule_modified_provenance_plugin
+
+    - name: Assert disable preserves modified managed files only
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[0].stat.exists
+          - not hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[1].stat.exists
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.exists
+          - >-
+            hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.pw_name ==
+            'root'
+          - >-
+            hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.gr_name ==
+            'root'
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.mode == '0600'
+          - >-
+            hermes_agent_molecule_modified_provenance_plugin.content |
+            b64decode == 'operator-modified managed plugin'
+
+    - name: Remove preserved modified inference provenance fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        state: absent
+
+    - name: Create foreign safe-name inference provenance plugin file
+      ansible.builtin.copy:
+        content: foreign operator plugin
+        dest: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+
+    - name: Reapply disabled inference provenance lifecycle to foreign plugin
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_inference_provenance: false
+
+    - name: Read preserved foreign inference provenance plugin file
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+      register: hermes_agent_molecule_foreign_provenance_plugin
+
+    - name: Assert disabled lifecycle preserves foreign safe-name plugin files
       ansible.builtin.assert:
         that:
           - >-
-            hermes_agent_molecule_disabled_inference_provenance_plugin_files.results |
-            selectattr('stat.exists') | list | length == 0
+            hermes_agent_molecule_foreign_provenance_plugin.content |
+            b64decode == 'foreign operator plugin'
 
     - name: Enable Home Assistant MCP in the fixture
       ansible.builtin.include_role:
@@ -920,3 +1341,88 @@
           - hermes_agent_molecule_foreign_tui_artifact.stat.pw_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.gr_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.mode == '0644'
+
+    - name: Create root-owned node symlink target canary
+      ansible.builtin.copy:
+        content: node ownership canary
+        dest: /var/tmp/hermes-node-ownership-canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Create nested Hermes node runtime symlink fixture
+      ansible.builtin.file:
+        src: /var/tmp/hermes-node-ownership-canary
+        dest: /var/lib/hermes-agent/node/bin/ownership-canary-link
+        state: link
+        owner: hermes-agent
+        group: hermes-agent
+        follow: false
+
+    - name: Add second fixture revision source file
+      ansible.builtin.copy:
+        content: second fixture revision
+        dest: /usr/local/src/hermes-agent-fixture/upstream/second-revision
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Commit second fixture revision
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - add
+          - second-revision
+      changed_when: true
+
+    - name: Record second fixture revision commit
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - commit
+          - -m
+          - Second fixture revision
+      changed_when: true
+
+    - name: Read second fixture revision
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - rev-parse
+          - HEAD
+      register: hermes_agent_molecule_second_fixture_revision
+      changed_when: false
+
+    - name: Reinstall Hermes at second fixture revision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: "{{ hermes_agent_molecule_second_fixture_revision.stdout }}"
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+
+    - name: Inspect node symlink target after bounded ownership handoff
+      ansible.builtin.stat:
+        path: /var/tmp/hermes-node-ownership-canary
+      register: hermes_agent_molecule_node_ownership_canary
+
+    - name: Assert bounded ownership handoff did not follow nested symlink
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_node_ownership_canary.stat.pw_name == 'root'
+          - hermes_agent_molecule_node_ownership_canary.stat.gr_name == 'root'
+          - hermes_agent_molecule_node_ownership_canary.stat.mode == '0644'

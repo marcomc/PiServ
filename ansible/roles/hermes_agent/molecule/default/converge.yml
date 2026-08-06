@@ -2,6 +2,8 @@
 - name: Converge
   hosts: all
   become: true
+  vars:
+    hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
   pre_tasks:
     - name: Load test fixture variables
       ansible.builtin.include_tasks: tasks/fixture-vars.yml
