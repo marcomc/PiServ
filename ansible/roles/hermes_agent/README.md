@@ -251,6 +251,14 @@ on a dedicated volume. The role checks the filesystem containing that directory
 for enough space for the configured files plus
 `hermes_agent_local_models_min_free_bytes`.
 
+The capability is intentionally inert when `hermes_agent_manage_local_models` is
+false: it installs no model packages, runtime, model files, systemd units, or
+benchmark helper. When enabled on a future host, the role requires a mounted
+cgroup v2 filesystem with the `memory` controller before installing the model
+services. It also validates bounded memory/address-space settings and their
+ordering before rendering systemd units. The current 4 GB PiServ host is not a
+supported local-model provider target for the configured 64K workload.
+
 ## Testing
 
 The embedded Molecule scenario uses local fixture artifacts. It does not fetch

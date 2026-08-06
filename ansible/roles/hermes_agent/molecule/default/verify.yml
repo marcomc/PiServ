@@ -77,6 +77,17 @@
         path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
       register: hermes_agent_dashboard_tui_bundle
 
+    - name: Verify local-model capability is inert by default
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-gemma-4-e2b.service
+        - /etc/systemd/system/hermes-local-model-granite-3-3-2b.service
+        - /usr/local/libexec/hermes-agent/benchmark-local-model
+        - /usr/local/lib/llama.cpp
+        - /var/lib/hermes-models
+      register: hermes_agent_local_model_artifacts
+
     - name: Assert installed role behavior
       ansible.builtin.assert:
         that:
@@ -91,3 +102,6 @@
           - hermes_agent_dashboard_tui_bundle.stat.pw_name == 'root'
           - hermes_agent_dashboard_tui_bundle.stat.gr_name == 'root'
           - hermes_agent_dashboard_tui_bundle.stat.mode == '0644'
+          - >-
+            hermes_agent_local_model_artifacts.results |
+            selectattr('stat.exists') | list | length == 0

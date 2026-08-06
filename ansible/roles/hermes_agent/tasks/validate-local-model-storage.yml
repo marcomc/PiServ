@@ -4,6 +4,11 @@
     that:
       - hermes_agent_local_models_dir is match('^/')
       - hermes_agent_local_models_context_size >= 64000
+      - hermes_agent_local_models_threads >= 1
+      - hermes_agent_local_models_threads <= 64
+      - hermes_agent_local_models_benchmark_max_tokens >= 1
+      - hermes_agent_local_models_benchmark_max_tokens <= 4096
+      - hermes_agent_local_models_min_free_bytes >= 1073741824
       - hermes_agent_local_models_host == '127.0.0.1'
       - >-
         hermes_agent_local_models | map(attribute='id') | unique | length ==
@@ -11,6 +16,21 @@
       - >-
         hermes_agent_local_models | map(attribute='port') | unique | length ==
         hermes_agent_local_models | length
+      - hermes_agent_local_models_address_space_limit is match('^[1-9][0-9]*[KMGTP]$')
+      - hermes_agent_local_models_memory_high is match('^[1-9][0-9]*[KMGTP]$')
+      - hermes_agent_local_models_memory_max is match('^[1-9][0-9]*[KMGTP]$')
+      - hermes_agent_local_models_memory_swap_max is match('^[0-9][0-9]*[KMGTP]$')
+      - hermes_agent_local_models_memory_high | human_to_bytes > 0
+      - >-
+        hermes_agent_local_models_memory_max | human_to_bytes >
+        hermes_agent_local_models_memory_high | human_to_bytes
+      - >-
+        hermes_agent_local_models_address_space_limit | human_to_bytes >
+        hermes_agent_local_models_memory_max | human_to_bytes
+      - hermes_agent_local_models_memory_swap_max | human_to_bytes >= 0
+    fail_msg: >-
+      Local-model settings must use bounded values, keep MemoryHigh below
+      MemoryMax, and keep LimitAS above MemoryMax.
   when: hermes_agent_manage_local_models
 
 - name: Read available local-model storage capacity

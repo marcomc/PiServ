@@ -124,6 +124,9 @@
   its isolated 64K memory-and-skill proof left PiServ unreachable while
   processing the Hermes prompt, followed by an unclean boot recovery. Removed
   the temporary model deployment and retained Codex as the only provider.
+- Kept the future local-model capability inert by default, required an active
+  cgroup v2 memory controller before enabling it, and validated bounded memory
+  and address-space settings before rendering its services.
 
 ## [0.3.0] - 2026-07-29
 

@@ -235,6 +235,45 @@
 - name: Flush local-model unit changes
   ansible.builtin.meta: flush_handlers
 
+- name: Read effective local-model systemd limits
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - show
+      - "hermes-local-model-{{ item.id }}.service"
+      - --property=LimitAS
+      - --property=MemoryHigh
+      - --property=MemoryMax
+      - --property=MemorySwapMax
+  register: hermes_agent_local_model_effective_limits
+  changed_when: false
+  check_mode: false
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Assert effective local-model systemd limits
+  ansible.builtin.assert:
+    that:
+      - >-
+        'LimitAS=' ~ (hermes_agent_local_models_address_space_limit | human_to_bytes | string)
+        in item.stdout_lines
+      - >-
+        'MemoryHigh=' ~ (hermes_agent_local_models_memory_high | human_to_bytes | string)
+        in item.stdout_lines
+      - >-
+        'MemoryMax=' ~ (hermes_agent_local_models_memory_max | human_to_bytes | string)
+        in item.stdout_lines
+      - >-
+        'MemorySwapMax=' ~ (hermes_agent_local_models_memory_swap_max | human_to_bytes | string)
+        in item.stdout_lines
+    fail_msg: >-
+      The effective systemd memory policy for {{ item.item.id }} does not match
+      the bounded local-model configuration.
+  loop: "{{ hermes_agent_local_model_effective_limits.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
 - name: Read installed llama-server version
   ansible.builtin.command:
     argv:
