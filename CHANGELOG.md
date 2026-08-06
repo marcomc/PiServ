@@ -91,6 +91,9 @@
 - Added Hermes native password authentication with an scrypt-only runtime
   state, a root-only generated-password proposal, source-scoped LAN UFW access,
   and Tailnet access through the existing Tailscale ingress policy.
+- Built the dashboard chat terminal UI into a separate root-owned runtime
+  artifact, preventing the unprivileged dashboard service from attempting and
+  failing `npm install` during chat startup.
 - Reduced the deployed dashboard production audit to one moderate transitive
   `undici` finding; the dashboard remains a loopback Python service serving
   prebuilt assets.

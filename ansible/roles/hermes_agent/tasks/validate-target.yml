@@ -5,6 +5,7 @@
       - ansible_facts["os_family"] == "Debian"
       - ansible_facts["architecture"] in hermes_agent_supported_architectures
       - hermes_agent_dashboard_host in ["127.0.0.1", "0.0.0.0"]
+      - hermes_agent_dashboard_tui_runtime_dir is match('^/')
       - >-
         hermes_agent_dashboard_host == "127.0.0.1" or
         hermes_agent_dashboard_manage_basic_auth | bool

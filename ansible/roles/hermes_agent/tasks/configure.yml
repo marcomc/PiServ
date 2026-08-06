@@ -263,6 +263,106 @@
   register: hermes_agent_dashboard_dist
   when: hermes_agent_manage_dashboard
 
+- name: Inspect built Hermes dashboard terminal UI bundle
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_dist
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Create Hermes dashboard terminal UI runtime directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - >-
+      not ansible_check_mode or
+      not hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Render Hermes dashboard terminal UI source into its managed runtime
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --delete
+      - --exclude=node_modules
+      - --exclude=dist
+      - "{{ hermes_agent_install_dir }}/ui-tui/"
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}/"
+  changed_when: true
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+    - >-
+      hermes_agent_install is changed or
+      not hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Link Hermes terminal UI dependencies into its managed runtime
+  ansible.builtin.file:
+    src: "{{ hermes_agent_install_dir }}/node_modules"
+    dest: "{{ hermes_agent_dashboard_tui_runtime_dir }}/node_modules"
+    state: link
+    owner: root
+    group: root
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Build Hermes dashboard terminal UI runtime bundle
+  ansible.builtin.command:
+    argv:
+      - npm
+      - run
+      - build
+    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  environment:
+    HOME: /root
+    HERMES_HOME: "{{ hermes_agent_home }}"
+    PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  changed_when: true
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+    - >-
+      hermes_agent_install is changed or
+      not hermes_agent_dashboard_tui_dist.stat.exists
+  notify: Restart Hermes Agent dashboard
+
+- name: Refresh Hermes dashboard terminal UI bundle state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_dist
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Restrict Hermes dashboard terminal UI bundle permissions
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Refresh restricted Hermes dashboard terminal UI bundle state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_dist
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Assert Hermes dashboard terminal UI bundle exists
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_tui_dist.stat.exists
+      - hermes_agent_dashboard_tui_dist.stat.isreg
+      - hermes_agent_dashboard_tui_dist.stat.pw_name == 'root'
+      - hermes_agent_dashboard_tui_dist.stat.gr_name == 'root'
+      - hermes_agent_dashboard_tui_dist.stat.mode == '0644'
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
 - name: Configure Hermes Agent dashboard service
   ansible.builtin.template:
     src: hermes-agent-dashboard.service.j2

@@ -164,6 +164,14 @@ argument_specs:
         type: bool
         default: true
         description: Whether to build and run the dashboard.
+      hermes_agent_manage_dashboard_chat:
+        type: bool
+        default: false
+        description: Build a separate prebuilt terminal UI bundle for dashboard chat.
+      hermes_agent_dashboard_tui_runtime_dir:
+        type: path
+        default: /usr/local/lib/hermes-agent-runtime/tui
+        description: Root-owned prebuilt terminal UI bundle directory.
       hermes_agent_dashboard_manage_basic_auth:
         type: bool
         default: false

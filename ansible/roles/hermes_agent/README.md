@@ -60,6 +60,11 @@ session-signing secret in Hermes state, and writes the proposed password to a
 root-only file. The consuming deployment remains responsible for ingress
 firewall and Tailnet policy.
 
+When `hermes_agent_manage_dashboard_chat` is enabled, the role builds the
+terminal UI into a separate root-owned runtime directory and configures
+`HERMES_TUI_DIR` for the dashboard service. The unprivileged service therefore
+executes a prebuilt bundle instead of attempting an `npm install` at chat time.
+
 ## Installation
 
 After the role has been extracted and imported into Galaxy, install a pinned
@@ -119,6 +124,8 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
 | `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Dashboard systemd unit. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
+| `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
+| `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |

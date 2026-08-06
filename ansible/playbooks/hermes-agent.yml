@@ -68,6 +68,7 @@
             provider: openai-codex
             model: gpt-5.6-sol
         hermes_agent_manage_inference_provenance: true
+        hermes_agent_manage_dashboard_chat: true
         hermes_agent_dashboard_host: >-
           {{ piserv_hermes_agent_dashboard_host }}
         hermes_agent_dashboard_manage_basic_auth: >-

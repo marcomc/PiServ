@@ -38,6 +38,7 @@ Live state observed on 2026-07-31:
 | Write gates | Memory and skill writes require approval |
 | Disabled toolsets | Terminal, file, browser, code execution, Home Assistant, and all other bundled toolsets |
 | Dashboard | Authenticated on LAN and Tailnet, port `9119` |
+| Dashboard chat | Prebuilt terminal UI bundle; no runtime `npm install` |
 | Backups | Daily full archive on `/mnt/external-data/backups/hermes-agent` |
 
 The first live dashboard probe returned HTTP `200`. The first backup contained
@@ -421,6 +422,18 @@ ssh -N -L 9119:127.0.0.1:9119 admin@PiServ.local
 ```
 
 Open `http://127.0.0.1:9119`.
+
+If the chat tab reports `Chat unavailable: 1`, inspect the dashboard journal:
+
+```sh
+ssh admin@<piserv-host> \
+  'sudo journalctl -u hermes-agent-dashboard.service -n 100 --no-pager'
+```
+
+The managed deployment builds the terminal UI under
+`/usr/local/lib/hermes-agent-runtime/tui` and exposes it through
+`HERMES_TUI_DIR`. A healthy chat launch must not emit `Installing TUI
+dependencies` or `npm install failed`.
 
 ## Validate
 
