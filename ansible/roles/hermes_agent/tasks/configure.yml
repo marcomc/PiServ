@@ -270,7 +270,13 @@
       - >-
         not hermes_agent_home_assistant_mcp_token_parent.stat.exists or
         (hermes_agent_home_assistant_mcp_token_parent.stat.isdir and
-        not hermes_agent_home_assistant_mcp_token_parent.stat.islnk)
+        not hermes_agent_home_assistant_mcp_token_parent.stat.islnk and
+        hermes_agent_home_assistant_mcp_token_parent.stat.pw_name == hermes_agent_user and
+        hermes_agent_home_assistant_mcp_token_parent.stat.gr_name == hermes_agent_group and
+        hermes_agent_home_assistant_mcp_token_parent.stat.mode == '0700')
+    fail_msg: >-
+      An existing Home Assistant MCP token parent must be a private directory
+      already owned by the Hermes runtime identity.
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_home_assistant_mcp
@@ -304,7 +310,12 @@
       - >-
         not hermes_agent_home_assistant_mcp_token_file.stat.exists or
         (hermes_agent_home_assistant_mcp_token_file.stat.isreg and
-        not hermes_agent_home_assistant_mcp_token_file.stat.islnk)
+        not hermes_agent_home_assistant_mcp_token_file.stat.islnk and
+        hermes_agent_home_assistant_mcp_token_file.stat.pw_name == hermes_agent_user and
+        hermes_agent_home_assistant_mcp_token_file.stat.gr_name == hermes_agent_group)
+    fail_msg: >-
+      An existing Home Assistant MCP token file must already be owned by the
+      Hermes runtime identity.
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_home_assistant_mcp
@@ -1007,25 +1018,14 @@
     - hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.isreg
     - not hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.islnk
 
-- name: Calculate desired disabled Hermes dashboard terminal UI source fingerprint
-  ansible.builtin.command:
-    argv:
-      - /bin/bash
-      - -o
-      - pipefail
-      - -c
-      - >-
-        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
-        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
-        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
-  args:
-    chdir: "{{ hermes_agent_install_dir }}/ui-tui"
-  register: hermes_agent_dashboard_tui_disabled_source_fingerprint
-  changed_when: false
-  failed_when: false
-  when:
-    - not hermes_agent_manage_dashboard_chat
-    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists
+- name: Load disabled Hermes dashboard terminal UI managed state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_disabled_managed_state: >-
+      {{
+        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
+        default('') | b64decode | from_yaml) or {}
+      }}
+  when: not hermes_agent_manage_dashboard_chat
 
 - name: Calculate disabled Hermes dashboard terminal UI runtime source fingerprint
   ansible.builtin.command:
@@ -1076,23 +1076,16 @@
         hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.pw_name == 'root' and
         hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.gr_name == 'root' and
         hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.mode == '0644' and
-        hermes_agent_dashboard_tui_disabled_source_fingerprint.rc == 0 and
         hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.rc == 0 and
-        hermes_agent_dashboard_tui_disabled_source_fingerprint.stdout | trim ==
-        hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.stdout | trim and
         ((hermes_agent_dashboard_tui_disabled_revision_contents | default({})).content |
-        default('') | b64decode | trim) == hermes_agent_repo_version and
-        ('revision: ' ~ hermes_agent_repo_version) in
-        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
-        default('') | b64decode) and
-        ('source_sha256: ' ~
-        (hermes_agent_dashboard_tui_disabled_source_fingerprint.stdout | trim)) in
-        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
-        default('') | b64decode) and
-        ('entry_sha256: ' ~
-        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.checksum) in
-        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
-        default('') | b64decode))
+        default('') | b64decode | trim) ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('revision', '') and
+        hermes_agent_dashboard_tui_disabled_managed_state.get('revision', '')
+        is match('^[0-9a-f]{40}$') and
+        (hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.stdout | trim) ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('source_sha256', '') and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.checksum ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('entry_sha256', ''))
   when: not hermes_agent_manage_dashboard_chat
 
 - name: Remove disabled Hermes dashboard terminal UI runtime

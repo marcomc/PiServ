@@ -119,7 +119,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_manage_home_assistant_mcp` | `false` | Enable the official Home Assistant Assist MCP capability gateway. |
 | `hermes_agent_home_assistant_mcp_name` | `home-assistant-assist` | MCP server identifier. |
 | `hermes_agent_home_assistant_mcp_url` | empty | Full Home Assistant MCP URL, ending in `/api/mcp`. |
-| `hermes_agent_home_assistant_mcp_token_env_file` | `{{ hermes_agent_home }}/home-assistant-mcp.env` | Private, operator-managed `KEY=value` token file. |
+| `hermes_agent_home_assistant_mcp_token_env_file` | `{{ hermes_agent_home }}/home-assistant-mcp.env` | Private, operator-managed `KEY=value` token file; existing file and parent must belong to the runtime identity. |
 | `hermes_agent_home_assistant_mcp_token_env_var` | `HASS_MCP_TOKEN` | Token variable name referenced from the managed config. |
 | `hermes_agent_home_assistant_mcp_timeout` | `30` | Per-request MCP timeout in seconds (`1`-`300`). |
 | `hermes_agent_home_assistant_mcp_connect_timeout` | `15` | Initial MCP connection timeout in seconds (`1`-`60`, no greater than the request timeout). |
