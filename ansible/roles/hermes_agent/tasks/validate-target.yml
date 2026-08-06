@@ -56,6 +56,22 @@
       - hermes_agent_backup_retention_days >= 1
       - hermes_agent_backup_retention_days <= 3650
       - hermes_agent_backup_randomized_delay is match('^[1-9][0-9]*(us|ms|s|m|h|d|w)$')
+      - >-
+        (
+          hermes_agent_backup_randomized_delay |
+          regex_replace('^([0-9]+).*$','\\1') | int
+        ) * {
+          'us': 0.000001,
+          'ms': 0.001,
+          's': 1,
+          'm': 60,
+          'h': 3600,
+          'd': 86400,
+          'w': 604800
+        }.get(
+          hermes_agent_backup_randomized_delay | regex_replace('^[0-9]+', ''),
+          86401
+        ) <= 86400
       - hermes_agent_backup_timezone is match('^[A-Za-z_]+(/[A-Za-z_+-]+)*$')
       - hermes_agent_backup_on_calendar is not search('[\r\n]')
       - >-

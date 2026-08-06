@@ -67,7 +67,7 @@ wait_for_http() {
   local attempt
 
   for attempt in $(seq 1 "${attempts}"); do
-    if curl --fail --silent "${url}" >/dev/null; then
+    if curl --fail --silent --max-time 5 "${url}" >/dev/null; then
       return 0
     fi
     sleep "${delay_seconds}"

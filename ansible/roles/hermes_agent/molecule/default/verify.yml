@@ -173,6 +173,29 @@
           - hermes_agent_molecule_request_timeout_rejected | default(false)
           - hermes_agent_molecule_connection_timeout_rejected | default(false)
 
+    - name: Reject an excessive backup randomized delay
+      block:
+        - name: Validate an excessive backup randomized delay
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_randomized_delay: 999999w
+
+        - name: Fail if excessive backup randomized delay was accepted
+          ansible.builtin.fail:
+            msg: Backup randomized delay must not exceed one day.
+      rescue:
+        - name: Assert excessive backup randomized delay failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive backup randomized delay
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_backup_randomized_delay_rejected: true
+
     - name: Reject an excessive dashboard authentication session lifetime
       block:
         - name: Validate excessive dashboard authentication session lifetime
@@ -220,6 +243,7 @@
     - name: Assert dashboard and plugin validation limits are enforced
       ansible.builtin.assert:
         that:
+          - hermes_agent_molecule_backup_randomized_delay_rejected | default(false)
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
 
