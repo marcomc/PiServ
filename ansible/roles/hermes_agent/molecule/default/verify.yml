@@ -260,6 +260,234 @@
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
 
+    - name: Reject duplicate local-model filenames
+      block:
+        - name: Validate duplicate local-model filenames
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models:
+              - id: duplicate-one
+                display_name: Duplicate one
+                repository: example/model-one
+                revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                filename: duplicate.gguf
+                sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                size_bytes: 1024
+                port: 18081
+              - id: duplicate-two
+                display_name: Duplicate two
+                repository: example/model-two
+                revision: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                filename: duplicate.gguf
+                sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                size_bytes: 1024
+                port: 18082
+
+        - name: Fail if duplicate local-model filenames were accepted
+          ansible.builtin.fail:
+            msg: Duplicate local-model filenames must be rejected.
+      rescue:
+        - name: Assert duplicate local-model filenames failed validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert local-model storage configuration'
+
+    - name: Reject terminal UI metadata path overlapping runtime source
+      block:
+        - name: Validate overlapping terminal UI metadata path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-agent-runtime/tui/package.json
+
+        - name: Fail if overlapping terminal UI metadata path was accepted
+          ansible.builtin.fail:
+            msg: Terminal UI metadata paths must not overlap runtime source.
+      rescue:
+        - name: Assert overlapping terminal UI metadata path failed validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Create terminal UI metadata inode-alias fixture directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-tui-inode-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create terminal UI revision inode fixture
+      ansible.builtin.copy:
+        content: terminal UI metadata canary
+        dest: /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Create terminal UI manifest hard-link alias fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+          - /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+      changed_when: true
+
+    - name: Reject terminal UI metadata inode aliases
+      block:
+        - name: Validate terminal UI metadata inode aliases
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-tui-inode-fixture
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+            hermes_agent_dashboard_tui_runtime_manifest_file: >-
+              /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+
+        - name: Fail if terminal UI metadata inode aliases were accepted
+          ansible.builtin.fail:
+            msg: Terminal UI metadata inode aliases must be rejected.
+      rescue:
+        - name: Assert terminal UI metadata inode aliases failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject Hermes dashboard terminal UI metadata inode aliases'
+
+    - name: Read terminal UI metadata aliases after rejection
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+        - /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+      register: hermes_agent_molecule_tui_metadata_aliases
+      changed_when: false
+
+    - name: Assert terminal UI metadata aliases are untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_tui_metadata_aliases.results[0].content |
+            b64decode == 'terminal UI metadata canary'
+          - >-
+            hermes_agent_molecule_tui_metadata_aliases.results[1].content |
+            b64decode == 'terminal UI metadata canary'
+
+    - name: Remove terminal UI metadata inode-alias fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-tui-inode-fixture
+        state: absent
+
+    - name: Reject lexical aliases for dashboard authentication outputs
+      block:
+        - name: Validate aliased dashboard authentication output paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: /root/hermes-auth-alias
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/./hermes-auth-alias
+
+        - name: Fail if aliased dashboard authentication outputs were accepted
+          ansible.builtin.fail:
+            msg: Lexically aliased dashboard authentication outputs must be rejected.
+      rescue:
+        - name: Assert aliased dashboard authentication outputs failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require distinct canonical Hermes dashboard authentication output paths'
+
+    - name: Reject auth state overlapping the derived bootstrap marker
+      block:
+        - name: Validate auth state overlapping the bootstrap marker path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: >-
+              /root/hermes-marker-alias.managed.yml
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-marker-alias
+
+        - name: Fail if auth state overlapping the bootstrap marker was accepted
+          ansible.builtin.fail:
+            msg: Auth state must not overlap the derived bootstrap marker.
+      rescue:
+        - name: Assert bootstrap marker path overlap failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require distinct canonical Hermes dashboard authentication output paths'
+
+    - name: Create dashboard authentication inode-alias fixture
+      ansible.builtin.copy:
+        content: inode alias canary
+        dest: /root/hermes-auth-inode-one
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create distinct dashboard bootstrap password inode fixture
+      ansible.builtin.copy:
+        content: distinct bootstrap canary
+        dest: /root/hermes-auth-inode-two
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create dashboard authentication marker hard-link alias fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - /root/hermes-auth-inode-one
+          - /root/hermes-auth-inode-two.managed.yml
+      changed_when: true
+
+    - name: Reject inode aliases for dashboard authentication outputs
+      block:
+        - name: Validate dashboard authentication output inode aliases
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: /root/hermes-auth-inode-one
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-auth-inode-two
+
+        - name: Fail if dashboard authentication inode aliases were accepted
+          ansible.builtin.fail:
+            msg: Dashboard authentication output inode aliases must be rejected.
+      rescue:
+        - name: Assert dashboard authentication inode aliases failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject Hermes dashboard authentication output inode aliases'
+
+    - name: Remove dashboard authentication inode-alias fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-auth-inode-one
+        - /root/hermes-auth-inode-two
+        - /root/hermes-auth-inode-two.managed.yml
+
     - name: Create foreign dashboard bootstrap password target fixture
       ansible.builtin.copy:
         content: foreign bootstrap canary
