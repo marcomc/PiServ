@@ -4,7 +4,7 @@ Install a locked-down [Nous Hermes Agent](https://github.com/NousResearch/hermes
 service backed by the OpenAI Codex CLI. The role pins and verifies both upstream
 artifacts, runs Hermes as an unprivileged system user, keeps the dashboard on
 loopback by default, can expose it with native password authentication, and can
-schedule encrypted-state backups to a caller-provided path.
+schedule private state backups to a caller-provided path.
 
 This directory is prepared for later extraction into the planned
 `marcomc.hermes_agent` Galaxy role. It is not published to Galaxy yet.
@@ -194,7 +194,7 @@ The full variable contract, including types, is in
         hermes_agent_manage_backup: true
         hermes_agent_backup_group: backups
         hermes_agent_backup_dir: /srv/backups/hermes-agent
-        hermes_agent_backup_timezone: Europe/Rome
+        hermes_agent_backup_timezone: UTC
 ```
 
 The backup group and directory are deployment values. Do not put host-specific
@@ -256,8 +256,9 @@ false: it installs no model packages, runtime, model files, systemd units, or
 benchmark helper. When enabled on a future host, the role requires a mounted
 cgroup v2 filesystem with the `memory` controller before installing the model
 services. It also validates bounded memory/address-space settings and their
-ordering before rendering systemd units. The current 4 GB PiServ host is not a
-supported local-model provider target for the configured 64K workload.
+ordering before rendering systemd units. A host that cannot complete a guarded
+64K provider proof while preserving its protected-service reserve is not a
+supported local-model provider target.
 
 ## Testing
 

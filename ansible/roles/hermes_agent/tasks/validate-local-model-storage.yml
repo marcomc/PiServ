@@ -3,6 +3,9 @@
   ansible.builtin.assert:
     that:
       - hermes_agent_local_models_dir is match('^/')
+      - hermes_agent_local_models_dir not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - hermes_agent_local_models_results_dir is match('^/')
+      - hermes_agent_local_models_results_dir.startswith(hermes_agent_local_models_dir ~ '/')
       - hermes_agent_local_models_context_size >= 64000
       - hermes_agent_local_models_threads >= 1
       - hermes_agent_local_models_threads <= 64
@@ -15,6 +18,33 @@
         hermes_agent_local_models | length
       - >-
         hermes_agent_local_models | map(attribute='port') | unique | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='id') |
+        select('match', '^[a-z0-9]+(?:-[a-z0-9]+)*$') | list | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='filename') |
+        select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*\.gguf$') | list | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='repository') |
+        select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$') | list | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='revision') |
+        select('match', '^[0-9a-f]{40}$') | list | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='sha256') |
+        select('match', '^[0-9a-f]{64}$') | list | length ==
+        hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='size_bytes') |
+        select('gt', 0) | list | length == hermes_agent_local_models | length
+      - >-
+        hermes_agent_local_models | map(attribute='port') |
+        select('ge', 1) | select('le', 65535) | list | length ==
         hermes_agent_local_models | length
       - hermes_agent_local_models_address_space_limit is match('^[1-9][0-9]*[KMGTP]$')
       - hermes_agent_local_models_memory_high is match('^[1-9][0-9]*[KMGTP]$')
@@ -32,6 +62,33 @@
       Local-model settings must use bounded values, keep MemoryHigh below
       MemoryMax, and keep LimitAS above MemoryMax.
   when: hermes_agent_manage_local_models
+
+- name: Inspect configured local-model directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_local_models_dir }}"
+    - "{{ hermes_agent_local_models_results_dir }}"
+  register: hermes_agent_local_model_directory_state
+  changed_when: false
+  check_mode: false
+
+- name: Require role-owned local-model directories when they already exist
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isdir and not item.stat.islnk and
+        item.stat.pw_name == 'root' and
+        item.stat.gr_name == hermes_agent_group and
+        item.stat.mode == '0750')
+    fail_msg: >-
+      {{ item.item }} already exists but is not the dedicated root-owned,
+      {{ hermes_agent_group }}-readable local-model directory managed by this role.
+  loop: "{{ hermes_agent_local_model_directory_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: Read available local-model storage capacity
   ansible.builtin.command:

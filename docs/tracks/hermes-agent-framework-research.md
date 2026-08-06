@@ -73,10 +73,11 @@ The runtime and authenticated provider flow were validated live on 2026-07-31:
 - The Hermes CLI policy exposes only memory and skills. Both write paths
   require review; terminal, file, browser, code execution, and Home Assistant
   are explicitly disabled.
-- The browser dashboard is active only on `127.0.0.1:9119` and returned HTTP
-  `200`. Operator access uses an SSH tunnel. Its post-convergence idle process
-  used about 135 MiB RSS while the host retained about 2.7 GiB available
-  memory. A forced process failure recovered to HTTP `200` in 13 seconds.
+- The browser dashboard initially passed loopback and SSH-tunnel checks, then
+  passed native-password authentication through its source-scoped LAN UFW rule
+  and the existing Tailnet ingress policy. Its post-convergence idle process
+  used about 135 MiB RSS while the host retained about 2.7 GiB available memory.
+  A forced process failure recovered to HTTP `200` in 13 seconds.
 - A daily systemd timer creates full state archives in the private
   `/mnt/external-data/backups/hermes-agent` directory. The first live backup
   completed successfully.
@@ -278,31 +279,22 @@ mount, OAuth, storage, backup, and restore decisions.
 ## Implementation Gates
 
 The runtime installation, ARM64 binary smoke test, authenticated provider
-response, loopback dashboard, toolset allowlist, first backup, and content-free
-Codex provenance audit are complete. The remaining gates are:
+response, persistence backup/restore and custom-provider proof, authenticated
+LAN/Tailnet dashboard, toolset allowlist, first backup, content-free Codex
+provenance audit, and Home Assistant state-read/reversible-write proof are
+complete. The remaining gates are:
 
-1. **Learning persistence:** prove that a curated memory entry and a reviewed
-   skill survive a Hermes restart and a provider change. Back up and restore the
-   service data, then verify audit continuity and rollback of a changed skill.
-2. **Codex:** test modality-aware routing and graceful handling of plan usage
+1. **Codex:** test modality-aware routing and graceful handling of plan usage
    limits.
-3. **Provider migration:** configure a test custom OpenAI-compatible endpoint,
-   switch Hermes from Codex to it, and rerun a fixed suite of conversations and
-   read-only tools. The future model must offer at least 64K context.
-4. **Gateway policy:** prove path traversal, unsupported MIME types, oversized
-   reads, unapproved operation IDs, and malformed Home Assistant targets fail
-   closed and are audited.
-5. **Home Assistant:** retain the authenticated MCP gateway and its Assist
-   per-entity exposure boundary. An end-to-end Hermes state read and reversible
-   service-call proof has passed; define any future unattended-action policy
-   separately.
-6. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
+2. **Capability gateway:** implement and test the separate Cloud Corpus and
+   approved-maintenance gateways, including path traversal, unsupported MIME,
+   oversized-read, and audit rejection paths.
+3. **Cloud Corpus:** validate pCloud and Google Drive retrieval against known
    documents without leaking credentials into prompts or logs.
-7. **Network and identity:** retain loopback plus SSH tunneling until an
-   authenticated LAN/Tailnet policy is implemented and tested.
-
-After the gates pass, codify the capability gateway, credential references,
-firewall policy, and authenticated health checks in Ansible.
+4. **Unattended Home Assistant operations:** define a separate policy before
+   Hermes may invoke write operations without a per-request confirmation.
+5. **Dependency hygiene:** pin an upstream Hermes release with `undici >= 6.28.0`
+   and repeat the production dependency audit.
 
 ## Sources
 

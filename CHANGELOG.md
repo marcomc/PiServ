@@ -86,18 +86,16 @@
 - Limited Hermes to memory and skill tools with write approval while explicitly
   disabling terminal, filesystem, browser, code execution, Home Assistant, and
   all other bundled toolsets.
-- Added a loopback-only Hermes dashboard, SSH-tunnel operator workflow, and
-  hardened systemd service.
-- Added Hermes native password authentication with an scrypt-only runtime
-  state, a root-only generated-password proposal, source-scoped LAN UFW access,
-  and Tailnet access through the existing Tailscale ingress policy.
+- Added a hardened Hermes dashboard with native password authentication,
+  scrypt-only runtime state, a root-only generated-password proposal,
+  source-scoped LAN UFW access, Tailnet ingress, and an SSH-tunnel recovery
+  workflow.
 - Built the dashboard chat terminal UI into a separate root-owned runtime
   artifact with a Hermes-revision marker, preventing the unprivileged
   dashboard service from attempting and failing `npm install` during chat
   startup and rebuilding it after a pinned-source update.
 - Reduced the deployed dashboard production audit to one moderate transitive
-  `undici` finding; the dashboard remains a loopback Python service serving
-  prebuilt assets.
+  `undici` finding; it serves prebuilt assets through a Python service.
 - Added daily full Hermes state backups to the external SSD with 30-day
   retention and validated the first live archive.
 - Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health

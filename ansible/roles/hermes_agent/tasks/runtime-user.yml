@@ -11,8 +11,8 @@
     group: "{{ hermes_agent_group }}"
     groups: >-
       {{ [hermes_agent_backup_group]
-      if hermes_agent_manage_backup else omit }}
-    append: true
+      if hermes_agent_manage_backup else [] }}
+    append: false
     home: "{{ hermes_agent_home }}"
     create_home: true
     shell: /usr/sbin/nologin

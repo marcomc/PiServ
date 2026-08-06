@@ -10,7 +10,7 @@
           - is-active
           - hermes-agent-dashboard.service
       changed_when: false
-      register: hermes_agent_dashboard_state
+      register: hermes_agent_molecule_dashboard_state
 
     - name: Read Hermes Agent backup timer state
       ansible.builtin.command:
@@ -19,7 +19,7 @@
           - is-enabled
           - hermes-agent-backup.timer
       changed_when: false
-      register: hermes_agent_backup_timer_state
+      register: hermes_agent_molecule_backup_timer_state
 
     - name: Verify loopback dashboard response
       ansible.builtin.uri:
@@ -40,7 +40,7 @@
         paths: /var/backups/hermes-agent
         patterns: hermes-backup-*.zip
         file_type: file
-      register: hermes_agent_backup_archives
+      register: hermes_agent_molecule_backup_archives
 
     - name: Read Hermes Agent version
       ansible.builtin.command:
@@ -48,7 +48,7 @@
           - /usr/local/bin/hermes
           - --version
       changed_when: false
-      register: hermes_agent_version
+      register: hermes_agent_molecule_installed_hermes_version
 
     - name: Read Codex CLI version
       ansible.builtin.command:
@@ -56,13 +56,22 @@
           - /usr/local/bin/codex
           - --version
       changed_when: false
-      register: hermes_agent_codex_version
+      register: hermes_agent_molecule_installed_codex_version
 
     - name: Read fixture Hermes revision
       ansible.builtin.slurp:
         src: /usr/local/src/hermes-agent-fixture/revision
       changed_when: false
-      register: hermes_agent_fixture_revision
+      register: hermes_agent_molecule_fixture_revision
+
+    - name: Read fixture artifact checksums
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        - /usr/local/src/hermes-agent-fixture/codex.tar.gz
+      register: hermes_agent_molecule_fixture_artifacts
 
     - name: Read Hermes dashboard terminal UI runtime revision
       ansible.builtin.command:
@@ -70,12 +79,12 @@
           - cat
           - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
       changed_when: false
-      register: hermes_agent_dashboard_tui_revision
+      register: hermes_agent_molecule_dashboard_tui_revision
 
     - name: Inspect Hermes dashboard terminal UI runtime bundle
       ansible.builtin.stat:
         path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
-      register: hermes_agent_dashboard_tui_bundle
+      register: hermes_agent_molecule_dashboard_tui_bundle
 
     - name: Verify local-model capability is inert by default
       ansible.builtin.stat:
@@ -86,22 +95,122 @@
         - /usr/local/libexec/hermes-agent/benchmark-local-model
         - /usr/local/lib/llama.cpp
         - /var/lib/hermes-models
-      register: hermes_agent_local_model_artifacts
+      register: hermes_agent_molecule_local_model_artifacts
 
     - name: Assert installed role behavior
       ansible.builtin.assert:
         that:
-          - hermes_agent_dashboard_state.stdout | trim == 'active'
-          - hermes_agent_backup_timer_state.stdout | trim == 'enabled'
-          - hermes_agent_backup_archives.matched | int == 1
-          - hermes_agent_version.stdout | trim == 'Hermes Agent v0.20.0'
-          - hermes_agent_codex_version.stdout | trim == 'codex-cli 0.145.0'
-          - hermes_agent_dashboard_tui_revision.stdout | trim == (hermes_agent_fixture_revision.content | b64decode | trim)
-          - hermes_agent_dashboard_tui_bundle.stat.exists
-          - hermes_agent_dashboard_tui_bundle.stat.isreg
-          - hermes_agent_dashboard_tui_bundle.stat.pw_name == 'root'
-          - hermes_agent_dashboard_tui_bundle.stat.gr_name == 'root'
-          - hermes_agent_dashboard_tui_bundle.stat.mode == '0644'
+          - hermes_agent_molecule_dashboard_state.stdout | trim == 'active'
+          - hermes_agent_molecule_backup_timer_state.stdout | trim == 'enabled'
+          - hermes_agent_molecule_backup_archives.matched | int == 1
+          - hermes_agent_molecule_installed_hermes_version.stdout | trim == 'Hermes Agent v0.20.0'
+          - hermes_agent_molecule_installed_codex_version.stdout | trim == 'codex-cli 0.145.0'
+          - hermes_agent_molecule_dashboard_tui_revision.stdout | trim == (hermes_agent_molecule_fixture_revision.content | b64decode | trim)
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.exists
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.isreg
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.pw_name == 'root'
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.gr_name == 'root'
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.mode == '0644'
           - >-
-            hermes_agent_local_model_artifacts.results |
+            hermes_agent_molecule_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
+
+    - name: Enable Home Assistant MCP in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+
+    - name: Inspect enabled Home Assistant MCP artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-agent/home-assistant-mcp.env
+        - /var/lib/hermes-agent/config.yaml
+      register: hermes_agent_molecule_mcp_artifacts
+
+    - name: Read enabled Hermes Agent MCP configuration
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/config.yaml
+      register: hermes_agent_molecule_mcp_config
+      changed_when: false
+
+    - name: Assert enabled Home Assistant MCP boundary
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.exists
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.gr_name == 'hermes-agent'
+          - >-
+            'Authorization: "Bearer ${HASS_MCP_TOKEN}"' in
+            (hermes_agent_molecule_mcp_config.content | b64decode)
+          - >-
+            'http://home-assistant.example.test/api/mcp' in
+            (hermes_agent_molecule_mcp_config.content | b64decode)
+
+    - name: Disable dashboard and backup services in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+
+    - name: Inspect disabled Hermes Agent units
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-agent-dashboard.service
+        - /etc/systemd/system/hermes-agent-backup.service
+        - /etc/systemd/system/hermes-agent-backup.timer
+      register: hermes_agent_molecule_disabled_units
+
+    - name: Read disabled Hermes Agent dashboard state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - hermes-agent-dashboard.service
+      register: hermes_agent_molecule_disabled_dashboard_state
+      changed_when: false
+      failed_when: false
+
+    - name: Read root group membership after backup disable
+      ansible.builtin.getent:
+        database: group
+        key: root
+
+    - name: Assert disabled feature cleanup
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_disabled_units.results |
+            selectattr('stat.exists') | list | length == 0
+          - hermes_agent_molecule_disabled_dashboard_state.rc != 0
+          - "'hermes-agent' not in ansible_facts.getent_group.root[2]"

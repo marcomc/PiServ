@@ -34,6 +34,16 @@
       - "'code_execution' in hermes_agent_disabled_toolsets"
       - "'homeassistant' in hermes_agent_disabled_toolsets"
       - not hermes_agent_manage_backup or hermes_agent_backup_group | length > 0
+      - hermes_agent_dashboard_port >= 1
+      - hermes_agent_dashboard_port <= 65535
+      - hermes_agent_dashboard_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
+      - hermes_agent_backup_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
+      - hermes_agent_backup_timer_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer$')
+      - hermes_agent_backup_retention_days >= 1
+      - hermes_agent_backup_retention_days <= 3650
+      - hermes_agent_backup_randomized_delay is match('^[1-9][0-9]*(us|ms|s|m|h|d|w)$')
+      - hermes_agent_backup_timezone is match('^[A-Za-z_]+(/[A-Za-z_+-]+)*$')
+      - hermes_agent_backup_on_calendar is not search('[\r\n]')
       - >-
         not hermes_agent_manage_home_assistant_mcp or
         hermes_agent_home_assistant_mcp_name is match('^[a-z][a-z0-9-]*$')
@@ -63,6 +73,16 @@
       the openai-codex provider, memory/skills-only access, an explicit backup
       group when backups are enabled, and a valid Assist MCP endpoint with a
       private token file when Home Assistant access is enabled.
+
+- name: Validate Hermes Agent backup timer schedule
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemd-analyze
+      - calendar
+      - "{{ hermes_agent_backup_on_calendar }} {{ hermes_agent_backup_timezone }}"
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
 
 - name: Read cgroup filesystem type for local-model preflight
   ansible.builtin.command:

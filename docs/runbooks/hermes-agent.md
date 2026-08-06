@@ -167,8 +167,11 @@ set -a
 . /var/lib/hermes-agent/home-assistant-mcp.env
 set +a
 test -n "$HASS_MCP_TOKEN"
-curl --fail --silent --show-error --max-time 10 \
-  -H "Authorization: Bearer $HASS_MCP_TOKEN" \
+curl_config="$(mktemp)"
+trap "rm -f -- \"$curl_config\"" EXIT
+chmod 0600 "$curl_config"
+printf "%s\\n" "header = \\\"Authorization: Bearer ${HASS_MCP_TOKEN}\\\"" >"$curl_config"
+curl --config "$curl_config" --fail --silent --show-error --max-time 10 \
   http://<home-assistant-host>:8123/api/ >/dev/null
 '
 echo HOME_ASSISTANT_AUTH_OK

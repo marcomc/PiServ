@@ -42,8 +42,9 @@ the lower-risk operation paths are live-tested.
 _Avoid_: interactive shell access, shared administrator login
 
 **Cloud Corpus**:
-The complete pCloud and Google Drive account content that Hermes is authorized
-to retrieve and analyze for the operator.
+The planned complete pCloud and Google Drive account content that Hermes may
+retrieve and analyze for the operator after its separate retrieval gateways are
+implemented and validated.
 _Avoid_: selected-folder source, public knowledge base
 
 **Pre-authorized Codex Routing**:
@@ -68,8 +69,8 @@ with Hermes.
 _Avoid_: Home Assistant Assist channel, public chat service
 
 **Home Assistant Assist Channel**:
-The Home Assistant conversation path that supplies an operator request to
-Hermes and returns its response to Assist.
+The planned Home Assistant conversation path that will supply an operator
+request to Hermes and return its response to Assist after separate validation.
 _Avoid_: direct Hermes chat, generic Home Assistant automation
 
 **Interaction Roadmap**:
@@ -78,9 +79,9 @@ Channel second, and both interfaces together after separate validation.
 _Avoid_: simultaneous first release, Home Assistant-only design
 
 **Authentication Roadmap**:
-The use of PiServ's existing administrator identity for the initial Direct
-Hermes Chat, followed by a dedicated Hermes identity after the first release.
-_Avoid_: permanent shared administrator login, unauthenticated LAN access
+Direct Hermes Chat uses native dashboard password authentication. Do not reuse
+the PiServ administrator identity for the dashboard.
+_Avoid_: shared administrator login, unauthenticated LAN access
 
 **Hermes Access Boundary**:
 The LAN and authenticated Tailnet devices permitted to reach Direct Hermes Chat

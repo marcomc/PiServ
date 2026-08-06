@@ -1,0 +1,41 @@
+---
+name: Hermes Agent Role
+
+"on":
+  pull_request:
+    paths:
+      - ansible/roles/hermes_agent/**
+      - .github/workflows/hermes-agent.yml
+  push:
+    branches:
+      - main
+    paths:
+      - ansible/roles/hermes_agent/**
+      - .github/workflows/hermes-agent.yml
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible/roles/hermes_agent
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Install Ansible dependencies
+        run: ansible-galaxy collection install -r molecule/default/collections.yml
+
+      - name: Lint role
+        run: ansible-lint .
+
+      - name: Run Molecule
+        run: molecule test

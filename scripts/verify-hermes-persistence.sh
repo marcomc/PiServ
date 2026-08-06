@@ -111,6 +111,16 @@ if [[ ! -f "${model_path}" ]]; then
   exit 69
 fi
 
+if [[ "$(stat -fc %T /sys/fs/cgroup)" != cgroup2fs ]]; then
+  printf 'The cgroup v2 filesystem is unavailable for the local-provider proof.\n' >&2
+  exit 70
+fi
+controllers="$(< /sys/fs/cgroup/cgroup.controllers)"
+if [[ " ${controllers} " != *' memory '* ]]; then
+  printf 'The cgroup v2 memory controller is unavailable for the local-provider proof.\n' >&2
+  exit 70
+fi
+
 available_run_bytes="$(df --output=avail -B1 /run | awk 'NR == 2 { print $1 }')"
 if [[ ! "${available_run_bytes}" =~ ^[0-9]+$ ]] || (( available_run_bytes < 268435456 )); then
   printf 'At least 256 MiB free under /run is required for the isolated proof.\n' >&2
@@ -219,14 +229,17 @@ run_as_restored_hermes hermes config set \
   providers.piserv-persistence-proof.max_output_tokens \
   "${provider_output_tokens}" >/dev/null
 
-# Use an independent low-context runtime for migration validation. LimitAS and
-# OOMScoreAdjust remain effective even when the host lacks cgroup-memory support.
+# Use an independent low-context runtime for migration validation. Its cgroup
+# policy matches the managed local-model service and is checked below.
 systemd-run --unit="${local_model_unit}" --service-type=exec \
   --uid=hermes-agent --gid=hermes-agent \
   --property=RuntimeMaxSec=5min \
   --property=CPUQuota=200% \
   --property=TasksMax=48 \
   --property=LimitAS=4G \
+  --property=MemoryHigh=2500M \
+  --property=MemoryMax=3200M \
+  --property=MemorySwapMax=512M \
   --property=OOMScoreAdjust=500 \
   --property=TimeoutStopSec=15s \
   /usr/local/bin/llama-server --model "${model_path}" --alias "${model_id}" \
@@ -235,6 +248,15 @@ systemd-run --unit="${local_model_unit}" --service-type=exec \
   --threads 2 --threads-batch 2 --cache-type-k q4_0 --cache-type-v q4_0 \
   --cache-ram 64 --n-predict "${provider_output_tokens}" --no-warmup \
   --jinja --no-mmproj --no-webui >/dev/null
+local_model_limits="$(systemctl show "${local_model_unit}.service" \
+  --property=MemoryHigh --property=MemoryMax --property=MemorySwapMax)"
+for expected_limit in MemoryHigh=2621440000 MemoryMax=3355443200 MemorySwapMax=536870912; do
+  if ! grep --fixed-strings --quiet "${expected_limit}" <<<"${local_model_limits}"; then
+    printf 'Temporary local-model cgroup policy is not effective: %s\n' \
+      "${expected_limit}" >&2
+    exit 70
+  fi
+done
 wait_for_http "http://127.0.0.1:${local_model_port}/health" 60 1
 
 set +e
@@ -300,7 +322,7 @@ import sys
 
 line = open(sys.argv[1], encoding="utf-8").readline().strip()
 line = re.sub(
-    r"(?i)(api[_ -]?key|token|authorization|bearer)(?:=|:|\\s+)\\S+",
+    r"(?i)(api[_ -]?key|token|authorization|bearer)(?:=|:|\s+)\S+",
     r"\1=[REDACTED]",
     line,
 )
@@ -316,7 +338,11 @@ if [[ "${response}" != *"${marker}"* ]]; then
   exit 74
 fi
 
-test ! -e "${source_home}/memories/MEMORY.md"
+if [[ -f "${source_home}/memories/MEMORY.md" ]] && \
+  grep --fixed-strings --quiet "${marker}" "${source_home}/memories/MEMORY.md"; then
+  printf 'The persistence marker leaked into the source Hermes memory.\n' >&2
+  exit 74
+fi
 test ! -e "${source_home}/skills/piserv-persistence-proof"
 systemctl is-active --quiet "${dashboard_service}"
 

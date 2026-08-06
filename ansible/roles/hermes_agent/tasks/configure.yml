@@ -411,6 +411,30 @@
   when: hermes_agent_manage_dashboard
   notify: Restart Hermes Agent dashboard
 
+- name: Inspect disabled Hermes Agent dashboard unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+  register: hermes_agent_dashboard_unit
+  changed_when: false
+  when: not hermes_agent_manage_dashboard
+
+- name: Disable Hermes Agent dashboard
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_dashboard_service_name }}"
+    enabled: false
+    state: stopped
+  when:
+    - not hermes_agent_manage_dashboard
+    - hermes_agent_dashboard_unit.stat.exists
+    - not ansible_check_mode
+
+- name: Remove disabled Hermes Agent dashboard unit
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    state: absent
+  when: not hermes_agent_manage_dashboard
+  notify: Reload systemd daemon
+
 - name: Enable Hermes Agent dashboard
   ansible.builtin.systemd_service:
     name: "{{ hermes_agent_dashboard_service_name }}"
@@ -420,6 +444,15 @@
   when:
     - hermes_agent_manage_dashboard
     - not ansible_check_mode or hermes_agent_dashboard_dist.stat.exists
+
+- name: Inspect configured Hermes Agent backup directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_backup_dir }}"
+    follow: false
+  register: hermes_agent_backup_directory_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
 
 - name: Configure Hermes Agent backups
   when:
@@ -457,3 +490,54 @@
         state: started
         daemon_reload: true
       when: not ansible_check_mode
+
+- name: Require a dedicated Hermes Agent backup directory
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_backup_dir is match('^/')
+      - hermes_agent_backup_dir not in ['/', '/tmp', '/var', '/var/backups', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - >-
+        not hermes_agent_backup_directory_state.stat.exists or
+        (hermes_agent_backup_directory_state.stat.isdir and
+        not hermes_agent_backup_directory_state.stat.islnk and
+        hermes_agent_backup_directory_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_backup_directory_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_backup_directory_state.stat.mode == '0700')
+    fail_msg: >-
+      hermes_agent_backup_dir must be a dedicated, non-symlinked directory owned
+      by the Hermes runtime user; system paths and directories owned by another
+      service are not safe backup targets.
+  when: hermes_agent_manage_backup
+
+- name: Inspect disabled Hermes Agent backup units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_service_name }}"
+    - "{{ hermes_agent_backup_timer_name }}"
+  register: hermes_agent_backup_units
+  changed_when: false
+  when: not hermes_agent_manage_backup
+
+- name: Disable Hermes Agent backup units
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ hermes_agent_backup_units.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - not hermes_agent_manage_backup
+    - item.stat.exists
+    - not ansible_check_mode
+
+- name: Remove disabled Hermes Agent backup units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - "{{ hermes_agent_backup_service_name }}"
+    - "{{ hermes_agent_backup_timer_name }}"
+  when: not hermes_agent_manage_backup
+  notify: Reload systemd daemon
