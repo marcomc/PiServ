@@ -90,6 +90,49 @@
   loop_control:
     label: "{{ item.item }}"
 
+- name: Inspect existing local benchmark models
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_local_model_files
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  changed_when: false
+  check_mode: false
+
+- name: Inspect resumable local benchmark model parts before download
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}.partial"
+  register: hermes_agent_local_model_initial_parts
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  changed_when: false
+  check_mode: false
+
+- name: Initialize required local-model download capacity
+  ansible.builtin.set_fact:
+    hermes_agent_local_models_required_download_bytes: 0
+
+- name: Calculate required local-model download capacity
+  ansible.builtin.set_fact:
+    hermes_agent_local_models_required_download_bytes: >-
+      {{
+        hermes_agent_local_models_required_download_bytes | int +
+        (
+          0 if hermes_agent_local_model_files.results[item].stat.exists else
+          [
+            (hermes_agent_local_models[item].size_bytes | int) -
+            (hermes_agent_local_model_initial_parts.results[item].stat.size | default(0) | int),
+            0
+          ] | max
+        )
+      }}
+  loop: "{{ range(0, hermes_agent_local_models | length) | list }}"
+  loop_control:
+    label: "{{ hermes_agent_local_models[item].id }}"
+
 - name: Read available local-model storage capacity
   ansible.builtin.command:
     argv:
@@ -113,9 +156,9 @@
     that:
       - >-
         hermes_agent_local_models_available_bytes >=
-        ((hermes_agent_local_models | map(attribute='size_bytes') | sum) +
+        (hermes_agent_local_models_required_download_bytes | int +
         hermes_agent_local_models_min_free_bytes)
     fail_msg: >-
-      Local-model storage needs the configured model files plus the configured
-      free-space reserve before this deployment can download anything.
+      Local-model storage needs the remaining model download bytes plus the
+      configured free-space reserve before this deployment can proceed.
   when: hermes_agent_manage_local_models

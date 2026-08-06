@@ -42,7 +42,7 @@ while IFS= read -r -d '' tracked_path; do
 done < "${file_list}"
 
 if [[ "${#shell_files[@]}" -gt 0 ]]; then
-  shellcheck --enable=all "${shell_files[@]}"
+  shellcheck --enable=all --external-sources "${shell_files[@]}"
 fi
 
 ansible localhost, \

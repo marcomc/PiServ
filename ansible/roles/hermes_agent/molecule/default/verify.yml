@@ -115,6 +115,65 @@
             hermes_agent_molecule_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
 
+    - name: Load role defaults for local-model capacity fixture
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+
+    - name: Create local-model capacity fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: hermes-agent
+        mode: "0750"
+      loop:
+        - /var/lib/hermes-model-capacity-fixture
+        - /var/lib/hermes-model-capacity-fixture/results
+
+    - name: Create pre-existing local-model capacity fixture files
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "/var/lib/hermes-model-capacity-fixture/{{ item.name }}"
+        owner: root
+        group: hermes-agent
+        mode: "0640"
+      loop:
+        - name: present.gguf
+          content: x
+        - name: partial.gguf.partial
+          content: "{{ 'x' * 512 }}"
+
+    - name: Validate local-model capacity with existing fixture files
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+      vars:
+        hermes_agent_manage_local_models: true
+        hermes_agent_local_models_dir: /var/lib/hermes-model-capacity-fixture
+        hermes_agent_local_models_results_dir: /var/lib/hermes-model-capacity-fixture/results
+        hermes_agent_local_models_min_free_bytes: 1073741824
+        hermes_agent_local_models:
+          - id: present
+            display_name: Present fixture
+            repository: fixture/present
+            revision: "0000000000000000000000000000000000000000"
+            filename: present.gguf
+            sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+            size_bytes: 1024
+            port: 18081
+          - id: partial
+            display_name: Partial fixture
+            repository: fixture/partial
+            revision: "0000000000000000000000000000000000000000"
+            filename: partial.gguf
+            sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+            size_bytes: 2048
+            port: 18082
+
+    - name: Assert local-model capacity excludes present and partial bytes
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_local_models_required_download_bytes | int == 1536
+
     - name: Enable Home Assistant MCP in the fixture
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"

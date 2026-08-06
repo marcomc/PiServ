@@ -24,6 +24,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: not ansible_check_mode
 
 - name: Create versioned llama.cpp installation directory
   ansible.builtin.file:
@@ -79,16 +80,6 @@
   loop:
     - "{{ hermes_agent_local_models_dir }}"
     - "{{ hermes_agent_local_models_results_dir }}"
-
-- name: Inspect downloaded local benchmark models
-  ansible.builtin.stat:
-    path: "{{ hermes_agent_local_models_dir }}/{{ item.filename }}"
-    checksum_algorithm: sha256
-  register: hermes_agent_local_model_files
-  loop: "{{ hermes_agent_local_models }}"
-  loop_control:
-    label: "{{ item.id }}"
-  check_mode: false
 
 - name: Assert existing local benchmark models match their pinned checksums
   ansible.builtin.assert:
@@ -251,6 +242,7 @@
   loop: "{{ hermes_agent_local_models }}"
   loop_control:
     label: "{{ item.id }}"
+  when: not ansible_check_mode
 
 - name: Assert effective local-model systemd limits
   ansible.builtin.assert:
@@ -273,6 +265,7 @@
   loop: "{{ hermes_agent_local_model_effective_limits.results }}"
   loop_control:
     label: "{{ item.item.id }}"
+  when: not ansible_check_mode
 
 - name: Read installed llama-server version
   ansible.builtin.command:
@@ -282,6 +275,7 @@
   register: hermes_agent_llama_server_version
   changed_when: false
   check_mode: false
+  when: not ansible_check_mode
 
 - name: Assert installed llama-server runs
   ansible.builtin.assert:
@@ -290,3 +284,4 @@
     fail_msg: >-
       llama-server failed to execute from
       {{ hermes_agent_local_model_llama_server_path }}.
+  when: not ansible_check_mode

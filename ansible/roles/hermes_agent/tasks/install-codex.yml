@@ -17,6 +17,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: not ansible_check_mode
 
 - name: Create versioned Codex installation directory
   ansible.builtin.file:

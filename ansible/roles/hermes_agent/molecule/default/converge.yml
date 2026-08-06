@@ -3,22 +3,22 @@
   hosts: all
   become: true
   pre_tasks:
-    - name: Read fixture revision
-      ansible.builtin.slurp:
-        path: /usr/local/src/hermes-agent-fixture/revision
-      register: hermes_agent_fixture_revision
+    - name: Load test fixture variables
+      ansible.builtin.include_tasks: tasks/fixture-vars.yml
 
-    - name: Read fixture installer checksum
+    - name: Inspect fresh local-model runtime before check-mode convergence
       ansible.builtin.stat:
-        path: /usr/local/src/hermes-agent-fixture/hermes-agent-installer
-        checksum_algorithm: sha256
-      register: hermes_agent_fixture_installer
+        path: /usr/local/lib/llama.cpp/llama-server
+      changed_when: false
+      check_mode: false
+      register: hermes_agent_fixture_llama_server
+      when: ansible_check_mode
 
-    - name: Read fixture Codex checksum
-      ansible.builtin.stat:
-        path: /usr/local/src/hermes-agent-fixture/codex.tar.gz
-        checksum_algorithm: sha256
-      register: hermes_agent_fixture_codex
+    - name: Assert fresh local-model runtime is absent before check-mode convergence
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_fixture_llama_server.stat.exists
+      when: ansible_check_mode
   tasks:
     - name: Include tested role
       ansible.builtin.include_role:
@@ -38,3 +38,9 @@
         hermes_agent_manage_dashboard_chat: true
         hermes_agent_backup_group: root
         hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_local_models: "{{ ansible_check_mode | bool }}"
+        hermes_agent_local_models: []
+        hermes_agent_local_model_runtime_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_local_model_runtime_archive_checksum: >-
+          sha256:{{ hermes_agent_fixture_codex.stat.checksum }}

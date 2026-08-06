@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-piserv_host=${PISERV_HOST:-PiServ.local}
-piserv_user=${PISERV_USER:-admin}
-target="${piserv_user}@${piserv_host}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/piserv-target.sh
+source "${script_dir}/lib/piserv-target.sh"
+target="$(piserv_ssh_target)"
 
 ssh -o BatchMode=yes "${target}" 'sudo /bin/bash -s' <<'REMOTE'
 set -euo pipefail

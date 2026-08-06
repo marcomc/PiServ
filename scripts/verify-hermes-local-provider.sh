@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-piserv_host=${PISERV_HOST:-PiServ.local}
-piserv_user=${PISERV_USER:-admin}
-target="${piserv_user}@${piserv_host}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/piserv-target.sh
+source "${script_dir}/lib/piserv-target.sh"
+target="$(piserv_ssh_target)"
 
 if [[ "$#" -ne 1 ]]; then
   printf 'Usage: %s MODEL_ID\n' "$0" >&2
@@ -24,7 +25,7 @@ unit_name="hermes-local-provider-proof-${model_id}-$(date -u +%Y%m%d%H%M%S)"
 
 printf 'Starting isolated local-provider proof unit: %s\n' "${unit_name}"
 ssh -o BatchMode=yes "${target}" \
-  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=10min --property=OOMScoreAdjust=500 --setenv='MODEL_ID=${model_id}' /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=20min --property=OOMScoreAdjust=500 --setenv='MODEL_ID=${model_id}' /bin/bash -s" <<'REMOTE'
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent

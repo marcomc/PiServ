@@ -304,9 +304,9 @@ After re-enabling local-model management on a future 8 GB-or-larger host, run
 one benchmark at a time:
 
 ```sh
-ssh admin@PiServ.local \
+ssh "admin@${PISERV_IP:-PiServ.local}" \
   'sudo /usr/local/libexec/hermes-agent/benchmark-local-model granite-3-3-2b'
-ssh admin@PiServ.local \
+ssh "admin@${PISERV_IP:-PiServ.local}" \
   'sudo /usr/local/libexec/hermes-agent/benchmark-local-model gemma-4-e2b'
 ```
 
@@ -353,6 +353,15 @@ The Hermes backup policy requires the external SSD and the `external-data`
 group. Local-model files do not: they use the filesystem containing the
 configured model directory, which is the root filesystem on PiServ today.
 
+When mDNS is unavailable, export the current operator-supplied DHCP lease
+before running the controller scripts or SSH examples below:
+
+```sh
+export PISERV_IP=<current-dhcp-lease>
+```
+
+Without `PISERV_IP`, the commands use `PiServ.local`.
+
 ```sh
 findmnt /mnt/external-data
 getent group external-data
@@ -384,7 +393,7 @@ states.
 The underlying first login command is:
 
 ```sh
-ssh -t admin@PiServ.local \
+ssh -t "admin@${PISERV_IP:-PiServ.local}" \
   'sudo -u hermes-agent -H env \
   CODEX_HOME=/var/lib/hermes-agent/codex \
   codex login --device-auth'
@@ -424,7 +433,7 @@ the new proposal, then return it to `false`.
 Keep SSH tunneling available as the recovery path:
 
 ```sh
-ssh -N -L 9119:127.0.0.1:9119 admin@PiServ.local
+ssh -N -L 9119:127.0.0.1:9119 "admin@${PISERV_IP:-PiServ.local}"
 ```
 
 Open `http://127.0.0.1:9119`.
@@ -446,7 +455,7 @@ dependencies` or `npm install failed`.
 Verify service, provider, tool policy, and both runtimes:
 
 ```sh
-ssh admin@PiServ.local '
+ssh "admin@${PISERV_IP:-PiServ.local}" '
   sudo systemctl --no-pager status hermes-agent-dashboard.service
   curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9119/
   sudo -u hermes-agent -H env \
@@ -479,14 +488,14 @@ tools as part of the login test.
 Run an on-demand full backup:
 
 ```sh
-ssh admin@PiServ.local \
+ssh "admin@${PISERV_IP:-PiServ.local}" \
   'sudo systemctl start hermes-agent-backup.service'
 ```
 
 Inspect the timer and archives:
 
 ```sh
-ssh admin@PiServ.local '
+ssh "admin@${PISERV_IP:-PiServ.local}" '
   sudo systemctl list-timers hermes-agent-backup.timer --no-pager
   sudo find /mnt/external-data/backups/hermes-agent \
     -maxdepth 1 -type f -name "hermes-backup-*.zip" -printf "%f %s bytes\n"
@@ -505,7 +514,7 @@ explicit maintenance window.
 Inspect service logs:
 
 ```sh
-ssh admin@PiServ.local \
+ssh "admin@${PISERV_IP:-PiServ.local}" \
   'sudo journalctl -u hermes-agent-dashboard.service -n 100 --no-pager'
 ```
 
