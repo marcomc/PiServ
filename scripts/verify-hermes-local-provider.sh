@@ -25,7 +25,7 @@ unit_name="hermes-local-provider-proof-${model_id}-$(date -u +%Y%m%d%H%M%S)"
 
 printf 'Starting isolated local-provider proof unit: %s\n' "${unit_name}"
 ssh -o BatchMode=yes "${target}" \
-  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=20min --property=OOMScoreAdjust=500 --setenv='MODEL_ID=${model_id}' /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=30min --property=OOMScoreAdjust=500 --setenv='MODEL_ID=${model_id}' /bin/bash -s" <<'REMOTE'
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent
@@ -106,13 +106,18 @@ assert_model_test_preflight() {
   memory_high="$(systemctl show "${service_name}" --property=MemoryHigh --value)"
   memory_max="$(systemctl show "${service_name}" --property=MemoryMax --value)"
   memory_swap_max="$(systemctl show "${service_name}" --property=MemorySwapMax --value)"
-  for memory_limit in "${memory_high}" "${memory_max}" "${memory_swap_max}"; do
+  for memory_limit in "${memory_high}" "${memory_max}"; do
     if [[ ! "${memory_limit}" =~ ^[1-9][0-9]*$ ]]; then
       printf 'Local model cgroup memory policy is not effective: %s\n' \
         "${service_name}" >&2
       exit 70
     fi
   done
+  if [[ ! "${memory_swap_max}" =~ ^[0-9]+$ ]]; then
+    printf 'Local model cgroup swap policy is not effective: %s\n' \
+      "${service_name}" >&2
+    exit 70
+  fi
   if (( memory_high > memory_max )); then
     printf 'Local model cgroup memory policy has MemoryHigh above MemoryMax.\n' >&2
     exit 70

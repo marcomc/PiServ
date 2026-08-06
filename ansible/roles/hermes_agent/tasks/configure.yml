@@ -109,6 +109,47 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_inference_provenance
 
+- name: Inspect managed inference provenance plugin files for removal
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+  register: hermes_agent_inference_provenance_plugin_files
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+
+- name: Require removable inference provenance plugin files to be non-symlinked
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists or not item.stat.islnk
+    fail_msg: >-
+      {{ item.item }} is a symbolic link and cannot be removed as a managed
+      inference provenance plugin file.
+  loop: "{{ hermes_agent_inference_provenance_plugin_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+
+- name: Remove managed inference provenance plugin files when disabled
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: absent
+  loop: "{{ hermes_agent_inference_provenance_plugin_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+
 - name: Inspect Home Assistant MCP token parent
   ansible.builtin.stat:
     path: "{{ hermes_agent_home_assistant_mcp_token_env_file | dirname }}"
