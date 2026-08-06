@@ -193,6 +193,7 @@ memory_events_before="$(jq --raw-input 'split("\n") | map(select(length > 0) | s
 rss_before="$(awk '/VmRSS:/ { print $2 * 1024 }' "/proc/${main_pid}/status")"
 request_started_nanoseconds="$(date +%s%N)"
 response="$(curl --fail --silent --show-error \
+  --max-time {{ hermes_agent_local_models_benchmark_request_timeout }} \
   --header 'Content-Type: application/json' \
   --data '{"model":"'"${model_id}"'","messages":[{"role":"user","content":"Reply with exactly: HERMES_LOCAL_MODEL_OK"}],"temperature":0,"max_tokens":{{ hermes_agent_local_models_benchmark_max_tokens }},"stream":false}' \
   "${service_url}/v1/chat/completions")"

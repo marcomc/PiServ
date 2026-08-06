@@ -307,6 +307,10 @@ argument_specs:
         type: int
         default: 128
         description: Completion-token budget for the synthetic local-model probe.
+      hermes_agent_local_models_benchmark_request_timeout:
+        type: int
+        default: 120
+        description: Maximum seconds allowed for the synthetic local-model request.
       hermes_agent_local_models_cache_type_k:
         type: str
         default: q4_0

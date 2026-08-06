@@ -53,3 +53,12 @@ ansible localhost, \
   >/dev/null
 
 shellcheck --enable=all -s sh "${tmpdir}/msmtp-system.sh"
+
+ansible localhost, \
+  -c local \
+  -m ansible.builtin.template \
+  -a "src=ansible/roles/hermes_agent/templates/benchmark-hermes-local-model.sh.j2 dest=${tmpdir}/benchmark-hermes-local-model.sh" \
+  -e @ansible/roles/hermes_agent/defaults/main.yml \
+  >/dev/null
+
+shellcheck --enable=all -s bash "${tmpdir}/benchmark-hermes-local-model.sh"

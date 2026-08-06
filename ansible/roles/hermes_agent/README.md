@@ -136,7 +136,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |
 | `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file. |
-| `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime. |
+| `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
 | `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
 | `hermes_agent_codex_version` | `0.145.0` | Codex CLI release version. |
 | `hermes_agent_download_cache_dir` | `/var/cache/hermes-agent` | Verified-download cache. |
@@ -178,6 +178,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_models_memory_swap_max` | `512M` | systemd swap limit. |
 | `hermes_agent_local_model_benchmark_helper_path` | `/usr/local/libexec/hermes-agent/benchmark-local-model` | Benchmark helper path. |
 | `hermes_agent_local_models` | role list | Model records and their checksum-pinned sources. |
+| `hermes_agent_local_models_benchmark_request_timeout` | `120` | Bounded synthetic completion request timeout in seconds (1-600). |
 
 The full variable contract, including types, is in
 [meta/argument_specs.yml](meta/argument_specs.yml).

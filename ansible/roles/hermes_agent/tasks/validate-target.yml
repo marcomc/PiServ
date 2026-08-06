@@ -34,6 +34,12 @@
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
         hermes_agent_dashboard_basic_auth_session_ttl_seconds >= 60
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_session_ttl_seconds <= 86400
+      - >-
+        not hermes_agent_manage_inference_provenance or
+        hermes_agent_inference_provenance_plugin_name is match('^[a-z][a-z0-9-]*$')
       - hermes_agent_provider == "openai-codex"
       - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
       - "'terminal' in hermes_agent_disabled_toolsets"

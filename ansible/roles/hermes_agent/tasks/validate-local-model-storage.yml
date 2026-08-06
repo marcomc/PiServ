@@ -11,6 +11,8 @@
       - hermes_agent_local_models_threads <= 64
       - hermes_agent_local_models_benchmark_max_tokens >= 1
       - hermes_agent_local_models_benchmark_max_tokens <= 4096
+      - hermes_agent_local_models_benchmark_request_timeout >= 1
+      - hermes_agent_local_models_benchmark_request_timeout <= 600
       - hermes_agent_local_models_min_free_bytes >= 1073741824
       - hermes_agent_local_models_host == '127.0.0.1'
       - >-

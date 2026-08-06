@@ -141,6 +141,7 @@ hermes_agent_local_models_host: 127.0.0.1
 hermes_agent_local_models_context_size: 65536
 hermes_agent_local_models_threads: 3
 hermes_agent_local_models_benchmark_max_tokens: 128
+hermes_agent_local_models_benchmark_request_timeout: 120
 hermes_agent_local_models_cache_type_k: q4_0
 hermes_agent_local_models_cache_type_v: q4_0
 hermes_agent_local_models_address_space_limit: 4G
