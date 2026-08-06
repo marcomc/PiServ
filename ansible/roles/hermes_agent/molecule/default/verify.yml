@@ -304,6 +304,53 @@
                 ansible_failed_task.name ==
                 'Assert Hermes Agent runtime identity names are unprivileged'
 
+    - name: Inspect shared temporary directory before installer-path preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_before
+
+    - name: Reject a Hermes installer beneath a shared temporary directory
+      block:
+        - name: Preflight shared temporary Hermes installer path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_user: hermes-agent
+            hermes_agent_group: hermes-agent
+            hermes_agent_home: /var/lib/hermes-agent
+            hermes_agent_install_dir: /usr/local/lib/hermes-agent
+            hermes_agent_installer_path: /tmp/hermes-agent-installer
+
+        - name: Fail if shared temporary Hermes installer path was accepted
+          ansible.builtin.fail:
+            msg: Shared temporary installer paths must fail preflight.
+      rescue:
+        - name: Assert shared temporary installer path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject shared temporary Hermes installer paths'
+
+    - name: Inspect shared temporary directory after installer-path preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_after
+
+    - name: Assert rejected temporary installer path made no mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_tmp_after.stat.mode ==
+            hermes_agent_molecule_tmp_before.stat.mode
+          - >-
+            hermes_agent_molecule_tmp_after.stat.pw_name ==
+            hermes_agent_molecule_tmp_before.stat.pw_name
+          - >-
+            hermes_agent_molecule_tmp_after.stat.gr_name ==
+            hermes_agent_molecule_tmp_before.stat.gr_name
+
     - name: Create disposable UID-zero alias fixture group
       ansible.builtin.group:
         name: hermes-uid-zero-fixture

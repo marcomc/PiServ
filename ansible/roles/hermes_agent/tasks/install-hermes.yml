@@ -1,4 +1,12 @@
 ---
+- name: Refresh Hermes installer parent directory state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_installer_path | dirname }}"
+    follow: false
+  register: hermes_agent_installer_parent_install_state
+  changed_when: false
+  check_mode: false
+
 - name: Create root-owned Hermes installer directory
   ansible.builtin.file:
     path: "{{ hermes_agent_installer_path | dirname }}"
@@ -6,6 +14,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: not hermes_agent_installer_parent_install_state.stat.exists
 
 - name: Download checksum-pinned Hermes installer
   ansible.builtin.get_url:

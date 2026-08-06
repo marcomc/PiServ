@@ -100,7 +100,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_repo_version` | pinned commit | Hermes upstream commit to install. |
 | `hermes_agent_version` | `0.20.0` | Expected Hermes CLI version. |
 | `hermes_agent_installer_url` | pinned upstream URL | Hermes installer URL. |
-| `hermes_agent_installer_path` | `/usr/local/libexec/hermes-agent-installer` | Local installer path. |
+| `hermes_agent_installer_path` | `/usr/local/libexec/hermes-agent-installer` | Root-owned local installer path outside shared temporary directories. |
 | `hermes_agent_uv_python_install_dir` | `/usr/local/share/uv/python` | uv Python runtime directory. |
 | `hermes_agent_uv_python_bin_dir` | `/usr/local/share/uv/bin` | uv binary directory. |
 | `hermes_agent_installer_checksum` | pinned SHA-256 | Installer integrity check. |

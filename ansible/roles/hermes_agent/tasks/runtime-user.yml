@@ -40,6 +40,44 @@
     label: "{{ item.item }}"
   when: hermes_agent_runtime_user_phase == 'preflight'
 
+- name: Reject shared temporary Hermes installer paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_resolved_managed_paths.results[2].stdout
+        | default(hermes_agent_installer_path)
+        is not match('^/(tmp|var/tmp)(/|$)')
+    fail_msg: >-
+      hermes_agent_installer_path must not be staged beneath a shared temporary
+      directory. Canonical path:
+      {{ hermes_agent_resolved_managed_paths.results[2].stdout |
+      default(hermes_agent_installer_path) }}.
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes installer parent directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_installer_path | dirname }}"
+    follow: false
+  register: hermes_agent_installer_parent_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Require a safe Hermes installer parent directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_installer_parent_state.stat.exists or
+        (hermes_agent_installer_parent_state.stat.isdir and
+        not hermes_agent_installer_parent_state.stat.islnk and
+        hermes_agent_installer_parent_state.stat.pw_name == 'root' and
+        hermes_agent_installer_parent_state.stat.gr_name == 'root' and
+        hermes_agent_installer_parent_state.stat.mode is match('^0?[0-7][0-5][0-5]$'))
+    fail_msg: >-
+      An existing Hermes installer parent must be a root-owned directory that
+      is not writable by its group or other users.
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
 - name: Inspect Hermes Agent persistent state root
   ansible.builtin.stat:
     path: "{{ hermes_agent_home }}"

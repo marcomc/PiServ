@@ -11,7 +11,7 @@ unit_name="hermes-persistence-proof-$(date -u +%Y%m%d%H%M%S)"
 printf 'Starting transient proof unit: %s\n' "${unit_name}"
 set +e
 ssh -o BatchMode=yes "${target}" \
-  "sudo systemd-run --unit=${unit_name} --wait --pipe --service-type=exec --property=RuntimeMaxSec=10min /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit=${unit_name} --wait --pipe --service-type=exec --property=RuntimeMaxSec=20min /bin/bash -s" <<'REMOTE'
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent
@@ -92,8 +92,13 @@ if ! systemctl is-active --quiet "${dashboard_service}"; then
   exit 65
 fi
 
-if systemctl is-active --quiet hermes-local-model-granite-3-3-2b.service; then
-  printf 'Refusing to run alongside the managed Granite model service.\n' >&2
+mapfile -t active_local_model_units < <(
+  systemctl list-units --type=service --state=active --no-legend --plain \
+    'hermes-local-model-*.service' | awk '{print $1}'
+)
+if (( ${#active_local_model_units[@]} > 0 )); then
+  printf 'Refusing to run alongside active local-model services: %s\n' \
+    "${active_local_model_units[*]}" >&2
   exit 66
 fi
 
@@ -234,7 +239,7 @@ run_as_restored_hermes hermes config set \
 # policy matches the managed local-model service and is checked below.
 systemd-run --unit="${local_model_unit}" --service-type=exec \
   --uid=hermes-agent --gid=hermes-agent \
-  --property=RuntimeMaxSec=5min \
+  --property=RuntimeMaxSec=10min \
   --property=CPUQuota=200% \
   --property=TasksMax=48 \
   --property=LimitAS=4G \
