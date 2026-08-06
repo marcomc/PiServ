@@ -78,6 +78,14 @@ hermes_agent_dashboard_host: 127.0.0.1
 hermes_agent_dashboard_port: 9119
 hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
 hermes_agent_manage_dashboard: true
+hermes_agent_dashboard_manage_basic_auth: false
+hermes_agent_dashboard_basic_auth_username: ""
+hermes_agent_dashboard_basic_auth_state_file: >-
+  {{ hermes_agent_home }}/dashboard-basic-auth.yaml
+hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+  /root/hermes-agent-dashboard-bootstrap-password
+hermes_agent_dashboard_basic_auth_session_ttl_seconds: 43200
+hermes_agent_dashboard_rotate_basic_auth: false
 hermes_agent_codex_version: "0.145.0"
 hermes_agent_download_cache_dir: /var/cache/hermes-agent
 hermes_agent_codex_archive_url: >-

@@ -64,6 +64,149 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_manage_home_assistant_mcp
 
+- name: Read Hermes dashboard authentication state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+  register: hermes_agent_dashboard_basic_auth_state
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Generate Hermes dashboard authentication material
+  ansible.builtin.command:
+    argv:
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+      - -c
+      - |
+        import json
+        import secrets
+        from plugins.dashboard_auth.basic import hash_password
+
+        password = secrets.token_urlsafe(32)
+        print(json.dumps({
+            "username": "{{ hermes_agent_dashboard_basic_auth_username }}",
+            "password": password,
+            "password_hash": hash_password(password),
+            "secret": secrets.token_urlsafe(32),
+        }))
+    chdir: "{{ hermes_agent_install_dir }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
+  register: hermes_agent_dashboard_basic_auth_generated
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Store private Hermes dashboard authentication state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'username': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).username,
+        'password_hash': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password_hash,
+        'secret': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).secret,
+        'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Store root-only proposed Hermes dashboard password
+  ansible.builtin.copy:
+    content: >-
+      {{ (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Read private Hermes dashboard authentication state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+  register: hermes_agent_dashboard_basic_auth_state_contents
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode or hermes_agent_dashboard_basic_auth_state.stat.exists
+
+- name: Load private Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_basic_auth: >-
+      {{ {
+        'username': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).username,
+        'password_hash': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).password_hash,
+        'secret': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).secret,
+        'session_ttl_seconds': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).session_ttl_seconds
+      } }}
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - hermes_agent_dashboard_basic_auth_state_contents is defined
+
+- name: Normalize private Hermes dashboard authentication state
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_basic_auth | to_nice_yaml(indent=2) }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+
+- name: Prepare check-mode Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_basic_auth:
+      username: "{{ hermes_agent_dashboard_basic_auth_username }}"
+      password_hash: ""
+      secret: ""
+      session_ttl_seconds: "{{ hermes_agent_dashboard_basic_auth_session_ttl_seconds }}"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - ansible_check_mode
+    - not hermes_agent_dashboard_basic_auth_state.stat.exists
+
+- name: Clear one-shot Hermes dashboard password rotation request
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotate_basic_auth: false
+  no_log: true
+  when: hermes_agent_dashboard_rotate_basic_auth | bool
+
 - name: Install locked-down Hermes configuration
   ansible.builtin.template:
     src: config.yaml.j2

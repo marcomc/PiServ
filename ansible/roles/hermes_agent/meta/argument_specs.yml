@@ -6,7 +6,7 @@ argument_specs:
       - Installs a checksum-pinned Hermes Agent revision under a root-owned path.
       - Installs a checksum-pinned ARM64 Codex CLI release.
       - Runs Hermes under a dedicated unprivileged system identity.
-      - Manages a loopback-only dashboard and optional state backups.
+      - Manages a private or authenticated network dashboard and optional state backups.
       - Does not perform provider login or store operator credentials.
     options:
       hermes_agent_user:
@@ -150,7 +150,8 @@ argument_specs:
         default: 127.0.0.1
         choices:
           - 127.0.0.1
-        description: Loopback address used by the private dashboard.
+          - 0.0.0.0
+        description: Loopback or wildcard IPv4 address used by the dashboard.
       hermes_agent_dashboard_port:
         type: int
         default: 9119
@@ -162,7 +163,29 @@ argument_specs:
       hermes_agent_manage_dashboard:
         type: bool
         default: true
-        description: Whether to build and run the loopback dashboard.
+        description: Whether to build and run the dashboard.
+      hermes_agent_dashboard_manage_basic_auth:
+        type: bool
+        default: false
+        description: Generate and manage Hermes native dashboard password authentication.
+      hermes_agent_dashboard_basic_auth_username:
+        type: str
+        default: ""
+        description: Username for Hermes native dashboard password authentication.
+      hermes_agent_dashboard_basic_auth_state_file:
+        type: path
+        description: Private file holding the dashboard password hash and session secret.
+      hermes_agent_dashboard_basic_auth_bootstrap_password_file:
+        type: path
+        description: Root-only initial dashboard password retrieval file.
+      hermes_agent_dashboard_basic_auth_session_ttl_seconds:
+        type: int
+        default: 43200
+        description: Authenticated dashboard session lifetime in seconds.
+      hermes_agent_dashboard_rotate_basic_auth:
+        type: bool
+        default: false
+        description: Generate a replacement dashboard password and session secret once.
       hermes_agent_codex_version:
         type: str
         default: "0.145.0"

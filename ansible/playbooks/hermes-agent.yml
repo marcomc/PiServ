@@ -3,9 +3,46 @@
   hosts: piserv
   gather_facts: true
   become: true
+  vars:
+    piserv_hermes_agent_lan_ipv4_cidr: >-
+      {{ ansible_facts.default_ipv4.network ~ '/' ~ ansible_facts.default_ipv4.prefix }}
   vars_files:
     - ../vars/hermes-agent.yml.example
     - ../vars/hermes-agent.yml
+  pre_tasks:
+    - name: Validate firewall policy for the network Hermes dashboard
+      when: piserv_hermes_agent_dashboard_host == '0.0.0.0'
+      block:
+        - name: Read UFW policy before enabling the network Hermes dashboard
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/ufw
+              - status
+              - verbose
+          register: piserv_hermes_agent_ufw_status
+          changed_when: false
+          check_mode: false
+
+        - name: Require the PiServ firewall policy before enabling the network Hermes dashboard
+          ansible.builtin.assert:
+            that:
+              - "'Status: active' in piserv_hermes_agent_ufw_status.stdout"
+              - "'Default: deny (incoming)' in piserv_hermes_agent_ufw_status.stdout"
+              - >-
+                piserv_hermes_agent_ufw_status.stdout is regex(
+                  '(?m)^9119/tcp\\s+ALLOW IN\\s+'
+                  ~ (piserv_hermes_agent_lan_ipv4_cidr | regex_escape)
+                  ~ '\\s+# PiServ LAN Hermes dashboard$'
+                )
+              - >-
+                piserv_hermes_agent_ufw_status.stdout is regex(
+                  '(?m)^Anywhere\\s+on\\s+tailscale0\\s+ALLOW IN\\s+Anywhere'
+                  ~ '\\s+# PiServ Tailscale ingress$'
+                )
+            fail_msg: >-
+              Apply ansible/playbooks/firewall.yml before exposing Hermes. UFW
+              must have default incoming deny, a source-scoped LAN dashboard
+              rule, and PiServ Tailscale ingress policy.
   roles:
     - role: hermes_agent
       vars:
@@ -31,6 +68,12 @@
             provider: openai-codex
             model: gpt-5.6-sol
         hermes_agent_manage_inference_provenance: true
+        hermes_agent_dashboard_host: >-
+          {{ piserv_hermes_agent_dashboard_host }}
+        hermes_agent_dashboard_manage_basic_auth: >-
+          {{ piserv_hermes_agent_dashboard_manage_basic_auth }}
+        hermes_agent_dashboard_basic_auth_username: >-
+          {{ piserv_hermes_agent_dashboard_basic_auth_username }}
         hermes_agent_manage_home_assistant_mcp: >-
           {{ piserv_hermes_agent_manage_home_assistant_mcp }}
         hermes_agent_home_assistant_mcp_url: >-

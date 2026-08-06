@@ -82,13 +82,15 @@
         hermes_agent_codex_version_output.stdout
   when: hermes_agent_codex_binary.stat.exists
 
-- name: Validate loopback Hermes Agent dashboard
+- name: Validate Hermes Agent dashboard
   ansible.builtin.uri:
     url: >-
       http://{{ hermes_agent_dashboard_host }}:{{
       hermes_agent_dashboard_port }}/
-    status_code: 200
+    status_code: >-
+      {{ 302 if hermes_agent_dashboard_manage_basic_auth else 200 }}
     return_content: false
+    follow_redirects: none
   check_mode: false
   when:
     - hermes_agent_manage_dashboard

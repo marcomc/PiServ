@@ -3,7 +3,8 @@
 Install a locked-down [Nous Hermes Agent](https://github.com/NousResearch/hermes-agent)
 service backed by the OpenAI Codex CLI. The role pins and verifies both upstream
 artifacts, runs Hermes as an unprivileged system user, keeps the dashboard on
-loopback, and can schedule encrypted-state backups to a caller-provided path.
+loopback by default, can expose it with native password authentication, and can
+schedule encrypted-state backups to a caller-provided path.
 
 This directory is prepared for later extraction into the planned
 `marcomc.hermes_agent` Galaxy role. It is not published to Galaxy yet.
@@ -15,6 +16,7 @@ This directory is prepared for later extraction into the planned
 - [Installation](#installation)
 - [Role Variables](#role-variables)
 - [Example Playbook](#example-playbook)
+- [Dashboard Authentication](#dashboard-authentication)
 - [Provider Login](#provider-login)
 - [Backups](#backups)
 - [Local Models](#local-models)
@@ -51,9 +53,12 @@ Hermes runs as the non-login `hermes-agent` system user. Its systemd services
 use a private state directory, `NoNewPrivileges`, a cleared capability set, and
 a strict read-only system filesystem with explicit writable paths.
 
-The dashboard binds to `127.0.0.1`. Reach it through an authenticated SSH tunnel
-or a separately-managed authenticated reverse proxy. Do not expose the dashboard
-directly by changing its bind address.
+The dashboard binds to `127.0.0.1` by default. A consuming deployment may bind
+to `0.0.0.0` only with `hermes_agent_dashboard_manage_basic_auth: true`; the
+role creates a random one-time password, persists only an scrypt hash and a
+session-signing secret in Hermes state, and writes the proposed password to a
+root-only file. The consuming deployment remains responsible for ingress
+firewall and Tailnet policy.
 
 ## Installation
 
@@ -114,6 +119,12 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
 | `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Dashboard systemd unit. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
+| `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
+| `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
+| `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |
+| `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file. |
+| `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime. |
+| `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
 | `hermes_agent_codex_version` | `0.145.0` | Codex CLI release version. |
 | `hermes_agent_download_cache_dir` | `/var/cache/hermes-agent` | Verified-download cache. |
 | `hermes_agent_codex_archive_url` | pinned upstream URL | ARM64 Codex archive URL. |
@@ -176,6 +187,25 @@ The full variable contract, including types, is in
 
 The backup group and directory are deployment values. Do not put host-specific
 mount paths, credentials, or provider tokens into the role defaults.
+
+## Dashboard Authentication
+
+For a network dashboard, set a valid username, enable
+`hermes_agent_dashboard_manage_basic_auth`, and bind to `0.0.0.0`. After the
+first convergence, retrieve the generated proposal over SSH:
+
+```sh
+sudo cat /root/hermes-agent-dashboard-bootstrap-password
+```
+
+Treat it as a password-manager entry and remove the file after recording it:
+
+```sh
+sudo rm /root/hermes-agent-dashboard-bootstrap-password
+```
+
+To rotate, set `hermes_agent_dashboard_rotate_basic_auth: true` for one
+convergence, retrieve the replacement, then return the variable to `false`.
 
 ## Provider Login
 

@@ -88,6 +88,9 @@
   all other bundled toolsets.
 - Added a loopback-only Hermes dashboard, SSH-tunnel operator workflow, and
   hardened systemd service.
+- Added Hermes native password authentication with an scrypt-only runtime
+  state, a root-only generated-password proposal, source-scoped LAN UFW access,
+  and Tailnet access through the existing Tailscale ingress policy.
 - Reduced the deployed dashboard production audit to one moderate transitive
   `undici` finding; the dashboard remains a loopback Python service serving
   prebuilt assets.

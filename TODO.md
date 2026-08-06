@@ -94,15 +94,14 @@
 
 - [ ] **Complete Hermes Agent provider and capability integration**
   - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
-    dashboard, persistent state, daily backup, and Ansible deployment are live.
+    dashboard, authenticated LAN/Tailnet access, persistent state, daily backup,
+    and Ansible deployment are live.
     Codex authentication and isolated state/provider-transport persistence
     validation are complete; external capabilities remain incomplete.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
     - Pin the next Hermes upstream release that upgrades transitive `undici` to
       `6.28.0` or newer, then repeat the production dependency audit.
-    - Add authenticated Tailnet access only after defining the identity and
-      firewall policy.
 
 - [ ] **Define service-level cgroup v2 memory policy**
   - Assessment: Enabling the memory controller only makes memory accounting,

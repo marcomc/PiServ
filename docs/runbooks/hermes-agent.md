@@ -12,7 +12,7 @@
 - [Verify Persistence](#verify-persistence)
 - [Deploy](#deploy)
 - [Complete ChatGPT Login](#complete-chatgpt-login)
-- [Open the Private Dashboard](#open-the-private-dashboard)
+- [Open the Dashboard](#open-the-dashboard)
 - [Validate](#validate)
 - [Backup and Restore](#backup-and-restore)
 - [Recovery](#recovery)
@@ -37,7 +37,7 @@ Live state observed on 2026-07-31:
 | Enabled toolsets | `memory`, `skills` |
 | Write gates | Memory and skill writes require approval |
 | Disabled toolsets | Terminal, file, browser, code execution, Home Assistant, and all other bundled toolsets |
-| Dashboard | `127.0.0.1:9119`, reachable only locally or through an SSH tunnel |
+| Dashboard | Authenticated on LAN and Tailnet, port `9119` |
 | Backups | Daily full archive on `/mnt/external-data/backups/hermes-agent` |
 
 The first live dashboard probe returned HTTP `200`. The first backup contained
@@ -386,16 +386,41 @@ ssh -t admin@PiServ.local \
 Hermes creates its own refresh session. Routine Codex CLI use does not rotate
 the Hermes provider token.
 
-## Open the Private Dashboard
+## Open the Dashboard
 
-Create an SSH tunnel from the operator Mac:
+The managed deployment binds to wildcard IPv4 only after verifying UFW's
+source-scoped LAN rule and Tailscale ingress. Hermes native password
+authentication is mandatory for this bind. On 2026-08-05, the login endpoint
+was verified through both PiServ's LAN and Tailnet IPv4 addresses.
+
+Retrieve the initially proposed password once over SSH, add it to the password
+manager, then remove the root-only proposal file:
+
+```sh
+ssh admin@<piserv-host> \
+  'sudo cat /root/hermes-agent-dashboard-bootstrap-password'
+ssh admin@<piserv-host> \
+  'sudo rm /root/hermes-agent-dashboard-bootstrap-password'
+```
+
+Open either `http://<piserv-lan-ip>:9119` on the trusted LAN or
+`http://<piserv-tailnet-name>:9119` through Tailnet. Tailscale encrypts its
+transport; direct LAN HTTP does not. Use only a trusted LAN until a separate
+TLS reverse-proxy deployment is approved.
+
+The username is a deployment variable, while the password is generated on the
+Pi. Hermes stores only an scrypt hash and session-signing secret in its private
+state. To replace the password, set
+`hermes_agent_dashboard_rotate_basic_auth: true` for one playbook run, retrieve
+the new proposal, then return it to `false`.
+
+Keep SSH tunneling available as the recovery path:
 
 ```sh
 ssh -N -L 9119:127.0.0.1:9119 admin@PiServ.local
 ```
 
-Open `http://127.0.0.1:9119`. Keep the dashboard loopback-only until an
-authenticated LAN or Tailnet exposure policy is implemented.
+Open `http://127.0.0.1:9119`.
 
 ## Validate
 
@@ -404,7 +429,7 @@ Verify service, provider, tool policy, and both runtimes:
 ```sh
 ssh admin@PiServ.local '
   sudo systemctl --no-pager status hermes-agent-dashboard.service
-  curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9119/
+  curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9119/
   sudo -u hermes-agent -H env \
     HERMES_HOME=/var/lib/hermes-agent \
     CODEX_HOME=/var/lib/hermes-agent/codex \
@@ -420,7 +445,8 @@ ssh admin@PiServ.local '
 
 Expected results after login:
 
-- Dashboard service is active and HTTP returns `200`.
+- Dashboard service is active; anonymous HTTP requests redirect to login, and
+  a valid password login returns `200`.
 - Hermes and Codex report authenticated ChatGPT sessions.
 - Only `memory` and `skills` are enabled.
 - `terminal`, `file`, `browser`, `code_execution`, and `homeassistant` remain

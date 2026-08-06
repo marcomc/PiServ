@@ -94,9 +94,11 @@ On 2026-08-05, a reproducible audit of the deployed `v2026.8.3` lockfile found
 one moderate transitive production vulnerability in `undici` below `6.28.0`.
 Upstream `main` has already advanced to `undici` `7.28.0`, but no newer release
 tag is available to pin. The dashboard serves prebuilt assets through a
-loopback-only Python service; it does not execute Node or npm in production.
-Keep the loopback policy until the separate Tailnet identity and firewall work
-is complete.
+Python service; it does not execute Node or npm in production.
+The dashboard now uses Hermes native password authentication with a
+source-scoped LAN UFW rule and existing Tailnet ingress policy. Keep direct LAN
+access on a trusted network until a separate TLS reverse-proxy deployment is
+approved.
 
 ## Selected Architecture
 

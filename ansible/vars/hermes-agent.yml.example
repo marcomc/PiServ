@@ -4,3 +4,8 @@
 # /var/lib/hermes-agent/home-assistant-mcp.env.
 piserv_hermes_agent_manage_home_assistant_mcp: false
 piserv_hermes_agent_home_assistant_mcp_url: ""
+# Set these values to expose the dashboard through the PiServ firewall policy.
+# The password itself is generated once on PiServ and stored root-only.
+piserv_hermes_agent_dashboard_host: 127.0.0.1
+piserv_hermes_agent_dashboard_manage_basic_auth: false
+piserv_hermes_agent_dashboard_basic_auth_username: ""
