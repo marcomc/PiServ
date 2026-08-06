@@ -113,6 +113,23 @@
   changed_when: false
   check_mode: false
 
+- name: Require existing local benchmark models to match their pinned checksums
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        item.stat.checksum == model.sha256
+    fail_msg: >-
+      {{ hermes_agent_local_models_dir }}/{{ model.filename }} exists but does
+      not match its configured SHA-256.
+      Remove or replace it explicitly before this role can proceed.
+  loop: "{{ hermes_agent_local_model_files.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+    loop_var: item
+  vars:
+    model: "{{ item.item }}"
+
 - name: Initialize required local-model download capacity
   ansible.builtin.set_fact:
     hermes_agent_local_models_required_download_bytes: 0

@@ -419,7 +419,7 @@
             repository: fixture/present
             revision: "0000000000000000000000000000000000000000"
             filename: present.gguf
-            sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+            sha256: "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
             size_bytes: 1024
             port: 18081
           - id: partial

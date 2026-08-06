@@ -81,23 +81,6 @@
     - "{{ hermes_agent_local_models_dir }}"
     - "{{ hermes_agent_local_models_results_dir }}"
 
-- name: Assert existing local benchmark models match their pinned checksums
-  ansible.builtin.assert:
-    that:
-      - >-
-        not item.stat.exists or
-        item.stat.checksum == model.sha256
-    fail_msg: >-
-      {{ hermes_agent_local_models_dir }}/{{ model.filename }} exists but does
-      not match its configured SHA-256.
-      Remove or replace it explicitly before this role can proceed.
-  loop: "{{ hermes_agent_local_model_files.results }}"
-  loop_control:
-    label: "{{ item.item.id }}"
-    loop_var: item
-  vars:
-    model: "{{ item.item }}"
-
 - name: Download resumable local benchmark model parts
   ansible.builtin.command:
     argv:

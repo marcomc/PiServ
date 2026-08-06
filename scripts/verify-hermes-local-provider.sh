@@ -66,7 +66,7 @@ wait_for_model_http() {
   local attempt
 
   for attempt in $(seq 1 "${attempts}"); do
-    if curl --fail --silent "${url}" >/dev/null 2>&1; then
+    if curl --fail --silent --max-time 5 "${url}" >/dev/null 2>&1; then
       return 0
     fi
     if systemctl is-failed --quiet "${service_name}"; then

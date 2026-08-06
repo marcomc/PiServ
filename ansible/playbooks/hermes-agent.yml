@@ -7,8 +7,9 @@
     piserv_hermes_agent_lan_ipv4_cidr: >-
       {{ ansible_facts.default_ipv4.network ~ '/' ~ ansible_facts.default_ipv4.prefix }}
   vars_files:
-    - ../vars/hermes-agent.yml.example
-    - ../vars/hermes-agent.yml
+    -
+      - ../vars/hermes-agent.yml
+      - ../vars/hermes-agent.yml.example
   pre_tasks:
     - name: Verify external backup filesystem is mounted before Hermes configuration
       ansible.builtin.command:
