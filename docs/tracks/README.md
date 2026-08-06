@@ -19,6 +19,8 @@ checklists. Use them for active work that is not yet fully automated.
 | [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
 | [Google Drive and external storage](google-drive-and-external-storage.md) | Proposal |
 | [Hermes Agent framework](hermes-agent-framework-research.md) | Authenticated runtime; capability integration pending |
+| [HomeClaw MCP over SSH](homeclaw-mcp-over-ssh.md) | Proposal: manual Mac gateway |
+| [HomeClaw MCP with Supergateway](homeclaw-mcp-supergateway.md) | Proposal: Tailnet HTTP gateway |
 | [Pi Node on PiServ](pi-node-on-piserv.md) | Investigation: native install blocked |
 | [Ansible Galaxy Wi-Fi watchdog role assessment](ansible-galaxy-wifi-watchdog-role-assessment.md) | Decision: retain a dedicated role |
 

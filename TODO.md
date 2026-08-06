@@ -103,6 +103,24 @@
     - Pin the next Hermes upstream release that upgrades transitive `undici` to
       `6.28.0` or newer, then repeat the production dependency audit.
 
+- [ ] **Connect Hermes to HomeClaw MCP through SSH**
+  - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)
+  - Use an authenticated SSH session from PiServ to run the HomeClaw MCP
+    adapter as a stdio child while the HomeClaw macOS app is already running.
+  - Keep the remote command and tool set explicitly allowlisted; do not expose
+    an unrestricted shell to Hermes.
+  - Validate read-only discovery first, then require confirmation and audit
+    evidence for HomeKit writes and configuration changes.
+
+- [ ] **Expose HomeClaw MCP through Supergateway on the Tailnet**
+  - Proposal: [HomeClaw MCP with Supergateway](docs/tracks/homeclaw-mcp-supergateway.md)
+  - Have an operator start a Supergateway relay on the Mac that converts the
+    HomeClaw stdio MCP server to Streamable HTTP for PiServ.
+  - Bind the relay to the Tailnet path only and add authentication, Tailscale
+    ACLs, tool filtering, and write-operation auditing before enabling it.
+  - Validate relay restart, Mac sleep/unavailability, read-only discovery, and
+    confirmed HomeKit writes.
+
 - [ ] **Define service-level cgroup v2 memory policy**
   - Assessment: Enabling the memory controller only makes memory accounting,
     pressure signals, and enforcement available. PiServ needs evidence-based
