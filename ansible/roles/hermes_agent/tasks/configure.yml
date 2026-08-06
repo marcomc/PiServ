@@ -1,7 +1,7 @@
 ---
 - name: Inspect private Hermes runtime directories
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     follow: false
   loop:
     - "{{ hermes_agent_home }}"
@@ -23,7 +23,7 @@
       its ownership or permissions can be managed.
   loop: "{{ hermes_agent_runtime_directories.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item.path }}"
   when: hermes_agent_runtime_user_available
 
 - name: Create private Hermes runtime directories
@@ -114,10 +114,12 @@
     path: "{{ item }}"
     follow: false
   loop:
-    - >-
-      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
-    - >-
-      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+    - path: >-
+        {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+      template: inference-provenance-plugin.yaml.j2
+    - path: >-
+        {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+      template: inference-provenance-plugin.py.j2
   register: hermes_agent_inference_provenance_plugin_files
   changed_when: false
   check_mode: false
@@ -128,10 +130,13 @@
 - name: Require removable inference provenance plugin files to be non-symlinked
   ansible.builtin.assert:
     that:
-      - not item.stat.exists or not item.stat.islnk
+      - >-
+        not item.stat.exists or
+        (item.stat.isreg and not item.stat.islnk and
+        item.stat.checksum == (lookup('template', item.item.template) | hash('sha256')))
     fail_msg: >-
-      {{ item.item }} is a symbolic link and cannot be removed as a managed
-      inference provenance plugin file.
+      {{ item.item.path }} is not a recognized managed inference provenance
+      plugin file and cannot be removed.
   loop: "{{ hermes_agent_inference_provenance_plugin_files.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -141,11 +146,11 @@
 
 - name: Remove managed inference provenance plugin files when disabled
   ansible.builtin.file:
-    path: "{{ item.item }}"
+    path: "{{ item.item.path }}"
     state: absent
   loop: "{{ hermes_agent_inference_provenance_plugin_files.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item.path }}"
   when:
     - hermes_agent_runtime_user_available
     - not hermes_agent_manage_inference_provenance

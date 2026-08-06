@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Status](#status)
+- [Project Identity](#project-identity)
 - [Scope](#scope)
 - [Architecture](#architecture)
 - [Manual Startup](#manual-startup)
@@ -14,6 +15,14 @@
 ## Status
 
 Proposal. No relay, port, or firewall change is included in this track.
+
+## Project Identity
+
+This track refers specifically to [HomeClaw by Omar Shahine](https://github.com/omarshahine/HomeClaw),
+the macOS application that exposes Apple Home/HomeKit through its CLI and
+stdio MCP server. It does **not** refer to the `homeclaw.org` flavor in the
+[EverClaw flavor collection](https://github.com/EverClaw/EverClaw/tree/main/flavors),
+which is an OpenClaw/Morpheus smart-home agent configuration.
 
 ## Scope
 

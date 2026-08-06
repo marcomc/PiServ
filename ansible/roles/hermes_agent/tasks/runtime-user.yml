@@ -1,9 +1,61 @@
 ---
+- name: Assert Hermes Agent runtime identity names are unprivileged
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_user != 'root'
+      - hermes_agent_group != 'root'
+      - hermes_agent_home is match('^/')
+      - hermes_agent_home not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+
+- name: Inspect Hermes Agent persistent state root
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}"
+    follow: false
+  register: hermes_agent_home_state
+  changed_when: false
+  check_mode: false
+
+- name: Read existing Hermes Agent runtime account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_agent_user }}"
+    fail_key: false
+  check_mode: false
+
 - name: Create Hermes Agent system group
   ansible.builtin.group:
     name: "{{ hermes_agent_group }}"
     system: true
     state: present
+
+- name: Read Hermes Agent system group
+  ansible.builtin.getent:
+    database: group
+    key: "{{ hermes_agent_group }}"
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Require a dedicated persistent state root and compatible runtime account
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_home_state.stat.exists or
+        (hermes_agent_home_state.stat.isdir and
+        not hermes_agent_home_state.stat.islnk and
+        hermes_agent_home_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_home_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_home_state.stat.mode == '0700')
+      - >-
+        hermes_agent_user not in (ansible_facts.getent_passwd | default({})) or
+        ((ansible_facts.getent_passwd[hermes_agent_user][1] | int) > 0 and
+        ansible_facts.getent_passwd[hermes_agent_user][2] ==
+        ansible_facts.getent_group[hermes_agent_group][1] and
+        ansible_facts.getent_passwd[hermes_agent_user][4] == hermes_agent_home and
+        ansible_facts.getent_passwd[hermes_agent_user][5] == '/usr/sbin/nologin')
+    fail_msg: >-
+      hermes_agent_user and hermes_agent_home must identify a dedicated,
+      unprivileged runtime account and a non-symlinked private state directory.
+  when: not ansible_check_mode
 
 - name: Create Hermes Agent system user
   ansible.builtin.user:
@@ -19,7 +71,7 @@
     system: true
     state: present
 
-- name: Read Hermes Agent runtime account
+- name: Read configured Hermes Agent runtime account
   ansible.builtin.getent:
     database: passwd
     key: "{{ hermes_agent_user }}"
