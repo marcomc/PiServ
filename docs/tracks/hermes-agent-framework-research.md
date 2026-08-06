@@ -199,6 +199,10 @@ a state read and a reversible four-second upstairs-stairs light on/off test
 through the gateway. Home Assistant confirmed both actions and the final state
 was `off`.
 
+Decision 0019 accepts the broader MCP write surface: Home Assistant's Assist
+exposure policy is the authoritative entity and operation boundary, and PiServ
+does not add a duplicate MCP operation allowlist.
+
 ### Phase 2: Home Assistant Assist channel
 
 Home Assistant supports custom `ConversationEntity` implementations. A small

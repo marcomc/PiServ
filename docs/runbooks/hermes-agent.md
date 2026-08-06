@@ -113,6 +113,9 @@ endpoint at `/api/mcp`; it does not enable Hermes' broader built-in
 Home Assistant controls which entities and operations its MCP server exposes.
 PiServ does not add a second write restriction, so approved Home Assistant MCP
 tools can perform available actions through the same audited Hermes runtime.
+This broader write surface is an accepted project decision; review the
+Home Assistant Assist exposure list before enabling or changing entities.
+See [Decision 0019](../decisions/0019-hermes-home-assistant-mcp-write-surface.md).
 
 On 2026-08-05, PiServ authenticated to its configured Home Assistant host and
 discovered 21 MCP tools. An end-to-end Hermes chat read the state of the

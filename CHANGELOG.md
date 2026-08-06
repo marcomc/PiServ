@@ -127,6 +127,8 @@
 - Kept the future local-model capability inert by default, required an active
   cgroup v2 memory controller before enabling it, and validated bounded memory
   and address-space settings before rendering its services.
+- Formally accepted Home Assistant's Assist exposure policy as the authority
+  for the broader MCP entity and operation surface used by Hermes.
 
 ## [0.3.0] - 2026-07-29
 
