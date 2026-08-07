@@ -144,6 +144,700 @@
       ansible.builtin.include_vars:
         file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
 
+    - name: Create foreign regular Codex link target fixture
+      ansible.builtin.copy:
+        content: foreign codex executable
+        dest: /usr/local/bin/codex-foreign-regular-fixture
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign regular Codex link target fixture
+      block:
+        - name: Validate foreign regular Codex link target fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-foreign-regular-fixture
+
+        - name: Fail if foreign regular Codex target was accepted
+          ansible.builtin.fail:
+            msg: Foreign regular Codex targets must fail preflight.
+      rescue:
+        - name: Assert foreign regular Codex target failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read foreign regular Codex target after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-foreign-regular-fixture
+      register: hermes_agent_molecule_foreign_codex_regular
+
+    - name: Assert foreign regular Codex target was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_codex_regular.content | b64decode ==
+            'foreign codex executable'
+
+    - name: Create foreign symlink Codex target fixture
+      ansible.builtin.file:
+        src: /bin/true
+        dest: /usr/local/bin/codex-foreign-link-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Reject foreign symlink Codex target fixture
+      block:
+        - name: Validate foreign symlink Codex target fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-foreign-link-fixture
+
+        - name: Fail if foreign symlink Codex target was accepted
+          ansible.builtin.fail:
+            msg: Foreign symlink Codex targets must fail preflight.
+      rescue:
+        - name: Assert foreign symlink Codex target failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read foreign symlink Codex target after rejection
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/readlink
+          - /usr/local/bin/codex-foreign-link-fixture
+      register: hermes_agent_molecule_foreign_codex_link
+      changed_when: false
+
+    - name: Assert foreign symlink Codex target was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_codex_link.stdout == '/bin/true'
+
+    - name: Create Codex link symlink-parent fixture
+      ansible.builtin.file:
+        src: /usr/local/bin
+        dest: /usr/local/hermes-codex-link-parent-alias
+        state: link
+        owner: root
+        group: root
+
+    - name: Create Codex link alias preservation canary
+      ansible.builtin.copy:
+        content: alias canary preserved
+        dest: /usr/local/bin/codex-parent-alias-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject symlink-parent Codex link alias
+      block:
+        - name: Validate symlink-parent Codex link alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/hermes-codex-link-parent-alias/codex-parent-alias-fixture
+
+        - name: Fail if symlink-parent Codex alias was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent Codex link paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent Codex alias failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require canonical Codex link parent'
+
+    - name: Create lexical Codex link alias preservation canary
+      ansible.builtin.copy:
+        content: lexical canary preserved
+        dest: /usr/local/bin/codex-lexical-alias-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject lexical Codex link alias
+      block:
+        - name: Validate lexical Codex link alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/../bin/codex-lexical-alias-fixture
+
+        - name: Fail if lexical Codex alias was accepted
+          ansible.builtin.fail:
+            msg: Lexical Codex link paths must fail preflight.
+      rescue:
+        - name: Assert lexical Codex alias failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require canonical Codex link parent'
+
+    - name: Read rejected Codex link alias canaries
+      ansible.builtin.slurp:
+        src: "/usr/local/bin/{{ item }}"
+      loop:
+        - codex-parent-alias-fixture
+        - codex-lexical-alias-fixture
+      register: hermes_agent_molecule_codex_alias_canaries
+
+    - name: Assert rejected Codex link aliases preserved exact content
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_alias_canaries.results[0].content |
+            b64decode == 'alias canary preserved'
+          - >-
+            hermes_agent_molecule_codex_alias_canaries.results[1].content |
+            b64decode == 'lexical canary preserved'
+
+    - name: Inspect managed runtime roots before Codex equality rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        - "{{ hermes_agent_local_model_runtime_dir }}"
+      register: hermes_agent_molecule_codex_runtime_roots_before
+
+    - name: Reject Codex link equal to TUI runtime root
+      block:
+        - name: Validate Codex link equal to TUI runtime root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+
+        - name: Fail if TUI runtime root equality was accepted
+          ansible.builtin.fail:
+            msg: A Codex link equal to the TUI runtime root must fail preflight.
+      rescue:
+        - name: Record TUI runtime root equality rejection
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require Codex link outputs outside other managed roots'
+
+        - name: Record accepted TUI runtime root rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_tui_root_rejected: true
+
+    - name: Reject Codex link equal to local-model runtime root
+      block:
+        - name: Validate Codex link equal to local-model runtime root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_local_model_runtime_dir }}"
+
+        - name: Fail if local-model runtime root equality was accepted
+          ansible.builtin.fail:
+            msg: A Codex link equal to the local-model runtime root must fail preflight.
+      rescue:
+        - name: Record local-model runtime root equality rejection
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require Codex link outputs outside other managed roots'
+
+        - name: Record accepted local-model runtime root rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_local_runtime_root_rejected: true
+
+    - name: Inspect managed runtime roots after Codex equality rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        - "{{ hermes_agent_local_model_runtime_dir }}"
+      register: hermes_agent_molecule_codex_runtime_roots_after
+
+    - name: Assert managed runtime root equality was rejected without mutation
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_tui_root_rejected | default(false)
+          - hermes_agent_molecule_codex_local_runtime_root_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.exists ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[0].stat.exists
+          - >-
+            not hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.exists or
+            hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.inode ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[0].stat.inode
+          - >-
+            hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.exists ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[1].stat.exists
+          - >-
+            not hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.exists or
+            hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.inode ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[1].stat.inode
+
+    - name: Create Codex-version-root containment fixture directory
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/current-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Codex-version-root containment canary
+      ansible.builtin.copy:
+        content: codex root canary preserved
+        dest: /usr/local/lib/codex/current-fixture/link-inside-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject Codex link inside configured Codex version root
+      block:
+        - name: Validate Codex link inside configured version root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/lib/codex/current-fixture/link-inside-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if Codex link inside version root was accepted
+          ansible.builtin.fail:
+            msg: Codex link paths inside the version root must fail preflight.
+      rescue:
+        - name: Record Codex version-root containment rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_version_root_rejected: true
+
+    - name: Read Codex-version-root canary after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/lib/codex/current-fixture/link-inside-fixture
+      register: hermes_agent_molecule_codex_version_root_canary
+
+    - name: Create derived-marker managed-root collision fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create derived-marker managed-root collision canary
+      ansible.builtin.copy:
+        content: marker root canary preserved
+        dest: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml/canary
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject derived Codex marker equal to managed root
+      block:
+        - name: Validate derived Codex marker equal to managed root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-marker-root-fixture
+            hermes_agent_dashboard_tui_runtime_dir: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml
+
+        - name: Fail if derived marker managed-root collision was accepted
+          ansible.builtin.fail:
+            msg: Derived Codex markers equal to managed roots must fail preflight.
+      rescue:
+        - name: Record derived-marker managed-root collision rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_marker_root_rejected: true
+
+    - name: Read derived-marker managed-root canary after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml/canary
+      register: hermes_agent_molecule_codex_marker_root_canary
+
+    - name: Create protected Codex path fixture
+      ansible.builtin.copy:
+        content: protected codex path preserved
+        dest: /etc/codex-protected-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject protected Codex path fixture
+      block:
+        - name: Validate protected Codex path fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /etc/codex-protected-fixture
+
+        - name: Fail if protected Codex path was accepted
+          ansible.builtin.fail:
+            msg: Codex link paths beneath /etc must fail preflight.
+      rescue:
+        - name: Record protected Codex path rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_protected_path_rejected: true
+
+    - name: Read protected Codex path fixture after rejection
+      ansible.builtin.slurp:
+        src: /etc/codex-protected-fixture
+      register: hermes_agent_molecule_codex_protected_path
+
+    - name: Assert explicit Codex root and protected-path regressions
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_version_root_rejected | default(false)
+          - hermes_agent_molecule_codex_marker_root_rejected | default(false)
+          - hermes_agent_molecule_codex_protected_path_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_version_root_canary.content | b64decode ==
+            'codex root canary preserved'
+          - >-
+            hermes_agent_molecule_codex_marker_root_canary.content | b64decode ==
+            'marker root canary preserved'
+          - >-
+            hermes_agent_molecule_codex_protected_path.content | b64decode ==
+            'protected codex path preserved'
+
+    - name: Create prior and current Codex upgrade directories
+      ansible.builtin.file:
+        path: "/usr/local/lib/codex/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - prior-fixture
+        - current-fixture
+
+    - name: Create prior and current Codex upgrade target fixtures
+      ansible.builtin.copy:
+        content: "{{ item }} codex fixture"
+        dest: "/usr/local/lib/codex/{{ item }}/codex"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - prior-fixture
+        - current-fixture
+
+    - name: Create prior managed active Codex link fixture
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/prior-fixture/codex
+        dest: /usr/local/bin/codex-upgrade-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record prior managed active Codex link fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-upgrade-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-upgrade-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Accept recognized prior-version Codex link during upgrade
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+      vars:
+        hermes_agent_codex_binary_path: /usr/local/bin/codex-upgrade-fixture
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+    - name: Create marker-only Codex provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-marker-only-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-marker-only-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject marker-only Codex provenance fixture
+      block:
+        - name: Validate marker-only Codex provenance fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-marker-only-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if marker-only Codex provenance was accepted
+          ansible.builtin.fail:
+            msg: A Codex provenance marker without its link must fail preflight.
+      rescue:
+        - name: Assert marker-only provenance failed link identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read marker-only Codex provenance after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-marker-only-fixture.hermes-agent-managed.yml
+      register: hermes_agent_molecule_codex_marker_only
+
+    - name: Assert marker-only Codex provenance was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_marker_only.content | b64decode ==
+            hermes_agent_molecule_codex_marker_only_expected
+      vars:
+        hermes_agent_molecule_codex_marker_only_expected: |
+          link_path: /usr/local/bin/codex-marker-only-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+
+    - name: Create current Codex link with malformed provenance fixture
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/current-fixture/codex
+        dest: /usr/local/bin/codex-malformed-marker-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create malformed Codex provenance fixture
+      ansible.builtin.copy:
+        content: "managed_by: foreign\n"
+        dest: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject malformed Codex provenance fixture
+      block:
+        - name: Validate malformed Codex provenance fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-malformed-marker-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if malformed Codex provenance was accepted
+          ansible.builtin.fail:
+            msg: Malformed Codex provenance must fail preflight.
+      rescue:
+        - name: Assert malformed provenance failed exact schema validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact Codex link managed-state schema'
+
+    - name: Read malformed Codex provenance after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+      register: hermes_agent_molecule_codex_malformed_marker
+
+    - name: Assert malformed Codex provenance was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_malformed_marker.content | b64decode ==
+            'managed_by: foreign\n'
+
+    - name: Remove malformed marker for current-target markerless regression
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+        state: absent
+
+    - name: Accept markerless link pointing at exact current Codex target
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+      vars:
+        hermes_agent_codex_binary_path: /usr/local/bin/codex-malformed-marker-fixture
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+    - name: Inspect installer before Codex collision regressions
+      ansible.builtin.stat:
+        path: "{{ hermes_agent_installer_path }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_installer_before_codex_collisions
+
+    - name: Reject Codex link collision with installer output
+      block:
+        - name: Validate Codex link collision with installer output
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_installer_path }}"
+
+        - name: Fail if installer output collision was accepted
+          ansible.builtin.fail:
+            msg: Codex link collision with installer output must fail preflight.
+      rescue:
+        - name: Record installer output collision rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_installer_collision_rejected: true
+
+    - name: Remove stale Codex hard-link collision fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-hardlink-fixture
+        state: absent
+
+    - name: Create Codex hard-link inode collision fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - "{{ hermes_agent_installer_path }}"
+          - /usr/local/bin/codex-hardlink-fixture
+      changed_when: true
+
+    - name: Reject Codex hard-link inode collision fixture
+      block:
+        - name: Validate Codex hard-link inode collision fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-hardlink-fixture
+
+        - name: Fail if Codex hard-link inode collision was accepted
+          ansible.builtin.fail:
+            msg: Codex hard-link aliases of managed outputs must fail preflight.
+      rescue:
+        - name: Assert hard-link collision failed inode validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Reject existing Codex output inode aliases'
+
+    - name: Inspect installer and hard-link after collision rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ hermes_agent_installer_path }}"
+        - /usr/local/bin/codex-hardlink-fixture
+      register: hermes_agent_molecule_codex_collision_outputs
+
+    - name: Assert installer and hard-link collisions were preserved
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_installer_collision_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[0].stat.checksum ==
+            hermes_agent_molecule_installer_before_codex_collisions.stat.checksum
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[1].stat.checksum ==
+            hermes_agent_molecule_installer_before_codex_collisions.stat.checksum
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[0].stat.inode ==
+            hermes_agent_molecule_codex_collision_outputs.results[1].stat.inode
+
+    - name: Create real Codex target behind a symlinked version directory
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/real-symlink-version-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Codex target behind symlinked version directory
+      ansible.builtin.copy:
+        content: symlinked version codex
+        dest: /usr/local/lib/codex/real-symlink-version-fixture/codex
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create symlinked Codex version directory
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/real-symlink-version-fixture
+        dest: /usr/local/lib/codex/symlink-version-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create managed link through symlinked Codex version directory
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/symlink-version-fixture/codex
+        dest: /usr/local/bin/codex-symlink-version-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record symlinked Codex version provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-symlink-version-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/symlink-version-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-symlink-version-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject recorded target through symlinked Codex version directory
+      block:
+        - name: Validate target through symlinked Codex version directory
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-symlink-version-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if symlinked Codex version target was accepted
+          ansible.builtin.fail:
+            msg: Symlinked Codex version targets must fail preflight.
+      rescue:
+        - name: Assert symlinked version target failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require safe canonical recorded Codex target'
+
+    - name: Create Codex link with parent-traversal recorded target
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/../codex/prior-fixture/codex
+        dest: /usr/local/bin/codex-recorded-traversal-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record parent-traversal Codex provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-recorded-traversal-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/../codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-recorded-traversal-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject parent-traversal recorded Codex target
+      block:
+        - name: Validate parent-traversal recorded Codex target
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-recorded-traversal-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if parent-traversal recorded target was accepted
+          ansible.builtin.fail:
+            msg: Parent-traversal recorded Codex targets must fail preflight.
+      rescue:
+        - name: Assert traversal target failed exact provenance schema
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact Codex link managed-state schema'
+
     - name: Reject an excessive Home Assistant MCP request timeout
       block:
         - name: Validate an excessive Home Assistant MCP request timeout

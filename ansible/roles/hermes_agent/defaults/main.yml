@@ -108,6 +108,8 @@ hermes_agent_codex_archive_binary_name: codex-aarch64-unknown-linux-musl
 hermes_agent_codex_install_dir: >-
   /usr/local/lib/codex/{{ hermes_agent_codex_version }}
 hermes_agent_codex_binary_path: /usr/local/bin/codex
+hermes_agent_codex_link_managed_state_file: >-
+  {{ hermes_agent_codex_binary_path }}.hermes-agent-managed.yml
 hermes_agent_codex_home: "{{ hermes_agent_home }}/codex"
 hermes_agent_manage_backup: false
 hermes_agent_backup_group: ""

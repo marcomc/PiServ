@@ -98,6 +98,24 @@
   when:
     - not ansible_check_mode or hermes_agent_codex_binary.stat.exists
 
+- name: Record active Codex CLI link ownership
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'link_path': hermes_agent_codex_binary_path,
+          'managed_by': 'marcomc.hermes_agent',
+          'target': hermes_agent_codex_install_dir ~ '/codex',
+          'version': 1
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: "{{ hermes_agent_codex_link_managed_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not ansible_check_mode or hermes_agent_codex_binary.stat.exists
+
 - name: Refresh versioned Codex binary state
   ansible.builtin.stat:
     path: "{{ hermes_agent_codex_install_dir }}/codex"
