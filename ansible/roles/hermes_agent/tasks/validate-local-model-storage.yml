@@ -68,6 +68,36 @@
       MemoryMax, and keep LimitAS above MemoryMax.
   when: hermes_agent_manage_local_models
 
+- name: Resolve configured local-model directory identities
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_local_models_dir }}"
+    - "{{ hermes_agent_local_models_results_dir }}"
+  register: hermes_agent_local_model_directory_identities
+  changed_when: false
+  check_mode: false
+
+- name: Require canonical dedicated local-model directory identities
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_local_model_directory_identities.results[0].stdout ==
+        hermes_agent_local_models_dir
+      - >-
+        hermes_agent_local_model_directory_identities.results[1].stdout ==
+        hermes_agent_local_models_results_dir
+      - >-
+        hermes_agent_local_model_directory_identities.results[1].stdout.startswith(
+        hermes_agent_local_model_directory_identities.results[0].stdout ~ '/')
+    fail_msg: >-
+      Local-model and results directories must use canonical paths, without
+      parent traversal or symlink-parent aliases, and results must remain below
+      the canonical models directory.
+
 - name: Resolve local-model benchmark helper path through existing parents
   ansible.builtin.command:
     argv:
@@ -200,13 +230,75 @@
   loop_control:
     label: "{{ hermes_agent_local_models[item].id }}"
 
+- name: Resolve local-model capacity probe to nearest existing ancestor
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        probe=$HERMES_AGENT_LOCAL_MODELS_DIR
+        while [ ! -e "$probe" ]; do
+          parent=${probe%/*}
+          if [ -z "$parent" ]; then
+            parent=/
+          fi
+          if [ "$parent" = "$probe" ]; then
+            break
+          fi
+          probe=$parent
+        done
+        /usr/bin/realpath --canonicalize-existing "$probe"
+  environment:
+    HERMES_AGENT_LOCAL_MODELS_DIR: "{{ hermes_agent_local_models_dir }}"
+  register: hermes_agent_local_models_capacity_probe
+  changed_when: false
+  check_mode: false
+
+- name: Record local-model capacity probe path
+  ansible.builtin.set_fact:
+    hermes_agent_local_models_capacity_probe_path: >-
+      {{ hermes_agent_local_models_capacity_probe.stdout | trim }}
+
+- name: Inspect local-model capacity probe path
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_capacity_probe_path }}"
+    follow: false
+  register: hermes_agent_local_models_capacity_probe_state
+  changed_when: false
+  check_mode: false
+
+- name: Read local-model capacity mount options
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/findmnt
+      - --noheadings
+      - --output
+      - OPTIONS
+      - --target
+      - "{{ hermes_agent_local_models_capacity_probe_path }}"
+  register: hermes_agent_local_models_capacity_mount
+  changed_when: false
+  check_mode: false
+
+- name: Require writable local-model capacity storage
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_models_capacity_probe_state.stat.isdir
+      - >-
+        'ro' not in
+        (hermes_agent_local_models_capacity_mount.stdout | trim).split(',')
+    fail_msg: >-
+      The local-model directory or its nearest existing ancestor must be a
+      writable directory before this role can mutate host state.
+
 - name: Read available local-model storage capacity
   ansible.builtin.command:
     argv:
       - /usr/bin/df
       - --block-size=1
       - --output=avail
-      - "{{ hermes_agent_local_models_dir | dirname }}"
+      - "{{ hermes_agent_local_models_capacity_probe_path }}"
   register: hermes_agent_local_models_capacity
   changed_when: false
   check_mode: false

@@ -1473,6 +1473,141 @@
       ansible.builtin.assert:
         that:
           - hermes_agent_local_models_required_download_bytes | int == 1536
+          - >-
+            hermes_agent_local_models_capacity_probe_path ==
+            '/var/lib/hermes-model-capacity-fixture'
+
+    - name: Create nearest-ancestor capacity fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-capacity-ancestor
+        state: directory
+        owner: root
+        group: hermes-agent
+        mode: "0750"
+
+    - name: Validate capacity for an absent nested local-model directory
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+      vars:
+        hermes_agent_manage_local_models: true
+        hermes_agent_local_models_dir: /var/lib/hermes-capacity-ancestor/absent/models
+        hermes_agent_local_models_results_dir: /var/lib/hermes-capacity-ancestor/absent/models/results
+        hermes_agent_local_models_min_free_bytes: 1073741824
+        hermes_agent_local_models: []
+
+    - name: Assert capacity uses the nearest existing ancestor
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_local_models_capacity_probe_path ==
+            '/var/lib/hermes-capacity-ancestor'
+
+    - name: Create local-model canonical-path rejection fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /var/lib/hermes-storage-canonical-fixture
+        - /var/lib/hermes-storage-path-canaries
+
+    - name: Create local-model storage symlink-parent fixture
+      ansible.builtin.file:
+        src: /var/lib/hermes-storage-canonical-fixture
+        dest: /var/lib/hermes-storage-alias-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create local-model canonical-path rejection canaries
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "/var/lib/hermes-storage-path-canaries/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - name: dotdot
+          content: dotdot preserved
+        - name: symlink
+          content: symlink preserved
+
+    - name: Reject parent-traversal local-model directory alias
+      block:
+        - name: Validate parent-traversal local-model directory alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models_dir: /var/lib/hermes-capacity-ancestor/../hermes-dotdot-models
+            hermes_agent_local_models_results_dir: /var/lib/hermes-capacity-ancestor/../hermes-dotdot-models/results
+            hermes_agent_local_models_min_free_bytes: 1073741824
+            hermes_agent_local_models: []
+
+        - name: Fail if parent-traversal storage alias was accepted
+          ansible.builtin.fail:
+            msg: Parent-traversal local-model paths must fail preflight.
+      rescue:
+        - name: Assert parent-traversal alias failed canonical identity
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated local-model directory identities'
+
+    - name: Reject symlink-parent local-model directory alias
+      block:
+        - name: Validate symlink-parent local-model directory alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models_dir: /var/lib/hermes-storage-alias-fixture/models
+            hermes_agent_local_models_results_dir: /var/lib/hermes-storage-alias-fixture/models/results
+            hermes_agent_local_models_min_free_bytes: 1073741824
+            hermes_agent_local_models: []
+
+        - name: Fail if symlink-parent storage alias was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent local-model paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent alias failed canonical identity
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated local-model directory identities'
+
+    - name: Inspect rejected local-model path artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-dotdot-models
+        - /var/lib/hermes-storage-canonical-fixture/models
+      register: hermes_agent_molecule_rejected_storage_alias_artifacts
+
+    - name: Read local-model canonical-path rejection canaries
+      ansible.builtin.slurp:
+        src: "/var/lib/hermes-storage-path-canaries/{{ item }}"
+      loop:
+        - dotdot
+        - symlink
+      register: hermes_agent_molecule_storage_path_canaries
+
+    - name: Assert rejected local-model aliases caused no mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_rejected_storage_alias_artifacts.results |
+            selectattr('stat.exists') | list | length == 0
+          - >-
+            hermes_agent_molecule_storage_path_canaries.results[0].content |
+            b64decode == 'dotdot preserved'
+          - >-
+            hermes_agent_molecule_storage_path_canaries.results[1].content |
+            b64decode == 'symlink preserved'
 
     - name: Enable managed inference provenance plugin in the fixture
       ansible.builtin.include_role:
@@ -2551,6 +2686,180 @@
         - obsolete-fixture
         - current-fixture
       register: hermes_agent_molecule_local_model_fixture_units
+
+    - name: Create foreign desired local-model unit fixture
+      ansible.builtin.copy:
+        content: foreign desired unit
+        dest: /etc/systemd/system/hermes-local-model-foreign-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Record empty local-model manifest fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units: {}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate empty local-model manifest fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Reject foreign desired local-model unit fixture
+      block:
+        - name: Validate foreign desired local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-desired-local-model-units.yml
+          vars:
+            hermes_agent_local_models:
+              - id: foreign-desired-fixture
+
+        - name: Fail if foreign desired local-model unit was accepted
+          ansible.builtin.fail:
+            msg: Foreign desired local-model units must fail preflight.
+      rescue:
+        - name: Assert foreign desired unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized desired local-model service units'
+
+    - name: Read foreign desired local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-foreign-desired-fixture.service
+      register: hermes_agent_molecule_foreign_desired_unit
+
+    - name: Assert foreign desired local-model unit is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_desired_unit.content | b64decode ==
+            'foreign desired unit'
+
+    - name: Create prior managed desired local-model unit fixture
+      ansible.builtin.copy:
+        content: prior managed desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Inspect prior managed desired local-model unit checksum
+      ansible.builtin.stat:
+        path: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_managed_desired_unit
+
+    - name: Record prior managed desired local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units:
+            managed-desired-fixture: {{ hermes_agent_molecule_managed_desired_unit.stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate prior managed desired local-model manifest
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Accept unchanged prior managed desired local-model unit
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-desired-local-model-units.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Apply intentional desired local-model unit update fixture
+      ansible.builtin.copy:
+        content: intentionally updated desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Record intentional desired local-model unit update
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/record-local-model-unit-state.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Validate updated desired local-model manifest
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Accept converged intentional desired local-model unit update
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-desired-local-model-units.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Modify previously managed desired local-model unit externally
+      ansible.builtin.copy:
+        content: externally modified desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject modified previously managed desired local-model unit
+      block:
+        - name: Validate modified managed desired local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-desired-local-model-units.yml
+          vars:
+            hermes_agent_local_models:
+              - id: managed-desired-fixture
+
+        - name: Fail if modified managed desired unit was accepted
+          ansible.builtin.fail:
+            msg: Modified previously managed desired units must fail preflight.
+      rescue:
+        - name: Assert modified desired unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized desired local-model service units'
+
+    - name: Read modified desired local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+      register: hermes_agent_molecule_modified_desired_unit
+
+    - name: Assert modified desired local-model unit is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_modified_desired_unit.content | b64decode ==
+            'externally modified desired unit'
 
     - name: Create foreign valid-looking local-model manifest fixture
       ansible.builtin.copy:

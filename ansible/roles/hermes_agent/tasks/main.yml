@@ -15,6 +15,10 @@
 - name: Validate local-model managed-state path
   ansible.builtin.import_tasks: validate-local-model-managed-state.yml
 
+- name: Validate desired local-model service units
+  ansible.builtin.import_tasks: validate-desired-local-model-units.yml
+  when: hermes_agent_manage_local_models
+
 - name: Preflight Hermes Agent runtime identity and persistent paths
   ansible.builtin.include_tasks: runtime-user.yml
   vars:
