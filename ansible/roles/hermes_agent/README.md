@@ -128,7 +128,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_disabled_toolsets` | role list | Explicitly disabled bundled toolsets. |
 | `hermes_agent_dashboard_host` | `127.0.0.1` | Dashboard bind address. |
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
-| `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Dashboard systemd unit. |
+| `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Role-marked dashboard systemd unit target. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
@@ -141,7 +141,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
 | `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
 | `hermes_agent_codex_version` | `0.145.0` | Codex CLI release version. |
-| `hermes_agent_download_cache_dir` | `/var/cache/hermes-agent` | Verified-download cache. |
+| `hermes_agent_download_cache_dir` | `/var/cache/hermes-agent` | Canonical, root-owned, role-marked verified-download cache separated from runtime roots. |
 | `hermes_agent_codex_archive_url` | pinned upstream URL | ARM64 Codex archive URL. |
 | `hermes_agent_codex_archive_checksum` | pinned SHA-256 | Codex archive integrity check. |
 | `hermes_agent_codex_archive_binary_name` | `codex-aarch64-unknown-linux-musl` | Binary name in the archive. |
@@ -151,8 +151,8 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_manage_backup` | `false` | Install a scheduled Hermes-state backup timer. |
 | `hermes_agent_backup_group` | empty | Existing group permitted to access the backup path. |
 | `hermes_agent_backup_dir` | `/var/backups/hermes-agent` | Backup archive directory. |
-| `hermes_agent_backup_service_name` | `hermes-agent-backup.service` | Backup systemd service. |
-| `hermes_agent_backup_timer_name` | `hermes-agent-backup.timer` | Backup systemd timer. |
+| `hermes_agent_backup_service_name` | `hermes-agent-backup.service` | Role-marked backup systemd service target. |
+| `hermes_agent_backup_timer_name` | `hermes-agent-backup.timer` | Role-marked backup systemd timer target. |
 | `hermes_agent_backup_retention_days` | `30` | Retention period for backup ZIP files. |
 | `hermes_agent_backup_on_calendar` | `*-*-* 03:20:00` | systemd calendar schedule. |
 | `hermes_agent_backup_timezone` | `UTC` | Time zone used by the schedule. |

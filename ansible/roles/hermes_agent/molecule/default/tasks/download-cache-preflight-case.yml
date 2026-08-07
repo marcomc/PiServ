@@ -1,0 +1,26 @@
+---
+- name: Reject unsafe download cache fixture case
+  block:
+    - name: Validate unsafe download cache path
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-download-cache.yml
+      vars:
+        hermes_agent_download_cache_dir: "{{ hermes_agent_molecule_cache_case }}"
+
+    - name: Fail if unsafe download cache path was accepted
+      ansible.builtin.fail:
+        msg: Unsafe download cache paths must fail preflight.
+  rescue:
+    - name: Assert unsafe download cache failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name in [
+              'Require canonical dedicated Hermes Agent download cache path',
+              'Require download cache separation from managed roots',
+              'Require absent or role-compatible Hermes Agent download cache',
+              'Require a private Hermes Agent download cache managed marker',
+              'Require recognized Hermes Agent download cache managed marker'
+            ]

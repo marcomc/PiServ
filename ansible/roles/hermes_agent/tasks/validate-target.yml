@@ -58,6 +58,19 @@
       - hermes_agent_dashboard_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
       - hermes_agent_backup_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
       - hermes_agent_backup_timer_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer$')
+      - hermes_agent_dashboard_service_name != hermes_agent_backup_service_name
+      - hermes_agent_dashboard_service_name != hermes_agent_backup_timer_name
+      - hermes_agent_backup_service_name != hermes_agent_backup_timer_name
+      - >-
+        hermes_agent_dashboard_service_name not in
+        (hermes_agent_local_models |
+        map(attribute='id') |
+        map('regex_replace', '^(.*)$', 'hermes-local-model-\\1.service') | list)
+      - >-
+        hermes_agent_backup_service_name not in
+        (hermes_agent_local_models |
+        map(attribute='id') |
+        map('regex_replace', '^(.*)$', 'hermes-local-model-\\1.service') | list)
       - hermes_agent_backup_retention_days >= 1
       - hermes_agent_backup_retention_days <= 3650
       - hermes_agent_backup_randomized_delay is match('^[1-9][0-9]*(us|ms|s|m|h|d|w)$')

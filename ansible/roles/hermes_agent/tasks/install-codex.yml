@@ -7,6 +7,18 @@
     group: root
     mode: "0755"
 
+- name: Record Hermes Agent download cache ownership
+  ansible.builtin.copy:
+    content: "managed_by: marcomc.hermes_agent\n"
+    dest: "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - >-
+      not ansible_check_mode or
+      hermes_agent_download_cache_state.stat.exists
+
 - name: Download checksum-pinned Codex CLI archive
   ansible.builtin.get_url:
     url: "{{ hermes_agent_codex_archive_url }}"

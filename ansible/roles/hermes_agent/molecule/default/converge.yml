@@ -21,6 +21,14 @@
         that:
           - not hermes_agent_fixture_llama_server.stat.exists
       when: ansible_check_mode
+
+    - name: Inspect fresh download cache before check-mode convergence
+      ansible.builtin.stat:
+        path: /var/cache/hermes-agent
+      register: hermes_agent_fixture_download_cache_before_check
+      changed_when: false
+      check_mode: false
+      when: ansible_check_mode
   tasks:
     - name: Include tested role
       ansible.builtin.include_role:
@@ -46,3 +54,18 @@
           file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
         hermes_agent_local_model_runtime_archive_checksum: >-
           sha256:{{ hermes_agent_fixture_codex.stat.checksum }}
+  post_tasks:
+    - name: Inspect fresh download cache after check-mode convergence
+      ansible.builtin.stat:
+        path: /var/cache/hermes-agent
+      register: hermes_agent_fixture_download_cache_after_check
+      changed_when: false
+      check_mode: false
+      when: ansible_check_mode
+
+    - name: Assert fresh download cache check mode made no mutation
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_fixture_download_cache_before_check.stat.exists
+          - not hermes_agent_fixture_download_cache_after_check.stat.exists
+      when: ansible_check_mode

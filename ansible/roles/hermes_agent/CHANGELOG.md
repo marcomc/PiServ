@@ -4,6 +4,11 @@ All notable changes to this role are documented here.
 
 ## [Unreleased]
 
+- Reject foreign configured systemd unit targets and unsafe or foreign download
+  caches during early preflight, before package or runtime mutation.
+- Reject colliding service names and require a private role marker before
+  reusing an existing canonical download cache.
+
 - Run dashboard asset builds as the Hermes runtime identity, validate custom
   Codex state roots, converge dashboard username changes without rotating
   secrets, and reconcile obsolete managed local-model units.

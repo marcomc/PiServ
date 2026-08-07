@@ -2,6 +2,12 @@
 - name: Validate Hermes Agent target and policy
   ansible.builtin.import_tasks: validate-target.yml
 
+- name: Validate Hermes Agent systemd unit targets
+  ansible.builtin.import_tasks: validate-systemd-unit-targets.yml
+
+- name: Validate Hermes Agent download cache
+  ansible.builtin.import_tasks: validate-download-cache.yml
+
 - name: Validate Hermes Agent local-model storage
   ansible.builtin.import_tasks: validate-local-model-storage.yml
   when: hermes_agent_manage_local_models

@@ -272,6 +272,22 @@
           - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
           - hermes_agent_molecule_plugin_name_rejected | default(false)
 
+    - name: Reject colliding configured systemd unit names
+      ansible.builtin.include_tasks:
+        file: tasks/unit-name-topology-case.yml
+      loop:
+        - dashboard: collision-fixture.service
+          backup_service: collision-fixture.service
+          backup_timer: collision-fixture.timer
+        - dashboard: hermes-local-model-gemma-4-e2b.service
+          backup_service: safe-backup-fixture.service
+          backup_timer: safe-backup-fixture.timer
+        - dashboard: safe-dashboard-fixture.service
+          backup_service: hermes-local-model-gemma-4-e2b.service
+          backup_timer: safe-backup-fixture.timer
+      loop_control:
+        loop_var: hermes_agent_molecule_unit_topology
+
     - name: Reject an unsafe Codex archive binary name
       block:
         - name: Validate unsafe Codex archive binary name
@@ -2218,6 +2234,97 @@
           - hermes_agent_molecule_foreign_tui_artifact.stat.pw_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.gr_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.mode == '0644'
+
+    - name: Inspect shared temporary directory before cache preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_before_cache_preflight
+
+    - name: Create foreign download cache fixture
+      ansible.builtin.file:
+        path: /var/cache/hermes-foreign-cache-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Create foreign download cache content fixture
+      ansible.builtin.copy:
+        content: foreign cache
+        dest: /var/cache/hermes-foreign-cache-fixture/canary
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create metadata-compatible foreign download cache fixture
+      ansible.builtin.file:
+        path: /var/cache/hermes-compatible-foreign-cache-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create metadata-compatible foreign cache content fixture
+      ansible.builtin.copy:
+        content: compatible foreign cache
+        dest: /var/cache/hermes-compatible-foreign-cache-fixture/canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject unsafe download cache paths
+      ansible.builtin.include_tasks:
+        file: tasks/download-cache-preflight-case.yml
+      loop:
+        - /tmp
+        - /var/cache/hermes-foreign-cache-fixture
+        - /var/cache/hermes-compatible-foreign-cache-fixture
+        - /usr/local/lib/hermes-agent
+      loop_control:
+        loop_var: hermes_agent_molecule_cache_case
+
+    - name: Inspect preserved download cache fixtures
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp
+        - /var/cache/hermes-foreign-cache-fixture
+        - /var/cache/hermes-foreign-cache-fixture/canary
+        - /var/cache/hermes-compatible-foreign-cache-fixture
+        - /var/cache/hermes-compatible-foreign-cache-fixture/canary
+      register: hermes_agent_molecule_preserved_cache_fixtures
+
+    - name: Read metadata-compatible foreign cache after rejection
+      ansible.builtin.slurp:
+        src: /var/cache/hermes-compatible-foreign-cache-fixture/canary
+      register: hermes_agent_molecule_compatible_foreign_cache_content
+
+    - name: Assert cache preflight preserved shared and foreign metadata
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_preserved_cache_fixtures.results[0].stat.mode ==
+            hermes_agent_molecule_tmp_before_cache_preflight.stat.mode
+          - hermes_agent_molecule_preserved_cache_fixtures.results[1].stat.mode == '0700'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[2].stat.mode == '0600'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[3].stat.mode == '0755'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[4].stat.mode == '0644'
+          - >-
+            hermes_agent_molecule_compatible_foreign_cache_content.content |
+            b64decode == 'compatible foreign cache'
+
+    - name: Reject foreign configured systemd unit targets
+      ansible.builtin.include_tasks:
+        file: tasks/foreign-systemd-unit-case.yml
+      loop:
+        - kind: dashboard
+          name: foreign-dashboard-fixture.service
+        - kind: backup-service
+          name: foreign-backup-fixture.service
+        - kind: backup-timer
+          name: foreign-backup-fixture.timer
+      loop_control:
+        loop_var: hermes_agent_molecule_unit_case
 
     - name: Back up fixture npm before forced build failures
       ansible.builtin.copy:
