@@ -1,0 +1,149 @@
+---
+- name: Create clean pinned checkout provenance fixture
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - clone
+      - --no-hardlinks
+      - /usr/local/src/hermes-agent-fixture/upstream
+      - /usr/local/lib/hermes-checkout-provenance-fixture
+  changed_when: true
+
+- name: Read tracked checkout provenance fixture path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - /usr/local/lib/hermes-checkout-provenance-fixture
+      - ls-files
+      - README.md
+  register: hermes_agent_molecule_checkout_tracked_paths
+  changed_when: false
+
+- name: Record tracked checkout provenance fixture file
+  ansible.builtin.set_fact:
+    hermes_agent_molecule_checkout_tracked_file: >-
+      {{ hermes_agent_molecule_checkout_tracked_paths.stdout | trim }}
+
+- name: Accept clean root-owned pinned checkout during preflight
+  ansible.builtin.include_tasks:
+    file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+  vars:
+    hermes_agent_runtime_user_phase: preflight
+    hermes_agent_install_dir: /usr/local/lib/hermes-checkout-provenance-fixture
+
+- name: Dirty tracked checkout provenance fixture
+  ansible.builtin.lineinfile:
+    path: >-
+      /usr/local/lib/hermes-checkout-provenance-fixture/{{
+      hermes_agent_molecule_checkout_tracked_file }}
+    line: molecule tracked-checkout drift fixture
+
+- name: Reject dirty tracked checkout before mutation
+  block:
+    - name: Preflight dirty tracked checkout
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+      vars:
+        hermes_agent_runtime_user_phase: preflight
+        hermes_agent_install_dir: /usr/local/lib/hermes-checkout-provenance-fixture
+
+    - name: Fail if dirty tracked checkout was accepted
+      ansible.builtin.fail:
+        msg: Dirty tracked checkout must fail preflight.
+  rescue:
+    - name: Assert dirty tracked checkout failed provenance validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require pristine root-owned existing Hermes Agent checkout'
+
+- name: Restore dirty tracked checkout provenance fixture
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - /usr/local/lib/hermes-checkout-provenance-fixture
+      - checkout
+      - --
+      - "{{ hermes_agent_molecule_checkout_tracked_file }}"
+  changed_when: true
+
+- name: Drift tracked checkout provenance file ownership and mode
+  ansible.builtin.file:
+    path: >-
+      /usr/local/lib/hermes-checkout-provenance-fixture/{{
+      hermes_agent_molecule_checkout_tracked_file }}
+    owner: daemon
+    group: daemon
+    mode: "0600"
+
+- name: Reject tracked checkout ownership and mode drift before mutation
+  block:
+    - name: Preflight ownership-drifted tracked checkout
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+      vars:
+        hermes_agent_runtime_user_phase: preflight
+        hermes_agent_install_dir: /usr/local/lib/hermes-checkout-provenance-fixture
+
+    - name: Fail if ownership-drifted tracked checkout was accepted
+      ansible.builtin.fail:
+        msg: Ownership-drifted tracked checkout must fail preflight.
+  rescue:
+    - name: Assert ownership drift failed provenance validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require pristine root-owned existing Hermes Agent checkout'
+
+- name: Restore tracked checkout provenance file metadata
+  ansible.builtin.file:
+    path: >-
+      /usr/local/lib/hermes-checkout-provenance-fixture/{{
+      hermes_agent_molecule_checkout_tracked_file }}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Drift tracked checkout provenance file mode
+  ansible.builtin.file:
+    path: >-
+      /usr/local/lib/hermes-checkout-provenance-fixture/{{
+      hermes_agent_molecule_checkout_tracked_file }}
+    mode: "0600"
+
+- name: Reject tracked checkout mode drift before mutation
+  block:
+    - name: Preflight mode-drifted tracked checkout
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+      vars:
+        hermes_agent_runtime_user_phase: preflight
+        hermes_agent_install_dir: /usr/local/lib/hermes-checkout-provenance-fixture
+
+    - name: Fail if mode-drifted tracked checkout was accepted
+      ansible.builtin.fail:
+        msg: Mode-drifted tracked checkout must fail preflight.
+  rescue:
+    - name: Assert mode drift failed provenance validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require pristine root-owned existing Hermes Agent checkout'
+
+- name: Restore tracked checkout provenance file mode
+  ansible.builtin.file:
+    path: >-
+      /usr/local/lib/hermes-checkout-provenance-fixture/{{
+      hermes_agent_molecule_checkout_tracked_file }}
+    mode: "0644"
+
+- name: Remove intentionally absent lazy-refresh marker from clean checkout
+  ansible.builtin.file:
+    path: /usr/local/lib/hermes-checkout-provenance-fixture/.lazy-refresh-incomplete
+    state: absent
+
+- name: Accept clean checkout with intentionally absent lazy-refresh marker
+  ansible.builtin.include_tasks:
+    file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+  vars:
+    hermes_agent_runtime_user_phase: preflight
+    hermes_agent_install_dir: /usr/local/lib/hermes-checkout-provenance-fixture

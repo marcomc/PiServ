@@ -165,6 +165,96 @@
     - hermes_agent_runtime_user_phase == 'preflight'
     - hermes_agent_install_provenance_state.stat.exists
 
+- name: Verify existing Hermes Agent tracked checkout content
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - diff
+      - --quiet
+      - --ignore-submodules
+      - --
+      - .
+      - ':(exclude).lazy-refresh-incomplete'
+  register: hermes_agent_existing_checkout_content
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Verify existing Hermes Agent staged checkout content
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - diff
+      - --cached
+      - --quiet
+      - --ignore-submodules
+      - --
+      - .
+      - ':(exclude).lazy-refresh-incomplete'
+  register: hermes_agent_existing_checkout_index_content
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Verify existing Hermes Agent tracked checkout ownership
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import os
+        import subprocess
+        import sys
+
+        checkout = sys.argv[1]
+        lazy_marker = '.lazy-refresh-incomplete'
+        entries = subprocess.check_output(
+            ['/usr/bin/git', '-C', checkout, 'ls-files', '-s', '-z']
+        ).split(b'\0')
+        for entry in filter(None, entries):
+            mode, _, path = entry.split(b' ', 2)
+            _, path = path.split(b'\t', 1)
+            path = path.decode()
+            if path == lazy_marker:
+                continue
+            state = os.lstat(os.path.join(checkout, path))
+            if state.st_uid != 0 or state.st_gid != 0:
+                raise SystemExit(1)
+            if (state.st_mode & 0o777) != (int(mode[-3:], 8)):
+                raise SystemExit(1)
+      - "{{ hermes_agent_install_dir }}"
+  register: hermes_agent_existing_checkout_ownership
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Require pristine root-owned existing Hermes Agent checkout
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_existing_checkout_content.rc == 0
+      - hermes_agent_existing_checkout_index_content.rc == 0
+      - hermes_agent_existing_checkout_ownership.rc == 0
+    fail_msg: >-
+      Existing Hermes checkout tracked content and ownership must be pristine
+      and root-owned before the role can mutate host state. The intentionally
+      removed upstream .lazy-refresh-incomplete marker is excluded.
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
 - name: Require compatible existing Hermes Agent identity and roots
   ansible.builtin.assert:
     that:
@@ -204,9 +294,13 @@
         not hermes_agent_install_root_state.stat.exists or
         (hermes_agent_install_root_state.stat.isdir and
         not hermes_agent_install_root_state.stat.islnk and
+        hermes_agent_install_root_state.stat.pw_name == 'root' and
+        hermes_agent_install_root_state.stat.gr_name == 'root' and
         hermes_agent_install_provenance_state.stat.exists and
         hermes_agent_install_provenance_state.stat.isdir and
-        not hermes_agent_install_provenance_state.stat.islnk)
+        not hermes_agent_install_provenance_state.stat.islnk and
+        hermes_agent_install_provenance_state.stat.pw_name == 'root' and
+        hermes_agent_install_provenance_state.stat.gr_name == 'root')
     fail_msg: >-
       Existing Hermes Agent identities and persistent roots must be dedicated,
       unprivileged, compatible, and positively identified before mutation.

@@ -22,6 +22,39 @@
   loop:
     - /usr/local/lib/hermes-agent-runtime/tui-foreign-fixture
     - /usr/local/lib/hermes-agent-runtime/tui-stale-fixture
+    - /usr/local/lib/hermes-agent-runtime/tui-check-mode-absent-fixture
+
+- name: Check absent terminal UI runtime without an installed checkout
+  ansible.builtin.include_tasks:
+    file: >-
+      {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+      }}/tasks/configure-dashboard-tui.yml
+    apply:
+      check_mode: true
+  vars:
+    hermes_agent_manage_dashboard: false
+    hermes_agent_manage_dashboard_chat: true
+    hermes_agent_dashboard_tui_runtime_dir: >-
+      /usr/local/lib/hermes-agent-runtime/tui-check-mode-absent-fixture
+    hermes_agent_dashboard_tui_runtime_revision_file: >-
+      /usr/local/lib/hermes-agent-runtime/tui-check-mode-absent-fixture/.hermes-revision
+    hermes_agent_dashboard_tui_runtime_manifest_file: >-
+      /usr/local/lib/hermes-agent-runtime/tui-check-mode-absent-fixture/.hermes-managed-state.yml
+    hermes_agent_checkout:
+      stat:
+        exists: false
+    hermes_agent_install:
+      changed: false
+
+- name: Assert absent-checkout check mode made no terminal UI mutation
+  ansible.builtin.stat:
+    path: /usr/local/lib/hermes-agent-runtime/tui-check-mode-absent-fixture
+  register: hermes_agent_molecule_absent_checkout_tui_runtime
+
+- name: Verify absent-checkout check mode avoids terminal UI access failures
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_molecule_absent_checkout_tui_runtime.stat.exists
 
 - name: Create plausible foreign terminal UI runtime directories
   ansible.builtin.file:

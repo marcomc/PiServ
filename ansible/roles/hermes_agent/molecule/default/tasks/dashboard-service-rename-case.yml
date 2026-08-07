@@ -1,0 +1,184 @@
+---
+- name: Converge managed dashboard under original service name
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars: &dashboard_service_fixture_vars
+    hermes_agent_repo_version: >-
+      {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+    hermes_agent_installer_url: >-
+      file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+    hermes_agent_installer_checksum: >-
+      sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+    hermes_agent_codex_archive_url: >-
+      file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+    hermes_agent_codex_archive_checksum: >-
+      sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+    hermes_agent_manage_dashboard: true
+    hermes_agent_manage_dashboard_chat: false
+    hermes_agent_manage_backup: false
+
+- name: Rename managed dashboard service
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: *dashboard_service_fixture_vars
+    hermes_agent_dashboard_service_name: hermes-agent-dashboard-renamed-fixture.service
+
+- name: Inspect dashboard units after managed rename
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - hermes-agent-dashboard.service
+    - hermes-agent-dashboard-renamed-fixture.service
+  register: hermes_agent_molecule_renamed_dashboard_units
+
+- name: Read renamed dashboard service activity
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - hermes-agent-dashboard-renamed-fixture.service
+  register: hermes_agent_molecule_renamed_dashboard_activity
+  changed_when: false
+
+- name: Read retired dashboard service activity
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - hermes-agent-dashboard.service
+  register: hermes_agent_molecule_retired_dashboard_activity
+  changed_when: false
+  failed_when: false
+
+- name: Assert managed dashboard rename retired old unit before replacement
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_molecule_renamed_dashboard_units.results[0].stat.exists
+      - hermes_agent_molecule_renamed_dashboard_units.results[1].stat.isreg
+      - hermes_agent_molecule_renamed_dashboard_activity.stdout | trim == 'active'
+      - hermes_agent_molecule_retired_dashboard_activity.rc != 0
+
+- name: Repeat renamed managed dashboard convergence
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: *dashboard_service_fixture_vars
+    hermes_agent_dashboard_service_name: hermes-agent-dashboard-renamed-fixture.service
+
+- name: Create prior dashboard unit provenance fixture
+  ansible.builtin.copy:
+    content: foreign dashboard unit fixture
+    dest: /etc/systemd/system/hermes-agent-dashboard-foreign-fixture.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Inspect prior dashboard unit provenance fixture
+  ansible.builtin.stat:
+    path: /etc/systemd/system/hermes-agent-dashboard-foreign-fixture.service
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_foreign_dashboard_unit
+
+- name: Record managed state then drift prior dashboard unit fixture
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'name': 'hermes-agent-dashboard-foreign-fixture.service',
+        'sha256': hermes_agent_molecule_foreign_dashboard_unit.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Drift prior dashboard unit after managed-state record
+  ansible.builtin.copy:
+    content: changed foreign dashboard unit fixture
+    dest: /etc/systemd/system/hermes-agent-dashboard-foreign-fixture.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Refuse changed foreign prior dashboard unit
+  block:
+    - name: Converge dashboard after prior unit drift
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        <<: *dashboard_service_fixture_vars
+        hermes_agent_dashboard_service_name: hermes-agent-dashboard-third-fixture.service
+
+    - name: Fail if changed foreign prior dashboard unit was accepted
+      ansible.builtin.fail:
+        msg: Changed foreign prior dashboard unit must be preserved and rejected.
+  rescue:
+    - name: Assert changed foreign prior dashboard unit failed before replacement
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require recognized previously managed Hermes dashboard unit'
+
+- name: Read changed foreign prior dashboard unit after refusal
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/hermes-agent-dashboard-foreign-fixture.service
+  register: hermes_agent_molecule_preserved_foreign_dashboard_unit
+  changed_when: false
+
+- name: Assert changed foreign prior dashboard unit is preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_preserved_foreign_dashboard_unit.content | b64decode ==
+        'changed foreign dashboard unit fixture'
+
+- name: Create symlinked dashboard service state parent fixture
+  ansible.builtin.file:
+    src: /etc
+    dest: /var/lib/hermes-dashboard-state-parent-alias
+    state: link
+
+- name: Reject unsafe dashboard service managed-state paths
+  block:
+    - name: Validate symlinked dashboard service state parent
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          /var/lib/hermes-dashboard-state-parent-alias/marker.yml
+
+    - name: Fail if symlinked dashboard service state parent was accepted
+      ansible.builtin.fail:
+        msg: Symlinked dashboard service state parents must fail validation.
+  rescue:
+    - name: Assert unsafe dashboard service state parent was rejected
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require safe Hermes dashboard service managed-state paths'
+
+- name: Reject dashboard service state aliasing its systemd unit
+  block:
+    - name: Validate aliased dashboard service state target
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          /etc/systemd/system/hermes-agent-dashboard-renamed-fixture.service
+        hermes_agent_dashboard_service_name: hermes-agent-dashboard-renamed-fixture.service
+
+    - name: Fail if aliased dashboard service state target was accepted
+      ansible.builtin.fail:
+        msg: Dashboard service state aliases must fail validation.
+  rescue:
+    - name: Assert dashboard service state alias was rejected
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require safe Hermes dashboard service managed-state paths'
+
+- name: Remove dashboard service rename fixtures
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/hermes-agent-dashboard-foreign-fixture.service
+    - /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+    - /var/lib/hermes-dashboard-state-parent-alias

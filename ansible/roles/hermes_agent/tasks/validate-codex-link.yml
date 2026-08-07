@@ -357,7 +357,7 @@
       - >-
         (not hermes_agent_codex_link_state.stat.exists and
         not hermes_agent_codex_link_managed_state.stat.exists) or
-        (hermes_agent_codex_link_state.stat.islnk and
+        (hermes_agent_codex_link_state.stat.islnk | default(false) and
         hermes_agent_codex_link_state.stat.pw_name == 'root' and
         hermes_agent_codex_link_state.stat.gr_name == 'root' and
         (hermes_agent_codex_link_state.stat.lnk_target ==

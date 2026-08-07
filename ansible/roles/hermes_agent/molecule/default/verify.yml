@@ -1321,53 +1321,44 @@
         group: root
         mode: "0600"
 
-    - name: Reject marker-only dashboard bootstrap partial state
-      block:
-        - name: Apply role with marker-only dashboard bootstrap state
-          ansible.builtin.include_role:
-            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
-          vars: &dashboard_auth_fixture_vars
-            hermes_agent_repo_version: >-
-              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
-            hermes_agent_installer_url: >-
-              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
-            hermes_agent_installer_checksum: >-
-              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
-            hermes_agent_codex_archive_url: >-
-              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
-            hermes_agent_codex_archive_checksum: >-
-              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
-            hermes_agent_manage_backup: false
-            hermes_agent_manage_dashboard: false
-            hermes_agent_manage_dashboard_chat: true
-            hermes_agent_dashboard_manage_basic_auth: true
-            hermes_agent_dashboard_basic_auth_username: fixture-admin
-            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
-              /root/hermes-foreign-bootstrap-target
+    - name: Recover marker-only managed dashboard bootstrap password state
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: &dashboard_auth_fixture_vars
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_dashboard_manage_basic_auth: true
+        hermes_agent_dashboard_basic_auth_username: fixture-admin
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+          /root/hermes-foreign-bootstrap-target
 
-        - name: Fail if marker-only dashboard bootstrap state was accepted
-          ansible.builtin.fail:
-            msg: Marker-only dashboard bootstrap state must be rejected.
-      rescue:
-        - name: Assert marker-only dashboard bootstrap state failed safely
-          ansible.builtin.assert:
-            that:
-              - >-
-                ansible_failed_task.name ==
-                'Require a recognized Hermes dashboard bootstrap password file'
+    - name: Assert marker-only managed dashboard bootstrap state converges
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target
+      register: hermes_agent_molecule_marker_only_bootstrap_password
 
-    - name: Read marker-only dashboard bootstrap state after rejection
-      ansible.builtin.slurp:
-        src: /root/hermes-foreign-bootstrap-target.managed.yml
-      register: hermes_agent_molecule_marker_only_bootstrap_state
-      changed_when: false
-
-    - name: Assert marker-only dashboard bootstrap state is untouched
+    - name: Verify marker-only managed dashboard bootstrap recovery
       ansible.builtin.assert:
         that:
-          - >-
-            'sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' in
-            (hermes_agent_molecule_marker_only_bootstrap_state.content | b64decode)
+          - hermes_agent_molecule_marker_only_bootstrap_password.stat.isreg
+          - hermes_agent_molecule_marker_only_bootstrap_password.stat.mode == '0600'
+
+    - name: Inspect established dashboard authentication commit point
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_established_bootstrap_auth_state
 
     - name: Create malformed dashboard bootstrap partial state
       ansible.builtin.copy:
@@ -1412,6 +1403,7 @@
     - name: Inspect dashboard authentication commit point after partial-state refusal
       ansible.builtin.stat:
         path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        checksum_algorithm: sha256
       register: hermes_agent_molecule_partial_bootstrap_auth_state
 
     - name: Assert malformed dashboard bootstrap partial state is untouched
@@ -1423,7 +1415,10 @@
           - >-
             hermes_agent_molecule_malformed_bootstrap_state.results[1].content |
             b64decode == 'path: [malformed\n'
-          - not hermes_agent_molecule_partial_bootstrap_auth_state.stat.exists
+          - hermes_agent_molecule_partial_bootstrap_auth_state.stat.isreg
+          - >-
+            hermes_agent_molecule_partial_bootstrap_auth_state.stat.checksum ==
+            hermes_agent_molecule_established_bootstrap_auth_state.stat.checksum
 
     - name: Remove dashboard bootstrap partial-state fixtures for recovery
       ansible.builtin.file:
@@ -1487,6 +1482,36 @@
         checksum_algorithm: sha256
       register: hermes_agent_molecule_initialized_bootstrap_target
 
+    - name: Delete managed dashboard bootstrap password while preserving state
+      ansible.builtin.file:
+        path: /root/hermes-foreign-bootstrap-target
+        state: absent
+
+    - name: Recover deleted managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: *dashboard_auth_fixture_vars
+
+    - name: Inspect recovered dashboard bootstrap password artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_recovered_bootstrap_artifacts
+
+    - name: Assert deleted managed dashboard bootstrap password converges
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.isreg
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[1].stat.isreg
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[1].stat.mode == '0600'
+          - >-
+            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum !=
+            hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.checksum
+
     - name: Rotate managed dashboard bootstrap password target
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
@@ -1513,7 +1538,7 @@
       ansible.builtin.assert:
         that:
           - >-
-            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum !=
+            hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.checksum !=
             hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
           - hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.mode == '0600'
           - hermes_agent_molecule_rotated_bootstrap_artifacts.results[1].stat.mode == '0600'
@@ -1752,6 +1777,12 @@
               - >-
                 ansible_failed_task.name ==
                 'Require expected Hermes Agent checkout origin'
+
+    - name: Exercise checkout provenance drift regressions
+      ansible.builtin.include_tasks: tasks/checkout-provenance-case.yml
+
+    - name: Exercise managed dashboard service rename regressions
+      ansible.builtin.include_tasks: tasks/dashboard-service-rename-case.yml
 
     - name: Create incompatible runtime identity fixture group
       ansible.builtin.group:

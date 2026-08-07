@@ -82,6 +82,8 @@ hermes_agent_disabled_toolsets:
 hermes_agent_dashboard_host: 127.0.0.1
 hermes_agent_dashboard_port: 9119
 hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
+hermes_agent_dashboard_service_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-dashboard-managed.yml
 hermes_agent_manage_dashboard: true
 hermes_agent_manage_dashboard_chat: false
 hermes_agent_dashboard_tui_runtime_dir: /usr/local/lib/hermes-agent-runtime/tui

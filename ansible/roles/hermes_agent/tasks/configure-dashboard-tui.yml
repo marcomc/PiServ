@@ -90,7 +90,9 @@
   register: hermes_agent_dashboard_tui_dist
   changed_when: false
   check_mode: false
-  when: hermes_agent_manage_dashboard_chat
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
 
 - name: Inspect Hermes dashboard terminal UI runtime revision
   ansible.builtin.stat:
@@ -199,7 +201,9 @@
         hermes_agent_dashboard_tui_source_fingerprint.stdout | trim ==
         hermes_agent_dashboard_tui_runtime_source_fingerprint.stdout | trim
       }}
-  when: hermes_agent_manage_dashboard_chat
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
 
 - name: Require absent or recognized Hermes dashboard terminal UI runtime
   ansible.builtin.assert:
@@ -287,6 +291,7 @@
     mode: "0755"
   when:
     - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
     - >-
       not ansible_check_mode or
       not hermes_agent_dashboard_tui_dist.stat.exists
@@ -327,6 +332,7 @@
     group: root
   when:
     - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
     - >-
       not ansible_check_mode or
       hermes_agent_dashboard_tui_dependencies.stat.exists

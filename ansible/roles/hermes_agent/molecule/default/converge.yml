@@ -34,6 +34,10 @@
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
       vars:
+        # The fixture supplies a mock archive, so permit the CI container's
+        # architecture without weakening the role's ARM64 production default.
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
         hermes_agent_repo_version: >-
           {{ hermes_agent_fixture_revision.content | b64decode | trim }}
         hermes_agent_installer_url: >-
