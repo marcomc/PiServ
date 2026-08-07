@@ -1,0 +1,28 @@
+---
+- name: Inspect built Hermes dashboard
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/hermes_cli/web_dist/index.html"
+  register: hermes_agent_dashboard_dist
+  when: hermes_agent_manage_dashboard
+
+- name: Record whether Hermes dashboard assets require a build
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_build_required: >-
+      {{
+        not hermes_agent_dashboard_dist.stat.exists or
+        hermes_agent_install is changed
+      }}
+  when: hermes_agent_manage_dashboard
+
+- name: Build pinned Hermes dashboard assets as the runtime identity
+  ansible.builtin.include_tasks: build-dashboard-assets.yml
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode
+    - hermes_agent_dashboard_build_required
+
+- name: Refresh built Hermes dashboard state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/hermes_cli/web_dist/index.html"
+  register: hermes_agent_dashboard_dist
+  when: hermes_agent_manage_dashboard

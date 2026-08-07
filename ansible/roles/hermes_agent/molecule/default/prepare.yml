@@ -8,6 +8,7 @@
       ansible.builtin.apt:
         name:
           - git
+          - shellcheck
           - tar
         state: present
         update_cache: true

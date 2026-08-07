@@ -1955,6 +1955,136 @@
             hermes_agent_molecule_benchmark_tmp_after.stat.gr_name ==
             hermes_agent_molecule_benchmark_tmp_before.stat.gr_name
 
+    - name: Create benchmark cleanup mock command directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-benchmark-cleanup-mocks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install benchmark cleanup systemctl mock
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          command=$1
+          shift
+          case "$command" in
+            cat) exit 0 ;;
+            list-units)
+              if [ "$MOCK_MODEL_ACTIVE" = true ]; then
+                echo "hermes-local-model-existing.service loaded active running"
+              fi
+              ;;
+            show)
+              case "$*" in
+                *ExecStart*) echo "/usr/bin/llama-server --port 18081" ;;
+                *MemoryHigh*) echo 1000 ;;
+                *MemoryMax*) echo 2000 ;;
+                *MemorySwapMax*) echo 0 ;;
+                *ActiveState*) echo failed ;;
+                *) echo 0 ;;
+              esac
+              ;;
+            is-active) exit 0 ;;
+            start|stop) echo "$command $*" >> "$MOCK_SYSTEMCTL_LOG" ;;
+            reset-failed|daemon-reload) ;;
+          esac
+        dest: /usr/local/lib/hermes-benchmark-cleanup-mocks/systemctl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install benchmark cleanup failure mocks
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit {{ item.exit_code }}
+        dest: "/usr/local/lib/hermes-benchmark-cleanup-mocks/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - name: curl
+          exit_code: 1
+        - name: sleep
+          exit_code: 0
+
+    - name: Render benchmark cleanup regression helper
+      ansible.builtin.template:
+        src: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/templates/benchmark-hermes-local-model.sh.j2
+        dest: /usr/local/lib/hermes-benchmark-cleanup-regression
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove stale benchmark cleanup regression logs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/hermes-benchmark-active-systemctl.log
+        - /tmp/hermes-benchmark-started-systemctl.log
+
+    - name: ShellCheck rendered benchmark cleanup helper
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+      changed_when: false
+
+    - name: Exercise benchmark rejection with an already active model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - gemma-4-e2b
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "true"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-active-systemctl.log
+      register: hermes_agent_molecule_benchmark_active_rejection
+      changed_when: false
+      failed_when: hermes_agent_molecule_benchmark_active_rejection.rc != 70
+
+    - name: Inspect active-model benchmark systemctl log
+      ansible.builtin.stat:
+        path: /tmp/hermes-benchmark-active-systemctl.log
+      register: hermes_agent_molecule_benchmark_active_log
+
+    - name: Exercise benchmark failure after starting its model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - gemma-4-e2b
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "false"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-started-systemctl.log
+      register: hermes_agent_molecule_benchmark_started_failure
+      changed_when: false
+      failed_when: hermes_agent_molecule_benchmark_started_failure.rc == 0
+
+    - name: Read invocation-started benchmark systemctl log
+      ansible.builtin.slurp:
+        src: /tmp/hermes-benchmark-started-systemctl.log
+      register: hermes_agent_molecule_benchmark_started_log
+
+    - name: Assert benchmark cleanup owns only its started service
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_benchmark_active_log.stat.exists
+          - >-
+            'start hermes-local-model-gemma-4-e2b.service' in
+            (hermes_agent_molecule_benchmark_started_log.content | b64decode)
+          - >-
+            'stop hermes-local-model-gemma-4-e2b.service' in
+            (hermes_agent_molecule_benchmark_started_log.content | b64decode)
+
     - name: Create foreign local-model storage fixture
       ansible.builtin.file:
         path: /var/lib/hermes-local-storage-foreign
@@ -2720,6 +2850,16 @@
             hermes_agent_molecule_mcp_token_parent_link.stat.lnk_source ==
             '/var/lib/hermes-mcp-system-parent'
 
+    - name: Read valid Hermes dashboard terminal UI state before corruption
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/package.json
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+      register: hermes_agent_molecule_valid_tui_state
+      changed_when: false
+
     - name: Corrupt managed Hermes dashboard terminal UI state
       ansible.builtin.copy:
         content: "{{ item.content }}"
@@ -2735,51 +2875,73 @@
         - path: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
           content: 'not: [valid'
 
-    - name: Repair managed Hermes dashboard terminal UI state
-      ansible.builtin.include_role:
-        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
-      vars:
-        hermes_agent_repo_version: >-
-          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
-        hermes_agent_installer_url: >-
-          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
-        hermes_agent_installer_checksum: >-
-          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
-        hermes_agent_codex_archive_url: >-
-          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
-        hermes_agent_codex_archive_checksum: >-
-          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
-        hermes_agent_manage_backup: true
-        hermes_agent_backup_group: root
-        hermes_agent_backup_dir: /var/backups/hermes-agent
-        hermes_agent_manage_dashboard_chat: true
-        hermes_agent_manage_home_assistant_mcp: true
-        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
-        hermes_agent_home_assistant_mcp_token_env_file: >-
-          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+    - name: Refuse malformed managed Hermes dashboard terminal UI state
+      block:
+        - name: Apply role with malformed managed terminal UI state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
 
-    - name: Read repaired Hermes dashboard terminal UI state
+        - name: Fail if malformed managed terminal UI state was accepted
+          ansible.builtin.fail:
+            msg: Malformed managed terminal UI state must block synchronization.
+      rescue:
+        - name: Assert malformed managed terminal UI state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Parse Hermes dashboard terminal UI managed state'
+
+    - name: Read malformed managed terminal UI state after rejection
       ansible.builtin.slurp:
         src: "{{ item }}"
       loop:
         - /usr/local/lib/hermes-agent-runtime/tui/package.json
         - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
         - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
-      register: hermes_agent_molecule_repaired_tui_state
+      register: hermes_agent_molecule_rejected_tui_state
       changed_when: false
 
-    - name: Assert managed Hermes dashboard terminal UI state is repaired
+    - name: Assert malformed managed terminal UI state is preserved
       ansible.builtin.assert:
         that:
           - >-
-            (hermes_agent_molecule_repaired_tui_state.results[0].content | b64decode | trim) ==
-            '{"name":"hermes-tui-fixture"}'
+            (hermes_agent_molecule_rejected_tui_state.results[0].content |
+            b64decode | trim) == '{"name":"corrupt-tui-fixture"}'
           - >-
-            (hermes_agent_molecule_repaired_tui_state.results[1].content | b64decode | trim) ==
-            'export default {};'
+            (hermes_agent_molecule_rejected_tui_state.results[1].content |
+            b64decode | trim) == 'export default { corrupt: true };'
           - >-
-            'revision: ' ~ (hermes_agent_molecule_fixture_revision.content | b64decode | trim) in
-            (hermes_agent_molecule_repaired_tui_state.results[2].content | b64decode)
+            (hermes_agent_molecule_rejected_tui_state.results[2].content |
+            b64decode) == 'not: [valid'
+
+    - name: Restore valid Hermes dashboard terminal UI state after rejection
+      ansible.builtin.copy:
+        content: "{{ item.content | b64decode }}"
+        dest: "{{ item.source }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ hermes_agent_molecule_valid_tui_state.results }}"
 
     - name: Corrupt disabled Hermes dashboard terminal UI managed state fixture
       ansible.builtin.copy:
@@ -2857,7 +3019,7 @@
     - name: Restore Hermes dashboard terminal UI managed state fixture
       ansible.builtin.copy:
         content: >-
-          {{ hermes_agent_molecule_repaired_tui_state.results[2].content | b64decode }}
+          {{ hermes_agent_molecule_valid_tui_state.results[2].content | b64decode }}
         dest: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
         owner: root
         group: root
@@ -3904,3 +4066,27 @@
           - hermes_agent_molecule_node_ownership_canary.stat.pw_name == 'root'
           - hermes_agent_molecule_node_ownership_canary.stat.gr_name == 'root'
           - hermes_agent_molecule_node_ownership_canary.stat.mode == '0644'
+
+    - name: Exercise isolated terminal UI lifecycle regressions
+      ansible.builtin.include_tasks:
+        file: tasks/dashboard-tui-lifecycle-case.yml
+        apply:
+          tags:
+            - tui-lifecycle
+      tags:
+        - tui-lifecycle
+      vars:
+        hermes_agent_user: hermes-agent
+        hermes_agent_group: hermes-agent
+        hermes_agent_home: /var/lib/hermes-agent
+        hermes_agent_install_dir: /usr/local/lib/hermes-agent
+
+  handlers:
+    - name: Restart Hermes Agent dashboard
+      ansible.builtin.systemd_service:
+        name: "{{ hermes_agent_dashboard_service_name }}"
+        state: restarted
+        daemon_reload: true
+      when:
+        - hermes_agent_manage_dashboard | default(false)
+        - not ansible_check_mode

@@ -39,6 +39,7 @@ runtime_dropin_dir="/run/systemd/system/${service_name}.d"
 runtime_dropin_path=""
 runtime_dropin_dir_created=false
 service_stopped=false
+service_started_by_invocation=false
 
 assert_model_test_preflight() {
   local controllers
@@ -133,7 +134,7 @@ remove_limit_as_override() {
 cleanup() {
   local status=$?
 
-  if [[ "${service_stopped}" != true ]]; then
+  if [[ "${service_started_by_invocation}" == true && "${service_stopped}" != true ]]; then
     systemctl stop "${service_name}" || true
   fi
   remove_limit_as_override
@@ -150,6 +151,7 @@ memory_before="$(awk '/MemAvailable:/ { print $2 * 1024 }' /proc/meminfo)"
 swap_used_before="$(awk '/SwapTotal:/ { total = $2 * 1024 } /SwapFree:/ { free = $2 * 1024 } END { print total - free }' /proc/meminfo)"
 systemctl reset-failed "${service_name}" 2>/dev/null || true
 systemctl start "${service_name}"
+service_started_by_invocation=true
 
 for _ in $(seq 1 120); do
   if curl --fail --silent --max-time 5 "${service_url}/health" >/dev/null 2>&1; then
