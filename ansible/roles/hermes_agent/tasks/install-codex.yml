@@ -32,6 +32,42 @@
   when: not ansible_check_mode
 
 - name: Create versioned Codex installation directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir }}"
+    follow: false
+  register: hermes_agent_codex_install_directory
+  changed_when: false
+  check_mode: false
+
+- name: Refuse a pre-existing unrecognized Codex installation directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir }}/codex"
+    follow: false
+  register: hermes_agent_codex_binary
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe pre-existing Codex installation directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        (hermes_agent_codex_install_directory.stat.isdir and
+         not hermes_agent_codex_install_directory.stat.islnk and
+         hermes_agent_codex_install_directory.stat.pw_name == 'root' and
+         hermes_agent_codex_install_directory.stat.gr_name == 'root' and
+         hermes_agent_codex_install_directory.stat.mode == '0755' and
+         hermes_agent_codex_binary.stat.exists and
+         hermes_agent_codex_binary.stat.isreg and
+         not hermes_agent_codex_binary.stat.islnk and
+         hermes_agent_codex_binary.stat.pw_name == 'root' and
+         hermes_agent_codex_binary.stat.gr_name == 'root' and
+         hermes_agent_codex_binary.stat.mode is match('^0?[0-7][0-7][1357]$'))
+    fail_msg: >-
+      Refusing to extract into an existing Codex installation directory that is
+      not a safe, complete role-managed runtime.
+
+- name: Create versioned Codex installation directory
   ansible.builtin.file:
     path: "{{ hermes_agent_codex_install_dir }}"
     state: directory

@@ -17,6 +17,7 @@
         hermes_agent_dashboard_tui_runtime_dir ~ '/.hermes-managed-state.yml'
       - >-
         hermes_agent_dashboard_host == "127.0.0.1" or
+        not hermes_agent_manage_dashboard | bool or
         hermes_agent_dashboard_manage_basic_auth | bool
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
