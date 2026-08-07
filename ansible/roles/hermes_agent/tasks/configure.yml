@@ -857,110 +857,18 @@
     - not hermes_agent_manage_dashboard_chat
     - not ansible_check_mode
 
-- name: Inspect Hermes dashboard managed service state
-  ansible.builtin.stat:
-    path: "{{ hermes_agent_dashboard_service_managed_state_file }}"
-    follow: false
-  register: hermes_agent_dashboard_service_managed_state
-  changed_when: false
-  check_mode: false
-
-- name: Create missing private Hermes dashboard service state parent
-  ansible.builtin.file:
-    path: "{{ hermes_agent_dashboard_service_managed_state_file | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  when:
-    - not hermes_agent_dashboard_service_state_targets.results[1].stat.exists
-
-- name: Read Hermes dashboard managed service state
-  ansible.builtin.slurp:
-    src: "{{ hermes_agent_dashboard_service_managed_state_file }}"
-  register: hermes_agent_dashboard_service_managed_state_contents
-  changed_when: false
-  when:
-    - hermes_agent_dashboard_service_managed_state.stat.isreg | default(false)
-    - not hermes_agent_dashboard_service_managed_state.stat.islnk | default(true)
-    - hermes_agent_dashboard_service_managed_state.stat.pw_name | default('') == 'root'
-    - hermes_agent_dashboard_service_managed_state.stat.gr_name | default('') == 'root'
-    - hermes_agent_dashboard_service_managed_state.stat.mode | default('') == '0600'
-
-- name: Load Hermes dashboard managed service state
-  ansible.builtin.set_fact:
-    hermes_agent_dashboard_service_managed_record: >-
-      {{ ((hermes_agent_dashboard_service_managed_state_contents |
-      default({})).content | default('') | b64decode | from_yaml) or {} }}
-
-- name: Require valid Hermes dashboard managed service state
-  ansible.builtin.assert:
-    that:
-      - >-
-        not hermes_agent_dashboard_service_managed_state.stat.exists | default(false) or
-        (hermes_agent_dashboard_service_managed_state.stat.isreg | default(false) and
-        not hermes_agent_dashboard_service_managed_state.stat.islnk | default(true) and
-        hermes_agent_dashboard_service_managed_state.stat.pw_name | default('') == 'root' and
-        hermes_agent_dashboard_service_managed_state.stat.gr_name | default('') == 'root' and
-        hermes_agent_dashboard_service_managed_state.stat.mode | default('') == '0600' and
-        hermes_agent_dashboard_service_managed_record.keys() | list | sort ==
-        ['name', 'sha256'] and
-        hermes_agent_dashboard_service_managed_record.name is match(
-        '^[A-Za-z0-9][A-Za-z0-9_.@-]*\\.service$') and
-        hermes_agent_dashboard_service_managed_record.sha256 is match('^[a-f0-9]{64}$'))
-    fail_msg: >-
-      Hermes dashboard managed service state must be a root-owned complete
-      record before reconciling a renamed dashboard unit.
-
-- name: Inspect previously managed Hermes dashboard unit
-  ansible.builtin.stat:
-    path: >-
-      /etc/systemd/system/{{ hermes_agent_dashboard_service_managed_record.name }}
-    follow: false
-    checksum_algorithm: sha256
-  register: hermes_agent_previous_dashboard_unit
-  changed_when: false
-  check_mode: false
-  when: hermes_agent_dashboard_service_managed_state.stat.exists | default(false)
-
-- name: Require recognized previously managed Hermes dashboard unit
-  ansible.builtin.assert:
-    that:
-      - >-
-        not hermes_agent_previous_dashboard_unit.stat.exists | default(false) or
-        (hermes_agent_previous_dashboard_unit.stat.isreg | default(false) and
-        not hermes_agent_previous_dashboard_unit.stat.islnk | default(true) and
-        hermes_agent_previous_dashboard_unit.stat.pw_name | default('') == 'root' and
-        hermes_agent_previous_dashboard_unit.stat.gr_name | default('') == 'root' and
-        hermes_agent_previous_dashboard_unit.stat.mode | default('') == '0644' and
-        hermes_agent_previous_dashboard_unit.stat.checksum ==
-        hermes_agent_dashboard_service_managed_record.sha256)
-    fail_msg: >-
-      Refusing to retire changed or foreign previously managed Hermes dashboard
-      unit {{ hermes_agent_dashboard_service_managed_record.name }}.
-  when: hermes_agent_dashboard_service_managed_state.stat.exists | default(false)
-
-- name: Stop and disable renamed Hermes dashboard unit
-  ansible.builtin.systemd_service:
-    name: "{{ hermes_agent_dashboard_service_managed_record.name }}"
-    enabled: false
-    state: stopped
-  when:
-    - hermes_agent_dashboard_service_managed_state.stat.exists | default(false)
-    - hermes_agent_dashboard_service_managed_record.name != hermes_agent_dashboard_service_name
-    - hermes_agent_previous_dashboard_unit.stat.exists | default(false)
-    - not ansible_check_mode
-
-- name: Remove renamed Hermes dashboard unit
-  ansible.builtin.file:
-    path: >-
-      /etc/systemd/system/{{ hermes_agent_dashboard_service_managed_record.name }}
-    state: absent
-  when:
-    - hermes_agent_dashboard_service_managed_state.stat.exists | default(false)
-    - hermes_agent_dashboard_service_managed_record.name != hermes_agent_dashboard_service_name
-    - hermes_agent_previous_dashboard_unit.stat.exists | default(false)
-  notify: Reload systemd daemon
+- name: Reconcile previously managed Hermes dashboard service
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes dashboard service
+    hermes_agent_managed_unit_name: "{{ hermes_agent_dashboard_service_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_dashboard }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_dashboard_service_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_dashboard_service_state_targets.results[1] }}
 
 - name: Configure Hermes Agent dashboard service
   ansible.builtin.template:
@@ -1059,6 +967,32 @@
       service are not safe backup targets.
   when: hermes_agent_manage_backup
 
+- name: Reconcile previously managed Hermes Agent backup service
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes Agent backup service
+    hermes_agent_managed_unit_name: "{{ hermes_agent_backup_service_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_backup }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_backup_service_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_backup_service_state_targets.results[1] }}
+
+- name: Reconcile previously managed Hermes Agent backup timer
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes Agent backup timer
+    hermes_agent_managed_unit_name: "{{ hermes_agent_backup_timer_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_backup }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_backup_timer_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_backup_timer_state_targets.results[1] }}
+
 - name: Configure Hermes Agent backups
   when:
     - hermes_agent_manage_backup
@@ -1080,6 +1014,27 @@
         group: root
         mode: "0644"
 
+    - name: Inspect configured Hermes Agent backup service
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_configured_backup_service
+      changed_when: false
+      check_mode: false
+
+    - name: Record managed Hermes Agent backup service state
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'name': hermes_agent_backup_service_name,
+            'sha256': hermes_agent_configured_backup_service.stat.checksum
+          } | to_nice_yaml(indent=2) }}
+        dest: "{{ hermes_agent_backup_service_managed_state_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not ansible_check_mode
+
     - name: Install Hermes Agent backup timer
       ansible.builtin.template:
         src: hermes-agent-backup.timer.j2
@@ -1087,6 +1042,27 @@
         owner: root
         group: root
         mode: "0644"
+
+    - name: Inspect configured Hermes Agent backup timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_configured_backup_timer
+      changed_when: false
+      check_mode: false
+
+    - name: Record managed Hermes Agent backup timer state
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'name': hermes_agent_backup_timer_name,
+            'sha256': hermes_agent_configured_backup_timer.stat.checksum
+          } | to_nice_yaml(indent=2) }}
+        dest: "{{ hermes_agent_backup_timer_managed_state_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not ansible_check_mode
 
     - name: Enable Hermes Agent backup timer
       ansible.builtin.systemd_service:

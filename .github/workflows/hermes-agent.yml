@@ -38,4 +38,4 @@ jobs:
         run: ansible-lint .
 
       - name: Run Molecule
-        run: molecule test
+        run: molecule test -s essential

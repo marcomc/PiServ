@@ -2,6 +2,11 @@
 - name: Verify  # noqa complexity[play] - one ordered lifecycle regression scenario
   hosts: all
   become: true
+  vars:
+    # The fixture exercises role behavior on the container architecture; the
+    # production role default remains ARM64-only.
+    hermes_agent_supported_architectures:
+      - "{{ ansible_facts['architecture'] }}"
   tasks:
     - name: Pin expected fixture origin across dynamic role inclusions
       ansible.builtin.set_fact:
@@ -3145,6 +3150,9 @@
             'HERMES_TUI_DIR' not in
             (hermes_agent_molecule_dashboard_without_chat.content | b64decode)
 
+    - name: Exercise managed backup timer rename regressions
+      ansible.builtin.include_tasks: tasks/backup-timer-rename-case.yml
+
     - name: Disable dashboard and backup services in the fixture
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
@@ -4123,6 +4131,62 @@
         hermes_agent_group: hermes-agent
         hermes_agent_home: /var/lib/hermes-agent
         hermes_agent_install_dir: /usr/local/lib/hermes-agent
+
+    - name: Remove active Codex artifacts for interrupted-install fixture
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/codex
+        - /usr/local/bin/codex.hermes-agent-managed.yml
+        - /usr/local/lib/codex/0.145.0
+
+    - name: Create partial interrupted Codex staging fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/.hermes-codex-interrupted-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create partial interrupted Codex extraction fixture
+      ansible.builtin.copy:
+        content: partial extraction
+        dest: /usr/local/lib/codex/.hermes-codex-interrupted-fixture/codex-aarch64-unknown-linux-musl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Retry Codex installation with an interrupted staging sibling
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+
+    - name: Inspect Codex installation after interrupted retry
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - /usr/local/lib/codex/0.145.0
+        - /usr/local/lib/codex/0.145.0/codex
+        - /usr/local/lib/codex/.hermes-codex-interrupted-fixture
+      register: hermes_agent_molecule_codex_retry_artifacts
+
+    - name: Assert interrupted Codex staging does not poison retry
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_retry_artifacts.results[0].stat.isdir
+          - hermes_agent_molecule_codex_retry_artifacts.results[1].stat.isreg
+          - hermes_agent_molecule_codex_retry_artifacts.results[1].stat.mode == '0755'
+          - hermes_agent_molecule_codex_retry_artifacts.results[2].stat.isdir
 
   handlers:
     - name: Restart Hermes Agent dashboard

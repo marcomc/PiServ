@@ -4,6 +4,9 @@ All notable changes to this role are documented here.
 
 ## [Unreleased]
 
+- Added a deployment-agnostic `essential` Molecule scenario as the nested-role
+  CI gate, while retaining the exhaustive `default` lifecycle and hardening
+  matrix for explicit runs and future standalone Galaxy release validation.
 - Reject foreign configured systemd unit targets and unsafe or foreign download
   caches during early preflight, before package or runtime mutation.
 - Reject colliding service names and require a private role marker before

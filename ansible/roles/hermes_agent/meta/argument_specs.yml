@@ -365,10 +365,18 @@ argument_specs:
         type: str
         default: hermes-agent-backup.service
         description: Systemd unit name for the backup service.
+      hermes_agent_backup_service_managed_state_file:
+        type: path
+        default: /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+        description: Root-only provenance record for the managed backup service.
       hermes_agent_backup_timer_name:
         type: str
         default: hermes-agent-backup.timer
         description: Systemd unit name for the backup timer.
+      hermes_agent_backup_timer_managed_state_file:
+        type: path
+        default: /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
+        description: Root-only provenance record for the managed backup timer.
       hermes_agent_backup_retention_days:
         type: int
         default: 30

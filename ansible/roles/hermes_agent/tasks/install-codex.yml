@@ -31,7 +31,15 @@
     mode: "0644"
   when: not ansible_check_mode
 
-- name: Create versioned Codex installation directory
+- name: Create Codex installation parent directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect versioned Codex installation directory
   ansible.builtin.stat:
     path: "{{ hermes_agent_codex_install_dir }}"
     follow: false
@@ -67,53 +75,80 @@
       Refusing to extract into an existing Codex installation directory that is
       not a safe, complete role-managed runtime.
 
-- name: Create versioned Codex installation directory
-  ansible.builtin.file:
-    path: "{{ hermes_agent_codex_install_dir }}"
+- name: Create temporary Codex installation directory
+  ansible.builtin.tempfile:
+    path: "{{ hermes_agent_codex_install_dir | dirname }}"
+    prefix: ".hermes-codex-"
     state: directory
+  register: hermes_agent_codex_staging_directory
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Set temporary Codex installation directory ownership
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_staging_directory.path }}"
     owner: root
     group: root
     mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Extract Codex CLI archive into temporary directory
+  ansible.builtin.unarchive:
+    src: >-
+      {{ hermes_agent_download_cache_dir }}/codex-{{
+      hermes_agent_codex_version }}-aarch64-linux.tar.gz
+    dest: "{{ hermes_agent_codex_staging_directory.path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Install normalized Codex binary name in temporary directory
+  ansible.builtin.copy:
+    src: >-
+      {{ hermes_agent_codex_staging_directory.path
+      }}/{{ hermes_agent_codex_archive_binary_name }}
+    dest: "{{ hermes_agent_codex_staging_directory.path }}/codex"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Remove extracted Codex source filename from temporary directory
+  ansible.builtin.file:
+    path: >-
+      {{ hermes_agent_codex_staging_directory.path
+      }}/{{ hermes_agent_codex_archive_binary_name }}
+    state: absent
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
+
+- name: Publish Codex installation directory atomically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - -T
+      - "{{ hermes_agent_codex_staging_directory.path }}"
+      - "{{ hermes_agent_codex_install_dir }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_binary.stat.exists
 
 - name: Inspect versioned Codex binary
   ansible.builtin.stat:
     path: "{{ hermes_agent_codex_install_dir }}/codex"
   register: hermes_agent_codex_binary
-
-- name: Extract Codex CLI archive
-  ansible.builtin.unarchive:
-    src: >-
-      {{ hermes_agent_download_cache_dir }}/codex-{{
-      hermes_agent_codex_version }}-aarch64-linux.tar.gz
-    dest: "{{ hermes_agent_codex_install_dir }}"
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0755"
-  when:
-    - not ansible_check_mode
-    - not hermes_agent_codex_binary.stat.exists
-
-- name: Install normalized Codex binary name
-  ansible.builtin.copy:
-    src: >-
-      {{ hermes_agent_codex_install_dir
-      }}/{{ hermes_agent_codex_archive_binary_name }}
-    dest: "{{ hermes_agent_codex_install_dir }}/codex"
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0755"
-  when:
-    - not ansible_check_mode
-    - not hermes_agent_codex_binary.stat.exists
-
-- name: Remove extracted Codex source filename
-  ansible.builtin.file:
-    path: >-
-      {{ hermes_agent_codex_install_dir
-      }}/{{ hermes_agent_codex_archive_binary_name }}
-    state: absent
 
 - name: Ensure Codex CLI is executable by the Hermes runtime account
   ansible.builtin.file:

@@ -129,6 +129,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_host` | `127.0.0.1` | Dashboard bind address. |
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
 | `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Role-marked dashboard systemd unit target. |
+| `hermes_agent_dashboard_service_managed_state_file` | systemd unit directory marker | Root-only name and checksum record used to retire a renamed dashboard unit safely. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
@@ -152,7 +153,9 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_backup_group` | empty | Existing group permitted to access the backup path. |
 | `hermes_agent_backup_dir` | `/var/backups/hermes-agent` | Backup archive directory. |
 | `hermes_agent_backup_service_name` | `hermes-agent-backup.service` | Role-marked backup systemd service target. |
+| `hermes_agent_backup_service_managed_state_file` | systemd unit directory marker | Root-only name and checksum record used to retire a renamed backup service safely. |
 | `hermes_agent_backup_timer_name` | `hermes-agent-backup.timer` | Role-marked backup systemd timer target. |
+| `hermes_agent_backup_timer_managed_state_file` | systemd unit directory marker | Root-only name and checksum record used to retire a renamed backup timer safely. |
 | `hermes_agent_backup_retention_days` | `30` | Retention period for backup ZIP files. |
 | `hermes_agent_backup_on_calendar` | `*-*-* 03:20:00` | systemd calendar schedule. |
 | `hermes_agent_backup_timezone` | `UTC` | Time zone used by the schedule. |
@@ -267,16 +270,48 @@ supported local-model provider target.
 
 ## Testing
 
-The embedded Molecule scenario uses local fixture artifacts. It does not fetch
+The embedded Molecule scenarios use local fixture artifacts. They do not fetch
 Hermes, Codex, or use a provider account. Docker must be running.
+
+`essential` is the required validation gate while the role is developed inside
+its parent repository. It remains deployment-agnostic and covers fresh check
+mode, convergence, idempotence, the pinned Hermes and Codex installation, the
+loopback dashboard and terminal UI, scheduled backups, and the default-disabled
+local-model capability.
+
+`default` retains the exhaustive security, path-alias, failure-recovery, rename,
+and optional local-model lifecycle matrix. It is intentionally an opt-in suite
+during this incubation phase because many cases dynamically include the entire
+role and therefore repeat all preflight and convergence work. A complete
+`default` run becomes a release gate before extraction or Galaxy publication.
+
+Review scope during incubation is the behavior enabled by the consuming
+repository plus the generic security invariants in role code. Missing optional
+feature combinations in the exhaustive scenario are deferred coverage, not a
+claim that defects in implemented behavior should be ignored.
 
 ```sh
 uv venv --python 3.13
 uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/ansible-galaxy collection install -r molecule/default/collections.yml
 .venv/bin/ansible-lint .
-.venv/bin/molecule test
+.venv/bin/molecule test -s essential
 ```
+
+Run the retained exhaustive suite explicitly:
+
+```sh
+.venv/bin/molecule test -s default
+```
+
+Before standalone publication:
+
+- make the exhaustive scenario a required CI gate;
+- split its lifecycle groups so independent groups can run in parallel;
+- remove repeated full-role convergence where a focused task preflight proves
+  the same invariant;
+- complete the optional-feature compatibility matrix promised by the public
+  role interface.
 
 While the role remains nested in its current parent repository, run the commands
 from this directory.

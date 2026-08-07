@@ -63,6 +63,15 @@
       - hermes_agent_dashboard_service_name != hermes_agent_backup_timer_name
       - hermes_agent_backup_service_name != hermes_agent_backup_timer_name
       - >-
+        hermes_agent_dashboard_service_managed_state_file !=
+        hermes_agent_backup_service_managed_state_file
+      - >-
+        hermes_agent_dashboard_service_managed_state_file !=
+        hermes_agent_backup_timer_managed_state_file
+      - >-
+        hermes_agent_backup_service_managed_state_file !=
+        hermes_agent_backup_timer_managed_state_file
+      - >-
         hermes_agent_dashboard_service_name not in
         (hermes_agent_local_models |
         map(attribute='id') |
@@ -237,6 +246,12 @@
 - name: Require safe Hermes dashboard service managed-state paths
   ansible.builtin.assert:
     that:
+      - >-
+        hermes_agent_dashboard_service_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
       - hermes_agent_dashboard_service_state_paths.results[0].stdout ==
         hermes_agent_dashboard_service_managed_state_file
       - hermes_agent_dashboard_service_state_paths.results[1].stdout ==
@@ -262,6 +277,160 @@
     fail_msg: >-
       Hermes dashboard service managed state must use a canonical private target
       with a safe parent and must not alias the dashboard systemd unit.
+
+- name: Resolve Hermes Agent backup service managed-state paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_service_managed_state_file }}"
+    - "{{ hermes_agent_backup_service_managed_state_file | dirname }}"
+  register: hermes_agent_backup_service_state_paths
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Hermes Agent backup service managed-state target and parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_backup_service_managed_state_file }}"
+    - "{{ hermes_agent_backup_service_managed_state_file | dirname }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+  register: hermes_agent_backup_service_state_targets
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Hermes Agent backup service managed-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_backup_service_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
+      - hermes_agent_backup_service_state_paths.results[0].stdout ==
+        hermes_agent_backup_service_managed_state_file
+      - hermes_agent_backup_service_state_paths.results[1].stdout ==
+        (hermes_agent_backup_service_managed_state_file | dirname)
+      - >-
+        not hermes_agent_backup_service_state_targets.results[0].stat.exists or
+        (hermes_agent_backup_service_state_targets.results[0].stat.isreg | default(false) and
+        not hermes_agent_backup_service_state_targets.results[0].stat.islnk | default(true) and
+        hermes_agent_backup_service_state_targets.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_backup_service_state_targets.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_backup_service_state_targets.results[0].stat.mode | default('') == '0600')
+      - >-
+        not hermes_agent_backup_service_state_targets.results[1].stat.exists or
+        (hermes_agent_backup_service_state_targets.results[1].stat.isdir | default(false) and
+        not hermes_agent_backup_service_state_targets.results[1].stat.islnk | default(true))
+      - >-
+        not (hermes_agent_backup_service_state_targets.results[0].stat.exists and
+        hermes_agent_backup_service_state_targets.results[2].stat.exists) or
+        hermes_agent_backup_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_service_state_targets.results[2].stat.dev or
+        hermes_agent_backup_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_service_state_targets.results[2].stat.inode
+    fail_msg: >-
+      Hermes Agent backup service managed state must use a canonical private
+      target with a safe parent and must not alias the service systemd unit.
+
+- name: Resolve Hermes Agent backup timer managed-state paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_timer_managed_state_file }}"
+    - "{{ hermes_agent_backup_timer_managed_state_file | dirname }}"
+  register: hermes_agent_backup_timer_state_paths
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Hermes Agent backup timer managed-state target and parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_backup_timer_managed_state_file }}"
+    - "{{ hermes_agent_backup_timer_managed_state_file | dirname }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+  register: hermes_agent_backup_timer_state_targets
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Hermes Agent backup timer managed-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_backup_timer_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
+      - hermes_agent_backup_timer_state_paths.results[0].stdout ==
+        hermes_agent_backup_timer_managed_state_file
+      - hermes_agent_backup_timer_state_paths.results[1].stdout ==
+        (hermes_agent_backup_timer_managed_state_file | dirname)
+      - >-
+        not hermes_agent_backup_timer_state_targets.results[0].stat.exists or
+        (hermes_agent_backup_timer_state_targets.results[0].stat.isreg | default(false) and
+        not hermes_agent_backup_timer_state_targets.results[0].stat.islnk | default(true) and
+        hermes_agent_backup_timer_state_targets.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_backup_timer_state_targets.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_backup_timer_state_targets.results[0].stat.mode | default('') == '0600')
+      - >-
+        not hermes_agent_backup_timer_state_targets.results[1].stat.exists or
+        (hermes_agent_backup_timer_state_targets.results[1].stat.isdir | default(false) and
+        not hermes_agent_backup_timer_state_targets.results[1].stat.islnk | default(true))
+      - >-
+        not (hermes_agent_backup_timer_state_targets.results[0].stat.exists and
+        hermes_agent_backup_timer_state_targets.results[2].stat.exists) or
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[2].stat.dev or
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[2].stat.inode
+    fail_msg: >-
+      Hermes Agent backup timer managed state must use a canonical private
+      target with a safe parent and must not alias the timer systemd unit.
+
+- name: Reject managed systemd unit marker inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          hermes_agent_dashboard_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_service_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_service_state_targets.results[0].stat.dev or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_service_state_targets.results[0].stat.inode
+      - >-
+        not (
+          hermes_agent_dashboard_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_timer_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode
+      - >-
+        not (
+          hermes_agent_backup_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_timer_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_backup_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev or
+        hermes_agent_backup_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode
+    fail_msg: >-
+      Managed dashboard, backup service, and backup timer state markers must
+      identify distinct files.
 
 - name: Inspect Hermes dashboard terminal UI metadata inode identities
   ansible.builtin.stat:

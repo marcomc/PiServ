@@ -2,26 +2,28 @@
 - name: Converge managed dashboard under original service name
   ansible.builtin.include_role:
     name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
-  vars: &dashboard_service_fixture_vars
-    hermes_agent_repo_version: >-
-      {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
-    hermes_agent_installer_url: >-
-      file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
-    hermes_agent_installer_checksum: >-
-      sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
-    hermes_agent_codex_archive_url: >-
-      file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
-    hermes_agent_codex_archive_checksum: >-
-      sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+  vars:
+    <<: &dashboard_service_fixture_vars
+      hermes_agent_repo_version: >-
+        {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+      hermes_agent_installer_url: >-
+        file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+      hermes_agent_installer_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+      hermes_agent_codex_archive_url: >-
+        file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+      hermes_agent_codex_archive_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+      hermes_agent_manage_dashboard_chat: false
+      hermes_agent_manage_backup: false
     hermes_agent_manage_dashboard: true
-    hermes_agent_manage_dashboard_chat: false
-    hermes_agent_manage_backup: false
 
 - name: Rename managed dashboard service
   ansible.builtin.include_role:
     name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
   vars:
     <<: *dashboard_service_fixture_vars
+    hermes_agent_manage_dashboard: true
     hermes_agent_dashboard_service_name: hermes-agent-dashboard-renamed-fixture.service
 
 - name: Inspect dashboard units after managed rename
@@ -64,7 +66,41 @@
     name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
   vars:
     <<: *dashboard_service_fixture_vars
+    hermes_agent_manage_dashboard: true
     hermes_agent_dashboard_service_name: hermes-agent-dashboard-renamed-fixture.service
+
+- name: Disable dashboard under a different configured service name
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: *dashboard_service_fixture_vars
+    hermes_agent_manage_dashboard: false
+    hermes_agent_dashboard_service_name: hermes-agent-dashboard-disabled-fixture.service
+
+- name: Inspect dashboard units after disabled rename
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - hermes-agent-dashboard-renamed-fixture.service
+    - hermes-agent-dashboard-disabled-fixture.service
+  register: hermes_agent_molecule_disabled_renamed_dashboard_units
+
+- name: Read retired renamed dashboard service activity
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - hermes-agent-dashboard-renamed-fixture.service
+  register: hermes_agent_molecule_disabled_renamed_dashboard_activity
+  changed_when: false
+  failed_when: false
+
+- name: Assert disabled dashboard rename retires recorded and configured units
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_molecule_disabled_renamed_dashboard_units.results[0].stat.exists
+      - not hermes_agent_molecule_disabled_renamed_dashboard_units.results[1].stat.exists
+      - hermes_agent_molecule_disabled_renamed_dashboard_activity.rc != 0
 
 - name: Create prior dashboard unit provenance fixture
   ansible.builtin.copy:
@@ -107,6 +143,7 @@
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
       vars:
         <<: *dashboard_service_fixture_vars
+        hermes_agent_manage_dashboard: true
         hermes_agent_dashboard_service_name: hermes-agent-dashboard-third-fixture.service
 
     - name: Fail if changed foreign prior dashboard unit was accepted
@@ -116,7 +153,9 @@
     - name: Assert changed foreign prior dashboard unit failed before replacement
       ansible.builtin.assert:
         that:
-          - ansible_failed_task.name == 'Require recognized previously managed Hermes dashboard unit'
+          - >-
+            ansible_failed_task.name ==
+            'Require recognized previously managed Hermes dashboard service'
 
 - name: Read changed foreign prior dashboard unit after refusal
   ansible.builtin.slurp:

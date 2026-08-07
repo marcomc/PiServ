@@ -117,7 +117,11 @@ hermes_agent_manage_backup: false
 hermes_agent_backup_group: ""
 hermes_agent_backup_dir: /var/backups/hermes-agent
 hermes_agent_backup_service_name: hermes-agent-backup.service
+hermes_agent_backup_service_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-backup-service-managed.yml
 hermes_agent_backup_timer_name: hermes-agent-backup.timer
+hermes_agent_backup_timer_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
 hermes_agent_backup_retention_days: 30
 hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
 hermes_agent_backup_timezone: UTC
