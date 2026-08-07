@@ -41,7 +41,7 @@ stderr_file="${work_dir}/agent-stderr.txt"
 runtime_dropin_dir="/run/systemd/system/${service_name}.d"
 runtime_dropin_path=""
 runtime_dropin_dir_created=false
-service_stopped=false
+service_started_by_invocation=false
 
 run_as_test_hermes() {
   runuser -u hermes-agent -- env \
@@ -170,7 +170,7 @@ remove_limit_as_override() {
 cleanup() {
   local status=$?
 
-  if [[ "${service_stopped}" != true ]]; then
+  if [[ "${service_started_by_invocation}" == true ]]; then
     systemctl stop "${service_name}" >/dev/null 2>&1 || true
   fi
   remove_limit_as_override
@@ -255,6 +255,7 @@ run_as_test_hermes hermes config set \
 
 systemctl reset-failed "${service_name}" 2>/dev/null || true
 systemctl start "${service_name}"
+service_started_by_invocation=true
 wait_for_model_http "http://127.0.0.1:${model_port}/health" 120 5
 
 model_control_group="$(systemctl show "${service_name}" --property=ControlGroup --value)"
@@ -323,7 +324,7 @@ dashboard_active_state="$(systemctl is-active hermes-agent-dashboard.service || 
 dashboard_http_status="$(curl --max-time 5 --output /dev/null --silent --write-out '%{http_code}' http://127.0.0.1:9119/ || true)"
 
 systemctl stop "${service_name}"
-service_stopped=true
+service_started_by_invocation=false
 cleanup_active_state="$(systemctl show "${service_name}" --property=ActiveState --value)"
 
 jq --null-input \

@@ -135,8 +135,14 @@ hermes_agent_local_model_runtime_archive_checksum: >-
   sha256:211d9e9ee738698beb7ca271be82661ae2b5da3fbb489cf7d9e4e6ed601be106
 hermes_agent_local_model_runtime_dir: >-
   /usr/local/lib/llama.cpp/{{ hermes_agent_local_model_runtime_version }}
+hermes_agent_local_model_runtime_managed_state_file: >-
+  {{ hermes_agent_local_model_runtime_dir }}/.hermes-agent-managed.yml
 hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli
 hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server
+hermes_agent_local_model_llama_cli_managed_state_file: >-
+  {{ hermes_agent_local_model_llama_cli_path }}.hermes-agent-managed.yml
+hermes_agent_local_model_llama_server_managed_state_file: >-
+  {{ hermes_agent_local_model_llama_server_path }}.hermes-agent-managed.yml
 hermes_agent_local_models_dir: "{{ hermes_agent_home | dirname }}/hermes-models"
 hermes_agent_local_models_results_dir: >-
   {{ hermes_agent_local_models_dir }}/benchmark-results

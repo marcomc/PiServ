@@ -2085,6 +2085,18 @@
             'stop hermes-local-model-gemma-4-e2b.service' in
             (hermes_agent_molecule_benchmark_started_log.content | b64decode)
 
+    - name: Exercise local-provider proof cleanup ownership regression
+      ansible.builtin.command:
+        argv:
+          - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../scripts/tests/test-verify-hermes-local-provider-cleanup.sh"
+      changed_when: false
+      become: false
+      delegate_to: localhost
+
+    - name: Exercise local-model runtime and activation safety regressions
+      ansible.builtin.include_tasks:
+        file: tasks/local-model-runtime-safety-case.yml
+
     - name: Create foreign local-model storage fixture
       ansible.builtin.file:
         path: /var/lib/hermes-local-storage-foreign

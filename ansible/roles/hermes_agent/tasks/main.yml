@@ -11,16 +11,19 @@
 - name: Validate active Codex CLI link target
   ansible.builtin.import_tasks: validate-codex-link.yml
 
-- name: Validate Hermes Agent local-model storage
-  ansible.builtin.import_tasks: validate-local-model-storage.yml
+- name: Validate managed local-model configuration
   when: hermes_agent_manage_local_models
+  block:
+    - name: Validate Hermes Agent local-model storage
+      ansible.builtin.import_tasks: validate-local-model-storage.yml
 
+    - name: Validate local-model runtime and activation links
+      ansible.builtin.import_tasks: validate-local-model-runtime.yml
+
+    - name: Validate desired local-model service units
+      ansible.builtin.import_tasks: validate-desired-local-model-units.yml
 - name: Validate local-model managed-state path
   ansible.builtin.import_tasks: validate-local-model-managed-state.yml
-
-- name: Validate desired local-model service units
-  ansible.builtin.import_tasks: validate-desired-local-model-units.yml
-  when: hermes_agent_manage_local_models
 
 - name: Preflight Hermes Agent runtime identity and persistent paths
   ansible.builtin.include_tasks: runtime-user.yml

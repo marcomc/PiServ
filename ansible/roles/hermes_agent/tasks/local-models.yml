@@ -26,9 +26,9 @@
     mode: "0644"
   when: not ansible_check_mode
 
-- name: Create versioned llama.cpp installation directory
+- name: Create llama.cpp installation parent directory
   ansible.builtin.file:
-    path: "{{ hermes_agent_local_model_runtime_dir }}"
+    path: "{{ hermes_agent_local_model_runtime_dir | dirname }}"
     state: directory
     owner: root
     group: root
@@ -39,37 +39,63 @@
     path: "{{ hermes_agent_local_model_runtime_dir }}/llama-server"
   register: hermes_agent_llama_server_binary
 
-- name: Extract llama.cpp ARM64 archive
-  ansible.builtin.unarchive:
-    src: >-
-      {{ hermes_agent_download_cache_dir }}/llama-{{
-      hermes_agent_local_model_runtime_version }}-ubuntu-arm64.tar.gz
-    dest: "{{ hermes_agent_local_model_runtime_dir }}"
-    remote_src: true
-    extra_opts:
-      - --strip-components=1
-    owner: root
-    group: root
-    mode: "0755"
+- name: Install absent llama.cpp runtime transactionally
+  ansible.builtin.include_tasks: install-local-model-runtime.yml
   when:
     - not ansible_check_mode
     - not hermes_agent_llama_server_binary.stat.exists
 
-- name: Link active llama.cpp binaries
-  ansible.builtin.file:
-    src: "{{ hermes_agent_local_model_runtime_dir }}/{{ item }}"
-    dest: >-
-      {{ hermes_agent_local_model_llama_cli_path
-      if item == 'llama-cli' else hermes_agent_local_model_llama_server_path }}
-    state: link
-    owner: root
-    group: root
-    force: true
-  loop:
-    - llama-cli
-    - llama-server
+- name: Activate installed llama.cpp runtime
   when: not ansible_check_mode or hermes_agent_llama_server_binary.stat.exists
+  block:
+    - name: Inspect installed llama.cpp binaries for provenance
+      ansible.builtin.stat:
+        path: "{{ hermes_agent_local_model_runtime_dir }}/{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - llama-cli
+        - llama-server
+      register: hermes_agent_installed_llama_binaries
+      check_mode: false
 
+    - name: Link active llama.cpp binaries
+      ansible.builtin.file:
+        src: "{{ hermes_agent_local_model_runtime_dir }}/{{ item }}"
+        dest: >-
+          {{ hermes_agent_local_model_llama_cli_path
+          if item == 'llama-cli' else hermes_agent_local_model_llama_server_path }}
+        state: link
+        owner: root
+        group: root
+        force: true
+      loop:
+        - llama-cli
+        - llama-server
+
+    - name: Record active llama.cpp link ownership
+      ansible.builtin.copy:
+        content: >-
+          {{
+            {
+              'link_path': item.path,
+              'managed_by': 'marcomc.hermes_agent',
+              'schema_version': 1,
+              'target': hermes_agent_local_model_runtime_dir ~ '/' ~ item.binary
+            } | to_nice_yaml(indent=2)
+          }}
+        dest: "{{ item.marker }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - binary: llama-cli
+          marker: "{{ hermes_agent_local_model_llama_cli_managed_state_file }}"
+          path: "{{ hermes_agent_local_model_llama_cli_path }}"
+        - binary: llama-server
+          marker: "{{ hermes_agent_local_model_llama_server_managed_state_file }}"
+          path: "{{ hermes_agent_local_model_llama_server_path }}"
+      loop_control:
+        label: "{{ item.path }}"
 - name: Create local model directories
   ansible.builtin.file:
     path: "{{ item }}"

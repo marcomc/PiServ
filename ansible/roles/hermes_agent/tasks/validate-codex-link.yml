@@ -125,6 +125,9 @@
       - "{{ hermes_agent_local_models_managed_state_file }}"
       - "{{ hermes_agent_local_model_llama_cli_path }}"
       - "{{ hermes_agent_local_model_llama_server_path }}"
+      - "{{ hermes_agent_local_model_runtime_managed_state_file }}"
+      - "{{ hermes_agent_local_model_llama_cli_managed_state_file }}"
+      - "{{ hermes_agent_local_model_llama_server_managed_state_file }}"
       - "{{ hermes_agent_home }}/config.yaml"
       - >-
         {{ hermes_agent_home }}/plugins/{{

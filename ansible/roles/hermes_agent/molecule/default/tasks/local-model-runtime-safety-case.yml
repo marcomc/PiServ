@@ -1,0 +1,427 @@
+---
+- name: Create foreign local-model runtime fixture
+  ansible.builtin.file:
+    path: /usr/local/lib/llama.cpp/foreign-runtime-fixture
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create foreign local-model runtime canary
+  ansible.builtin.copy:
+    content: foreign runtime preserved
+    dest: /usr/local/lib/llama.cpp/foreign-runtime-fixture/canary
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Reject foreign local-model runtime before mutation
+  block:
+    - name: Validate foreign local-model runtime
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-runtime.yml
+      vars:
+        hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/foreign-runtime-fixture
+        hermes_agent_local_model_runtime_managed_state_file: >-
+          /usr/local/lib/llama.cpp/foreign-runtime-fixture/.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli-runtime-fixture
+        hermes_agent_local_model_llama_cli_managed_state_file: >-
+          /usr/local/bin/llama-cli-runtime-fixture.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server-runtime-fixture
+        hermes_agent_local_model_llama_server_managed_state_file: >-
+          /usr/local/bin/llama-server-runtime-fixture.hermes-agent-managed.yml
+
+    - name: Fail if foreign local-model runtime was accepted
+      ansible.builtin.fail:
+        msg: A foreign local-model runtime must fail preflight.
+  rescue:
+    - name: Assert foreign runtime failed provenance validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require absent or positively managed local-model runtime'
+
+- name: Read foreign local-model runtime canary after rejection
+  ansible.builtin.slurp:
+    src: /usr/local/lib/llama.cpp/foreign-runtime-fixture/canary
+  register: hermes_agent_molecule_foreign_runtime_canary
+
+- name: Assert foreign local-model runtime was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_foreign_runtime_canary.content | b64decode ==
+        'foreign runtime preserved'
+
+- name: Create foreign local-model activation output
+  ansible.builtin.copy:
+    content: foreign activation preserved
+    dest: /usr/local/bin/llama-server-foreign-fixture
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reject foreign local-model activation output in check mode
+  block:
+    - name: Validate foreign activation output in check mode
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-runtime.yml
+        apply:
+          check_mode: true
+      vars:
+        hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/absent-runtime-fixture
+        hermes_agent_local_model_runtime_managed_state_file: >-
+          /usr/local/lib/llama.cpp/absent-runtime-fixture/.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli-foreign-fixture
+        hermes_agent_local_model_llama_cli_managed_state_file: >-
+          /usr/local/bin/llama-cli-foreign-fixture.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server-foreign-fixture
+        hermes_agent_local_model_llama_server_managed_state_file: >-
+          /usr/local/bin/llama-server-foreign-fixture.hermes-agent-managed.yml
+
+    - name: Fail if check mode accepted foreign activation output
+      ansible.builtin.fail:
+        msg: Check mode must reject a foreign activation output.
+  rescue:
+    - name: Assert foreign activation failed ownership validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require absent or positively managed local-model activation links'
+
+- name: Read foreign activation output after rejection
+  ansible.builtin.slurp:
+    src: /usr/local/bin/llama-server-foreign-fixture
+  register: hermes_agent_molecule_foreign_activation_canary
+
+- name: Assert foreign activation output was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_foreign_activation_canary.content | b64decode ==
+        'foreign activation preserved'
+
+- name: Create prior managed local-model runtime directory
+  ansible.builtin.file:
+    path: /usr/local/lib/llama.cpp/managed-old-fixture
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create prior managed local-model runtime binaries
+  ansible.builtin.copy:
+    content: "#!/bin/sh\nexit 0\n"
+    dest: "/usr/local/lib/llama.cpp/managed-old-fixture/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - llama-cli
+    - llama-server
+
+- name: Create prior managed local-model activation links
+  ansible.builtin.file:
+    src: "/usr/local/lib/llama.cpp/managed-old-fixture/{{ item.binary }}"
+    dest: "{{ item.path }}"
+    state: link
+    owner: root
+    group: root
+  loop:
+    - binary: llama-cli
+      path: /usr/local/bin/llama-cli-upgrade-fixture
+    - binary: llama-server
+      path: /usr/local/bin/llama-server-upgrade-fixture
+
+- name: Record prior managed local-model activation links
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'link_path': item.path,
+          'managed_by': 'marcomc.hermes_agent',
+          'schema_version': 1,
+          'target': '/usr/local/lib/llama.cpp/managed-old-fixture/' ~ item.binary
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: "{{ item.path }}.hermes-agent-managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - binary: llama-cli
+      path: /usr/local/bin/llama-cli-upgrade-fixture
+    - binary: llama-server
+      path: /usr/local/bin/llama-server-upgrade-fixture
+
+- name: Repeatedly accept prior managed activation links for a runtime version upgrade
+  ansible.builtin.include_tasks:
+    file: >-
+      {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+      }}/tasks/validate-local-model-runtime.yml
+  loop:
+    - first-validation
+    - repeated-validation
+  loop_control:
+    label: "{{ validation_pass }}"
+    loop_var: validation_pass
+  vars:
+    hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/managed-new-fixture
+    hermes_agent_local_model_runtime_managed_state_file: >-
+      /usr/local/lib/llama.cpp/managed-new-fixture/.hermes-agent-managed.yml
+    hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli-upgrade-fixture
+    hermes_agent_local_model_llama_cli_managed_state_file: >-
+      /usr/local/bin/llama-cli-upgrade-fixture.hermes-agent-managed.yml
+    hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server-upgrade-fixture
+    hermes_agent_local_model_llama_server_managed_state_file: >-
+      /usr/local/bin/llama-server-upgrade-fixture.hermes-agent-managed.yml
+
+- name: Create unsafe writable activation parent fixture
+  ansible.builtin.file:
+    path: /usr/local/lib/hermes-unsafe-link-parent-fixture
+    state: directory
+    owner: root
+    group: root
+    mode: "0733"
+
+- name: Reject writable local-model activation parent
+  block:
+    - name: Validate writable activation parent
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-runtime.yml
+      vars:
+        hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/absent-parent-fixture
+        hermes_agent_local_model_runtime_managed_state_file: >-
+          /usr/local/lib/llama.cpp/absent-parent-fixture/.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_cli_path: >-
+          /usr/local/lib/hermes-unsafe-link-parent-fixture/llama-cli
+        hermes_agent_local_model_llama_cli_managed_state_file: >-
+          /usr/local/lib/hermes-unsafe-link-parent-fixture/llama-cli.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_server_path: >-
+          /usr/local/lib/hermes-unsafe-link-parent-fixture/llama-server
+        hermes_agent_local_model_llama_server_managed_state_file: >-
+          /usr/local/lib/hermes-unsafe-link-parent-fixture/llama-server.hermes-agent-managed.yml
+
+    - name: Fail if writable activation parent was accepted
+      ansible.builtin.fail:
+        msg: A group/other-writable activation parent must fail preflight.
+  rescue:
+    - name: Assert writable activation parent failed mode validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require safe local-model activation link parents'
+
+- name: Inspect rejected writable activation parent
+  ansible.builtin.stat:
+    path: /usr/local/lib/hermes-unsafe-link-parent-fixture
+  register: hermes_agent_molecule_unsafe_link_parent
+
+- name: Assert writable activation parent was preserved
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_molecule_unsafe_link_parent.stat.mode == '0733'
+
+- name: Create well-formed wrong-provenance runtime directory
+  ansible.builtin.file:
+    path: /usr/local/lib/llama.cpp/wrong-provenance-fixture
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create well-formed wrong-provenance runtime binaries
+  ansible.builtin.copy:
+    content: "#!/bin/sh\nexit 0\n"
+    dest: "/usr/local/lib/llama.cpp/wrong-provenance-fixture/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [llama-cli, llama-server]
+
+- name: Inspect wrong-provenance runtime binary checksums
+  ansible.builtin.stat:
+    path: "/usr/local/lib/llama.cpp/wrong-provenance-fixture/{{ item }}"
+    checksum_algorithm: sha256
+  loop: [llama-cli, llama-server]
+  register: hermes_agent_molecule_wrong_provenance_binaries
+
+- name: Write well-formed but mismatched runtime provenance
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'archive_checksum': 'sha256:' ~ ('0' * 64),
+          'binaries': {
+            'llama-cli': hermes_agent_molecule_wrong_provenance_binaries.results[0].stat.checksum,
+            'llama-server': hermes_agent_molecule_wrong_provenance_binaries.results[1].stat.checksum
+          },
+          'managed_by': 'marcomc.hermes_agent',
+          'runtime_dir': '/usr/local/lib/llama.cpp/wrong-provenance-fixture',
+          'runtime_version': 'well-formed-wrong-version',
+          'schema_version': 1
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: /usr/local/lib/llama.cpp/wrong-provenance-fixture/.hermes-agent-managed.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Reject well-formed mismatched runtime provenance
+  block:
+    - name: Validate mismatched runtime provenance
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-runtime.yml
+      vars:
+        hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/wrong-provenance-fixture
+        hermes_agent_local_model_runtime_managed_state_file: >-
+          /usr/local/lib/llama.cpp/wrong-provenance-fixture/.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli-wrong-provenance
+        hermes_agent_local_model_llama_cli_managed_state_file: >-
+          /usr/local/bin/llama-cli-wrong-provenance.hermes-agent-managed.yml
+        hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server-wrong-provenance
+        hermes_agent_local_model_llama_server_managed_state_file: >-
+          /usr/local/bin/llama-server-wrong-provenance.hermes-agent-managed.yml
+
+    - name: Fail if mismatched runtime provenance was accepted
+      ansible.builtin.fail:
+        msg: Exact configured runtime provenance must be required.
+  rescue:
+    - name: Assert mismatched runtime provenance failed exact validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require absent or positively managed local-model runtime'
+
+- name: Read mismatched runtime binary after rejection
+  ansible.builtin.slurp:
+    src: /usr/local/lib/llama.cpp/wrong-provenance-fixture/llama-server
+  register: hermes_agent_molecule_wrong_provenance_canary
+
+- name: Assert mismatched runtime was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_wrong_provenance_canary.content | b64decode ==
+        "#!/bin/sh\nexit 0\n"
+
+- name: Create runtime transaction archive fixtures
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      install -d -m 0700 /root/hermes-runtime-archive-fixture/incomplete/bin
+      install -d -m 0700 /root/hermes-runtime-archive-fixture/complete/bin
+      printf '#!/bin/sh\nexit 0\n' > /root/hermes-runtime-archive-fixture/incomplete/bin/llama-cli
+      cp /root/hermes-runtime-archive-fixture/incomplete/bin/llama-cli \
+        /root/hermes-runtime-archive-fixture/complete/bin/llama-cli
+      cp /root/hermes-runtime-archive-fixture/incomplete/bin/llama-cli \
+        /root/hermes-runtime-archive-fixture/complete/bin/llama-server
+      chmod 0755 /root/hermes-runtime-archive-fixture/*/bin/*
+      install -d -m 0755 /var/cache/hermes-runtime-transaction-fixture
+      tar -C /root/hermes-runtime-archive-fixture/incomplete -czf \
+        /var/cache/hermes-runtime-transaction-fixture/llama-transaction-fixture-ubuntu-arm64.tar.gz bin
+    executable: /bin/sh
+  changed_when: true
+
+- name: Reject incomplete staged runtime without stranding final directory
+  block:
+    - name: Install incomplete staged runtime fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/install-local-model-runtime.yml
+      vars:
+        hermes_agent_download_cache_dir: /var/cache/hermes-runtime-transaction-fixture
+        hermes_agent_local_model_runtime_version: transaction-fixture
+        hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/transaction-fixture
+        hermes_agent_local_model_runtime_archive_checksum: "sha256:{{ '1' * 64 }}"
+
+    - name: Fail if incomplete staged runtime was accepted
+      ansible.builtin.fail:
+        msg: An incomplete staged runtime must fail validation.
+  rescue:
+    - name: Assert incomplete staged runtime failed binary validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require safe staged llama.cpp runtime binaries'
+
+- name: Inspect final runtime and staging siblings after failed transaction
+  ansible.builtin.find:
+    paths: /usr/local/lib/llama.cpp
+    patterns:
+      - transaction-fixture
+      - .hermes-agent-llama-runtime-*
+    file_type: any
+    hidden: true
+  register: hermes_agent_molecule_failed_runtime_transaction_paths
+
+- name: Assert failed runtime transaction left no final or staging directory
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_molecule_failed_runtime_transaction_paths.matched == 0
+
+- name: Replace incomplete archive with valid runtime archive
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -C
+      - /root/hermes-runtime-archive-fixture/complete
+      - -czf
+      - /var/cache/hermes-runtime-transaction-fixture/llama-transaction-fixture-ubuntu-arm64.tar.gz
+      - bin
+  changed_when: true
+
+- name: Retry runtime transaction with complete archive
+  ansible.builtin.include_tasks:
+    file: >-
+      {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+      }}/tasks/install-local-model-runtime.yml
+  vars:
+    hermes_agent_download_cache_dir: /var/cache/hermes-runtime-transaction-fixture
+    hermes_agent_local_model_runtime_version: transaction-fixture
+    hermes_agent_local_model_runtime_dir: /usr/local/lib/llama.cpp/transaction-fixture
+    hermes_agent_local_model_runtime_archive_checksum: "sha256:{{ '2' * 64 }}"
+
+- name: Inspect retried runtime transaction outputs
+  ansible.builtin.stat:
+    path: "/usr/local/lib/llama.cpp/transaction-fixture/{{ item }}"
+  loop:
+    - llama-cli
+    - llama-server
+    - .hermes-agent-managed.yml
+  register: hermes_agent_molecule_retried_runtime_outputs
+
+- name: Assert runtime transaction retry published complete managed output
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_retried_runtime_outputs.results |
+        rejectattr('stat.exists') | list | length == 0
+
+- name: Remove local-model runtime safety fixtures
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/lib/llama.cpp/foreign-runtime-fixture
+    - /usr/local/bin/llama-server-foreign-fixture
+    - /usr/local/lib/llama.cpp/managed-old-fixture
+    - /usr/local/bin/llama-cli-upgrade-fixture
+    - /usr/local/bin/llama-cli-upgrade-fixture.hermes-agent-managed.yml
+    - /usr/local/bin/llama-server-upgrade-fixture
+    - /usr/local/bin/llama-server-upgrade-fixture.hermes-agent-managed.yml
+    - /usr/local/lib/hermes-unsafe-link-parent-fixture
+    - /usr/local/lib/llama.cpp/wrong-provenance-fixture
+    - /usr/local/lib/llama.cpp/transaction-fixture
+    - /var/cache/hermes-runtime-transaction-fixture
+    - /root/hermes-runtime-archive-fixture
