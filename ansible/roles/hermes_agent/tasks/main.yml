@@ -6,6 +6,9 @@
   ansible.builtin.import_tasks: validate-local-model-storage.yml
   when: hermes_agent_manage_local_models
 
+- name: Validate local-model managed-state path
+  ansible.builtin.import_tasks: validate-local-model-managed-state.yml
+
 - name: Preflight Hermes Agent runtime identity and persistent paths
   ansible.builtin.include_tasks: runtime-user.yml
   vars:
@@ -28,6 +31,15 @@
 
 - name: Install pinned Codex CLI
   ansible.builtin.import_tasks: install-codex.yml
+
+- name: Reconcile managed local-model service units
+  ansible.builtin.import_tasks: reconcile-local-model-units.yml
+  vars:
+    hermes_agent_local_model_desired_ids: >-
+      {{
+        hermes_agent_local_models | map(attribute='id') | list
+        if hermes_agent_manage_local_models else []
+      }}
 
 - name: Install local-model benchmark runtime
   ansible.builtin.import_tasks: local-models.yml

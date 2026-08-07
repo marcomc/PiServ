@@ -4,6 +4,13 @@ All notable changes to this role are documented here.
 
 ## [Unreleased]
 
+- Run dashboard asset builds as the Hermes runtime identity, validate custom
+  Codex state roots, converge dashboard username changes without rotating
+  secrets, and reconcile obsolete managed local-model units.
+- Restore dashboard build ownership after failures and identify removable
+  local-model units through a fail-closed root-owned checksum manifest that is
+  reconciled even when local models are disabled.
+
 - Prepared the initial `0.1.0` release candidate for standalone Ansible Galaxy
   publication after validated project use.
 - Added Galaxy metadata, complete argument specifications, fixture-based

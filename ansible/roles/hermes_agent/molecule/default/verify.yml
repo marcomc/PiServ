@@ -95,6 +95,14 @@
         path: /var/lib/hermes-agent/node/bin/npm
       register: hermes_agent_molecule_node_runtime_file
 
+    - name: Read dashboard build identity fixtures
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent/hermes_cli/web_dist/build-uid
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/build-uid
+      register: hermes_agent_molecule_dashboard_build_identities
+
     - name: Verify local-model capability is inert by default
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -124,6 +132,10 @@
           - hermes_agent_molecule_node_runtime_file.stat.pw_name == 'hermes-agent'
           - hermes_agent_molecule_node_runtime_file.stat.gr_name == 'hermes-agent'
           - hermes_agent_molecule_node_runtime_file.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_dashboard_build_identities.results |
+            map(attribute='content') | map('b64decode') | map('trim') |
+            reject('equalto', '0') | list | length == 2
           - >-
             hermes_agent_molecule_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
@@ -2206,6 +2218,497 @@
           - hermes_agent_molecule_foreign_tui_artifact.stat.pw_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.gr_name == 'root'
           - hermes_agent_molecule_foreign_tui_artifact.stat.mode == '0644'
+
+    - name: Back up fixture npm before forced build failures
+      ansible.builtin.copy:
+        src: /var/lib/hermes-agent/node/bin/npm
+        dest: /var/tmp/hermes-fixture-npm-backup
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install forced-failure fixture npm
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit 42
+        dest: /var/lib/hermes-agent/node/bin/npm
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0755"
+
+    - name: Force dashboard build failure
+      block:
+        - name: Run failing dashboard build task path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/build-dashboard-assets.yml
+
+        - name: Fail if dashboard build unexpectedly succeeded
+          ansible.builtin.fail:
+            msg: Forced dashboard build failure unexpectedly succeeded.
+      rescue:
+        - name: Inspect dashboard workspace after forced failure
+          ansible.builtin.stat:
+            path: /usr/local/lib/hermes-agent/hermes_cli
+          register: hermes_agent_molecule_failed_dashboard_workspace
+
+        - name: Assert dashboard workspace ownership was restored
+          ansible.builtin.assert:
+            that:
+              - hermes_agent_molecule_failed_dashboard_workspace.stat.pw_name == 'root'
+              - hermes_agent_molecule_failed_dashboard_workspace.stat.gr_name == 'root'
+
+    - name: Create forced-failure terminal UI workspace fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Force terminal UI build failure
+      block:
+        - name: Run failing terminal UI build task path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/build-dashboard-tui.yml
+          vars:
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+
+        - name: Fail if terminal UI build unexpectedly succeeded
+          ansible.builtin.fail:
+            msg: Forced terminal UI build failure unexpectedly succeeded.
+      rescue:
+        - name: Inspect terminal UI workspace after forced failure
+          ansible.builtin.stat:
+            path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+          register: hermes_agent_molecule_failed_tui_workspace
+
+        - name: Assert terminal UI workspace ownership was restored
+          ansible.builtin.assert:
+            that:
+              - hermes_agent_molecule_failed_tui_workspace.stat.pw_name == 'root'
+              - hermes_agent_molecule_failed_tui_workspace.stat.gr_name == 'root'
+
+    - name: Remove forced-failure terminal UI workspace fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+        state: absent
+
+    - name: Restore fixture npm after forced build failures
+      ansible.builtin.copy:
+        src: /var/tmp/hermes-fixture-npm-backup
+        dest: /var/lib/hermes-agent/node/bin/npm
+        remote_src: true
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0755"
+
+    - name: Remove forced-build npm backup fixture
+      ansible.builtin.file:
+        path: /var/tmp/hermes-fixture-npm-backup
+        state: absent
+
+    - name: Create foreign Codex home directory fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-foreign-codex-home
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create foreign Codex home content fixture
+      ansible.builtin.copy:
+        content: foreign Codex state
+        dest: /var/lib/hermes-foreign-codex-home/canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject unsafe Codex home paths during preflight
+      ansible.builtin.include_tasks:
+        file: tasks/codex-home-preflight-case.yml
+      loop:
+        - /etc
+        - /var/lib/../etc
+        - /var/lib/hermes-foreign-codex-home
+      loop_control:
+        loop_var: hermes_agent_molecule_codex_home_case
+
+    - name: Inspect foreign Codex home fixture after rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-foreign-codex-home
+      register: hermes_agent_molecule_foreign_codex_home
+
+    - name: Read foreign Codex home content after rejection
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-foreign-codex-home/canary
+      register: hermes_agent_molecule_foreign_codex_home_content
+
+    - name: Assert foreign Codex home fixture is preserved
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_codex_home.stat.isdir
+          - hermes_agent_molecule_foreign_codex_home.stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_codex_home.stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_codex_home.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_foreign_codex_home_content.content |
+            b64decode == 'foreign Codex state'
+
+    - name: Read dashboard authentication state before username change
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_auth_before_username_change
+
+    - name: Converge changed dashboard authentication username
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_dashboard_chat: false
+        hermes_agent_manage_backup: false
+        hermes_agent_dashboard_tui_runtime_dir: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent
+        hermes_agent_dashboard_tui_runtime_revision_file: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent/.hermes-revision
+        hermes_agent_dashboard_tui_runtime_manifest_file: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent/.hermes-managed-state.yml
+        hermes_agent_dashboard_manage_basic_auth: true
+        hermes_agent_dashboard_basic_auth_username: fixture-renamed
+
+    - name: Read dashboard authentication state after username change
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_auth_after_username_change
+
+    - name: Assert username converges without rotating dashboard secrets
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).username == 'fixture-renamed'
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).password_hash ==
+            (hermes_agent_molecule_auth_before_username_change.content |
+            b64decode | from_yaml).password_hash
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).secret ==
+            (hermes_agent_molecule_auth_before_username_change.content |
+            b64decode | from_yaml).secret
+
+    - name: Create local-model unit reconciliation fixtures
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description={{ item.description }}
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/hermes-local-model-{{ item.id }}.service"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - id: obsolete-fixture
+          description: Obsolete managed fixture
+        - id: foreign-fixture
+          description: Foreign preserved fixture
+        - id: current-fixture
+          description: Current managed fixture
+
+    - name: Inspect local-model reconciliation fixture checksums
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/hermes-local-model-{{ item }}.service"
+        checksum_algorithm: sha256
+      loop:
+        - obsolete-fixture
+        - current-fixture
+      register: hermes_agent_molecule_local_model_fixture_units
+
+    - name: Create foreign valid-looking local-model manifest fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: attacker.override
+          version: 1
+          units:
+            obsolete-fixture: {{ hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject foreign valid-looking local-model manifest fixture
+      block:
+        - name: Validate foreign local-model manifest fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-local-model-managed-state.yml
+          vars:
+            hermes_agent_local_models_managed_by: attacker.override
+
+        - name: Fail if foreign local-model manifest was accepted
+          ansible.builtin.fail:
+            msg: Foreign local-model manifests must fail preflight.
+      rescue:
+        - name: Assert foreign local-model manifest failed exact schema
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact local-model managed-state schema'
+
+    - name: Read foreign local-model manifest after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_foreign_local_model_manifest
+
+    - name: Assert foreign local-model manifest is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_foreign_local_model_manifest.content |
+            b64decode) ==
+            ('managed_by: attacker.override\nversion: 1\nunits:\n  obsolete-fixture: ' ~
+            hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum ~
+            '\n')
+
+    - name: Record prior managed local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units:
+            obsolete-fixture: {{ hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate prior managed local-model unit fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Replace previously managed local-model unit with foreign content
+      ansible.builtin.copy:
+        content: foreign replacement
+        dest: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject replaced foreign local-model unit during reconciliation
+      block:
+        - name: Reconcile replaced foreign local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/reconcile-local-model-units.yml
+          vars:
+            hermes_agent_local_models_managed_state_file: >-
+              /etc/systemd/system/hermes-local-models.managed.yml
+            hermes_agent_local_model_desired_ids:
+              - current-fixture
+
+        - name: Fail if replaced foreign local-model unit was removed
+          ansible.builtin.fail:
+            msg: Changed local-model units must not be removed as managed.
+      rescue:
+        - name: Assert replaced local-model unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized obsolete managed local-model units'
+
+    - name: Read replaced foreign local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+      register: hermes_agent_molecule_replaced_local_model_unit
+
+    - name: Assert replaced foreign local-model unit is preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_replaced_local_model_unit.content |
+            b64decode == 'foreign replacement'
+
+    - name: Restore managed obsolete local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Obsolete managed fixture
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable obsolete managed local-model unit fixture
+      ansible.builtin.systemd_service:
+        name: hermes-local-model-obsolete-fixture.service
+        enabled: true
+        daemon_reload: true
+
+    - name: Exercise managed local-model unit reconciliation
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+      vars:
+        hermes_agent_local_models_managed_state_file: >-
+          /etc/systemd/system/hermes-local-models.managed.yml
+        hermes_agent_local_models:
+          - id: current-fixture
+        hermes_agent_local_model_desired_ids:
+          - current-fixture
+
+    - name: Rewrite current managed local-model unit state fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/record-local-model-unit-state.yml
+      vars:
+        hermes_agent_local_models_managed_state_file: >-
+          /etc/systemd/system/hermes-local-models.managed.yml
+        hermes_agent_local_models:
+          - id: current-fixture
+
+    - name: Flush local-model unit reconciliation handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Inspect reconciled and foreign local-model unit fixtures
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+      register: hermes_agent_molecule_reconciled_local_model_units
+
+    - name: Read reconciled local-model managed state
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_reconciled_local_model_state
+
+    - name: Read obsolete local-model unit enablement after reconciliation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-local-model-obsolete-fixture.service
+      register: hermes_agent_molecule_obsolete_local_model_enablement
+      changed_when: false
+      failed_when: false
+
+    - name: Assert managed local-model reconciliation preserves foreign units
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_reconciled_local_model_units.results[0].stat.exists
+          - hermes_agent_molecule_reconciled_local_model_units.results[1].stat.exists
+          - hermes_agent_molecule_obsolete_local_model_enablement.rc != 0
+          - >-
+            (hermes_agent_molecule_reconciled_local_model_state.content |
+            b64decode | from_yaml).units.keys() | list == ['current-fixture']
+
+    - name: Validate enabled local-model manifest before disablement
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Predict enabled-to-disabled local-model reconciliation in check mode
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+        apply:
+          check_mode: true
+      vars:
+        hermes_agent_local_model_desired_ids: []
+
+    - name: Inspect local-model artifacts after check-mode disable prediction
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-current-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+        - /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_check_disabled_local_model_artifacts
+
+    - name: Assert check mode predicts cleanup without mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_local_model_unit_removals.results |
+            selectattr('changed') | list | length == 1
+          - hermes_agent_local_model_manifest_retirement.changed
+          - >-
+            hermes_agent_molecule_check_disabled_local_model_artifacts.results |
+            selectattr('stat.exists') | list | length == 3
+
+    - name: Reconcile enabled local-model units during feature disablement
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+      vars:
+        hermes_agent_local_model_desired_ids: []
+
+    - name: Flush disabled local-model reconciliation handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Inspect local-model artifacts after feature disablement
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-current-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+        - /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_disabled_local_model_artifacts
+
+    - name: Read current local-model unit enablement after disablement
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-local-model-current-fixture.service
+      register: hermes_agent_molecule_disabled_local_model_enablement
+      changed_when: false
+      failed_when: false
+
+    - name: Assert disabled local-model lifecycle cleanup
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_disabled_local_model_artifacts.results[0].stat.exists
+          - hermes_agent_molecule_disabled_local_model_artifacts.results[1].stat.exists
+          - not hermes_agent_molecule_disabled_local_model_artifacts.results[2].stat.exists
+          - hermes_agent_molecule_disabled_local_model_enablement.rc != 0
 
     - name: Create root-owned node symlink target canary
       ansible.builtin.copy:

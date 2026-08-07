@@ -152,6 +152,8 @@ hermes_agent_local_models_memory_max: 3200M
 hermes_agent_local_models_memory_swap_max: 512M
 hermes_agent_local_model_benchmark_helper_path: >-
   /usr/local/libexec/hermes-agent/benchmark-local-model
+hermes_agent_local_models_managed_state_file: >-
+  /etc/systemd/system/hermes-local-models.managed.yml
 hermes_agent_local_models:
   - id: gemma-4-e2b
     display_name: Gemma 4 E2B text-only Q4_0

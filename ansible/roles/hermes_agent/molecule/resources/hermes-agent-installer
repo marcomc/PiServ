@@ -50,10 +50,12 @@ set -eu
 if [ -f "$PWD/package.json" ]; then
   mkdir -p "$PWD/dist"
   printf '%s\n' 'export default {};' > "$PWD/dist/entry.js"
+  id -u > "$PWD/dist/build-uid"
 else
   mkdir -p "$PWD/hermes_cli/web_dist"
   printf '%s\n' '<!doctype html><title>Hermes fixture</title>' \
     > "$PWD/hermes_cli/web_dist/index.html"
+  id -u > "$PWD/hermes_cli/web_dist/build-uid"
 fi
 EOF
 chmod 0755 "${hermes_home}/node/bin/npm"

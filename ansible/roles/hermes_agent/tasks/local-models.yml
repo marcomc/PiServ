@@ -189,6 +189,9 @@
     label: "{{ item.id }}"
   notify: Reload systemd daemon
 
+- name: Record current managed local-model service units
+  ansible.builtin.import_tasks: record-local-model-unit-state.yml
+
 - name: Create local-model benchmark helper directory
   ansible.builtin.file:
     path: "{{ hermes_agent_local_model_benchmark_helper_path | dirname }}"

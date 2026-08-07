@@ -9,6 +9,7 @@
       - hermes_agent_install_dir is match('^/')
       - hermes_agent_install_dir not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
       - hermes_agent_installer_path is match('^/')
+      - hermes_agent_codex_home is match('^/')
       - hermes_agent_expected_repo_origin | length > 0
   when: hermes_agent_runtime_user_phase == 'preflight'
 
@@ -22,6 +23,7 @@
     - "{{ hermes_agent_home }}"
     - "{{ hermes_agent_install_dir }}"
     - "{{ hermes_agent_installer_path }}"
+    - "{{ hermes_agent_codex_home }}"
   register: hermes_agent_resolved_managed_paths
   changed_when: false
   check_mode: false
@@ -83,6 +85,15 @@
     path: "{{ hermes_agent_home }}"
     follow: false
   register: hermes_agent_home_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes Agent Codex state root
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_home }}"
+    follow: false
+  register: hermes_agent_codex_home_state
   changed_when: false
   check_mode: false
   when: hermes_agent_runtime_user_phase == 'preflight'
@@ -175,6 +186,20 @@
         hermes_agent_home_state.stat.pw_name == hermes_agent_user and
         hermes_agent_home_state.stat.gr_name == hermes_agent_group and
         hermes_agent_home_state.stat.mode == '0700')
+      - >-
+        hermes_agent_resolved_managed_paths.results[3].stdout ==
+        hermes_agent_codex_home
+      - >-
+        hermes_agent_resolved_managed_paths.results[3].stdout not in
+        ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc',
+        '/run', '/home', '/opt']
+      - >-
+        not hermes_agent_codex_home_state.stat.exists or
+        (hermes_agent_codex_home_state.stat.isdir and
+        not hermes_agent_codex_home_state.stat.islnk and
+        hermes_agent_codex_home_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_codex_home_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_codex_home_state.stat.mode == '0700')
       - >-
         not hermes_agent_install_root_state.stat.exists or
         (hermes_agent_install_root_state.stat.isdir and

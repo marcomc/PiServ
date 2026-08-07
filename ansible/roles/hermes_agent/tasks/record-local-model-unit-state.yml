@@ -1,0 +1,44 @@
+---
+- name: Inspect installed managed local-model units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/hermes-local-model-{{ item.id }}.service"
+    checksum_algorithm: sha256
+    follow: false
+  loop: "{{ hermes_agent_local_models }}"
+  register: hermes_agent_installed_local_model_units
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Require installed managed local-model units
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode == '0644'
+  loop: "{{ hermes_agent_installed_local_model_units.results }}"
+  when: not ansible_check_mode
+
+- name: Record managed local-model unit state
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'version': 1,
+          'units': dict(
+            hermes_agent_installed_local_model_units.results |
+            map(attribute='item.id') | zip(
+              hermes_agent_installed_local_model_units.results |
+              map(attribute='stat.checksum')
+            )
+          )
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: "{{ hermes_agent_local_models_managed_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode

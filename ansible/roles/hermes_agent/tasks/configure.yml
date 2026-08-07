@@ -634,8 +634,7 @@
   ansible.builtin.set_fact:
     hermes_agent_dashboard_basic_auth: >-
       {{ {
-        'username': (hermes_agent_dashboard_basic_auth_state_contents.content |
-        b64decode | from_yaml).username,
+        'username': hermes_agent_dashboard_basic_auth_username,
         'password_hash': (hermes_agent_dashboard_basic_auth_state_contents.content |
         b64decode | from_yaml).password_hash,
         'secret': (hermes_agent_dashboard_basic_auth_state_contents.content |
@@ -813,26 +812,21 @@
   register: hermes_agent_dashboard_dist
   when: hermes_agent_manage_dashboard
 
-- name: Build pinned Hermes dashboard assets
-  ansible.builtin.command:
-    argv:
-      - npm
-      - run
-      - build
-      - -w
-      - web
-    chdir: "{{ hermes_agent_install_dir }}"
-  environment:
-    HOME: /root
-    HERMES_HOME: "{{ hermes_agent_home }}"
-    PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  changed_when: true
+- name: Record whether Hermes dashboard assets require a build
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_build_required: >-
+      {{
+        not hermes_agent_dashboard_dist.stat.exists or
+        hermes_agent_install is changed
+      }}
+  when: hermes_agent_manage_dashboard
+
+- name: Build pinned Hermes dashboard assets as the runtime identity
+  ansible.builtin.include_tasks: build-dashboard-assets.yml
   when:
     - hermes_agent_manage_dashboard
     - not ansible_check_mode
-    - >-
-      not hermes_agent_dashboard_dist.stat.exists or
-      hermes_agent_install is changed
+    - hermes_agent_dashboard_build_required
 
 - name: Refresh built Hermes dashboard state
   ansible.builtin.stat:
@@ -996,18 +990,8 @@
       not ansible_check_mode or
       hermes_agent_dashboard_tui_dependencies.stat.exists
 
-- name: Build Hermes dashboard terminal UI runtime bundle
-  ansible.builtin.command:
-    argv:
-      - npm
-      - run
-      - build
-    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
-  environment:
-    HOME: /root
-    HERMES_HOME: "{{ hermes_agent_home }}"
-    PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  changed_when: true
+- name: Build Hermes terminal UI assets as the runtime identity
+  ansible.builtin.include_tasks: build-dashboard-tui.yml
   when:
     - hermes_agent_manage_dashboard_chat
     - not ansible_check_mode
@@ -1015,8 +999,6 @@
       hermes_agent_install is changed or
       not hermes_agent_dashboard_tui_dist.stat.exists or
       hermes_agent_dashboard_tui_runtime_stale
-  notify: Restart Hermes Agent dashboard
-
 - name: Record Hermes dashboard terminal UI runtime revision
   ansible.builtin.copy:
     content: "{{ hermes_agent_repo_version }}\n"

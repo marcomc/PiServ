@@ -178,6 +178,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_local_models_memory_high` | `2500M` | systemd memory pressure threshold. |
 | `hermes_agent_local_models_memory_max` | `3200M` | systemd memory hard limit. |
 | `hermes_agent_local_models_memory_swap_max` | `512M` | systemd swap limit. |
+| `hermes_agent_local_models_managed_state_file` | systemd unit directory manifest | Canonical root-owned checksum manifest used to remove obsolete managed model units, including after disablement. |
 | `hermes_agent_local_model_benchmark_helper_path` | `/usr/local/libexec/hermes-agent/benchmark-local-model` | Root-owned benchmark helper path outside shared temporary directories. |
 | `hermes_agent_local_models` | role list | Model records and their checksum-pinned sources. |
 | `hermes_agent_local_models_benchmark_request_timeout` | `120` | Bounded synthetic completion request timeout in seconds (1-600). |

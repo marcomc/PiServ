@@ -347,6 +347,10 @@ argument_specs:
         type: path
         default: /usr/local/libexec/hermes-agent/benchmark-local-model
         description: Installed helper used to benchmark one local model service.
+      hermes_agent_local_models_managed_state_file:
+        type: path
+        default: /etc/systemd/system/hermes-local-models.managed.yml
+        description: Canonical root-owned checksum manifest of managed local-model units.
       hermes_agent_local_models:
         type: list
         elements: dict
