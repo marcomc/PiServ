@@ -1,35 +1,33 @@
 ---
-- name: Inspect inference provenance plugin ownership state
+- name: Inspect inference provenance plugin state marker
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ hermes_agent_installer_path }}.inference-provenance.yml"
     follow: false
-    checksum_algorithm: sha256
-  loop:
-    - >-
-      {{ hermes_agent_home }}/plugins/{{
-      hermes_agent_inference_provenance_plugin_name }}
-    - >-
-      {{ hermes_agent_home }}/plugins/{{
-      hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
-    - >-
-      {{ hermes_agent_home }}/plugins/{{
-      hermes_agent_inference_provenance_plugin_name }}/__init__.py
-    - "{{ hermes_agent_installer_path }}.inference-provenance.yml"
-  register: hermes_agent_inference_provenance_target_states
+  register: hermes_agent_inference_provenance_marker
   changed_when: false
   check_mode: false
-  when: hermes_agent_manage_inference_provenance
 
-- name: Read inference provenance plugin ownership state
+- name: Authenticate inference provenance plugin state marker
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        (hermes_agent_inference_provenance_marker.stat.isreg | default(false) and
+        not hermes_agent_inference_provenance_marker.stat.islnk | default(true) and
+        hermes_agent_inference_provenance_marker.stat.pw_name | default('') == 'root' and
+        hermes_agent_inference_provenance_marker.stat.gr_name | default('') == 'root' and
+        hermes_agent_inference_provenance_marker.stat.mode | default('') == '0600')
+    fail_msg: >-
+      An existing inference provenance state marker must be a private,
+      root-owned regular file before it can authorize plugin mutation.
+
+- name: Read authenticated inference provenance plugin state
   ansible.builtin.slurp:
     src: "{{ hermes_agent_installer_path }}.inference-provenance.yml"
   register: hermes_agent_inference_provenance_target_state_raw
-  when:
-    - hermes_agent_manage_inference_provenance
-    - hermes_agent_inference_provenance_target_states.results[3].stat.isreg | default(false)
-    - not hermes_agent_inference_provenance_target_states.results[3].stat.islnk | default(true)
+  when: hermes_agent_inference_provenance_marker.stat.exists
 
-- name: Load inference provenance plugin ownership state
+- name: Load authenticated inference provenance plugin state
   ansible.builtin.set_fact:
     hermes_agent_inference_provenance_target_state: >-
       {{
@@ -38,44 +36,145 @@
         if hermes_agent_inference_provenance_target_state_raw is not skipped
         else {}
       }}
-  when: hermes_agent_manage_inference_provenance
+
+- name: Require exact inference provenance plugin state
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_target_state is mapping
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_target_state.keys() | list | sort ==
+        ['implementation_sha256', 'manifest_sha256', 'plugin_name']
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_target_state.plugin_name is
+        match('^[a-z][a-z0-9-]*$')
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_target_state.manifest_sha256 is
+        match('^[a-f0-9]{64}$')
+      - >-
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_target_state.implementation_sha256 is
+        match('^[a-f0-9]{64}$')
+    fail_msg: >-
+      The inference provenance marker must contain only the recognized plugin
+      name and SHA-256 fields before it can authorize plugin mutation.
+
+- name: Select recorded inference provenance plugin identity
+  ansible.builtin.set_fact:
+    hermes_agent_inference_provenance_recorded_plugin_name: >-
+      {{
+        hermes_agent_inference_provenance_target_state.get(
+          'plugin_name', hermes_agent_inference_provenance_plugin_name
+        )
+      }}
+
+- name: Resolve inference provenance plugin lifecycle paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_home }}/plugins"
+    - >-
+      {{ hermes_agent_home }}/plugins/{{
+      hermes_agent_inference_provenance_recorded_plugin_name }}
+    - >-
+      {{ hermes_agent_home }}/plugins/{{
+      hermes_agent_inference_provenance_plugin_name }}
+  register: hermes_agent_inference_provenance_lifecycle_paths
+  changed_when: false
+  check_mode: false
+
+- name: Require canonical inference provenance plugin lifecycle paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_inference_provenance_lifecycle_paths.results[0].stdout ==
+        hermes_agent_home ~ '/plugins'
+      - >-
+        hermes_agent_inference_provenance_lifecycle_paths.results[1].stdout ==
+        hermes_agent_home ~ '/plugins/' ~
+        hermes_agent_inference_provenance_recorded_plugin_name
+      - >-
+        hermes_agent_inference_provenance_lifecycle_paths.results[2].stdout ==
+        hermes_agent_home ~ '/plugins/' ~
+        hermes_agent_inference_provenance_plugin_name
+    fail_msg: >-
+      Inference provenance plugin lifecycle paths must be canonical and must
+      not traverse symlinked existing parents.
+
+- name: Inspect recorded inference provenance plugin artifacts
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - path: >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_recorded_plugin_name }}
+      checksum_key: ""
+    - path: >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_recorded_plugin_name }}/plugin.yaml
+      checksum_key: manifest_sha256
+    - path: >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_recorded_plugin_name }}/__init__.py
+      checksum_key: implementation_sha256
+  register: hermes_agent_inference_provenance_recorded_artifacts
+  changed_when: false
+  check_mode: false
+
+- name: Inspect desired inference provenance plugin directory
+  ansible.builtin.stat:
+    path: >-
+      {{ hermes_agent_home }}/plugins/{{
+      hermes_agent_inference_provenance_plugin_name }}
+    follow: false
+  register: hermes_agent_inference_provenance_desired_directory
+  changed_when: false
+  check_mode: false
 
 - name: Refuse foreign inference provenance plugin destinations
   ansible.builtin.assert:
     that:
       - >-
-        not hermes_agent_inference_provenance_target_states.results[0].stat.exists or
-        hermes_agent_inference_provenance_target_states.results[3].stat.exists
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        not hermes_agent_inference_provenance_recorded_artifacts.results[0].stat.exists or
+        (
+        hermes_agent_inference_provenance_recorded_artifacts.results[0].stat.isdir | default(false) and
+        not hermes_agent_inference_provenance_recorded_artifacts.results[0].stat.islnk | default(true))
       - >-
-        not hermes_agent_inference_provenance_target_states.results[3].stat.exists or
-        (hermes_agent_inference_provenance_target_states.results[3].stat.isreg | default(false) and
-        not hermes_agent_inference_provenance_target_states.results[3].stat.islnk | default(true) and
-        hermes_agent_inference_provenance_target_states.results[3].stat.pw_name | default('') == 'root' and
-        hermes_agent_inference_provenance_target_states.results[3].stat.gr_name | default('') == 'root' and
-        hermes_agent_inference_provenance_target_states.results[3].stat.mode | default('') == '0600')
-      - >-
-        not hermes_agent_inference_provenance_target_states.results[3].stat.exists or
-        hermes_agent_inference_provenance_target_state.keys() | list | sort ==
-        ['implementation_sha256', 'manifest_sha256', 'plugin_name']
-      - >-
-        not hermes_agent_inference_provenance_target_states.results[3].stat.exists or
-        hermes_agent_inference_provenance_target_state.plugin_name ==
-        hermes_agent_inference_provenance_plugin_name
-      - >-
-        not hermes_agent_inference_provenance_target_states.results[1].stat.exists or
-        (hermes_agent_inference_provenance_target_states.results[3].stat.exists and
-        hermes_agent_inference_provenance_target_states.results[1].stat.isreg | default(false) and
-        not hermes_agent_inference_provenance_target_states.results[1].stat.islnk | default(true) and
-        hermes_agent_inference_provenance_target_states.results[1].stat.checksum | default('') ==
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        not hermes_agent_inference_provenance_recorded_artifacts.results[1].stat.exists or
+        (
+        hermes_agent_inference_provenance_recorded_artifacts.results[1].stat.isreg | default(false) and
+        not hermes_agent_inference_provenance_recorded_artifacts.results[1].stat.islnk | default(true) and
+        hermes_agent_inference_provenance_recorded_artifacts.results[1].stat.checksum | default('') ==
         hermes_agent_inference_provenance_target_state.get('manifest_sha256', ''))
       - >-
-        not hermes_agent_inference_provenance_target_states.results[2].stat.exists or
-        (hermes_agent_inference_provenance_target_states.results[3].stat.exists and
-        hermes_agent_inference_provenance_target_states.results[2].stat.isreg | default(false) and
-        not hermes_agent_inference_provenance_target_states.results[2].stat.islnk | default(true) and
-        hermes_agent_inference_provenance_target_states.results[2].stat.checksum | default('') ==
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        not hermes_agent_inference_provenance_recorded_artifacts.results[2].stat.exists or
+        (
+        hermes_agent_inference_provenance_recorded_artifacts.results[2].stat.isreg | default(false) and
+        not hermes_agent_inference_provenance_recorded_artifacts.results[2].stat.islnk | default(true) and
+        hermes_agent_inference_provenance_recorded_artifacts.results[2].stat.checksum | default('') ==
         hermes_agent_inference_provenance_target_state.get('implementation_sha256', ''))
+      - >-
+        not hermes_agent_manage_inference_provenance or
+        hermes_agent_inference_provenance_marker.stat.exists or
+        not hermes_agent_inference_provenance_desired_directory.stat.exists
+      - >-
+        not hermes_agent_manage_inference_provenance or
+        not hermes_agent_inference_provenance_marker.stat.exists or
+        hermes_agent_inference_provenance_recorded_plugin_name ==
+        hermes_agent_inference_provenance_plugin_name or
+        not hermes_agent_inference_provenance_desired_directory.stat.exists
     fail_msg: >-
-      An existing inference provenance plugin destination must have a private
-      root-owned state record whose checksums recognize every existing file.
-  when: hermes_agent_manage_inference_provenance
+      Existing inference provenance artifacts must be absent or recognized by
+      an authenticated marker; a renamed plugin also requires an unused target.

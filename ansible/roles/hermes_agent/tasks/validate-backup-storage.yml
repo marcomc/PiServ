@@ -1,4 +1,27 @@
 ---
+- name: Resolve Hermes Agent backup storage paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_dir }}"
+    - "{{ hermes_agent_backup_dir | dirname }}"
+  register: hermes_agent_backup_storage_paths
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
+
+- name: Inspect Hermes Agent backup directory parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_backup_dir | dirname }}"
+    follow: false
+  register: hermes_agent_backup_directory_parent_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
+
 - name: Inspect configured Hermes Agent backup directory
   ansible.builtin.stat:
     path: "{{ hermes_agent_backup_dir }}"
@@ -12,6 +35,14 @@
   ansible.builtin.assert:
     that:
       - hermes_agent_backup_dir is match('^/')
+      - hermes_agent_backup_storage_paths.results[0].stdout == hermes_agent_backup_dir
+      - >-
+        hermes_agent_backup_storage_paths.results[1].stdout ==
+        (hermes_agent_backup_dir | dirname)
+      - >-
+        not hermes_agent_backup_directory_parent_state.stat.exists or
+        (hermes_agent_backup_directory_parent_state.stat.isdir | default(false) and
+        not hermes_agent_backup_directory_parent_state.stat.islnk | default(true))
       - hermes_agent_backup_dir not in ['/', '/tmp', '/var', '/var/backups', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
       - >-
         not hermes_agent_backup_directory_state.stat.exists or
