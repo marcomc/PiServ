@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0] - Unreleased
+
+### Hermes Home Assistant and Apple Home
+
+- Added a Mac-side acceptance harness that drives Hermes through its SSH CLI,
+  verifies Home Assistant and Apple Home convergence through HomeClaw, restores
+  reversible test entities, and writes local text and JSON reports.
+- Added a local allowlist example, release runbook, and accepted decision for
+  activity-scoped Hermes autonomy, critical-action confirmation, and HomeClaw's
+  read-only observer role.
+- Recorded the current release blocker: PiServ cannot resolve the configured
+  Home Assistant MCP hostname.
+
 ## [0.4.0] - 2026-08-08
 
 ### Reliability

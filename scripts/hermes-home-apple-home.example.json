@@ -1,0 +1,20 @@
+{
+  "ssh_target": "admin@PiServ.local",
+  "hermes_home": "/var/lib/hermes-agent",
+  "codex_home": "/var/lib/hermes-agent/codex",
+  "hermes_binary": "/usr/local/bin/hermes",
+  "home_assistant_api_url": "http://home-assistant.example:8123/api",
+  "home_assistant_token_env_file": "/var/lib/hermes-agent/home-assistant-mcp.env",
+  "scenes": [
+    "A non-critical scene exposed to Home Assistant and Apple Home"
+  ],
+  "entities": [
+    {
+      "label": "non-critical test light",
+      "home_assistant_entity_id": "light.example_test",
+      "homeclaw_accessory": "Example Test Light",
+      "homeclaw_characteristic": "power",
+      "risk": "non-critical"
+    }
+  ]
+}

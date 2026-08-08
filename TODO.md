@@ -108,8 +108,10 @@
     framework maintenance item is the transitive `undici` dependency audit.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Pin the next Hermes upstream release that upgrades transitive `undici` to
-      `6.28.0` or newer, then repeat the production dependency audit.
+    - Reopen this task only when a new Hermes upstream release is selected,
+      that release carries `undici >= 6.28.0`, or a new security finding
+      requires earlier action. Then pin the release and repeat the production
+      dependency audit before enabling it.
 
 - [ ] **Complete Hermes smart-home control through Home Assistant and Apple Home**
   - Priority: **High**
@@ -122,16 +124,17 @@
     - Revalidate Hermes-to-Home Assistant MCP authentication, tool discovery,
       state reads, and reversible writes after service restart and backup
       restore.
-    - Define and review the Home Assistant Assist exposure policy for read-only
-      entities, lights, scenes, and other approved operations; exclude locks,
-      security devices, and configuration changes by default.
+    - Define and review the Home Assistant Assist exposure policy for the full
+      desired operation surface; keep security-critical actions confirmation-
+      gated even when activity-scoped autonomy is granted.
     - Configure and validate Home Assistant's HomeKit Bridge for the selected
       entities, then verify Apple Home and Siri reflect the resulting states.
-    - Add post-write state verification, failure handling, and audit evidence to
-      the Hermes runbook before enabling unattended actions.
-    - Decide whether direct Apple Home control through HomeClaw is still needed;
-      if so, select either the restricted SSH transport or the authenticated
-      Tailnet Supergateway transport and complete its validation track.
+    - Run the local acceptance harness from the Mac with an explicit allowlist,
+      scoped state capture, post-write verification, cleanup, and audit report.
+    - Resolve the current PiServ DNS/MCP reachability failure before marking
+      this release task complete.
+    - Keep direct Apple Home control through HomeClaw in a later release; use
+      SSH or authenticated Tailnet Supergateway only after a separate decision.
 
 - [ ] **Connect Hermes to Omar Shahine's HomeClaw MCP through SSH**
   - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)

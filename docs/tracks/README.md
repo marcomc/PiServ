@@ -18,7 +18,7 @@ checklists. Use them for active work that is not yet fully automated.
 | [External SSD USB link recovery](external-storage-usb-link-recovery.md) | High-priority plan |
 | [pCloud `pcloudcc` podcast storage](pcloudcc-podcast-storage.md) | Workload integrated |
 | [Google Drive and external storage](google-drive-and-external-storage.md) | Proposal |
-| [Hermes Agent framework](hermes-agent-framework-research.md) | Authenticated runtime; Home Assistant MCP live, Apple Home path pending |
+| [Hermes Agent framework](hermes-agent-framework-research.md) | 0.5 acceptance harness implemented; live MCP reachability pending |
 | [Omar Shahine HomeClaw MCP over SSH](homeclaw-mcp-over-ssh.md) | Proposal: manual Mac Apple Home gateway |
 | [Omar Shahine HomeClaw MCP with Supergateway](homeclaw-mcp-supergateway.md) | Proposal: Tailnet Apple Home gateway |
 | [Pi Node on PiServ](pi-node-on-piserv.md) | Investigation: native install blocked |
