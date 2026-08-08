@@ -1,6 +1,135 @@
 # Changelog
 
-All notable project changes are documented here.
+## [0.4.0] - Unreleased
+
+### Reliability
+
+- Added a reversible PiServ cold-reset policy that validates distinct private
+  rollback and runtime-control paths, reconciles one final `reboot=c` token,
+  activates the running kernel's cold mode, and supports returning to the
+  Raspberry Pi device-tree default without automatic reboot.
+- Validated the cold policy through its activation and three subsequent
+  persistent reboots; all returned with NVMe mounts and critical services
+  healthy, bringing the observed cold-reset series to nine successes.
+- Rendered a separate Freenove background task-manager artifact that fixes the
+  upstream SIGTERM handler without dirtying the pinned source tree, restarts the
+  managed service only when needed, preserves it when an existing unit is
+  unmanaged, and exits cleanly during system shutdown.
+- Added a pre-network-teardown shutdown email with bounded, authenticated
+  journal correlation for nearby `sudo` evidence.
+- Retried boot notification delivery only for bounded temporary mail failures,
+  avoiding a boot-time DNS race by using the local hostname without a DNS lookup
+  and preserving permanent SMTP errors as visible systemd failures. The generated
+  systemd start timeout now covers the full retry budget, and negative policy
+  tests fail when validation is bypassed.
+- Added an Ansible-managed Wi-Fi connectivity watchdog that checks the WLAN
+  link, gateway, and DNS, then escalates from connection restart to
+  NetworkManager restart. Host reboot escalation is opt-in.
+- Configured PiServ to reboot after 15 continuous minutes without a route to
+  either public internet probe, while preventing a Wi-Fi outage from rebooting
+  a host that remains online through another IPv4 default-route interface.
+- Required PiServ's locally configured Wi-Fi profile for deterministic recovery
+  and required the active cold reboot mode immediately before automatic reboot.
+- Extracted the watchdog into the reusable `wifi_watchdog` role with
+  Galaxy-ready metadata, standalone documentation, tests, and release guidance.
+- Included the Wi-Fi watchdog in the canonical full-host convergence entry
+  point and bound its default gateway probe to the monitored Wi-Fi interface.
+- Hardened the reusable watchdog against localized `nmcli` state, configured
+  profile fallback, wall-clock changes during recovery, mismatched systemd
+  service-path overrides, and DNS success delivered through another network
+  interface.
+- Retried failed connection activations and NetworkManager restarts while an
+  outage continues without blocking higher recovery levels, and retried the
+  connection after a successful NetworkManager restart.
+- Made privileged path inspection authoritative and preserved fresh-host
+  check-mode convergence when the watchdog unit is not created yet, including
+  handler execution.
+- Corrected the PiServ watchdog runbook to verify service state on PiServ
+  rather than the Ansible controller.
+- Made a DNS resolver failure fail the watchdog health check explicitly.
+- Preserved fresh check-mode convergence for missing parent directories and
+  constrained watchdog unit paths to systemd's system unit directory.
+- Restricted the root-executed watchdog script to a validated trusted system
+  path.
+
+### Cgroup Memory Controller
+
+- Extracted managed cgroup-memory boot policy into a Galaxy-ready local
+  `cgroup_memory_controller` role, keeping PiServ artifact identities and
+  runtime policy exclusively in the consumer configuration.
+- Added a full managed copy of the Raspberry Pi vendor DTB that removes exactly
+  `cgroup_disable=memory` with `fdtput`, validates the result with `fdtget`, and
+  is selected through a marked `device_tree=piserv-cgroup-memory.dtb` entry.
+- Preserved the vendor DTB while retaining initial boot-artifact backups,
+  explicit rollback, and refresh after vendor DTB updates.
+- Activated the controller after an approved reboot and verified `memory` in
+  the live cgroup v2 controller list before testing enforced model-service
+  limits.
+
+### Hermes Agent
+
+- Made installer, inference-plugin, and backup-storage ownership checks fail
+  before package, identity, download, or service mutations, preserving foreign
+  destinations instead of overwriting them.
+- Updated Nous Hermes Agent to the pinned upstream `v2026.8.3` release
+  (`0.20.0`) under a root-owned code path and an unprivileged `hermes-agent`
+  runtime identity.
+- Configured `gpt-5.6-luna` as the default Codex provider with tested Spark,
+  Terra, and Sol fallback order, bounded reasoning-effort overrides, and
+  session-scoped Terra and Sol selectors.
+- Added a managed Hermes provenance plugin, validated it with a live Luna
+  response, and stored only private, content-free inference audit metadata.
+- Added an official Home Assistant MCP gateway configuration that reads its
+  dedicated token only from a private runtime environment file, then validated
+  authenticated tool discovery plus an end-to-end Hermes state read and
+  reversible four-second light on/off operation.
+- Installed the checksum-verified official Codex CLI `0.145.0` Linux ARM64
+  release, completed ChatGPT device authorization for both Codex CLI and
+  Hermes, and validated direct and Hermes-mediated responses without an API key.
+- Limited Hermes to memory and skill tools with write approval while explicitly
+  disabling terminal, filesystem, browser, code execution, Home Assistant, and
+  all other bundled toolsets.
+- Added a hardened Hermes dashboard with native password authentication,
+  scrypt-only runtime state, a root-only generated-password proposal,
+  source-scoped LAN UFW access, Tailnet ingress, and an SSH-tunnel recovery
+  workflow.
+- Built the dashboard chat terminal UI into a separate root-owned runtime
+  artifact with a Hermes-revision marker, preventing the unprivileged
+  dashboard service from attempting and failing `npm install` during chat
+  startup and rebuilding it after a pinned-source update.
+- Reduced the deployed dashboard production audit to one moderate transitive
+  `undici` finding; it serves prebuilt assets through a Python service.
+- Added daily full Hermes state backups to the external SSD with 30-day
+  retention and validated the first live archive.
+- Added the reusable `hermes_agent` Ansible role, PiServ playbook, live health
+  assertions, one-command provider-login helper, runbook, and updated
+  architecture track.
+- Added checksum-pinned Gemma 4 E2B and Granite 3.3 2B local-model benchmarks
+  through loopback-only llama.cpp systemd services, with 64K context,
+  constrained KV cache, memory limits, integrity checks, and result capture.
+- Moved reproducible local-model weights outside Hermes state backups and added
+  an address-space cap that remains effective when a host disables cgroup memory.
+- Added an isolated persistence verifier for a dashboard restart, Hermes
+  backup/restore, reviewed local-skill discovery, and provider-transport
+  migration to a bounded Granite loopback endpoint.
+- Enabled cgroup v2 memory control and proved that guarded 64K full-provider
+  tests for Gemma 4 E2B and Granite 3.3 2B exceed the 4 GB host's 1.5 GiB
+  reserve. The guard stopped only the model service and preserved dashboard
+  health, so PiServ now disables local-model deployment while retaining the
+  reusable framework for future hardware.
+- Validated a locally generated Llama 3.2 1B Instruct Q4_K_M artifact with a
+  loopback-only 64K synthetic response test. It used about 1.50 GiB cgroup
+  memory, produced the expected visible response in 1.2 seconds, and left the
+  dashboard healthy; it is not yet the managed Hermes provider.
+- Rejected Llama 3.2 1B Instruct as a local Hermes provider on the 4 GB host:
+  its isolated 64K memory-and-skill proof left PiServ unreachable while
+  processing the Hermes prompt, followed by an unclean boot recovery. Removed
+  the temporary model deployment and retained Codex as the only provider.
+- Kept the future local-model capability inert by default, required an active
+  cgroup v2 memory controller before enabling it, and validated bounded memory
+  and address-space settings before rendering its services.
+- Formally accepted Home Assistant's Assist exposure policy as the authority
+  for the broader MCP entity and operation surface used by Hermes.
 
 ## [0.3.0] - 2026-07-29
 

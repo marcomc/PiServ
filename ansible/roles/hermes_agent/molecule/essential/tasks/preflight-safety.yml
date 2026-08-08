@@ -1,0 +1,684 @@
+---
+- name: Read essential fixture installer checksum
+  ansible.builtin.stat:
+    path: /usr/local/src/hermes-agent-fixture/hermes-agent-installer
+    checksum_algorithm: sha256
+  register: hermes_agent_essential_fixture_installer
+
+- name: Read essential fixture Codex checksum
+  ansible.builtin.stat:
+    path: /usr/local/src/hermes-agent-fixture/codex.tar.gz
+    checksum_algorithm: sha256
+  register: hermes_agent_essential_fixture_codex
+
+- name: Read essential fixture Hermes revision
+  ansible.builtin.slurp:
+    src: /usr/local/src/hermes-agent-fixture/revision
+  register: hermes_agent_essential_fixture_revision
+
+- name: Pin essential fixture artifact checksums across role inclusions
+  ansible.builtin.set_fact:
+    hermes_agent_installer_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+    hermes_agent_codex_archive_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+
+- name: Reject a systemd marker path aliased to another managed output
+  block:
+    - name: Prepare systemd marker alias validation state
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-target.yml
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_dashboard_basic_auth_state_file }}
+
+    - name: Validate systemd marker alias against managed outputs
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_dashboard_basic_auth_state_file }}
+
+    - name: Fail if systemd marker output alias was accepted
+      ansible.builtin.fail:
+        msg: Systemd marker aliases with managed outputs must be rejected.
+  rescue:
+    - name: Assert systemd marker alias failed during preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
+- name: Reject the Hermes environment path aliased to another managed output
+  block:
+    - name: Validate a direct Hermes environment output collision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_home }}/.env
+
+    - name: Fail if the Hermes environment output collision was accepted
+      ansible.builtin.fail:
+        msg: The Hermes environment file must be a distinct managed output.
+  rescue:
+    - name: Assert the environment collision failed during preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
+- name: Corrupt the installed Hermes virtual environment
+  ansible.builtin.copy:
+    content: unauthenticated virtual environment fixture
+    dest: /usr/local/lib/hermes-agent/venv/foreign-essential.pth
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Reconcile corrupted Hermes virtual environment provenance
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    hermes_agent_supported_architectures:
+      - "{{ ansible_facts['architecture'] }}"
+    hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
+    hermes_agent_repo_version: >-
+      {{ hermes_agent_essential_fixture_revision.content | b64decode | trim }}
+    hermes_agent_installer_url: >-
+      file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+    hermes_agent_installer_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+    hermes_agent_codex_archive_url: >-
+      file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+    hermes_agent_codex_archive_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+    hermes_agent_manage_backup: true
+    hermes_agent_manage_dashboard_chat: true
+    hermes_agent_manage_inference_provenance: true
+    hermes_agent_backup_group: root
+    hermes_agent_backup_dir: /var/backups/hermes-agent
+    hermes_agent_manage_local_models: false
+
+- name: Inspect reconciled Hermes virtual environment provenance
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/lib/hermes-agent/venv/foreign-essential.pth
+    - /usr/local/lib/hermes-agent/.hermes-venv-managed.yml
+  register: hermes_agent_essential_venv_reconciliation
+
+- name: Assert Hermes virtual environment corruption was repaired
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_venv_reconciliation.results[0].stat.exists
+      - hermes_agent_essential_venv_reconciliation.results[1].stat.isreg
+      - hermes_agent_essential_venv_reconciliation.results[1].stat.pw_name == 'root'
+      - hermes_agent_essential_venv_reconciliation.results[1].stat.gr_name == 'root'
+      - hermes_agent_essential_venv_reconciliation.results[1].stat.mode == '0600'
+
+- name: Read installed Codex binary and installation marker
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /usr/local/lib/codex/0.145.0/codex
+    - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_install_artifacts
+
+- name: Read installed Codex installation marker
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_install_marker_raw
+
+- name: Inspect recognized Codex installation parent and provenance
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/lib/codex
+    - /usr/local/lib/codex/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_parent_artifacts
+
+- name: Read recognized Codex installation parent provenance
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_parent_marker_raw
+
+- name: Assert installed Codex provenance binds its binary
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).keys() | list | sort ==
+        ['archive_sha256', 'binary_sha256', 'managed_by', 'version']
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).binary_sha256 ==
+        hermes_agent_essential_codex_install_artifacts.results[0].stat.checksum
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).archive_sha256 ==
+        hermes_agent_essential_fixture_codex.stat.checksum
+      - hermes_agent_essential_codex_parent_artifacts.results[0].stat.isdir
+      - hermes_agent_essential_codex_parent_artifacts.results[0].stat.mode == '0755'
+      - hermes_agent_essential_codex_parent_artifacts.results[1].stat.isreg
+      - hermes_agent_essential_codex_parent_artifacts.results[1].stat.mode == '0600'
+      - >-
+        (hermes_agent_essential_codex_parent_marker_raw.content |
+        b64decode | from_yaml) ==
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'path': '/usr/local/lib/codex',
+          'version': 1
+        }
+
+- name: Verify Codex parent publication recovery and marker topology
+  ansible.builtin.include_tasks: codex-parent-publication.yml
+
+- name: Reject a missing configured backup group
+  block:
+    - name: Apply role with a missing backup group
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_user: hermes-missing-backup-fixture
+        hermes_agent_group: hermes-missing-backup-fixture
+        hermes_agent_home: /var/lib/hermes-missing-backup-fixture
+        hermes_agent_install_dir: /usr/local/lib/hermes-missing-backup-fixture
+        hermes_agent_installer_path: >-
+          /usr/local/libexec/hermes-missing-backup-fixture-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: hermes-backup-group-does-not-exist
+        hermes_agent_backup_dir: /var/backups/hermes-missing-backup-fixture
+
+    - name: Fail if a missing backup group was accepted
+      ansible.builtin.fail:
+        msg: A missing backup group must fail preflight.
+  rescue:
+    - name: Assert missing backup group failed at preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require an existing Hermes Agent backup group'
+
+- name: Inspect missing-backup-group mutation canaries
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/getent
+      - "{{ item.database }}"
+      - "{{ item.key }}"
+  loop:
+    - database: passwd
+      key: hermes-missing-backup-fixture
+    - database: group
+      key: hermes-missing-backup-fixture
+  register: hermes_agent_essential_missing_backup_identity_canaries
+  changed_when: false
+  failed_when: false
+
+- name: Inspect missing-backup-group installer canary
+  ansible.builtin.stat:
+    path: /usr/local/libexec/hermes-missing-backup-fixture-installer
+  register: hermes_agent_essential_missing_backup_installer_canary
+
+- name: Assert missing backup group caused no identity or installer mutation
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_missing_backup_identity_canaries.results |
+        selectattr('rc', 'equalto', 0) | list | length == 0
+      - not hermes_agent_essential_missing_backup_installer_canary.stat.exists
+
+- name: Verify inaccessible backup storage fails before publication
+  ansible.builtin.include_tasks: inaccessible-backup.yml
+
+- name: Create foreign unmarked Codex installation fixture
+  ansible.builtin.file:
+    path: /usr/local/lib/codex/foreign-essential
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install foreign unmarked Codex binary canary
+  ansible.builtin.copy:
+    content: foreign-codex-binary-canary
+    dest: /usr/local/lib/codex/foreign-essential/codex
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reject a foreign unmarked Codex installation
+  block:
+    - name: Apply role with a foreign unmarked Codex installation
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_codex_version: foreign-essential
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/foreign-essential
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+
+    - name: Fail if a foreign unmarked Codex installation was accepted
+      ansible.builtin.fail:
+        msg: A foreign Codex installation must fail preflight.
+  rescue:
+    - name: Assert foreign Codex installation failed at marker authentication
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Authenticate existing Codex installation artifacts'
+
+- name: Read foreign Codex binary after rejection
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/foreign-essential/codex
+  register: hermes_agent_essential_foreign_codex_canary
+
+- name: Inspect foreign Codex marker after rejection
+  ansible.builtin.stat:
+    path: /usr/local/lib/codex/foreign-essential/.hermes-agent-managed.yml
+  register: hermes_agent_essential_foreign_codex_marker
+
+- name: Assert foreign Codex installation was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_foreign_codex_canary.content | b64decode ==
+        'foreign-codex-binary-canary'
+      - not hermes_agent_essential_foreign_codex_marker.stat.exists
+
+- name: Reject an unsupported Hermes binary path override
+  block:
+    - name: Apply role with an unsupported Hermes binary path
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_binary_path: /usr/local/bin/hermes-custom-fixture
+
+    - name: Fail if an unsupported Hermes binary path was accepted
+      ansible.builtin.fail:
+        msg: Unsupported Hermes binary paths must fail target validation.
+  rescue:
+    - name: Assert unsupported Hermes binary path failed target validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+- name: Inspect unsupported Hermes binary path after rejection
+  ansible.builtin.stat:
+    path: /usr/local/bin/hermes-custom-fixture
+  register: hermes_agent_essential_custom_binary_path
+
+- name: Assert unsupported Hermes binary path was not provisioned
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_custom_binary_path.stat.exists
+
+- name: Reject a foreign Hermes installer destination
+  block:
+    - name: Apply role with a foreign Hermes installer destination
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_path: /usr/bin/ssh
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+
+    - name: Fail if a foreign Hermes installer destination was accepted
+      ansible.builtin.fail:
+        msg: A foreign installer destination must fail preflight.
+  rescue:
+    - name: Assert the foreign installer failed at its preflight boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Refuse foreign Hermes installer destinations'
+
+- name: Create foreign inference provenance plugin fixture
+  ansible.builtin.file:
+    path: /var/lib/hermes-agent/plugins/foreign-provenance-fixture
+    state: directory
+    owner: hermes-agent
+    group: hermes-agent
+    mode: "0700"
+
+- name: Install foreign inference provenance plugin canary
+  ansible.builtin.copy:
+    content: foreign-plugin-canary
+    dest: >-
+      /var/lib/hermes-agent/plugins/foreign-provenance-fixture/plugin.yaml
+    owner: hermes-agent
+    group: hermes-agent
+    mode: "0600"
+
+- name: Reject a foreign inference provenance plugin
+  block:
+    - name: Apply role with a foreign inference provenance plugin
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_inference_provenance: true
+        hermes_agent_inference_provenance_plugin_name: >-
+          foreign-provenance-fixture
+
+    - name: Fail if a foreign inference provenance plugin was accepted
+      ansible.builtin.fail:
+        msg: A foreign plugin destination must fail preflight.
+  rescue:
+    - name: Assert the foreign plugin failed at its preflight boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Refuse foreign inference provenance plugin destinations'
+
+- name: Read foreign inference provenance plugin canary
+  ansible.builtin.slurp:
+    src: /var/lib/hermes-agent/plugins/foreign-provenance-fixture/plugin.yaml
+  register: hermes_agent_essential_foreign_plugin_canary
+
+- name: Assert the foreign inference provenance plugin was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_foreign_plugin_canary.content | b64decode ==
+        'foreign-plugin-canary'
+
+- name: Create foreign backup directory fixture
+  ansible.builtin.file:
+    path: /var/backups/hermes-agent-essential-foreign
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reject foreign backup storage before installer mutation
+  block:
+    - name: Apply role with foreign backup storage
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_path: >-
+          /usr/local/libexec/hermes-essential-backup-preflight-installer
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent-essential-foreign
+
+    - name: Fail if foreign backup storage was accepted
+      ansible.builtin.fail:
+        msg: Foreign backup storage must fail preflight.
+  rescue:
+    - name: Assert foreign backup storage failed at its preflight boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require a dedicated Hermes Agent backup directory'
+
+- name: Inspect installer destination after rejected backup storage
+  ansible.builtin.stat:
+    path: /usr/local/libexec/hermes-essential-backup-preflight-installer
+  register: hermes_agent_essential_backup_preflight_installer
+
+- name: Assert rejected backup storage caused no installer mutation
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_backup_preflight_installer.stat.exists
+
+- name: Create backup symlink-parent fixtures
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /var/backups/hermes-essential-external
+    - /var/backups/hermes-essential-link-parent
+
+- name: Create backup symlinked parent
+  ansible.builtin.file:
+    src: /var/backups/hermes-essential-external
+    dest: /var/backups/hermes-essential-link-parent/alias
+    state: link
+
+- name: Reject absent backup storage below a symlinked parent
+  block:
+    - name: Apply role with symlink-parent backup storage
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: >-
+          /var/backups/hermes-essential-link-parent/alias/backup
+
+    - name: Fail if symlink-parent backup storage was accepted
+      ansible.builtin.fail:
+        msg: Backup storage below a symlinked parent must fail preflight.
+  rescue:
+    - name: Assert symlink-parent backup failed at its preflight boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require a dedicated Hermes Agent backup directory'
+
+- name: Inspect external backup target after symlink-parent rejection
+  ansible.builtin.stat:
+    path: /var/backups/hermes-essential-external/backup
+  register: hermes_agent_essential_symlink_backup_target
+
+- name: Assert symlink-parent backup rejection made no external mutation
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_symlink_backup_target.stat.exists
+
+- name: Create unrelated old-plugin canary before rename
+  ansible.builtin.copy:
+    content: preserve-old-plugin-canary
+    dest: /var/lib/hermes-agent/plugins/inference-provenance/unrelated.canary
+    owner: hermes-agent
+    group: hermes-agent
+    mode: "0600"
+
+- name: Preflight a failing inference provenance rename target
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+    tasks_from: validate-inference-provenance-target.yml
+  vars:
+    hermes_agent_manage_inference_provenance: true
+    hermes_agent_inference_provenance_plugin_name: failed-provenance-fixture
+
+- name: Snapshot prior inference provenance artifacts before failed rename
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+    - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+    - /var/lib/hermes-agent/plugins/inference-provenance/unrelated.canary
+    - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+  register: hermes_agent_essential_provenance_before_failed_rename
+
+- name: Reject incomplete inference provenance rename publication
+  block:
+    - name: Publish inference provenance with an invalid file owner
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: publish-inference-provenance.yml
+      vars:
+        hermes_agent_inference_provenance_plugin_name: failed-provenance-fixture
+        hermes_agent_inference_provenance_publish_owner: >-
+          hermes-essential-missing-owner
+
+    - name: Fail if incomplete inference provenance publication succeeded
+      ansible.builtin.fail:
+        msg: A failed renamed target publication must roll back.
+  rescue:
+    - name: Assert renamed target failure was reported after rollback
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Report inference provenance plugin publication failure'
+
+- name: Inspect inference provenance artifacts after failed rename
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+    - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+    - /var/lib/hermes-agent/plugins/inference-provenance/unrelated.canary
+    - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+    - /var/lib/hermes-agent/plugins/failed-provenance-fixture
+  register: hermes_agent_essential_provenance_after_failed_rename
+
+- name: Assert failed inference provenance rename preserved prior state
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_provenance_after_failed_rename.results[:4] |
+        map(attribute='stat.checksum') | list ==
+        hermes_agent_essential_provenance_before_failed_rename.results |
+        map(attribute='stat.checksum') | list
+      - not hermes_agent_essential_provenance_after_failed_rename.results[4].stat.exists
+
+- name: Rename the managed inference provenance plugin
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars: &essential_renamed_provenance_vars
+    hermes_agent_supported_architectures:
+      - "{{ ansible_facts['architecture'] }}"
+    hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
+    hermes_agent_repo_version: >-
+      {{ hermes_agent_essential_fixture_revision.content | b64decode | trim }}
+    hermes_agent_installer_url: >-
+      file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+    hermes_agent_installer_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+    hermes_agent_codex_archive_url: >-
+      file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+    hermes_agent_codex_archive_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+    hermes_agent_manage_backup: true
+    hermes_agent_backup_group: root
+    hermes_agent_backup_dir: /var/backups/hermes-agent
+    hermes_agent_manage_dashboard_chat: true
+    hermes_agent_manage_inference_provenance: true
+    hermes_agent_inference_provenance_plugin_name: renamed-provenance-fixture
+
+- name: Converge the renamed inference provenance plugin again
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars: *essential_renamed_provenance_vars
+
+- name: Inspect inference provenance artifacts after rename
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+    - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+    - /var/lib/hermes-agent/plugins/inference-provenance/unrelated.canary
+    - /var/lib/hermes-agent/plugins/renamed-provenance-fixture/plugin.yaml
+    - /var/lib/hermes-agent/plugins/renamed-provenance-fixture/__init__.py
+    - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+  register: hermes_agent_essential_renamed_provenance_artifacts
+
+- name: Read renamed inference provenance marker
+  ansible.builtin.slurp:
+    src: /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+  register: hermes_agent_essential_renamed_provenance_marker
+
+- name: Assert inference provenance plugin rename converged safely
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_renamed_provenance_artifacts.results[0].stat.exists
+      - not hermes_agent_essential_renamed_provenance_artifacts.results[1].stat.exists
+      - hermes_agent_essential_renamed_provenance_artifacts.results[2].stat.exists
+      - hermes_agent_essential_renamed_provenance_artifacts.results[3].stat.exists
+      - hermes_agent_essential_renamed_provenance_artifacts.results[4].stat.exists
+      - >-
+        (hermes_agent_essential_renamed_provenance_marker.content |
+        b64decode | from_yaml).plugin_name == 'renamed-provenance-fixture'
+
+- name: Make inference provenance marker foreign before disabled cleanup
+  ansible.builtin.file:
+    path: /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+    mode: "0644"
+
+- name: Reject disabled cleanup with an unauthenticated provenance marker
+  block:
+    - name: Disable provenance with an unauthenticated marker
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_inference_provenance: false
+
+    - name: Fail if unauthenticated provenance cleanup was accepted
+      ansible.builtin.fail:
+        msg: Disabled cleanup must authenticate provenance before deletion.
+  rescue:
+    - name: Assert disabled cleanup failed at marker authentication
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Authenticate inference provenance plugin state marker'
+
+- name: Inspect provenance artifacts after rejected disabled cleanup
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /var/lib/hermes-agent/plugins/renamed-provenance-fixture/plugin.yaml
+    - /var/lib/hermes-agent/plugins/renamed-provenance-fixture/__init__.py
+    - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+  register: hermes_agent_essential_rejected_cleanup_artifacts
+
+- name: Assert rejected disabled cleanup preserved managed artifacts
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_rejected_cleanup_artifacts.results |
+        rejectattr('stat.exists') | list | length == 0
+      - hermes_agent_essential_rejected_cleanup_artifacts.results[2].stat.mode == '0644'

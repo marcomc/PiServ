@@ -2,13 +2,76 @@
 
 ## Current
 
+- [ ] **Validate automatic total-internet-outage recovery**
+  - Assessment: PiServ's watchdog is configured to recover its locally
+    configured NetworkManager profile and to request a cold reboot after 15
+    minutes only when normal routing and every IPv4 default-route interface
+    fail to reach either public probe. Its healthy-path deployment can be
+    verified without risk; the actual outage path needs an approved alternate
+    access route.
+  - Actions:
+    - With alternate access available, prove that a Wi-Fi-only outage does not
+      reboot the host while another interface reaches a public probe.
+    - Prove one controlled total-outage reboot, then validate Wi-Fi recovery,
+      SSH, storage mounts, and the watchdog journal after the next boot.
+
+- [ ] **Implement scheduled RTC wake-up**
+  - Assessment: Raspberry Pi 5 provides `rtc0` through its built-in `rpi-rtc`.
+    With continuous USB-C power, an RTC alarm can wake PiServ from a low-power
+    halt at a scheduled time; this must not be confused with recovery after an
+    external power loss.
+  - Actions:
+    - Add a managed, backed-up, and reversible EEPROM configuration for RTC
+      wake-up, including `POWER_OFF_ON_HALT=1`.
+    - Implement a systemd service and timer that sets `rtc0/wakealarm`, then
+      performs a clean halt at the configured schedule.
+    - Prove a short, operator-approved wake-up cycle before enabling a daily
+      schedule; verify boot, SSH, storage mounts, and scheduled services.
+    - Document the continuous-power requirement and recommend an RTC battery
+      where time must survive a complete USB-C power loss.
+
 - Track upstream `Oefenweb/ansible-ufw` PR #54 and replace the fork commit pin
   with an upstream release after the change is merged and published.
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
+- [ ] Validate the managed shutdown email notification path and confirm that a planned
+  `sudo systemctl reboot` sends a message with the command, requesting user,
+  and UTC request time before the network is stopped.
+- [ ] Reinstate Hermes Agent role CI in the dedicated standalone role repository,
+  and keep the role local workflow intentionally disabled in PiServ until that
+  repository owns the long-term CI matrix.
+- [ ] Add a CI target that executes the dedicated `wifi_watchdog` test harness
+  (`ansible/roles/wifi_watchdog/tests/test-watchdog.sh`) so it is enforced during
+  merges and does not regress in isolation.
+- [ ] Extend Hermes/cleanup regression coverage to assert side-effect boundaries
+  (for example, daemon-reload and override teardown in the mock harness) before
+  collapsing them back to no-op coverage.
 
 ## Propositions
+
+- [ ] **Automate ASM246X USB 3 link recovery before mount**
+  - Priority: **High**
+  - Assessment: The external ASM246X bridge can enumerate on the same physical
+    Raspberry Pi USB 3 port at either `5000` or `480` Mbps. A bounded pre-mount
+    gate can attempt one logical xHCI recovery without touching a mounted
+    filesystem, then preserve availability by allowing a clearly reported
+    degraded mount if the link remains at `480` Mbps.
+  - Plan: [External SSD USB link recovery](docs/tracks/external-storage-usb-link-recovery.md)
+  - Actions:
+    - [ ] Implement a read-only link and device-identity classifier that runs
+      after USB enumeration but before filesystem checks or mounting.
+    - [ ] Implement one bounded, lock-protected recovery attempt with controller
+      isolation, identity revalidation, timeouts, and bind restoration.
+    - [ ] Gate both `systemd-fsck` and `/mnt/external-data` mounting on the
+      preflight result while retaining the existing absent-disk `nofail` path.
+    - [ ] Mount the verified device at `480` Mbps with a persistent warning when
+      recovery fails or is refused for safety; block mounting on identity or
+      layout mismatch.
+    - [ ] Codify the helper, systemd ordering, policy variables, and disable path
+      in Ansible without resetting USB during normal convergence or check mode.
+    - [ ] Complete the validation matrix and staged live rollout, then update
+      Decision 0017, the external-storage runbook, changelog, and this task.
 
 - [ ] **Build Apple Home-compatible Python camera streaming service**
   - Assessment: A small Python stream service can expose the camera as MJPEG,
@@ -38,21 +101,79 @@
     - Package the app as a systemd service and codify deployment in Ansible.
     - Document operator workflows in a runbook.
 
-- [ ] **Set up Hermes AI agent for Home Assistant integration**
-  - Assessment: Hermes should be treated as a local-network service first, with
-    explicit network exposure, authentication, and Home Assistant integration
-    boundaries before it controls or observes home automations.
+- [ ] **Complete Hermes Agent provider and capability integration**
+  - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
+    dashboard, authenticated LAN/Tailnet access, persistent state, daily backup,
+    and Ansible deployment are live.
+    Codex authentication and isolated state/provider-transport persistence
+    validation are complete; external capabilities remain incomplete.
+  - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Identify the Hermes runtime, deployment model, and hardware requirements
-      suitable for PiServ.
-    - Decide whether Hermes should run directly on PiServ or as an isolated
-      service with a dedicated system user and systemd unit.
-    - Define the Home Assistant connection method for an instance on the same
-      network, including API endpoint, token storage, and allowed capabilities.
-    - Document firewall, Tailscale, and local-network access expectations before
-      exposing the service.
-    - Codify the final install, configuration, and service health checks in
-      Ansible after live validation.
+    - Pin the next Hermes upstream release that upgrades transitive `undici` to
+      `6.28.0` or newer, then repeat the production dependency audit.
+
+- [ ] **Connect Hermes to Omar Shahine's HomeClaw MCP through SSH**
+  - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)
+  - Use an authenticated SSH session from PiServ to run the HomeClaw MCP
+    adapter as a stdio child while the HomeClaw macOS app is already running.
+  - Keep the remote command and tool set explicitly allowlisted; do not expose
+    an unrestricted shell to Hermes.
+  - Validate read-only discovery first, then require confirmation and audit
+    evidence for HomeKit writes and configuration changes.
+
+- [ ] **Expose Omar Shahine's HomeClaw MCP through Supergateway on the Tailnet**
+  - Proposal: [HomeClaw MCP with Supergateway](docs/tracks/homeclaw-mcp-supergateway.md)
+  - Have an operator start a Supergateway relay on the Mac that converts the
+    HomeClaw stdio MCP server to Streamable HTTP for PiServ.
+  - Bind the relay to the Tailnet path only and add authentication, Tailscale
+    ACLs, tool filtering, and write-operation auditing before enabling it.
+  - Validate relay restart, Mac sleep/unavailability, read-only discovery, and
+    confirmed HomeKit writes.
+
+- [ ] **Define service-level cgroup v2 memory policy**
+  - Assessment: Enabling the memory controller only makes memory accounting,
+    pressure signals, and enforcement available. PiServ needs evidence-based
+    policies for Hermes, local model servers, Docker workloads, and core
+    services before `MemoryHigh`, `MemoryMax`, or swap limits are applied.
+  - Actions:
+    - After the controller is active, record baseline `memory.current`,
+      `memory.events`, memory pressure, and restart behavior for each managed
+      service under representative load.
+    - Classify services into protected core services, bounded workloads, and
+      burstable workloads; document the proposed `MemoryHigh`, `MemoryMax`,
+      `MemorySwapMax`, and any required systemd slice hierarchy.
+    - Implement approved systemd unit drop-ins and Docker/container limits in
+      their owning Ansible roles, retaining `LimitAS` only where it remains a
+      justified complementary guard.
+    - Validate limit enforcement, OOM behavior, recovery, and continued SSH
+      reachability before applying policies to additional services.
+
+- [ ] **Instrument local-model freeze diagnostics**
+  - Assessment: The 64K Llama full-provider proof ended with an unclean host
+    stop while the model processed the Hermes prompt. Persistent PiServ logs
+    contained no OOM, NVMe, PCIe, thermal, undervoltage, or kernel-panic record;
+    the internal NVMe SMART log is healthy. A controlled retry needs independent
+    controller-side telemetry to distinguish CPU or memory starvation, NVMe I/O
+    faults, and a selective network failure from a complete host freeze.
+  - Actions:
+    - Create a controller-side monitor that writes timestamped reachability
+      samples to the MacBook: ICMP, bounded SSH command, and dashboard HTTP
+      health, without relying on `PiServ.local` mDNS.
+    - Create a bounded PiServ-side collector with durable samples for cgroup
+      `memory.current`, `memory.events`, `memory.swap.current`, PSI memory and
+      I/O pressure, host RAM and swap, CPU load, temperature, `get_throttled`,
+      NVMe `/proc/diskstats`, and service PID RSS.
+    - Synchronize both clocks and record boot ID, kernel version, model unit
+      limits, and test start and stop markers so post-reboot evidence can be
+      correlated without assuming journal timestamps survived the failure.
+    - Run one loopback-only, cgroup-contained local-model proof with the
+      collector enabled and no concurrent model service; stop immediately on
+      memory-limit events, sustained pressure, or lost controller-side health.
+    - After any interruption, collect prior-boot journal, SMART and PCIe/NVMe
+      errors, filesystem recovery records, watchdog evidence, and both telemetry
+      logs before attempting another model run.
+    - Document the result and only reconsider a local default provider after a
+      complete proof, clean cleanup, and sustained SSH/dashboard availability.
 
 - [ ] **Evaluate and deploy Google Drive access and synchronization**
   - Assessment: Google Drive for Desktop is unavailable on Linux. `rclone`

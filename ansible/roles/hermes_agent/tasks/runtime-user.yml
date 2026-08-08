@@ -1,0 +1,371 @@
+---
+- name: Assert Hermes Agent runtime identity names are unprivileged
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_user != 'root'
+      - hermes_agent_group != 'root'
+      - hermes_agent_home is match('^/')
+      - hermes_agent_home not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - hermes_agent_install_dir is match('^/')
+      - hermes_agent_install_dir not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - hermes_agent_installer_path is match('^/')
+      - hermes_agent_codex_home is match('^/')
+      - hermes_agent_expected_repo_origin | length > 0
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Resolve Hermes Agent managed paths through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_install_dir }}"
+    - "{{ hermes_agent_installer_path }}"
+    - "{{ hermes_agent_codex_home }}"
+  register: hermes_agent_resolved_managed_paths
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Require canonical dedicated Hermes Agent managed paths
+  ansible.builtin.assert:
+    that:
+      - item.stdout == item.item
+      - item.stdout not in ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+    fail_msg: >-
+      {{ item.item }} must be a canonical dedicated path without symlinked-parent
+      aliases or a system root/ancestor.
+  loop: "{{ hermes_agent_resolved_managed_paths.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Reject shared temporary Hermes installer paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_resolved_managed_paths.results[2].stdout
+        | default(hermes_agent_installer_path)
+        is not match('^/(tmp|var/tmp)(/|$)')
+    fail_msg: >-
+      hermes_agent_installer_path must not be staged beneath a shared temporary
+      directory. Canonical path:
+      {{ hermes_agent_resolved_managed_paths.results[2].stdout |
+      default(hermes_agent_installer_path) }}.
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes installer parent directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_installer_path | dirname }}"
+    follow: false
+  register: hermes_agent_installer_parent_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Require a safe Hermes installer parent directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_installer_parent_state.stat.exists or
+        (hermes_agent_installer_parent_state.stat.isdir and
+        not hermes_agent_installer_parent_state.stat.islnk and
+        hermes_agent_installer_parent_state.stat.pw_name == 'root' and
+        hermes_agent_installer_parent_state.stat.gr_name == 'root' and
+        hermes_agent_installer_parent_state.stat.mode is match('^0?[0-7][0-5][0-5]$'))
+    fail_msg: >-
+      An existing Hermes installer parent must be a root-owned directory that
+      is not writable by its group or other users.
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes Agent persistent state root
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}"
+    follow: false
+  register: hermes_agent_home_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes Agent Codex state root
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_home }}"
+    follow: false
+  register: hermes_agent_codex_home_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Read existing Hermes Agent runtime account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_agent_user }}"
+    fail_key: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Read existing Hermes Agent runtime group
+  ansible.builtin.getent:
+    database: group
+    key: "{{ hermes_agent_group }}"
+    fail_key: false
+  register: hermes_agent_existing_group
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Read configured Hermes Agent backup group
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/getent
+      - group
+      - "{{ hermes_agent_backup_group }}"
+  register: hermes_agent_backup_group_lookup
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_manage_backup
+
+- name: Require an existing Hermes Agent backup group
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_backup_group_lookup.rc == 0
+    fail_msg: >-
+      hermes_agent_backup_group must identify an existing group before package
+      or runtime-identity mutation.
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_manage_backup
+
+- name: Inspect Hermes Agent install root
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}"
+    follow: false
+  register: hermes_agent_install_root_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Inspect Hermes Agent install provenance
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/.git"
+    follow: false
+  register: hermes_agent_install_provenance_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Read existing Hermes Agent checkout origin
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - config
+      - --get
+      - remote.origin.url
+  register: hermes_agent_existing_checkout_origin
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Require expected Hermes Agent checkout origin
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_existing_checkout_origin.rc == 0
+      - >-
+        hermes_agent_existing_checkout_origin.stdout ==
+        hermes_agent_expected_repo_origin
+    fail_msg: >-
+      An existing Hermes checkout must have the exact configured upstream
+      origin before the role can mutate host state. Found
+      {{ hermes_agent_existing_checkout_origin.stdout | default('unreadable') | to_json }},
+      expected {{ hermes_agent_expected_repo_origin | to_json }}.
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Verify existing Hermes Agent tracked checkout content
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - diff
+      - --quiet
+      - --ignore-submodules
+      - --
+      - .
+      - ':(exclude).lazy-refresh-incomplete'
+  register: hermes_agent_existing_checkout_content
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Verify existing Hermes Agent staged checkout content
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - diff
+      - --cached
+      - --quiet
+      - --ignore-submodules
+      - --
+      - .
+      - ':(exclude).lazy-refresh-incomplete'
+  register: hermes_agent_existing_checkout_index_content
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Verify existing Hermes Agent tracked checkout ownership
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import os
+        import subprocess
+        import sys
+
+        checkout = sys.argv[1]
+        lazy_marker = '.lazy-refresh-incomplete'
+        entries = subprocess.check_output(
+            ['/usr/bin/git', '-C', checkout, 'ls-files', '-s', '-z']
+        ).split(b'\0')
+        for entry in filter(None, entries):
+            mode, _, path = entry.split(b' ', 2)
+            _, path = path.split(b'\t', 1)
+            path = path.decode()
+            if path == lazy_marker:
+                continue
+            state = os.lstat(os.path.join(checkout, path))
+            if state.st_uid != 0 or state.st_gid != 0:
+                raise SystemExit(1)
+            if (state.st_mode & 0o777) != (int(mode[-3:], 8)):
+                raise SystemExit(1)
+      - "{{ hermes_agent_install_dir }}"
+  register: hermes_agent_existing_checkout_ownership
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Require pristine root-owned existing Hermes Agent checkout
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_existing_checkout_content.rc == 0
+      - hermes_agent_existing_checkout_index_content.rc == 0
+      - hermes_agent_existing_checkout_ownership.rc == 0
+    fail_msg: >-
+      Existing Hermes checkout tracked content and ownership must be pristine
+      and root-owned before the role can mutate host state. The intentionally
+      removed upstream .lazy-refresh-incomplete marker is excluded.
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_install_provenance_state.stat.exists
+
+- name: Require compatible existing Hermes Agent identity and roots
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group) is none or
+        (ansible_facts.getent_group[hermes_agent_group][1] | int) > 0
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user) is none or
+        ((ansible_facts.getent_passwd[hermes_agent_user][1] | int) > 0 and
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group) is not none and
+        ansible_facts.getent_passwd[hermes_agent_user][2] ==
+        ansible_facts.getent_group[hermes_agent_group][1] and
+        ansible_facts.getent_passwd[hermes_agent_user][4] == hermes_agent_home and
+        ansible_facts.getent_passwd[hermes_agent_user][5] == '/usr/sbin/nologin')
+      - >-
+        not hermes_agent_home_state.stat.exists or
+        (hermes_agent_home_state.stat.isdir and
+        not hermes_agent_home_state.stat.islnk and
+        hermes_agent_home_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_home_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_home_state.stat.mode == '0700')
+      - >-
+        hermes_agent_resolved_managed_paths.results[3].stdout ==
+        hermes_agent_codex_home
+      - >-
+        hermes_agent_resolved_managed_paths.results[3].stdout not in
+        ['/', '/tmp', '/var', '/var/lib', '/usr', '/usr/local', '/etc',
+        '/run', '/home', '/opt']
+      - >-
+        not hermes_agent_codex_home_state.stat.exists or
+        (hermes_agent_codex_home_state.stat.isdir and
+        not hermes_agent_codex_home_state.stat.islnk and
+        hermes_agent_codex_home_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_codex_home_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_codex_home_state.stat.mode == '0700')
+      - >-
+        not hermes_agent_install_root_state.stat.exists or
+        (hermes_agent_install_root_state.stat.isdir and
+        not hermes_agent_install_root_state.stat.islnk and
+        hermes_agent_install_root_state.stat.pw_name == 'root' and
+        hermes_agent_install_root_state.stat.gr_name == 'root' and
+        hermes_agent_install_provenance_state.stat.exists and
+        hermes_agent_install_provenance_state.stat.isdir and
+        not hermes_agent_install_provenance_state.stat.islnk and
+        hermes_agent_install_provenance_state.stat.pw_name == 'root' and
+        hermes_agent_install_provenance_state.stat.gr_name == 'root')
+    fail_msg: >-
+      Existing Hermes Agent identities and persistent roots must be dedicated,
+      unprivileged, compatible, and positively identified before mutation.
+  when: hermes_agent_runtime_user_phase == 'preflight'
+
+- name: Create Hermes Agent system group
+  ansible.builtin.group:
+    name: "{{ hermes_agent_group }}"
+    system: true
+    state: present
+  when: hermes_agent_runtime_user_phase == 'mutate'
+
+- name: Create Hermes Agent system user
+  ansible.builtin.user:
+    name: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    groups: >-
+      {{ [hermes_agent_backup_group]
+      if hermes_agent_manage_backup else [] }}
+    append: false
+    home: "{{ hermes_agent_home }}"
+    create_home: true
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+  when: hermes_agent_runtime_user_phase == 'mutate'
+
+- name: Read configured Hermes Agent runtime account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_agent_user }}"
+    fail_key: false
+  check_mode: false
+  when: hermes_agent_runtime_user_phase == 'mutate'
+
+- name: Record whether the Hermes runtime account is available
+  ansible.builtin.set_fact:
+    hermes_agent_runtime_user_available: >-
+      {{
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)
+        is not none
+      }}
+  when: hermes_agent_runtime_user_phase == 'mutate'

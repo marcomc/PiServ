@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: wifi_watchdog
+  author: Marco Massari Calderone <marco@marcomc.com>
+  description: Monitor NetworkManager Wi-Fi connectivity and recover it progressively on systemd hosts.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - wifi
+    - networkmanager
+    - networking
+    - watchdog
+    - systemd
+    - debian
+dependencies: []

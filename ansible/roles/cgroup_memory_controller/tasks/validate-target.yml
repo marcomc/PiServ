@@ -1,0 +1,9 @@
+---
+- name: Require a supported Debian-family target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Debian'
+    fail_msg: >-
+      The cgroup_memory_controller role supports Debian-family hosts only.
+      Detected operating system family:
+      {{ ansible_facts.os_family | default('unknown') }}.

@@ -1,0 +1,31 @@
+---
+- name: Inspect desired local-model service units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/hermes-local-model-{{ item.id }}.service"
+    follow: false
+    checksum_algorithm: sha256
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+  register: hermes_agent_local_model_desired_unit_state
+  changed_when: false
+  check_mode: false
+
+- name: Require recognized desired local-model service units
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.item.id in hermes_agent_local_models_managed_state_data.units and
+        item.stat.isreg and not item.stat.islnk and
+        item.stat.pw_name == 'root' and item.stat.gr_name == 'root' and
+        item.stat.mode == '0644' and
+        item.stat.checksum ==
+        hermes_agent_local_models_managed_state_data.units[item.item.id])
+    fail_msg: >-
+      {{ item.item.id }} already has an unrecognized or modified service unit.
+      Preserve it for operator review; remove or adopt it explicitly before
+      this role can manage that model ID.
+  loop: "{{ hermes_agent_local_model_desired_unit_state.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"

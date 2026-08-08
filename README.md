@@ -150,6 +150,8 @@ Active implementation tracks:
 | --- | --- |
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 | [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
+| [Wi-Fi connectivity watchdog](docs/runbooks/wifi-connectivity-watchdog.md) | Recover Wi-Fi after access-point or mesh outages |
+| [Hermes Agent](docs/tracks/hermes-agent-framework-research.md) | Run the persistent agent with Codex and bounded capabilities |
 
 ## Automation
 
@@ -171,9 +173,10 @@ bypass safety ordering. It passes safe full-run options such as `--check`,
 of the full entrypoint is an unsupported bypass. The entry point first
 preflights external storage without mutation, then imports the steady-state
 configuration playbooks in dependency order: Tailscale, firewall, base host
-policy, external storage, Freenove, pCloud, Home Assistant MQTT Agent, Jackett,
-and RaiPlaySound. It is designed to be rerun; a converged second run should
-report `changed=0` apart from live state that has drifted.
+policy, Wi-Fi connectivity watchdog, external storage, Freenove, pCloud, Home
+Assistant MQTT Agent, Hermes Agent, Jackett, and RaiPlaySound. It is designed
+to be rerun; a converged second run should report `changed=0` apart from live
+state that has drifted.
 
 The NVMe migration playbook is intentionally excluded because it is destructive
 and one-time. The pCloud health-check playbook is also separate because it is
@@ -193,14 +196,32 @@ then manages SSH root-login and password-auth policy, keeps VNC aligned with
 touchscreen output `DSI-1`, exposes the Cockpit HTTPS console on port `9090`,
 provides an authenticated Glances API to the LAN and Home Assistant, disables
 unneeded CUPS, `rpcbind`, and NFS helper units, enables unattended upgrades,
-and disables cloud-init. PiServ uses `msmtp` with operator-managed
+activates the managed cold-reset policy, and disables cloud-init. The cold-reset
+policy validates its private rollback backup and activates the current kernel
+mode without rebooting the host. PiServ uses `msmtp` with operator-managed
 `/etc/msmtprc` and `/etc/aliases` files because they contain SMTP credentials
 and local delivery policy. The reusable `journald` role receives PiServ's
-persistent, bounded journal policy from this consumer playbook. Boot
-notifications are skipped until `/etc/msmtprc` exists and is non-empty.
+persistent, bounded journal policy from this consumer playbook. Boot and
+shutdown notifications are skipped until `/etc/msmtprc` exists and is
+non-empty. The shutdown message is sent before the network is stopped and
+reports an authenticated `sudo` command, user, and timestamp only when that
+record appears within five seconds before an authenticated `systemd-logind`
+shutdown event that is itself observed within five seconds of helper execution.
+This is correlation, not proof of causation.
 Unattended upgrades send a mobile-readable routine digest with package version
 transitions; full logs remain on PiServ and native error alerts remain enabled
 as a fallback.
+
+For narrow Wi-Fi watchdog maintenance or recovery, run its dedicated playbook:
+
+```sh
+ansible-playbook ansible/playbooks/wifi-watchdog.yml
+```
+
+The watchdog checks Wi-Fi link state, default-gateway reachability, and DNS.
+It lets NetworkManager select any suitable saved Wi-Fi profile during recovery,
+then escalates to a NetworkManager restart. Automatic host reboot is disabled
+by default.
 
 Configure the Freenove FNK0100K post-OS setup:
 
@@ -213,7 +234,9 @@ official Freenove code from the controller-managed local vendor copy into
 `/opt/freenove/Freenove_Computer_Case_Kit_for_Raspberry_Pi`, creates desktop
 launchers, enables the Freenove background service, manages `Code/app_config.json`
 for LED/fan/OLED startup behavior, and validates Python imports/source syntax.
-It reboots only when the I2C firmware setting changes.
+It renders a SIGTERM-safe runtime task manager without modifying the pinned
+upstream copy. It reboots only when the I2C firmware setting changes and first
+verifies that the active kernel mode is `cold`.
 
 Install the pCloud console client:
 

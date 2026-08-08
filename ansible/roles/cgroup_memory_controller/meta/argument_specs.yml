@@ -1,0 +1,80 @@
+---
+argument_specs:
+  main:
+    short_description: Enable the cgroup v2 memory controller with a managed Device Tree.
+    description:
+      - Builds and validates a managed Device Tree that removes one vendor boot argument.
+      - Supports explicit rollback without changing the vendor Device Tree Blob.
+    options:
+      cgroup_memory_controller_manage:
+        type: bool
+        default: true
+        description: Whether to manage the cgroup v2 memory-controller boot policy.
+      cgroup_memory_controller_enabled:
+        type: bool
+        default: true
+        description: Whether the managed Device Tree should enable the memory controller.
+      cgroup_memory_controller_require_runtime:
+        type: bool
+        default: false
+        description: Whether to require active cgroup and optional systemd-service validation.
+      cgroup_memory_controller_packages:
+        type: list
+        elements: str
+        description: Packages required to generate and validate the managed Device Tree.
+      cgroup_memory_controller_vendor_dtb:
+        type: path
+        required: true
+        description: Vendor Device Tree Blob used as the managed copy source.
+      cgroup_memory_controller_config_path:
+        type: path
+        default: /boot/firmware/config.txt
+        description: Firmware configuration file that selects the managed Device Tree.
+      cgroup_memory_controller_managed_dtb_path:
+        type: path
+        default: /boot/firmware/ansible-cgroup-memory.dtb
+        description: Destination path for the managed Device Tree.
+      cgroup_memory_controller_disabled_argument:
+        type: str
+        default: cgroup_disable=memory
+        description: Exact vendor boot argument removed from the managed Device Tree.
+      cgroup_memory_controller_helper_path:
+        type: path
+        default: /usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb
+        description: Root-owned helper that validates and generates the managed Device Tree.
+      cgroup_memory_controller_kernel_hook_path:
+        type: path
+        default: /etc/kernel/postinst.d/zz-ansible-cgroup-memory-controller
+        description: Kernel hook that refreshes the managed copy after a vendor DTB update.
+      cgroup_memory_controller_kernel_refresh_dependency_path:
+        type: path
+        default: ""
+        description: Optional earlier kernel hook that refreshes the vendor DTB.
+      cgroup_memory_controller_reboot_mode_path:
+        type: path
+        default: ""
+        description: Optional active reboot-mode control checked before refresh.
+      cgroup_memory_controller_required_reboot_mode:
+        type: str
+        default: ""
+        description: Required value of the optional active reboot-mode control.
+      cgroup_memory_controller_backup_dir:
+        type: path
+        default: /var/lib/cgroup-memory-controller
+        description: Root-only directory retaining initial boot artifacts and source state.
+      cgroup_memory_controller_config_backup_filename:
+        type: str
+        default: config.before-cgroup-memory-controller
+        description: Basename used for the initial firmware configuration backup.
+      cgroup_memory_controller_vendor_dtb_backup_filename:
+        type: str
+        default: vendor.dtb.before-cgroup-memory-controller
+        description: Basename used for the initial vendor DTB backup.
+      cgroup_memory_controller_config_marker:
+        type: str
+        default: "ANSIBLE MANAGED: cgroup v2 memory controller"
+        description: Marker text for the managed firmware configuration block.
+      cgroup_memory_controller_runtime_systemd_service:
+        type: str
+        default: ""
+        description: Optional systemd service whose cgroup must expose memory.events.

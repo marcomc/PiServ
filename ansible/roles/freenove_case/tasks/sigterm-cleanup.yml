@@ -1,0 +1,37 @@
+---
+- name: Inspect the upstream Freenove task manager
+  when: freenove_case_manage_sigterm_cleanup_fix | bool
+  ansible.builtin.stat:
+    path: "{{ freenove_case_task_manager_path }}"
+    follow: false
+  register: freenove_case_task_manager_stat
+  become: true
+  become_user: "{{ freenove_case_install_user }}"
+  check_mode: false
+
+- name: Require a non-symlink Freenove task manager source
+  when: freenove_case_manage_sigterm_cleanup_fix | bool
+  ansible.builtin.assert:
+    that:
+      - freenove_case_task_manager_stat.stat.exists
+      - freenove_case_task_manager_stat.stat.isreg
+      - not freenove_case_task_manager_stat.stat.islnk
+    fail_msg: >-
+      The Freenove task manager source must be an existing non-symlink regular
+      file: {{ freenove_case_task_manager_path }}.
+
+- name: Render the managed Freenove SIGTERM-safe task manager
+  when: freenove_case_manage_sigterm_cleanup_fix | bool
+  ansible.builtin.script:
+    cmd: >-
+      {{ role_path | default(playbook_dir ~ '/..') }}/files/render_task_manager.py
+      --source {{ freenove_case_task_manager_path | quote }}
+      --destination {{ freenove_case_task_manager_runtime_path | quote }}
+      {{ '--check' if ansible_check_mode else '' }}
+    executable: /usr/bin/python3
+  register: freenove_case_sigterm_render
+  changed_when: freenove_case_sigterm_render.stdout | trim == 'changed'
+  become: true
+  become_user: "{{ freenove_case_install_user }}"
+  check_mode: false
+  notify: Restart Freenove background service

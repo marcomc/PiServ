@@ -27,6 +27,14 @@
   when: base_manage_reboot_notification | bool
   ansible.builtin.include_tasks: reboot-notification.yml
 
+- name: Configure kernel reboot mode
+  when: base_manage_kernel_reboot_mode | bool
+  ansible.builtin.include_tasks: reboot-mode.yml
+
+- name: Configure base shutdown notification
+  when: base_manage_shutdown_notification | bool
+  ansible.builtin.include_tasks: shutdown-notification.yml
+
 - name: Install storage health tooling
   when: base_manage_smartmontools | bool
   ansible.builtin.include_tasks: smartmontools.yml

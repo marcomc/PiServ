@@ -1,0 +1,189 @@
+---
+hermes_agent_user: hermes-agent
+hermes_agent_group: hermes-agent
+hermes_agent_home: /var/lib/hermes-agent
+hermes_agent_install_dir: /usr/local/lib/hermes-agent
+hermes_agent_venv_state_file: >-
+  {{ hermes_agent_install_dir }}/.hermes-venv-managed.yml
+hermes_agent_expected_repo_origin: https://github.com/NousResearch/hermes-agent.git
+hermes_agent_binary_path: /usr/local/bin/hermes
+hermes_agent_repo_version: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
+hermes_agent_version: "0.20.0"
+hermes_agent_installer_url: >-
+  https://raw.githubusercontent.com/NousResearch/hermes-agent/{{
+  hermes_agent_repo_version }}/scripts/install.sh
+hermes_agent_installer_path: /usr/local/libexec/hermes-agent-installer
+hermes_agent_installer_checksum: >-
+  sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
+hermes_agent_uv_python_install_dir: /usr/local/share/uv/python
+hermes_agent_uv_python_bin_dir: /usr/local/share/uv/bin
+hermes_agent_supported_architectures:
+  - aarch64
+  - arm64
+hermes_agent_packages:
+  - build-essential
+  - ca-certificates
+  - curl
+  - git
+  - libffi-dev
+  - python3-dev
+  - ripgrep
+  - rsync
+hermes_agent_model: gpt-5.5
+hermes_agent_provider: openai-codex
+hermes_agent_fallback_providers: []
+hermes_agent_reasoning_effort: medium
+hermes_agent_reasoning_overrides: {}
+hermes_agent_model_aliases: {}
+hermes_agent_manage_inference_provenance: false
+hermes_agent_inference_provenance_plugin_name: inference-provenance
+hermes_agent_inference_provenance_label: Codex
+hermes_agent_inference_provenance_default_models: []
+hermes_agent_inference_provenance_fallback_models: []
+hermes_agent_manage_home_assistant_mcp: false
+hermes_agent_home_assistant_mcp_name: home-assistant-assist
+hermes_agent_home_assistant_mcp_url: ""
+hermes_agent_home_assistant_mcp_token_env_file: >-
+  {{ hermes_agent_home }}/home-assistant-mcp.env
+hermes_agent_home_assistant_mcp_token_env_var: HASS_MCP_TOKEN
+hermes_agent_home_assistant_mcp_timeout: 30
+hermes_agent_home_assistant_mcp_connect_timeout: 15
+hermes_agent_enabled_toolsets:
+  - memory
+  - skills
+hermes_agent_disabled_toolsets:
+  - browser
+  - clarify
+  - code_execution
+  - computer_use
+  - context_engine
+  - cronjob
+  - delegation
+  - discord
+  - discord_admin
+  - feishu_doc
+  - feishu_drive
+  - file
+  - homeassistant
+  - image_gen
+  - kanban
+  - project
+  - search
+  - session_search
+  - spotify
+  - stt
+  - terminal
+  - todo
+  - tts
+  - video
+  - video_gen
+  - vision
+  - web
+  - x_search
+  - yuanbao
+hermes_agent_dashboard_host: 127.0.0.1
+hermes_agent_dashboard_port: 9119
+hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
+hermes_agent_dashboard_service_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+hermes_agent_manage_dashboard: true
+hermes_agent_manage_dashboard_chat: false
+hermes_agent_dashboard_tui_runtime_dir: /usr/local/lib/hermes-agent-runtime/tui
+hermes_agent_dashboard_tui_runtime_revision_file: >-
+  {{ hermes_agent_dashboard_tui_runtime_dir }}/.hermes-revision
+hermes_agent_dashboard_tui_runtime_manifest_file: >-
+  {{ hermes_agent_dashboard_tui_runtime_dir }}/.hermes-managed-state.yml
+hermes_agent_dashboard_manage_basic_auth: false
+hermes_agent_dashboard_basic_auth_username: ""
+hermes_agent_dashboard_basic_auth_state_file: >-
+  {{ hermes_agent_home }}/dashboard-basic-auth.yaml
+hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+  /root/hermes-agent-dashboard-bootstrap-password
+hermes_agent_dashboard_basic_auth_session_ttl_seconds: 43200
+hermes_agent_dashboard_rotate_basic_auth: false
+hermes_agent_codex_version: "0.145.0"
+hermes_agent_download_cache_dir: /var/cache/hermes-agent
+hermes_agent_codex_archive_url: >-
+  https://github.com/openai/codex/releases/download/rust-v{{
+  hermes_agent_codex_version }}/codex-aarch64-unknown-linux-musl.tar.gz
+hermes_agent_codex_archive_checksum: >-
+  sha256:d384f90bc842450b42bd675feef06a12a46a3b1ca97efcb22566b270e4a11227
+hermes_agent_codex_archive_binary_name: codex-aarch64-unknown-linux-musl
+hermes_agent_codex_install_dir: >-
+  /usr/local/lib/codex/{{ hermes_agent_codex_version }}
+hermes_agent_codex_binary_path: /usr/local/bin/codex
+hermes_agent_codex_link_managed_state_file: >-
+  {{ hermes_agent_codex_binary_path }}.hermes-agent-managed.yml
+hermes_agent_codex_home: "{{ hermes_agent_home }}/codex"
+hermes_agent_manage_backup: false
+hermes_agent_backup_group: ""
+hermes_agent_backup_dir: /var/backups/hermes-agent
+hermes_agent_backup_service_name: hermes-agent-backup.service
+hermes_agent_backup_service_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+hermes_agent_backup_timer_name: hermes-agent-backup.timer
+hermes_agent_backup_timer_managed_state_file: >-
+  /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
+hermes_agent_backup_retention_days: 30
+hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
+hermes_agent_backup_timezone: UTC
+hermes_agent_backup_randomized_delay: 30m
+hermes_agent_manage_local_models: false
+hermes_agent_local_model_packages:
+  - aria2
+  - ca-certificates
+  - curl
+  - jq
+hermes_agent_local_model_runtime_version: b9637
+hermes_agent_local_model_runtime_archive_url: >-
+  https://github.com/ggml-org/llama.cpp/releases/download/{{
+  hermes_agent_local_model_runtime_version
+  }}/llama-{{ hermes_agent_local_model_runtime_version }}-bin-ubuntu-arm64.tar.gz
+hermes_agent_local_model_runtime_archive_checksum: >-
+  sha256:211d9e9ee738698beb7ca271be82661ae2b5da3fbb489cf7d9e4e6ed601be106
+hermes_agent_local_model_runtime_dir: >-
+  /usr/local/lib/llama.cpp/{{ hermes_agent_local_model_runtime_version }}
+hermes_agent_local_model_runtime_managed_state_file: >-
+  {{ hermes_agent_local_model_runtime_dir }}/.hermes-agent-managed.yml
+hermes_agent_local_model_llama_cli_path: /usr/local/bin/llama-cli
+hermes_agent_local_model_llama_server_path: /usr/local/bin/llama-server
+hermes_agent_local_model_llama_cli_managed_state_file: >-
+  {{ hermes_agent_local_model_llama_cli_path }}.hermes-agent-managed.yml
+hermes_agent_local_model_llama_server_managed_state_file: >-
+  {{ hermes_agent_local_model_llama_server_path }}.hermes-agent-managed.yml
+hermes_agent_local_models_dir: "{{ hermes_agent_home | dirname }}/hermes-models"
+hermes_agent_local_models_results_dir: >-
+  {{ hermes_agent_local_models_dir }}/benchmark-results
+hermes_agent_local_models_min_free_bytes: 10737418240
+hermes_agent_local_models_host: 127.0.0.1
+hermes_agent_local_models_context_size: 65536
+hermes_agent_local_models_threads: 3
+hermes_agent_local_models_benchmark_max_tokens: 128
+hermes_agent_local_models_benchmark_request_timeout: 120
+hermes_agent_local_models_cache_type_k: q4_0
+hermes_agent_local_models_cache_type_v: q4_0
+hermes_agent_local_models_address_space_limit: 4G
+hermes_agent_local_models_memory_high: 2500M
+hermes_agent_local_models_memory_max: 3200M
+hermes_agent_local_models_memory_swap_max: 512M
+hermes_agent_local_model_benchmark_helper_path: >-
+  /usr/local/libexec/hermes-agent/benchmark-local-model
+hermes_agent_local_models_managed_state_file: >-
+  /etc/systemd/system/hermes-local-models.managed.yml
+hermes_agent_local_models:
+  - id: gemma-4-e2b
+    display_name: Gemma 4 E2B text-only Q4_0
+    repository: ggml-org/gemma-4-E2B-it-GGUF
+    revision: b4243c156154b6dca9324415f8c7ccc098b4aed1
+    filename: gemma-4-E2B-it-Q4_0.gguf
+    sha256: 8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52
+    size_bytes: 2841481184
+    port: 18081
+  - id: granite-3-3-2b
+    display_name: Granite 3.3 2B Instruct Q4_K_M
+    repository: ibm-granite/granite-3.3-2b-instruct-GGUF
+    revision: 7cdf86ccd1f1bb3491c9b7017b033f2e51367397
+    filename: granite-3.3-2b-instruct-Q4_K_M.gguf
+    sha256: ac71e9e32c0bea919b409c5918f69ca74339854b0319c5065e4e9fb6d95c4852
+    size_bytes: 1545303328
+    port: 18082

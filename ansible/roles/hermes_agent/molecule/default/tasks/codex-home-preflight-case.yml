@@ -1,0 +1,22 @@
+---
+- name: Reject unsafe Codex home fixture case
+  block:
+    - name: Preflight unsafe Codex home path
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+      vars:
+        hermes_agent_runtime_user_phase: preflight
+        hermes_agent_codex_home: "{{ hermes_agent_molecule_codex_home_case }}"
+
+    - name: Fail if unsafe Codex home path was accepted
+      ansible.builtin.fail:
+        msg: Unsafe Codex home paths must fail preflight.
+  rescue:
+    - name: Assert unsafe Codex home failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name in [
+              'Require canonical dedicated Hermes Agent managed paths',
+              'Require compatible existing Hermes Agent identity and roots'
+            ]

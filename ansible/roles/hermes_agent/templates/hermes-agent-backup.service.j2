@@ -1,0 +1,29 @@
+# Managed by marcomc.hermes_agent
+[Unit]
+Description=Back up Hermes Agent state
+RequiresMountsFor={{ hermes_agent_backup_dir }}
+
+[Service]
+Type=oneshot
+User={{ hermes_agent_user }}
+Group={{ hermes_agent_group }}
+SupplementaryGroups={{ hermes_agent_backup_group }}
+Environment=HOME={{ hermes_agent_home }}
+Environment=HERMES_HOME={{ hermes_agent_home }}
+Environment=CODEX_HOME={{ hermes_agent_codex_home }}
+WorkingDirectory={{ hermes_agent_home }}
+ExecStart={{ hermes_agent_binary_path }} backup --output {{ hermes_agent_backup_dir }}
+ExecStartPost=/usr/bin/find {{ hermes_agent_backup_dir }} -type f -name hermes-backup-*.zip -mtime +{{ hermes_agent_backup_retention_days }} -delete
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ hermes_agent_home }} {{ hermes_agent_backup_dir }}
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+UMask=0077

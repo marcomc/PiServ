@@ -2,7 +2,7 @@
 galaxy_info:
   namespace: marcomc
   role_name: journald
-  author: Role maintainers
+  author: Marco Massari Calderone <marco@marcomc.com>
   description: Configure systemd-journald storage, retention, and disk-use policy on Debian-family hosts.
   license: MIT
   min_ansible_version: "2.15"

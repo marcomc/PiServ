@@ -1,0 +1,38 @@
+---
+# NOTE: The local role CI is intentionally disabled while Hermes Agent remains a
+# PiServ-local role. Test execution has been intentionally deferred to the
+# dedicated standalone role repository, which will host the full CI matrix.
+#
+# Re-enable this workflow once the role is published and maintained separately.
+name: Hermes Agent Role (disabled)
+
+"on":
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    if: false
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible/roles/hermes_agent
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Install Ansible dependencies
+        run: ansible-galaxy collection install -r molecule/default/collections.yml
+
+      - name: Lint role
+        run: ansible-lint .
+
+      - name: Run Molecule
+        run: molecule test -s essential

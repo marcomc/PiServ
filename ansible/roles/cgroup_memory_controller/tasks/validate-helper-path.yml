@@ -1,0 +1,64 @@
+---
+- name: Read cgroup memory-controller helper execution directories
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: /usr
+      required: true
+    - path: /usr/local
+      required: true
+    - path: /usr/local/libexec
+      required: false
+    - path: "{{ cgroup_memory_controller_helper_path | dirname }}"
+      required: false
+  register: cgroup_memory_controller_helper_directories
+  changed_when: false
+  become: true
+
+- name: Require safe cgroup memory-controller helper execution directories
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists or not item.item.required
+      - not item.stat.exists or (item.stat.isdir | default(false))
+      - not item.stat.exists or not (item.stat.islnk | default(false))
+      - not item.stat.exists or (item.stat.uid | default(-1)) == 0
+      - >-
+        not item.stat.exists
+        or (item.stat.mode | default('0000'))[-2] not in ['2', '3', '6', '7']
+      - >-
+        not item.stat.exists
+        or (item.stat.mode | default('0000'))[-1] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      {{ item.item.path }} must be a root-owned directory that is not writable
+      by its group or other users before executing or installing the
+      root-executed cgroup memory-controller helper. Mandatory ancestors must
+      already exist.
+  loop: "{{ cgroup_memory_controller_helper_directories.results }}"
+
+- name: Read existing cgroup memory-controller helper
+  ansible.builtin.stat:
+    path: "{{ cgroup_memory_controller_helper_path }}"
+    follow: false
+  register: cgroup_memory_controller_existing_helper
+  changed_when: false
+  become: true
+
+- name: Require a safe existing cgroup memory-controller helper
+  when: cgroup_memory_controller_existing_helper.stat.exists
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_existing_helper.stat.isreg | default(false)
+      - not (cgroup_memory_controller_existing_helper.stat.islnk | default(false))
+      - (cgroup_memory_controller_existing_helper.stat.uid | default(-1)) == 0
+      - >-
+        (cgroup_memory_controller_existing_helper.stat.mode | default('0000'))[-2]
+        not in ['2', '3', '6', '7']
+      - >-
+        (cgroup_memory_controller_existing_helper.stat.mode | default('0000'))[-1]
+        not in ['2', '3', '6', '7']
+      - cgroup_memory_controller_existing_helper.stat.executable | default(false)
+    fail_msg: >-
+      The existing root-executed cgroup memory-controller helper must be a
+      root-owned, executable regular file that is not writable by its group or
+      other users.

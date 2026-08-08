@@ -26,12 +26,14 @@ steady-state playbooks in this order:
 2. Tailscale
 3. Firewall
 4. Base host policy, including system mail
-5. External storage
-6. Freenove hardware
-7. pCloud installation
-8. Home Assistant MQTT Agent
-9. Jackett
-10. RaiPlaySound
+5. Wi-Fi connectivity watchdog
+6. External storage
+7. Freenove hardware
+8. pCloud installation
+9. Home Assistant MQTT Agent
+10. Hermes Agent
+11. Jackett
+12. RaiPlaySound
 
 The NVMe migration and pCloud health-check playbooks remain separate operator
 entry points. Individual configuration playbooks also remain available for

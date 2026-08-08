@@ -1,0 +1,22 @@
+---
+- name: Reject colliding unit-name topology fixture
+  block:
+    - name: Validate colliding unit-name topology
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+      vars:
+        hermes_agent_dashboard_service_name: >-
+          {{ hermes_agent_molecule_unit_topology.dashboard }}
+        hermes_agent_backup_service_name: >-
+          {{ hermes_agent_molecule_unit_topology.backup_service }}
+        hermes_agent_backup_timer_name: >-
+          {{ hermes_agent_molecule_unit_topology.backup_timer }}
+
+    - name: Fail if colliding unit-name topology was accepted
+      ansible.builtin.fail:
+        msg: Colliding unit names must fail target validation.
+  rescue:
+    - name: Assert colliding unit names failed target validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'

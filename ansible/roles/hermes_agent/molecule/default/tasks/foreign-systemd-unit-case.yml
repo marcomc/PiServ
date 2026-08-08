@@ -1,0 +1,52 @@
+---
+- name: Create foreign systemd unit target fixture
+  ansible.builtin.copy:
+    content: "foreign {{ hermes_agent_molecule_unit_case.name }}\n"
+    dest: "/etc/systemd/system/{{ hermes_agent_molecule_unit_case.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Reject foreign systemd unit target fixture
+  block:
+    - name: Validate foreign systemd unit target
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-systemd-unit-targets.yml
+      vars:
+        hermes_agent_dashboard_service_name: >-
+          {{ hermes_agent_molecule_unit_case.name
+          if hermes_agent_molecule_unit_case.kind == 'dashboard'
+          else 'hermes-fixture-safe-dashboard.service' }}
+        hermes_agent_backup_service_name: >-
+          {{ hermes_agent_molecule_unit_case.name
+          if hermes_agent_molecule_unit_case.kind == 'backup-service'
+          else 'hermes-fixture-safe-backup.service' }}
+        hermes_agent_backup_timer_name: >-
+          {{ hermes_agent_molecule_unit_case.name
+          if hermes_agent_molecule_unit_case.kind == 'backup-timer'
+          else 'hermes-fixture-safe-backup.timer' }}
+
+    - name: Fail if foreign systemd unit target was accepted
+      ansible.builtin.fail:
+        msg: Foreign systemd unit targets must fail preflight.
+  rescue:
+    - name: Assert foreign systemd unit failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require absent or role-marked Hermes Agent systemd unit targets'
+
+- name: Read foreign systemd unit target after rejection
+  ansible.builtin.slurp:
+    src: "/etc/systemd/system/{{ hermes_agent_molecule_unit_case.name }}"
+  register: hermes_agent_molecule_foreign_unit_content
+
+- name: Assert foreign systemd unit target is preserved exactly
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_foreign_unit_content.content | b64decode ==
+        'foreign ' ~ hermes_agent_molecule_unit_case.name ~ '\n'

@@ -4,10 +4,15 @@ from __future__ import annotations
 import platform
 import socket
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 
 RECIPIENT = {{ base_reboot_notification_recipient | to_json }}
 SUBJECT_PREFIX = {{ base_reboot_notification_subject_prefix | to_json }}
+RETRY_ATTEMPTS = {{ base_reboot_notification_retry_attempts | to_json }}
+RETRY_DELAY_SECONDS = {{ base_reboot_notification_retry_delay_seconds | to_json }}
+DELIVERY_TIMEOUT_SECONDS = {{ base_reboot_notification_delivery_timeout_seconds | to_json }}
+TEMPORARY_FAILURE_EXIT_CODE = 75
 
 
 def boot_time() -> str:
@@ -19,8 +24,28 @@ def boot_time() -> str:
     return booted_at.isoformat(timespec="seconds")
 
 
+def deliver(payload: str) -> None:
+    for attempt in range(RETRY_ATTEMPTS):
+        try:
+            subprocess.run(
+                ["/usr/sbin/sendmail", "-t"],
+                input=payload,
+                text=True,
+                check=True,
+                timeout=DELIVERY_TIMEOUT_SECONDS,
+            )
+            return
+        except subprocess.CalledProcessError as error:
+            if (
+                error.returncode != TEMPORARY_FAILURE_EXIT_CODE
+                or attempt == RETRY_ATTEMPTS - 1
+            ):
+                raise
+        time.sleep(RETRY_DELAY_SECONDS)
+
+
 def main() -> int:
-    hostname = socket.getfqdn() or socket.gethostname()
+    hostname = socket.gethostname()
     subject = f"{SUBJECT_PREFIX} booted: {hostname}"
     payload = "\n".join(
         [
@@ -33,7 +58,7 @@ def main() -> int:
             "",
         ]
     )
-    subprocess.run(["/usr/sbin/sendmail", "-t"], input=payload, text=True, check=True)
+    deliver(payload)
     return 0
 
 

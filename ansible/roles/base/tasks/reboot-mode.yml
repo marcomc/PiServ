@@ -1,0 +1,287 @@
+---
+- name: Validate kernel reboot-mode policy
+  ansible.builtin.assert:
+    that:
+      - base_kernel_reboot_mode in ['default', 'warm', 'cold']
+      - base_kernel_cmdline_path | length > 0
+      - base_kernel_cmdline_backup_path | length > 0
+      - base_kernel_cmdline_backup_path != base_kernel_cmdline_path
+      - base_kernel_reboot_runtime_mode_path | length > 0
+      - base_kernel_reboot_runtime_mode_path != base_kernel_cmdline_path
+      - base_kernel_reboot_runtime_mode_path != base_kernel_cmdline_backup_path
+    fail_msg: >-
+      Reboot mode must be default, warm, or cold, and all managed paths must be
+      non-empty with distinct command-line, backup, and runtime-control files.
+
+- name: Inspect the configured kernel command line
+  ansible.builtin.stat:
+    path: "{{ base_kernel_cmdline_path }}"
+    follow: false
+  register: base_kernel_cmdline_stat
+  become: true
+  check_mode: false
+
+- name: Require a regular kernel command-line file
+  ansible.builtin.assert:
+    that:
+      - base_kernel_cmdline_stat.stat.exists
+      - base_kernel_cmdline_stat.stat.isreg
+      - not base_kernel_cmdline_stat.stat.islnk
+    fail_msg: >-
+      {{ base_kernel_cmdline_path }} must be an existing non-symlink regular
+      file before reboot-mode policy is applied.
+
+- name: Validate the active kernel reboot-mode control before modifying boot configuration
+  block:
+    - name: Inspect the active kernel reboot-mode control
+      ansible.builtin.stat:
+        path: "{{ base_kernel_reboot_runtime_mode_path }}"
+        follow: false
+      register: base_kernel_reboot_runtime_stat
+      become: true
+      check_mode: false
+
+    - name: Require a distinct active kernel reboot-mode control
+      ansible.builtin.assert:
+        that:
+          - base_kernel_reboot_runtime_stat.stat.exists
+          - base_kernel_reboot_runtime_stat.stat.isreg
+          - not base_kernel_reboot_runtime_stat.stat.islnk
+          - base_kernel_reboot_runtime_stat.stat.uid == 0
+          - base_kernel_reboot_runtime_stat.stat.mode is match('^0?[0-7][0145][0145]$')
+          - >-
+            base_kernel_reboot_runtime_stat.stat.dev != base_kernel_cmdline_stat.stat.dev
+            or base_kernel_reboot_runtime_stat.stat.inode != base_kernel_cmdline_stat.stat.inode
+        fail_msg: >-
+          {{ base_kernel_reboot_runtime_mode_path }} must be a root-owned,
+          non-group/world-writable, non-symlink regular file distinct from
+          {{ base_kernel_cmdline_path }} before reboot-mode policy is applied.
+
+- name: Read the current kernel command line
+  ansible.builtin.slurp:
+    path: "{{ base_kernel_cmdline_path }}"
+  register: base_kernel_cmdline_slurp
+  become: true
+  check_mode: false
+
+- name: Derive the managed kernel command line
+  ansible.builtin.set_fact:
+    base_kernel_cmdline_original: "{{ base_kernel_cmdline_slurp.content | b64decode }}"
+    base_kernel_cmdline_original_tokens: >-
+      {{ (base_kernel_cmdline_slurp.content | b64decode | trim).split() }}
+
+- name: Require a non-empty single-line kernel command line
+  ansible.builtin.assert:
+    that:
+      - base_kernel_cmdline_original is match('^[^\r\n]+\r?\n?$')
+      - base_kernel_cmdline_original_tokens | length > 0
+      - not ('"' in base_kernel_cmdline_original)
+      - not ("'" in base_kernel_cmdline_original)
+    fail_msg: >-
+      {{ base_kernel_cmdline_path }} must contain exactly one non-empty physical
+      line with unquoted whitespace-separated tokens before reboot-mode policy
+      is applied.
+
+- name: Select the managed reboot-mode token
+  ansible.builtin.set_fact:
+    base_kernel_cmdline_managed_tokens: >-
+      {{
+        base_kernel_cmdline_original_tokens
+        | reject('match', '^reboot=')
+        | list
+        + (
+          ['reboot=' ~ {'warm': 'w', 'cold': 'c'}[base_kernel_reboot_mode]]
+          if base_kernel_reboot_mode != 'default'
+          else []
+        )
+      }}
+
+- name: Inspect the reboot-policy backup directory
+  ansible.builtin.stat:
+    path: "{{ base_kernel_cmdline_backup_path | dirname }}"
+    follow: false
+  register: base_kernel_cmdline_backup_dir_stat
+  become: true
+  check_mode: false
+
+- name: Validate the existing reboot-policy backup directory
+  when: base_kernel_cmdline_backup_dir_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - base_kernel_cmdline_backup_dir_stat.stat.isdir
+      - not base_kernel_cmdline_backup_dir_stat.stat.islnk
+      - base_kernel_cmdline_backup_dir_stat.stat.pw_name == base_kernel_cmdline_backup_owner
+      - base_kernel_cmdline_backup_dir_stat.stat.gr_name == base_kernel_cmdline_backup_group
+      - base_kernel_cmdline_backup_dir_stat.stat.mode == '0700'
+    fail_msg: >-
+      Existing backup parent {{ base_kernel_cmdline_backup_path | dirname }}
+      must be a private 0700 directory owned by
+      {{ base_kernel_cmdline_backup_owner }}:{{ base_kernel_cmdline_backup_group }}.
+
+- name: Create the private reboot-policy backup directory
+  when: not base_kernel_cmdline_backup_dir_stat.stat.exists
+  ansible.builtin.file:
+    path: "{{ base_kernel_cmdline_backup_path | dirname }}"
+    state: directory
+    owner: "{{ base_kernel_cmdline_backup_owner }}"
+    group: "{{ base_kernel_cmdline_backup_group }}"
+    mode: "0700"
+  become: true
+
+- name: Inspect the original kernel command-line backup
+  ansible.builtin.stat:
+    path: "{{ base_kernel_cmdline_backup_path }}"
+    follow: false
+  register: base_kernel_cmdline_backup_stat
+  become: true
+  check_mode: false
+
+- name: Validate the existing kernel command-line backup
+  when: base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - base_kernel_cmdline_backup_stat.stat.isreg
+      - not base_kernel_cmdline_backup_stat.stat.islnk
+      - base_kernel_cmdline_backup_stat.stat.pw_name == base_kernel_cmdline_backup_owner
+      - base_kernel_cmdline_backup_stat.stat.gr_name == base_kernel_cmdline_backup_group
+      - base_kernel_cmdline_backup_stat.stat.mode == '0600'
+      - >-
+        base_kernel_cmdline_backup_stat.stat.dev != base_kernel_cmdline_stat.stat.dev
+        or base_kernel_cmdline_backup_stat.stat.inode != base_kernel_cmdline_stat.stat.inode
+    fail_msg: >-
+      Existing backup {{ base_kernel_cmdline_backup_path }} must be a distinct,
+      private 0600 regular file owned by
+      {{ base_kernel_cmdline_backup_owner }}:{{ base_kernel_cmdline_backup_group }}.
+
+- name: Require a runtime control distinct from the existing backup
+  when:
+    - base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_kernel_reboot_runtime_stat.stat.dev != base_kernel_cmdline_backup_stat.stat.dev
+        or base_kernel_reboot_runtime_stat.stat.inode != base_kernel_cmdline_backup_stat.stat.inode
+    fail_msg: >-
+      {{ base_kernel_reboot_runtime_mode_path }} must be distinct from the
+      existing rollback backup {{ base_kernel_cmdline_backup_path }}.
+
+- name: Read the existing kernel command-line backup
+  when: base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.slurp:
+    path: "{{ base_kernel_cmdline_backup_path }}"
+  register: base_kernel_cmdline_backup_existing
+  become: true
+  check_mode: false
+
+- name: Require valid existing kernel command-line backup content
+  when: base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_kernel_cmdline_backup_existing.content | b64decode
+        is match('^[^\r\n]+\r?\n?$')
+      - >-
+        ((base_kernel_cmdline_backup_existing.content | b64decode | trim).split()
+        | length) > 0
+    fail_msg: >-
+      Existing backup {{ base_kernel_cmdline_backup_path }} must contain one
+      non-empty physical command-line record.
+
+- name: Preserve the pre-policy kernel command line
+  when: not base_kernel_cmdline_backup_stat.stat.exists
+  ansible.builtin.copy:
+    content: "{{ base_kernel_cmdline_original }}"
+    dest: "{{ base_kernel_cmdline_backup_path }}"
+    owner: "{{ base_kernel_cmdline_backup_owner }}"
+    group: "{{ base_kernel_cmdline_backup_group }}"
+    mode: "0600"
+  become: true
+
+- name: Inspect and activate the current kernel reboot mode
+  block:
+    - name: Read the active kernel reboot mode
+      ansible.builtin.slurp:
+        path: "{{ base_kernel_reboot_runtime_mode_path }}"
+      register: base_kernel_reboot_runtime_before
+      become: true
+      check_mode: false
+
+    - name: Require a recognized active kernel reboot mode
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_kernel_reboot_runtime_before.content | b64decode | trim
+            in ['default', 'warm', 'cold']
+        fail_msg: >-
+          {{ base_kernel_reboot_runtime_mode_path }} contains an unrecognized
+          reboot mode and will not be overwritten.
+
+    - name: Activate the running kernel reboot mode
+      when:
+        - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
+        - >-
+          base_kernel_reboot_runtime_before.content | b64decode | trim
+          != base_kernel_reboot_mode
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/tee
+          - "{{ base_kernel_reboot_runtime_mode_path }}"
+        stdin: "{{ base_kernel_reboot_mode }}"
+      changed_when: true
+      become: true
+
+    - name: Read the activated kernel reboot mode
+      when:
+        - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
+      ansible.builtin.slurp:
+        path: "{{ base_kernel_reboot_runtime_mode_path }}"
+      register: base_kernel_reboot_runtime_after
+      become: true
+      check_mode: false
+
+    - name: Verify the active kernel reboot mode
+      when:
+        - not ansible_check_mode
+        - base_kernel_reboot_mode in ['warm', 'cold']
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_kernel_reboot_runtime_after.content | b64decode | trim
+            == base_kernel_reboot_mode
+        fail_msg: >-
+          Failed to activate kernel reboot mode {{ base_kernel_reboot_mode }}.
+
+- name: Apply the managed kernel reboot mode
+  ansible.builtin.copy:
+    content: "{{ base_kernel_cmdline_managed_tokens | join(' ') }}\n"
+    dest: "{{ base_kernel_cmdline_path }}"
+    mode: "{{ base_kernel_cmdline_stat.stat.mode }}"
+  become: true
+
+- name: Read the reconciled kernel command line
+  when: not ansible_check_mode
+  ansible.builtin.slurp:
+    path: "{{ base_kernel_cmdline_path }}"
+  register: base_kernel_cmdline_reconciled_slurp
+  become: true
+  check_mode: false
+
+- name: Verify the reconciled kernel command line
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        (base_kernel_cmdline_reconciled_slurp.content | b64decode)
+        == (base_kernel_cmdline_managed_tokens | join(' ')) ~ '\n'
+      - >-
+        (
+          base_kernel_cmdline_reconciled_slurp.content
+          | b64decode
+          | regex_findall('(?:^|[ \t])reboot=[^ \t]+')
+          | length
+        ) == (0 if base_kernel_reboot_mode == 'default' else 1)
+    fail_msg: >-
+      The reconciled kernel command line does not contain the requested single
+      reboot-mode token.

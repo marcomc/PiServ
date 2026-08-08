@@ -204,6 +204,76 @@ argument_specs:
         type: path
         default: /etc/msmtprc
         description: Path that must exist before the boot notification service runs.
+      base_reboot_notification_retry_attempts:
+        type: int
+        default: 6
+        description: Maximum boot-notification delivery attempts for temporary mail failures.
+      base_reboot_notification_retry_delay_seconds:
+        type: int
+        default: 15
+        description: Delay between temporary boot-notification delivery attempts.
+      base_reboot_notification_delivery_timeout_seconds:
+        type: int
+        default: 20
+        description: Per-attempt boot-notification mail delivery timeout.
+      base_manage_kernel_reboot_mode:
+        type: bool
+        default: false
+        description: Whether to manage the kernel command-line reboot mode.
+      base_kernel_reboot_mode:
+        type: str
+        default: default
+        choices:
+          - default
+          - warm
+          - cold
+        description: Requested reboot mode or the Raspberry Pi platform default.
+      base_kernel_cmdline_path:
+        type: path
+        default: /boot/firmware/cmdline.txt
+        description: Single-line Raspberry Pi kernel command-line file.
+      base_kernel_cmdline_backup_path:
+        type: path
+        default: /var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode
+        description: Stable backup of the command line before policy management.
+      base_kernel_cmdline_backup_owner:
+        type: str
+        default: root
+        description: Owner of the private reboot-policy backup artifacts.
+      base_kernel_cmdline_backup_group:
+        type: str
+        default: root
+        description: Group of the private reboot-policy backup artifacts.
+      base_kernel_reboot_runtime_mode_path:
+        type: path
+        default: /sys/kernel/reboot/mode
+        description: Runtime control used to activate the current kernel reboot mode.
+      base_manage_shutdown_notification:
+        type: bool
+        default: true
+        description: Whether to install the shutdown notification systemd service.
+      base_shutdown_notification_service_name:
+        type: str
+        default: piserv-shutdown-notify.service
+        description: Bounded concrete shutdown notification .service unit filename.
+      base_shutdown_notification_script_path:
+        type: path
+        default: /usr/local/sbin/piserv-shutdown-notify
+        description: >-
+          Normalized absolute shutdown notification helper file path using
+          characters systemd accepts in executable paths.
+      base_shutdown_notification_recipient:
+        type: str
+        default: root
+        description: Local recipient used by shutdown notification email.
+      base_shutdown_notification_subject_prefix:
+        type: str
+        default: "[PiServ]"
+        description: Subject prefix used by shutdown notification email.
+      base_shutdown_notification_condition_path:
+        type: path
+        default: /etc/msmtprc
+        description: Normalized absolute path required by the shutdown notification service.
       base_manage_smartmontools:
         type: bool
         default: true

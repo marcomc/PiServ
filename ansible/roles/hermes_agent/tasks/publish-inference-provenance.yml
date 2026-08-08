@@ -1,0 +1,54 @@
+---
+- name: Publish inference provenance plugin with rollback
+  block:
+    - name: Create managed inference provenance plugin directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ hermes_agent_user }}"
+        group: "{{ hermes_agent_group }}"
+        mode: "0700"
+      loop:
+        - "{{ hermes_agent_home }}/plugins"
+        - "{{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}"
+        - "{{ hermes_agent_home }}/audit"
+
+    - name: Install managed inference provenance plugin manifest
+      ansible.builtin.template:
+        src: inference-provenance-plugin.yaml.j2
+        dest: >-
+          {{ hermes_agent_home }}/plugins/{{
+          hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+        owner: >-
+          {{ hermes_agent_inference_provenance_publish_owner |
+          default(hermes_agent_user) }}
+        group: "{{ hermes_agent_group }}"
+        mode: "0600"
+
+    - name: Install managed inference provenance plugin
+      ansible.builtin.template:
+        src: inference-provenance-plugin.py.j2
+        dest: >-
+          {{ hermes_agent_home }}/plugins/{{
+          hermes_agent_inference_provenance_plugin_name }}/__init__.py
+        owner: >-
+          {{ hermes_agent_inference_provenance_publish_owner |
+          default(hermes_agent_user) }}
+        group: "{{ hermes_agent_group }}"
+        mode: "0600"
+  rescue:
+    - name: Roll back incomplete inference provenance plugin target
+      ansible.builtin.file:
+        path: >-
+          {{ hermes_agent_home }}/plugins/{{
+          hermes_agent_inference_provenance_plugin_name }}
+        state: absent
+      when:
+        - >-
+          not hermes_agent_inference_provenance_desired_directory.stat.exists
+
+    - name: Report inference provenance plugin publication failure
+      ansible.builtin.fail:
+        msg: >-
+          Inference provenance plugin publication failed; a newly created
+          target was rolled back before the prior managed plugin was retired.

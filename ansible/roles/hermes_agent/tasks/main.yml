@@ -1,0 +1,86 @@
+---
+- name: Validate Hermes Agent target and policy
+  ansible.builtin.import_tasks: validate-target.yml
+
+- name: Validate Hermes Agent installer destination
+  ansible.builtin.import_tasks: validate-installer-target.yml
+
+- name: Validate versioned Codex installation
+  ansible.builtin.import_tasks: validate-codex-installation.yml
+
+- name: Validate managed inference provenance destination
+  ansible.builtin.import_tasks: validate-inference-provenance-target.yml
+
+- name: Validate Hermes Agent backup storage
+  ansible.builtin.import_tasks: validate-backup-storage.yml
+
+- name: Validate Hermes Agent systemd unit targets
+  ansible.builtin.import_tasks: validate-systemd-unit-targets.yml
+
+- name: Validate Hermes Agent download cache
+  ansible.builtin.import_tasks: validate-download-cache.yml
+
+- name: Validate active Codex CLI link target
+  ansible.builtin.import_tasks: validate-codex-link.yml
+
+- name: Validate managed local-model configuration
+  when: hermes_agent_manage_local_models
+  block:
+    - name: Validate Hermes Agent local-model storage
+      ansible.builtin.import_tasks: validate-local-model-storage.yml
+
+    - name: Validate local-model runtime and activation links
+      ansible.builtin.import_tasks: validate-local-model-runtime.yml
+
+    - name: Validate desired local-model service units
+      ansible.builtin.import_tasks: validate-desired-local-model-units.yml
+- name: Validate local-model managed-state path
+  ansible.builtin.import_tasks: validate-local-model-managed-state.yml
+
+- name: Preflight Hermes Agent runtime identity and persistent paths
+  ansible.builtin.include_tasks: runtime-user.yml
+  vars:
+    hermes_agent_runtime_user_phase: preflight
+
+- name: Configure Hermes Agent runtime identity
+  ansible.builtin.include_tasks: runtime-user.yml
+  vars:
+    hermes_agent_runtime_user_phase: mutate
+
+- name: Validate Hermes Agent runtime access to backup storage
+  ansible.builtin.include_tasks: validate-backup-access.yml
+
+- name: Install Hermes Agent system packages
+  ansible.builtin.apt:
+    name: "{{ hermes_agent_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Validate the operator-provisioned Home Assistant MCP token
+  ansible.builtin.import_tasks: validate-home-assistant-mcp-token.yml
+
+- name: Install pinned Hermes Agent runtime
+  ansible.builtin.import_tasks: install-hermes.yml
+
+- name: Install pinned Codex CLI
+  ansible.builtin.import_tasks: install-codex.yml
+
+- name: Reconcile managed local-model service units
+  ansible.builtin.import_tasks: reconcile-local-model-units.yml
+  vars:
+    hermes_agent_local_model_desired_ids: >-
+      {{
+        hermes_agent_local_models | map(attribute='id') | list
+        if hermes_agent_manage_local_models else []
+      }}
+
+- name: Install local-model benchmark runtime
+  ansible.builtin.import_tasks: local-models.yml
+  when: hermes_agent_manage_local_models
+
+- name: Configure Hermes Agent state and services
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Validate Hermes Agent installation
+  ansible.builtin.import_tasks: validate-install.yml

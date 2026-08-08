@@ -1,0 +1,47 @@
+---
+- name: Reject invalid role input
+  block:
+    - name: Validate invalid cgroup memory-controller role input
+      ansible.builtin.include_role:
+        name: "{{ cgroup_memory_controller_test_role_path }}"
+        tasks_from: configuration.yml
+      vars:
+        cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
+        cgroup_memory_controller_managed_dtb_path: >-
+          {{ cgroup_memory_controller_invalid_input_case.managed_path
+             | default('/boot/firmware/managed.dtb') }}
+        cgroup_memory_controller_disabled_argument: >-
+          {{ cgroup_memory_controller_invalid_input_case.disabled_argument
+             | default('cgroup_disable=memory') }}
+        cgroup_memory_controller_kernel_hook_path: >-
+          {{ cgroup_memory_controller_invalid_input_case.kernel_hook_path
+             | default('/etc/kernel/postinst.d/zz-valid') }}
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          {{ cgroup_memory_controller_invalid_input_case.dependency_path
+             | default('') }}
+        cgroup_memory_controller_reboot_mode_path: >-
+          {{ cgroup_memory_controller_invalid_input_case.reboot_mode_path
+             | default('') }}
+        cgroup_memory_controller_required_reboot_mode: >-
+          {{ cgroup_memory_controller_invalid_input_case.required_reboot_mode
+             | default('') }}
+        cgroup_memory_controller_config_backup_filename: >-
+          {{ cgroup_memory_controller_invalid_input_case.config_backup_filename
+             | default('config.backup') }}
+        cgroup_memory_controller_vendor_dtb_backup_filename: >-
+          {{ cgroup_memory_controller_invalid_input_case.vendor_backup_filename
+             | default('vendor.backup') }}
+        cgroup_memory_controller_config_marker: >-
+          {{ cgroup_memory_controller_invalid_input_case.config_marker
+             | default('ANSIBLE MANAGED: valid') }}
+
+    - name: Require invalid role input to fail validation
+      ansible.builtin.fail:
+        msg: >-
+          The {{ cgroup_memory_controller_invalid_input_case.name }} input
+          unexpectedly passed validation.
+  rescue:
+    - name: Assert invalid role input failed validation
+      ansible.builtin.assert:
+        that:
+          - "'policy requires safe absolute paths' in ansible_failed_result.msg"

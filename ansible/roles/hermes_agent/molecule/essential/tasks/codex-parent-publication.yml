@@ -1,0 +1,273 @@
+---
+- name: Create Codex parent publication intent collision canary
+  ansible.builtin.copy:
+    content: intent collision canary
+    dest: /var/tmp/hermes-intent-collision.hermes-agent-staging.intent.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Reject direct collision with Codex parent publication intent
+  block:
+    - name: Validate direct Codex parent publication intent collision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_codex_install_dir: /var/tmp/hermes-intent-collision/0.145.0
+        hermes_agent_dashboard_service_managed_state_file: >-
+          /var/tmp/hermes-intent-collision.hermes-agent-staging.intent.yml
+    - name: Fail if publication intent collision was accepted
+      ansible.builtin.fail:
+        msg: Codex parent publication intent collisions must fail preflight.
+  rescue:
+    - name: Assert publication intent collision failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
+- name: Read publication intent collision canary after rejection
+  ansible.builtin.slurp:
+    src: /var/tmp/hermes-intent-collision.hermes-agent-staging.intent.yml
+  register: hermes_agent_essential_intent_collision_canary
+
+- name: Assert publication intent collision canary was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_intent_collision_canary.content | b64decode ==
+        'intent collision canary'
+
+- name: Create Codex parent staging root collision fixture
+  ansible.builtin.file:
+    path: /var/tmp/hermes-staging-collision.hermes-agent-staging
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create Codex parent staging root collision canary
+  ansible.builtin.copy:
+    content: staging collision canary
+    dest: /var/tmp/hermes-staging-collision.hermes-agent-staging/canary
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Reject direct collision with Codex parent publication staging
+  block:
+    - name: Validate direct Codex parent publication staging collision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_codex_install_dir: /var/tmp/hermes-staging-collision/0.145.0
+        hermes_agent_dashboard_tui_runtime_dir: >-
+          /var/tmp/hermes-staging-collision.hermes-agent-staging
+    - name: Fail if publication staging collision was accepted
+      ansible.builtin.fail:
+        msg: Codex parent publication staging collisions must fail preflight.
+  rescue:
+    - name: Assert publication staging collision failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject Codex parent staging aliases with managed roots'
+
+- name: Read publication staging collision canary after rejection
+  ansible.builtin.slurp:
+    src: /var/tmp/hermes-staging-collision.hermes-agent-staging/canary
+  register: hermes_agent_essential_staging_collision_canary
+
+- name: Assert publication staging collision canary was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_staging_collision_canary.content | b64decode ==
+        'staging collision canary'
+
+- name: Create interrupted Codex parent publication staging
+  ansible.builtin.file:
+    path: /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create interrupted Codex parent publication canary
+  ansible.builtin.copy:
+    content: interrupted parent staging canary
+    dest: /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging/canary
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Record interrupted Codex parent publication intent
+  ansible.builtin.copy:
+    content: |
+      managed_by: marcomc.hermes_agent
+      path: /var/tmp/hermes-interrupted-codex-parent
+      staging_path: /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging
+      version: 1
+    dest: /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging.intent.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Validate interrupted Codex parent publication
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+    tasks_from: validate-codex-installation.yml
+  vars:
+    hermes_agent_codex_install_dir: /var/tmp/hermes-interrupted-codex-parent/0.145.0
+
+- name: Resume interrupted Codex parent publication
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+    tasks_from: install-codex.yml
+  vars:
+    hermes_agent_codex_install_dir: /var/tmp/hermes-interrupted-codex-parent/0.145.0
+    hermes_agent_codex_binary_path: /usr/local/bin/codex-interrupted-parent
+    hermes_agent_codex_link_managed_state_file: >-
+      /usr/local/bin/codex-interrupted-parent.hermes-agent-managed.yml
+    hermes_agent_codex_archive_url: >-
+      file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+
+- name: Inspect resumed Codex parent publication
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /var/tmp/hermes-interrupted-codex-parent
+    - /var/tmp/hermes-interrupted-codex-parent/.hermes-agent-managed.yml
+    - /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging
+    - /var/tmp/hermes-interrupted-codex-parent.hermes-agent-staging.intent.yml
+    - /var/tmp/hermes-interrupted-codex-parent/canary
+  register: hermes_agent_essential_resumed_codex_parent
+
+- name: Assert interrupted Codex parent publication resumed cleanly
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_essential_resumed_codex_parent.results[0].stat.isdir
+      - hermes_agent_essential_resumed_codex_parent.results[0].stat.mode == '0755'
+      - hermes_agent_essential_resumed_codex_parent.results[1].stat.isreg
+      - hermes_agent_essential_resumed_codex_parent.results[1].stat.mode == '0600'
+      - not hermes_agent_essential_resumed_codex_parent.results[2].stat.exists
+      - not hermes_agent_essential_resumed_codex_parent.results[3].stat.exists
+      - not hermes_agent_essential_resumed_codex_parent.results[4].stat.exists
+
+- name: Reject direct collision with versioned Codex provenance
+  block:
+    - name: Validate direct collision with versioned Codex provenance
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+    - name: Fail if direct versioned Codex marker collision was accepted
+      ansible.builtin.fail:
+        msg: Versioned Codex provenance must be a distinct managed output.
+  rescue:
+    - name: Assert direct versioned marker collision failed preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
+- name: Remove stale versioned Codex marker hard-link fixture
+  ansible.builtin.file:
+    path: /usr/local/bin/codex-version-marker-hardlink
+    state: absent
+
+- name: Create versioned Codex marker hard-link fixture
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ln
+      - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+      - /usr/local/bin/codex-version-marker-hardlink
+  changed_when: true
+
+- name: Reject hard-link collision with versioned Codex provenance
+  block:
+    - name: Validate hard-link collision with versioned Codex provenance
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          /usr/local/bin/codex-version-marker-hardlink
+    - name: Fail if versioned Codex marker hard-link was accepted
+      ansible.builtin.fail:
+        msg: Versioned Codex provenance hard links must fail preflight.
+  rescue:
+    - name: Assert versioned marker hard-link failed inode validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject inode aliases between configurable managed outputs'
+
+- name: Inspect versioned Codex marker collision artifacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+    - /usr/local/bin/codex-version-marker-hardlink
+  register: hermes_agent_essential_codex_marker_collisions
+
+- name: Assert versioned Codex marker collision artifacts were preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_codex_marker_collisions.results[0].stat.checksum ==
+        hermes_agent_essential_codex_marker_collisions.results[1].stat.checksum
+      - >-
+        hermes_agent_essential_codex_marker_collisions.results[0].stat.inode ==
+        hermes_agent_essential_codex_marker_collisions.results[1].stat.inode
+
+- name: Create foreign safe Codex installation parent fixture
+  ansible.builtin.file:
+    path: /var/tmp/hermes-unsafe-codex-parent
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Reject a foreign existing Codex installation parent
+  block:
+    - name: Apply role with a foreign Codex installation parent
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_codex_install_dir: >-
+          /var/tmp/hermes-unsafe-codex-parent/essential
+    - name: Fail if the foreign Codex installation parent was accepted
+      ansible.builtin.fail:
+        msg: A foreign Codex installation parent must fail preflight.
+  rescue:
+    - name: Assert the unsafe Codex parent failed before mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require absent or safe canonical Codex installation parent'
+
+- name: Inspect foreign Codex parent after rejection
+  ansible.builtin.stat:
+    path: /var/tmp/hermes-unsafe-codex-parent
+  register: hermes_agent_essential_unsafe_codex_parent
+
+- name: Assert foreign Codex parent metadata was preserved
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_essential_unsafe_codex_parent.stat.isdir
+      - hermes_agent_essential_unsafe_codex_parent.stat.pw_name == 'root'
+      - hermes_agent_essential_unsafe_codex_parent.stat.gr_name == 'root'
+      - hermes_agent_essential_unsafe_codex_parent.stat.mode == '0700'

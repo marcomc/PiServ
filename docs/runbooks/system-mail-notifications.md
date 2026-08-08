@@ -19,12 +19,16 @@ account credentials in Ansible or this repository.
 
 ## Status
 
-Applied on PiServ on 2026-07-08. The dedicated `msmtp` role installs the mail
-packages and hardens operator-created file metadata without creating or owning
-SMTP credentials. PiServ's playbook preserves operator edits to the SMTP sender,
-user, password, and aliases. For Gmail SMTP, use a Gmail app password rather
-than the normal account password or the Mac-specific OAuth helper. Provider
-connectivity and one root-alias delivery test have been validated.
+The mail transport was applied on PiServ on 2026-07-08. The dedicated `msmtp`
+role installs the mail packages and hardens operator-created file metadata
+without creating or owning SMTP credentials. PiServ's playbook preserves
+operator edits to the SMTP sender, user, password, and aliases. For Gmail SMTP,
+use a Gmail app password rather than the normal account password or the
+Mac-specific OAuth helper. Provider connectivity and one root-alias delivery
+test have been validated. The shutdown-notification service is implemented and
+deployed by the base role when `/etc/msmtprc` exists and is non-empty; live
+end-to-end evidence for planned reboot events is still part of the operational
+validation checklist.
 
 ## Automation
 
@@ -58,6 +62,18 @@ The `base` role configures mail consumers:
 | boot notification service | `piserv-reboot-notify.service` |
 | boot notification recipient | `root` |
 | boot notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| boot notification delivery | Uses the local hostname without DNS lookup; retries only `sendmail` temporary failure (`75`), up to six attempts with a 15-second delay and 20-second per-attempt timeout; generated `TimeoutStartSec` covers the full budget plus 10 seconds |
+| shutdown notification service | `piserv-shutdown-notify.service` |
+| shutdown notification recipient | `root` |
+| shutdown notification condition | skip until `/etc/msmtprc` exists and is non-empty |
+| shutdown config recheck | Require a non-empty regular mail-config file immediately before delivery |
+| shutdown evidence | Nearest authenticated `sudo` command preceding a fresh authenticated `systemd-logind` shutdown event by no more than five seconds |
+
+The logind event must be observed within five seconds of helper execution. The
+nearby `sudo` record is temporal correlation, not proof that the command caused
+the shutdown. The helper does not interpret command syntax. Scheduled shutdown
+commands outside the five-second window, direct-root commands, and hardware
+paths report unknown `sudo` evidence.
 
 ## Gmail App Password
 
@@ -179,8 +195,18 @@ Verify:
 
 ```sh
 ssh admin@PiServ.local 'systemctl status piserv-reboot-notify.service --no-pager'
+ssh admin@PiServ.local 'systemctl status piserv-shutdown-notify.service --no-pager'
 ssh admin@PiServ.local 'sudo test -f /etc/unattended-upgrades/plugins/UnattendedUpgradesPluginPiServMail.py'
 ssh admin@PiServ.local 'sudo grep -R "^Unattended-Upgrade::Mail" -n /etc/apt/apt.conf.d'
+```
+
+To retry a previous boot-notification failure after network and DNS are ready,
+run the service manually. This sends one boot notification email.
+
+```sh
+ssh admin@PiServ.local \
+  'sudo systemctl reset-failed piserv-reboot-notify.service && sudo systemctl start piserv-reboot-notify.service'
+ssh admin@PiServ.local 'systemctl is-system-running && systemctl --failed --no-legend'
 ```
 
 When the digest plugin is enabled, the third command shows `MailReport
@@ -207,10 +233,11 @@ The live PiServ config is create-only and already has these keys.
 
 ## Rollback
 
-Disable boot notifications:
+Disable boot and shutdown notifications:
 
 ```sh
 ssh admin@PiServ.local 'sudo systemctl disable --now piserv-reboot-notify.service'
+ssh admin@PiServ.local 'sudo systemctl disable --now piserv-shutdown-notify.service'
 ```
 
 Remove email keys from the RaiPlaySound config to make it skip summaries again.
@@ -229,3 +256,4 @@ Remove email keys from the RaiPlaySound config to make it skip summaries again.
 | 2026-07-08 | Role split | Mail transport moved to the dedicated local `msmtp` role |
 | 2026-07-08 | Final base playbook apply | Create-only `msmtp` role and `base` role completed with `changed=0` |
 | 2026-07-16 | Mobile upgrade digest | Plugin installed, routine raw mail removed, dry run passed, and test digest delivered through the root alias |
+| 2026-08-04 | Boot notification retry repair | A boot-time DNS `EX_TEMPFAIL` was repaired with bounded retry handling; a manual service retry completed successfully and returned systemd to `running` with no failed units |

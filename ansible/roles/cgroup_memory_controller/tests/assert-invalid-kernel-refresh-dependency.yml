@@ -1,0 +1,24 @@
+---
+- name: Reject unsafe firmware-refresh dependency
+  block:
+    - name: Validate unsafe firmware-refresh dependency
+      ansible.builtin.include_tasks: >-
+        ../tasks/validate-kernel-refresh-dependency.yml
+      vars:
+        cgroup_memory_controller_kernel_hook_path: >-
+          /etc/kernel/postinst.d/zz-valid
+        cgroup_memory_controller_kernel_refresh_dependency_path: >-
+          /etc/kernel/postinst.d/z50-valid
+        cgroup_memory_controller_kernel_refresh_dependency:
+          stat: "{{ cgroup_memory_controller_invalid_dependency_case.stat }}"
+
+    - name: Require unsafe firmware-refresh dependency to fail validation
+      ansible.builtin.fail:
+        msg: >-
+          The {{ cgroup_memory_controller_invalid_dependency_case.name }}
+          dependency unexpectedly passed validation.
+  rescue:
+    - name: Assert unsafe firmware-refresh dependency failed validation
+      ansible.builtin.assert:
+        that:
+          - "'safe root-owned executable' in ansible_failed_result.msg"

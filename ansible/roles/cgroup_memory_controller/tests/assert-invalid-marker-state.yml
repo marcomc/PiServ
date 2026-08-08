@@ -1,0 +1,38 @@
+---
+- name: Write malformed cgroup memory-controller marker fixture
+  ansible.builtin.copy:
+    content: "{{ cgroup_memory_controller_marker_case.content }}\n"
+    dest: "{{ cgroup_memory_controller_test_config }}"
+    mode: "0640"
+
+- name: Inspect malformed cgroup memory-controller marker fixture
+  ansible.builtin.stat:
+    path: "{{ cgroup_memory_controller_test_config }}"
+    checksum_algorithm: sha256
+  register: cgroup_memory_controller_marker_before
+
+- name: Reject malformed cgroup memory-controller marker fixture
+  ansible.builtin.command:
+    argv:
+      - "{{ cgroup_memory_controller_test_helper }}"
+      - --disable
+  register: cgroup_memory_controller_marker_rejection
+  changed_when: false
+  failed_when: false
+
+- name: Reinspect malformed cgroup memory-controller marker fixture
+  ansible.builtin.stat:
+    path: "{{ cgroup_memory_controller_test_config }}"
+    checksum_algorithm: sha256
+  register: cgroup_memory_controller_marker_after
+
+- name: Require malformed marker rejection to preserve configuration
+  ansible.builtin.assert:
+    that:
+      - cgroup_memory_controller_marker_rejection.rc != 0
+      - >-
+        cgroup_memory_controller_marker_before.stat.checksum
+        == cgroup_memory_controller_marker_after.stat.checksum
+    fail_msg: >-
+      The {{ cgroup_memory_controller_marker_case.name }} marker fixture was not
+      rejected byte-identically.

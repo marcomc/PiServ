@@ -1,0 +1,110 @@
+---
+- name: Initialize llama.cpp runtime transaction state
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_runtime_staging_published: false
+
+- name: Publish llama.cpp runtime from private sibling staging
+  block:
+    - name: Create private llama.cpp runtime staging directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ hermes_agent_local_model_runtime_dir | dirname }}"
+        prefix: .hermes-agent-llama-runtime-
+      register: hermes_agent_local_model_runtime_staging
+
+    - name: Restrict llama.cpp runtime staging directory
+      ansible.builtin.file:
+        path: "{{ hermes_agent_local_model_runtime_staging.path }}"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Extract llama.cpp archive into private staging
+      ansible.builtin.unarchive:
+        src: >-
+          {{ hermes_agent_download_cache_dir }}/llama-{{
+          hermes_agent_local_model_runtime_version }}-ubuntu-arm64.tar.gz
+        dest: "{{ hermes_agent_local_model_runtime_staging.path }}"
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Inspect staged llama.cpp runtime binaries
+      ansible.builtin.stat:
+        path: "{{ hermes_agent_local_model_runtime_staging.path }}/{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+      loop:
+        - llama-cli
+        - llama-server
+      register: hermes_agent_staged_llama_binaries
+
+    - name: Require safe staged llama.cpp runtime binaries
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg
+          - not item.stat.islnk
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name == 'root'
+          - item.stat.mode is match('^0?[0-7][0-7][1357]$')
+          - item.stat.checksum is match('^[0-9a-f]{64}$')
+        fail_msg: The staged llama.cpp archive lacks safe executable runtime binaries.
+      loop: "{{ hermes_agent_staged_llama_binaries.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Record staged local-model runtime ownership
+      ansible.builtin.copy:
+        content: >-
+          {{
+            {
+              'archive_checksum': hermes_agent_local_model_runtime_archive_checksum,
+              'binaries': {
+                'llama-cli': hermes_agent_staged_llama_binaries.results[0].stat.checksum,
+                'llama-server': hermes_agent_staged_llama_binaries.results[1].stat.checksum
+              },
+              'managed_by': 'marcomc.hermes_agent',
+              'runtime_dir': hermes_agent_local_model_runtime_dir,
+              'schema_version': 1,
+              'runtime_version': hermes_agent_local_model_runtime_version
+            } | to_nice_yaml(indent=2)
+          }}
+        dest: >-
+          {{ hermes_agent_local_model_runtime_staging.path
+          }}/.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Set publishable llama.cpp runtime directory metadata
+      ansible.builtin.file:
+        path: "{{ hermes_agent_local_model_runtime_staging.path }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Atomically publish staged llama.cpp runtime
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/mv
+          - --no-target-directory
+          - --
+          - "{{ hermes_agent_local_model_runtime_staging.path }}"
+          - "{{ hermes_agent_local_model_runtime_dir }}"
+      changed_when: true
+
+    - name: Clear published llama.cpp staging ownership
+      ansible.builtin.set_fact:
+        hermes_agent_local_model_runtime_staging_published: true
+  always:
+    - name: Remove unpublished llama.cpp runtime staging directory
+      ansible.builtin.file:
+        path: "{{ hermes_agent_local_model_runtime_staging.path }}"
+        state: absent
+      when:
+        - hermes_agent_local_model_runtime_staging is defined
+        - hermes_agent_local_model_runtime_staging.path is defined
+        - not hermes_agent_local_model_runtime_staging_published | default(false)

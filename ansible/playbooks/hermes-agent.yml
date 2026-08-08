@@ -1,0 +1,103 @@
+---
+- name: Install locked-down Hermes Agent
+  hosts: piserv
+  gather_facts: true
+  become: true
+  vars:
+    piserv_hermes_agent_lan_ipv4_cidr: >-
+      {{ ansible_facts.default_ipv4.network ~ '/' ~ ansible_facts.default_ipv4.prefix }}
+  vars_files:
+    -
+      - ../vars/hermes-agent.yml
+      - ../vars/hermes-agent.yml.example
+    -
+      - ../vars/external-storage.yml
+      - ../vars/external-storage.yml.example
+  pre_tasks:
+    - name: Validate concrete external backup storage identity and layout
+      ansible.builtin.include_tasks: ../tasks/external-storage-preflight.yml
+
+    - name: Validate firewall policy for the network Hermes dashboard
+      when: piserv_hermes_agent_dashboard_host == '0.0.0.0'
+      block:
+        - name: Read UFW policy before enabling the network Hermes dashboard
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/ufw
+              - status
+              - verbose
+          register: piserv_hermes_agent_ufw_status
+          changed_when: false
+          check_mode: false
+
+        - name: Require the PiServ firewall policy before enabling the network Hermes dashboard
+          ansible.builtin.assert:
+            that:
+              - "'Status: active' in piserv_hermes_agent_ufw_status.stdout"
+              - "'Default: deny (incoming)' in piserv_hermes_agent_ufw_status.stdout"
+              - >-
+                piserv_hermes_agent_ufw_status.stdout is regex(
+                  '(?m)^9119/tcp\\s+ALLOW IN\\s+'
+                  ~ (piserv_hermes_agent_lan_ipv4_cidr | regex_escape)
+                  ~ '\\s+# PiServ LAN Hermes dashboard$'
+                )
+              - >-
+                piserv_hermes_agent_ufw_status.stdout is regex(
+                  '(?m)^Anywhere\\s+on\\s+tailscale0\\s+ALLOW IN\\s+Anywhere'
+                  ~ '\\s+# PiServ Tailscale ingress$'
+                )
+            fail_msg: >-
+              Apply ansible/playbooks/firewall.yml before exposing Hermes. UFW
+              must have default incoming deny, a source-scoped LAN dashboard
+              rule, and PiServ Tailscale ingress policy.
+  roles:
+    - role: hermes_agent
+      vars:
+        hermes_agent_model: gpt-5.6-luna
+        hermes_agent_fallback_providers:
+          # Spark has a separate ChatGPT Pro preview allowance but accepts text only.
+          - provider: openai-codex
+            model: gpt-5.3-codex-spark
+          - provider: openai-codex
+            model: gpt-5.6-terra
+          - provider: openai-codex
+            model: gpt-5.6-sol
+        hermes_agent_reasoning_effort: medium
+        hermes_agent_reasoning_overrides:
+          gpt-5.3-codex-spark: low
+          gpt-5.6-terra: high
+          gpt-5.6-sol: xhigh
+        hermes_agent_model_aliases:
+          terra:
+            provider: openai-codex
+            model: gpt-5.6-terra
+          sol:
+            provider: openai-codex
+            model: gpt-5.6-sol
+        hermes_agent_manage_inference_provenance: true
+        hermes_agent_inference_provenance_plugin_name: piserv-inference-provenance
+        hermes_agent_inference_provenance_label: Codex via ChatGPT Pro
+        hermes_agent_inference_provenance_default_models:
+          - gpt-5.6-luna
+        hermes_agent_inference_provenance_fallback_models:
+          - gpt-5.3-codex-spark
+          - gpt-5.6-terra
+          - gpt-5.6-sol
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_dashboard_host: >-
+          {{ piserv_hermes_agent_dashboard_host }}
+        hermes_agent_dashboard_manage_basic_auth: >-
+          {{ piserv_hermes_agent_dashboard_manage_basic_auth }}
+        hermes_agent_dashboard_basic_auth_username: >-
+          {{ piserv_hermes_agent_dashboard_basic_auth_username }}
+        hermes_agent_manage_home_assistant_mcp: >-
+          {{ piserv_hermes_agent_manage_home_assistant_mcp }}
+        hermes_agent_home_assistant_mcp_url: >-
+          {{ piserv_hermes_agent_home_assistant_mcp_url }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: external-data
+        hermes_agent_backup_dir: /mnt/external-data/backups/hermes-agent
+        hermes_agent_backup_on_calendar: "*-*-* 03:20:00"
+        hermes_agent_backup_timezone: Europe/Rome
+        # Re-enable only after a guarded 64K proof on hardware with more RAM.
+        hermes_agent_manage_local_models: false

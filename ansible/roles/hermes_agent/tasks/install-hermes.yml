@@ -1,0 +1,314 @@
+---
+- name: Refresh Hermes installer parent directory state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_installer_path | dirname }}"
+    follow: false
+  register: hermes_agent_installer_parent_install_state
+  changed_when: false
+  check_mode: false
+
+- name: Create root-owned Hermes installer directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_installer_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not hermes_agent_installer_parent_install_state.stat.exists
+
+- name: Download checksum-pinned Hermes installer
+  ansible.builtin.get_url:
+    url: "{{ hermes_agent_installer_url }}"
+    dest: "{{ hermes_agent_installer_path }}"
+    checksum: "{{ hermes_agent_installer_checksum }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect Hermes source checkout
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/.git"
+  register: hermes_agent_checkout
+
+- name: Read installed Hermes revision
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - rev-parse
+      - HEAD
+  register: hermes_agent_installed_revision
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Resolve installed Hermes virtual environment interpreter
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -f
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+  register: hermes_agent_venv_interpreter
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Inspect Hermes virtual environment provenance state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_venv_state_file }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: hermes_agent_venv_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Read safe Hermes virtual environment provenance state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_venv_state_file }}"
+  register: hermes_agent_venv_state_raw
+  changed_when: false
+  when:
+    - hermes_agent_checkout.stat.exists
+    - hermes_agent_venv_state.stat.isreg | default(false)
+    - not (hermes_agent_venv_state.stat.islnk | default(false))
+    - hermes_agent_venv_state.stat.pw_name == 'root'
+    - hermes_agent_venv_state.stat.gr_name == 'root'
+    - hermes_agent_venv_state.stat.mode == '0600'
+
+- name: Calculate installed Hermes virtual environment digest
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import hashlib, os, pathlib, stat, sys
+        root = pathlib.Path(sys.argv[1])
+        digest = hashlib.sha256()
+        for path in sorted(root.rglob('*'), key=lambda item: item.as_posix()):
+            relative = path.relative_to(root).as_posix()
+            metadata = path.lstat()
+            mode = stat.S_IMODE(metadata.st_mode)
+            if path.is_symlink():
+                record = f'L\0{relative}\0{mode:o}\0{os.readlink(path)}\0'.encode()
+            elif path.is_file():
+                record = f'F\0{relative}\0{mode:o}\0'.encode() + path.read_bytes()
+            elif path.is_dir():
+                record = f'D\0{relative}\0{mode:o}\0'.encode()
+            else:
+                raise SystemExit(f'unsupported venv entry: {relative}')
+            digest.update(record)
+        print(digest.hexdigest())
+      - "{{ hermes_agent_install_dir }}/venv"
+  register: hermes_agent_venv_digest
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Calculate expected Hermes virtual environment state
+  ansible.builtin.set_fact:
+    hermes_agent_expected_venv_state: >-
+      schema=1;revision={{ hermes_agent_repo_version }};venv_sha256={{
+      (hermes_agent_venv_digest | default({})).get('stdout', '') }}
+
+- name: Determine Hermes virtual environment provenance validity
+  ansible.builtin.set_fact:
+    hermes_agent_venv_provenance_valid: >-
+      {{
+        (hermes_agent_venv_digest | default({})).get('rc', 1) == 0 and
+        (hermes_agent_venv_state.stat.isreg | default(false)) and
+        not (hermes_agent_venv_state.stat.islnk | default(false)) and
+        (hermes_agent_venv_state.stat.pw_name | default('')) == 'root' and
+        (hermes_agent_venv_state.stat.gr_name | default('')) == 'root' and
+        (hermes_agent_venv_state.stat.mode | default('')) == '0600' and
+        ((hermes_agent_venv_state_raw | default({})).get('content', '') |
+         b64decode) == hermes_agent_expected_venv_state
+      }}
+
+- name: Remove an unauthenticated Hermes virtual environment before reinstall
+  ansible.builtin.file:
+    path: "{{ hermes_agent_install_dir }}/venv"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - hermes_agent_checkout.stat.exists
+    - not hermes_agent_venv_provenance_valid
+
+- name: Install Hermes at the pinned revision
+  ansible.builtin.command:
+    argv:
+      - "{{ hermes_agent_installer_path }}"
+      - --skip-setup
+      - --skip-browser
+      - --no-skills
+      - --force-commit
+      - --commit
+      - "{{ hermes_agent_repo_version }}"
+      - --dir
+      - "{{ hermes_agent_install_dir }}"
+      - --hermes-home
+      - "{{ hermes_agent_home }}"
+      - --non-interactive
+  environment:
+    HOME: /root
+    HERMES_HOME: "{{ hermes_agent_home }}"
+    UV_PYTHON_INSTALL_DIR: "{{ hermes_agent_uv_python_install_dir }}"
+    UV_PYTHON_BIN_DIR: "{{ hermes_agent_uv_python_bin_dir }}"
+  register: hermes_agent_install
+  changed_when: true
+  notify: Restart Hermes Agent dashboard
+  when:
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_checkout.stat.exists or
+      hermes_agent_installed_revision.stdout | default("") !=
+      hermes_agent_repo_version or
+      hermes_agent_venv_interpreter.rc | default(1) != 0 or
+      hermes_agent_venv_interpreter.stdout is match("^/root/") or
+      not hermes_agent_venv_provenance_valid | default(false)
+
+- name: Refresh Hermes source checkout state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/.git"
+  register: hermes_agent_checkout
+
+- name: Confirm installed Hermes revision
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ hermes_agent_install_dir }}"
+      - rev-parse
+      - HEAD
+  register: hermes_agent_installed_revision
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Assert installed Hermes revision
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_installed_revision.stdout == hermes_agent_repo_version
+  when:
+    - hermes_agent_checkout.stat.exists
+    - not ansible_check_mode
+
+- name: Resolve refreshed Hermes virtual environment interpreter
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -f
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+  register: hermes_agent_venv_interpreter
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_checkout.stat.exists
+
+- name: Assert Hermes runtime interpreter is available to its service account
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_venv_interpreter.stdout is not match("^/root/")
+  when:
+    - hermes_agent_checkout.stat.exists
+    - not ansible_check_mode
+
+- name: Calculate refreshed Hermes virtual environment digest
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import hashlib, os, pathlib, stat, sys
+        root = pathlib.Path(sys.argv[1])
+        digest = hashlib.sha256()
+        for path in sorted(root.rglob('*'), key=lambda item: item.as_posix()):
+            relative = path.relative_to(root).as_posix()
+            metadata = path.lstat()
+            mode = stat.S_IMODE(metadata.st_mode)
+            if path.is_symlink():
+                record = f'L\0{relative}\0{mode:o}\0{os.readlink(path)}\0'.encode()
+            elif path.is_file():
+                record = f'F\0{relative}\0{mode:o}\0'.encode() + path.read_bytes()
+            elif path.is_dir():
+                record = f'D\0{relative}\0{mode:o}\0'.encode()
+            else:
+                raise SystemExit(f'unsupported venv entry: {relative}')
+            digest.update(record)
+        print(digest.hexdigest())
+      - "{{ hermes_agent_install_dir }}/venv"
+  register: hermes_agent_refreshed_venv_digest
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_checkout.stat.exists
+    - not ansible_check_mode
+
+- name: Record authenticated Hermes virtual environment state
+  ansible.builtin.copy:
+    content: >-
+      schema=1;revision={{ hermes_agent_repo_version }};venv_sha256={{
+      hermes_agent_refreshed_venv_digest.stdout }}
+    dest: "{{ hermes_agent_venv_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - hermes_agent_install is changed
+    - not ansible_check_mode
+
+- name: Inspect installer-created Hermes node runtime
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}/node"
+    follow: false
+  register: hermes_agent_node_runtime_state
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Require a safe installer-created Hermes node runtime
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_node_runtime_state.stat.isdir
+      - not hermes_agent_node_runtime_state.stat.islnk
+    fail_msg: >-
+      The Hermes installer-created node runtime must be a real directory before
+      its bounded ownership handoff.
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Hand Hermes persistent state root to the runtime identity
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Hand installer-created Hermes node runtime to the runtime identity
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home }}/node"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    recurse: true
+    follow: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_install is changed
+
+- name: Remove upstream lazy-refresh recovery marker
+  ansible.builtin.file:
+    path: "{{ hermes_agent_install_dir }}/.lazy-refresh-incomplete"
+    state: absent
+  when:
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+  # The pinned upstream revision accidentally tracks a process-specific marker.

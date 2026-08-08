@@ -1,0 +1,22 @@
+---
+- name: Validate bounded reboot notification retry policy
+  ansible.builtin.assert:
+    that:
+      - base_reboot_notification_retry_attempts is integer
+      - base_reboot_notification_retry_attempts >= 1
+      - base_reboot_notification_retry_attempts <= 10
+      - base_reboot_notification_retry_delay_seconds is integer
+      - base_reboot_notification_retry_delay_seconds >= 1
+      - base_reboot_notification_retry_delay_seconds <= 60
+      - base_reboot_notification_delivery_timeout_seconds is integer
+      - base_reboot_notification_delivery_timeout_seconds >= 5
+      - base_reboot_notification_delivery_timeout_seconds <= 60
+      - >-
+        (base_reboot_notification_retry_attempts *
+        base_reboot_notification_delivery_timeout_seconds) +
+        ((base_reboot_notification_retry_attempts - 1) *
+        base_reboot_notification_retry_delay_seconds) <= 600
+    fail_msg: >-
+      The reboot notification retry policy must use bounded integer attempts,
+      delay, and delivery timeout values with a total duration of at most ten
+      minutes.

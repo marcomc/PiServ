@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+: "${WIFI_WATCHDOG_TEST_LOG:?WIFI_WATCHDOG_TEST_LOG must be set}"
+
+printf '%s\n' "date $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+printf '%s\n' '0'

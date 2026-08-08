@@ -1,0 +1,5 @@
+---
+- name: Clean up test fixture
+  hosts: all
+  gather_facts: false
+  tasks: []

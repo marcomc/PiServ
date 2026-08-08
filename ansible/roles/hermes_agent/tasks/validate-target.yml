@@ -1,0 +1,507 @@
+---
+- name: Assert supported Hermes Agent target platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["os_family"] == "Debian"
+      - ansible_facts["architecture"] in hermes_agent_supported_architectures
+      - hermes_agent_dashboard_host in ["127.0.0.1", "0.0.0.0"]
+      - hermes_agent_dashboard_tui_runtime_dir is match('^/')
+      - hermes_agent_dashboard_tui_runtime_revision_file is match('^/')
+      - hermes_agent_dashboard_tui_runtime_manifest_file is match('^/')
+      - hermes_agent_dashboard_tui_runtime_dir not in ['/', '/tmp', '/var', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - >-
+        hermes_agent_dashboard_tui_runtime_revision_file ==
+        hermes_agent_dashboard_tui_runtime_dir ~ '/.hermes-revision'
+      - >-
+        hermes_agent_dashboard_tui_runtime_manifest_file ==
+        hermes_agent_dashboard_tui_runtime_dir ~ '/.hermes-managed-state.yml'
+      - >-
+        hermes_agent_dashboard_host == "127.0.0.1" or
+        not hermes_agent_manage_dashboard | bool or
+        hermes_agent_dashboard_manage_basic_auth | bool
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_username is match('^[A-Za-z0-9_-]+$')
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_state_file is match('^/')
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file is match('^/')
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_state_file !=
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_session_ttl_seconds >= 60
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_basic_auth_session_ttl_seconds <= 86400
+      - hermes_agent_inference_provenance_plugin_name is match('^[a-z][a-z0-9-]*$')
+      - hermes_agent_inference_provenance_label | length >= 1
+      - hermes_agent_inference_provenance_label | length <= 128
+      - hermes_agent_inference_provenance_label is not search('[\r\n]')
+      - hermes_agent_binary_path == '/usr/local/bin/hermes'
+      - >-
+        hermes_agent_venv_state_file ==
+        hermes_agent_install_dir ~ '/.hermes-venv-managed.yml'
+      - >-
+        hermes_agent_codex_archive_binary_name is
+        match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - hermes_agent_codex_archive_binary_name != 'codex'
+      - hermes_agent_provider == "openai-codex"
+      - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
+      - "'terminal' in hermes_agent_disabled_toolsets"
+      - "'file' in hermes_agent_disabled_toolsets"
+      - "'browser' in hermes_agent_disabled_toolsets"
+      - "'code_execution' in hermes_agent_disabled_toolsets"
+      - "'homeassistant' in hermes_agent_disabled_toolsets"
+      - not hermes_agent_manage_backup or hermes_agent_backup_group | length > 0
+      - hermes_agent_dashboard_port >= 1
+      - hermes_agent_dashboard_port <= 65535
+      - hermes_agent_dashboard_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
+      - hermes_agent_backup_service_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$')
+      - hermes_agent_backup_timer_name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer$')
+      - hermes_agent_dashboard_service_name != hermes_agent_backup_service_name
+      - hermes_agent_dashboard_service_name != hermes_agent_backup_timer_name
+      - hermes_agent_backup_service_name != hermes_agent_backup_timer_name
+      - >-
+        hermes_agent_dashboard_service_managed_state_file !=
+        hermes_agent_backup_service_managed_state_file
+      - >-
+        hermes_agent_dashboard_service_managed_state_file !=
+        hermes_agent_backup_timer_managed_state_file
+      - >-
+        hermes_agent_backup_service_managed_state_file !=
+        hermes_agent_backup_timer_managed_state_file
+      - >-
+        hermes_agent_dashboard_service_name not in
+        (hermes_agent_local_models |
+        map(attribute='id') |
+        map('regex_replace', '^(.*)$', 'hermes-local-model-\\1.service') | list)
+      - >-
+        hermes_agent_backup_service_name not in
+        (hermes_agent_local_models |
+        map(attribute='id') |
+        map('regex_replace', '^(.*)$', 'hermes-local-model-\\1.service') | list)
+      - hermes_agent_backup_retention_days >= 1
+      - hermes_agent_backup_retention_days <= 3650
+      - hermes_agent_backup_randomized_delay is match('^[1-9][0-9]*(us|ms|s|m|h|d|w)$')
+      - >-
+        (
+          hermes_agent_backup_randomized_delay |
+          regex_replace('^([0-9]+).*$','\\1') | int
+        ) * {
+          'us': 0.000001,
+          'ms': 0.001,
+          's': 1,
+          'm': 60,
+          'h': 3600,
+          'd': 86400,
+          'w': 604800
+        }.get(
+          hermes_agent_backup_randomized_delay | regex_replace('^[0-9]+', ''),
+          86401
+        ) <= 86400
+      - hermes_agent_backup_timezone is match('^[A-Za-z_]+(/[A-Za-z_+-]+)*$')
+      - hermes_agent_backup_on_calendar is not search('[\r\n]')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_name is match('^[a-z][a-z0-9-]*$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_url is match('^https?://[^/@]+/api/mcp$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_token_env_file is match('^/')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_token_env_var is match('^[A-Z][A-Z0-9_]*$')
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_timeout > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_timeout <= 300
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout > 0
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout <= 60
+      - >-
+        not hermes_agent_manage_home_assistant_mcp or
+        hermes_agent_home_assistant_mcp_connect_timeout <=
+        hermes_agent_home_assistant_mcp_timeout
+    fail_msg: >-
+      This role currently supports Debian architectures declared in
+      hermes_agent_supported_architectures, a loopback dashboard or an
+      authenticated wildcard dashboard,
+      the openai-codex provider, memory/skills-only access, an explicit backup
+      group when backups are enabled, and a valid Assist MCP endpoint with a
+      private token file when Home Assistant access is enabled.
+
+- name: Resolve Hermes dashboard authentication output paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_authentication_output_identities
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_dashboard_manage_basic_auth
+
+- name: Require distinct canonical Hermes dashboard authentication output paths
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_authentication_output_identities.results[0].stdout ==
+        hermes_agent_dashboard_basic_auth_state_file
+      - hermes_agent_dashboard_authentication_output_identities.results[1].stdout ==
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file
+      - hermes_agent_dashboard_authentication_output_identities.results[2].stdout ==
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file ~ '.managed.yml'
+      - >-
+        hermes_agent_dashboard_authentication_output_identities.results[0].stdout !=
+        hermes_agent_dashboard_authentication_output_identities.results[1].stdout
+      - >-
+        hermes_agent_dashboard_authentication_output_identities.results[0].stdout !=
+        hermes_agent_dashboard_authentication_output_identities.results[2].stdout
+      - >-
+        hermes_agent_dashboard_authentication_output_identities.results[1].stdout !=
+        hermes_agent_dashboard_authentication_output_identities.results[2].stdout
+    fail_msg: >-
+      Dashboard authentication state, bootstrap password, and managed-state
+      outputs must use distinct canonical paths without symlinked-parent aliases.
+  when: hermes_agent_dashboard_manage_basic_auth
+
+- name: Inspect Hermes dashboard authentication output inode identities
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_authentication_output_files
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_dashboard_manage_basic_auth
+
+- name: Reject Hermes dashboard authentication output inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (hermes_agent_dashboard_authentication_output_files.results[0].stat.exists and
+        hermes_agent_dashboard_authentication_output_files.results[1].stat.exists) or
+        hermes_agent_dashboard_authentication_output_files.results[0].stat.dev !=
+        hermes_agent_dashboard_authentication_output_files.results[1].stat.dev or
+        hermes_agent_dashboard_authentication_output_files.results[0].stat.inode !=
+        hermes_agent_dashboard_authentication_output_files.results[1].stat.inode
+      - >-
+        not (hermes_agent_dashboard_authentication_output_files.results[0].stat.exists and
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.exists) or
+        hermes_agent_dashboard_authentication_output_files.results[0].stat.dev !=
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.dev or
+        hermes_agent_dashboard_authentication_output_files.results[0].stat.inode !=
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.inode
+      - >-
+        not (hermes_agent_dashboard_authentication_output_files.results[1].stat.exists and
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.exists) or
+        hermes_agent_dashboard_authentication_output_files.results[1].stat.dev !=
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.dev or
+        hermes_agent_dashboard_authentication_output_files.results[1].stat.inode !=
+        hermes_agent_dashboard_authentication_output_files.results[2].stat.inode
+    fail_msg: >-
+      Dashboard authentication state, bootstrap password, and managed-state
+      outputs must not identify the same existing inode.
+  when: hermes_agent_dashboard_manage_basic_auth
+
+- name: Resolve Hermes dashboard service managed-state paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_dashboard_service_managed_state_file }}"
+    - "{{ hermes_agent_dashboard_service_managed_state_file | dirname }}"
+  register: hermes_agent_dashboard_service_state_paths
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Hermes dashboard service managed-state target and parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_dashboard_service_managed_state_file }}"
+    - "{{ hermes_agent_dashboard_service_managed_state_file | dirname }}"
+    - "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+  register: hermes_agent_dashboard_service_state_targets
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Hermes dashboard service managed-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_dashboard_service_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
+      - hermes_agent_dashboard_service_state_paths.results[0].stdout ==
+        hermes_agent_dashboard_service_managed_state_file
+      - hermes_agent_dashboard_service_state_paths.results[1].stdout ==
+        (hermes_agent_dashboard_service_managed_state_file | dirname)
+      - >-
+        not hermes_agent_dashboard_service_state_targets.results[0].stat.exists or
+        (hermes_agent_dashboard_service_state_targets.results[0].stat.isreg | default(false) and
+        not hermes_agent_dashboard_service_state_targets.results[0].stat.islnk | default(true) and
+        hermes_agent_dashboard_service_state_targets.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_dashboard_service_state_targets.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_dashboard_service_state_targets.results[0].stat.mode | default('') == '0600')
+      - >-
+        not hermes_agent_dashboard_service_state_targets.results[1].stat.exists or
+        (hermes_agent_dashboard_service_state_targets.results[1].stat.isdir | default(false) and
+        not hermes_agent_dashboard_service_state_targets.results[1].stat.islnk | default(true))
+      - >-
+        not (hermes_agent_dashboard_service_state_targets.results[0].stat.exists and
+        hermes_agent_dashboard_service_state_targets.results[2].stat.exists) or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.dev !=
+        hermes_agent_dashboard_service_state_targets.results[2].stat.dev or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.inode !=
+        hermes_agent_dashboard_service_state_targets.results[2].stat.inode
+    fail_msg: >-
+      Hermes dashboard service managed state must use a canonical private target
+      with a safe parent and must not alias the dashboard systemd unit.
+
+- name: Resolve Hermes Agent backup service managed-state paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_service_managed_state_file }}"
+    - "{{ hermes_agent_backup_service_managed_state_file | dirname }}"
+  register: hermes_agent_backup_service_state_paths
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Hermes Agent backup service managed-state target and parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_backup_service_managed_state_file }}"
+    - "{{ hermes_agent_backup_service_managed_state_file | dirname }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+  register: hermes_agent_backup_service_state_targets
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Hermes Agent backup service managed-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_backup_service_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
+      - hermes_agent_backup_service_state_paths.results[0].stdout ==
+        hermes_agent_backup_service_managed_state_file
+      - hermes_agent_backup_service_state_paths.results[1].stdout ==
+        (hermes_agent_backup_service_managed_state_file | dirname)
+      - >-
+        not hermes_agent_backup_service_state_targets.results[0].stat.exists or
+        (hermes_agent_backup_service_state_targets.results[0].stat.isreg | default(false) and
+        not hermes_agent_backup_service_state_targets.results[0].stat.islnk | default(true) and
+        hermes_agent_backup_service_state_targets.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_backup_service_state_targets.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_backup_service_state_targets.results[0].stat.mode | default('') == '0600')
+      - >-
+        not hermes_agent_backup_service_state_targets.results[1].stat.exists or
+        (hermes_agent_backup_service_state_targets.results[1].stat.isdir | default(false) and
+        not hermes_agent_backup_service_state_targets.results[1].stat.islnk | default(true))
+      - >-
+        not (hermes_agent_backup_service_state_targets.results[0].stat.exists and
+        hermes_agent_backup_service_state_targets.results[2].stat.exists) or
+        hermes_agent_backup_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_service_state_targets.results[2].stat.dev or
+        hermes_agent_backup_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_service_state_targets.results[2].stat.inode
+    fail_msg: >-
+      Hermes Agent backup service managed state must use a canonical private
+      target with a safe parent and must not alias the service systemd unit.
+
+- name: Resolve Hermes Agent backup timer managed-state paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_timer_managed_state_file }}"
+    - "{{ hermes_agent_backup_timer_managed_state_file | dirname }}"
+  register: hermes_agent_backup_timer_state_paths
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Hermes Agent backup timer managed-state target and parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_backup_timer_managed_state_file }}"
+    - "{{ hermes_agent_backup_timer_managed_state_file | dirname }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+  register: hermes_agent_backup_timer_state_targets
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Hermes Agent backup timer managed-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_backup_timer_managed_state_file not in [
+          '/etc/systemd/system/' ~ hermes_agent_dashboard_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_service_name,
+          '/etc/systemd/system/' ~ hermes_agent_backup_timer_name
+        ]
+      - hermes_agent_backup_timer_state_paths.results[0].stdout ==
+        hermes_agent_backup_timer_managed_state_file
+      - hermes_agent_backup_timer_state_paths.results[1].stdout ==
+        (hermes_agent_backup_timer_managed_state_file | dirname)
+      - >-
+        not hermes_agent_backup_timer_state_targets.results[0].stat.exists or
+        (hermes_agent_backup_timer_state_targets.results[0].stat.isreg | default(false) and
+        not hermes_agent_backup_timer_state_targets.results[0].stat.islnk | default(true) and
+        hermes_agent_backup_timer_state_targets.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_backup_timer_state_targets.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_backup_timer_state_targets.results[0].stat.mode | default('') == '0600')
+      - >-
+        not hermes_agent_backup_timer_state_targets.results[1].stat.exists or
+        (hermes_agent_backup_timer_state_targets.results[1].stat.isdir | default(false) and
+        not hermes_agent_backup_timer_state_targets.results[1].stat.islnk | default(true))
+      - >-
+        not (hermes_agent_backup_timer_state_targets.results[0].stat.exists and
+        hermes_agent_backup_timer_state_targets.results[2].stat.exists) or
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[2].stat.dev or
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[2].stat.inode
+    fail_msg: >-
+      Hermes Agent backup timer managed state must use a canonical private
+      target with a safe parent and must not alias the timer systemd unit.
+
+- name: Reject managed systemd unit marker inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          hermes_agent_dashboard_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_service_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_service_state_targets.results[0].stat.dev or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_service_state_targets.results[0].stat.inode
+      - >-
+        not (
+          hermes_agent_dashboard_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_timer_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev or
+        hermes_agent_dashboard_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode
+      - >-
+        not (
+          hermes_agent_backup_service_state_targets.results[0].stat.exists and
+          hermes_agent_backup_timer_state_targets.results[0].stat.exists
+        ) or
+        hermes_agent_backup_service_state_targets.results[0].stat.dev !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.dev or
+        hermes_agent_backup_service_state_targets.results[0].stat.inode !=
+        hermes_agent_backup_timer_state_targets.results[0].stat.inode
+    fail_msg: >-
+      Managed dashboard, backup service, and backup timer state markers must
+      identify distinct files.
+
+- name: Inspect Hermes dashboard terminal UI metadata inode identities
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_metadata_files
+  changed_when: false
+  check_mode: false
+
+- name: Reject Hermes dashboard terminal UI metadata inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (hermes_agent_dashboard_tui_metadata_files.results[0].stat.exists and
+        hermes_agent_dashboard_tui_metadata_files.results[1].stat.exists) or
+        hermes_agent_dashboard_tui_metadata_files.results[0].stat.dev !=
+        hermes_agent_dashboard_tui_metadata_files.results[1].stat.dev or
+        hermes_agent_dashboard_tui_metadata_files.results[0].stat.inode !=
+        hermes_agent_dashboard_tui_metadata_files.results[1].stat.inode
+    fail_msg: >-
+      Hermes dashboard terminal UI revision and managed-state files must not
+      identify the same existing inode.
+
+- name: Validate Hermes Agent backup timer schedule
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemd-analyze
+      - calendar
+      - "{{ hermes_agent_backup_on_calendar }} {{ hermes_agent_backup_timezone }}"
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
+
+- name: Read cgroup filesystem type for local-model preflight
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/stat
+      - -fc
+      - '%T'
+      - /sys/fs/cgroup
+  register: hermes_agent_cgroup_filesystem_type
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_local_models
+
+- name: Read cgroup controllers for local-model preflight
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/cat
+      - /sys/fs/cgroup/cgroup.controllers
+  register: hermes_agent_cgroup_controllers
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_local_models
+
+- name: Require enforced cgroup v2 memory control for local models
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_cgroup_filesystem_type.stdout | trim == 'cgroup2fs'
+      - >-
+        'memory' in
+        (hermes_agent_cgroup_controllers.stdout.split() | list)
+    fail_msg: >-
+      Local-model installation requires an active cgroup v2 memory controller.
+      Enable and verify cgroup memory before raising local-model address-space
+      limits or installing the model services.
+  when: hermes_agent_manage_local_models

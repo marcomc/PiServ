@@ -1,0 +1,31 @@
+---
+- name: Build terminal UI assets with failure-safe ownership restoration
+  block:
+    - name: Hand Hermes terminal UI build workspace to the runtime identity
+      ansible.builtin.file:
+        path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        owner: "{{ hermes_agent_user }}"
+        group: "{{ hermes_agent_group }}"
+        recurse: true
+        follow: false
+
+    - name: Build Hermes dashboard terminal UI runtime bundle
+      ansible.builtin.command:
+        argv: [npm, run, build]
+        chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+      environment:
+        HOME: "{{ hermes_agent_home }}"
+        HERMES_HOME: "{{ hermes_agent_home }}"
+        PATH: "{{ hermes_agent_home }}/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      become: true
+      become_user: "{{ hermes_agent_user }}"
+      changed_when: true
+      notify: Restart Hermes Agent dashboard
+  always:
+    - name: Return Hermes terminal UI runtime to root ownership
+      ansible.builtin.file:
+        path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        owner: root
+        group: root
+        recurse: true
+        follow: false

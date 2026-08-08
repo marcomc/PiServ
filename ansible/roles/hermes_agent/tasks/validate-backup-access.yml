@@ -1,0 +1,44 @@
+---
+- name: Prove backup storage access as the Hermes runtime identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import grp
+        import os
+        import sys
+
+        backup_path, backup_parent, backup_group = sys.argv[1:]
+        expected_gid = grp.getgrnam(backup_group).gr_gid
+        effective_groups = {os.getegid(), *os.getgroups()}
+        if expected_gid not in effective_groups:
+            raise SystemExit(
+                f'runtime process lacks backup group {backup_group!r}'
+            )
+
+        backup_dir_exists = os.path.isdir(backup_path)
+        target_kind = 'backup directory' if backup_dir_exists else 'parent directory'
+        target = backup_path if backup_dir_exists else backup_parent
+
+        if not os.path.isdir(target):
+            raise SystemExit(f'{target_kind} is not an existing directory: {target}')
+
+        # When the backup directory is already present, require write and execute.
+        # When it will be created by the role, require only parent traversal.
+        required_access = os.X_OK | os.W_OK if backup_dir_exists else os.X_OK
+        if not os.access(target, required_access):
+            raise SystemExit(
+                f'runtime process cannot access {target_kind}: {target}'
+            )
+      - "{{ hermes_agent_backup_dir }}"
+      - "{{ hermes_agent_backup_dir | dirname }}"
+      - "{{ hermes_agent_backup_group }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
+  register: hermes_agent_backup_runtime_access
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_backup
+    - hermes_agent_runtime_user_available | default(false)

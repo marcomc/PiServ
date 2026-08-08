@@ -1,0 +1,273 @@
+---
+- name: Test disabled cgroup memory-controller cleanup trust boundary
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    cgroup_memory_controller_test_role_path: "{{ playbook_dir | dirname }}"
+    cgroup_memory_controller_test_root: >-
+      /var/tmp/cgroup-memory-controller-disabled-role-test
+    cgroup_memory_controller_test_cases:
+      - normal
+      - exact
+      - drifted
+      - absent
+      - fully-absent
+    cgroup_memory_controller_test_case: normal
+    cgroup_memory_controller_enabled: false
+    cgroup_memory_controller_disabled_argument: cgroup_disable=memory
+    cgroup_memory_controller_kernel_refresh_dependency_path: ""
+    cgroup_memory_controller_reboot_mode_path: ""
+    cgroup_memory_controller_required_reboot_mode: ""
+    cgroup_memory_controller_config_marker: >-
+      ANSIBLE MANAGED: cgroup v2 memory controller
+    cgroup_memory_controller_vendor_dtb: >-
+      {{ cgroup_memory_controller_test_root
+         }}/{{ cgroup_memory_controller_test_case }}/vendor.dtb
+    cgroup_memory_controller_config_path: >-
+      {{ cgroup_memory_controller_test_root
+         }}/{{ cgroup_memory_controller_test_case }}/config.txt
+    cgroup_memory_controller_managed_dtb_path: >-
+      {{ cgroup_memory_controller_test_root
+         }}/{{ cgroup_memory_controller_test_case }}/managed.dtb
+    cgroup_memory_controller_helper_path: >-
+      /usr/local/libexec/cgroup-memory-controller-disabled-{{
+      cgroup_memory_controller_test_case }}-test/manage-cgroup-memory-dtb
+    cgroup_memory_controller_kernel_hook_path: >-
+      /etc/kernel/postinst.d/zz-cgroup-memory-controller-disabled-{{
+      cgroup_memory_controller_test_case }}-test
+    cgroup_memory_controller_backup_dir: >-
+      /var/lib/cgroup-memory-controller-disabled-{{
+      cgroup_memory_controller_test_case }}-test
+    cgroup_memory_controller_config_backup_filename: config.backup
+    cgroup_memory_controller_vendor_dtb_backup_filename: vendor.backup
+  tasks:
+    - name: Require a root Linux test target
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Linux'
+          - ansible_facts.user_uid == 0
+
+    - name: Exercise disabled-role cleanup trust boundary
+      block:
+        - name: Create disabled-role test root
+          check_mode: false
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_root }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Create disabled-role scenario directories
+          check_mode: false
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_root }}/{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          loop: "{{ cgroup_memory_controller_test_cases }}"
+
+        - name: Create disabled-role helper directories
+          check_mode: false
+          ansible.builtin.file:
+            path: >-
+              /usr/local/libexec/cgroup-memory-controller-disabled-{{ item }}-test
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          loop: "{{ cgroup_memory_controller_test_cases }}"
+
+        - name: Create disabled-role kernel-hook directory
+          check_mode: false
+          ansible.builtin.file:
+            path: /etc/kernel/postinst.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Write disabled-role firmware configuration fixtures
+          check_mode: false
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: >-
+              {{ cgroup_memory_controller_test_root }}/{{ item.name }}/config.txt
+            owner: root
+            group: root
+            mode: "0640"
+          loop:
+            - name: normal
+              content: "base=1\n"
+            - name: exact
+              content: |-
+                base=1
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: drifted
+              content: |-
+                base=1
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: absent
+              content: |-
+                base=1
+                # BEGIN ANSIBLE MANAGED: cgroup v2 memory controller
+            - name: fully-absent
+              content: "base=1\n"
+
+        - name: Create unsafe normal rollback target
+          check_mode: false
+          ansible.builtin.file:
+            path: >-
+              {{ cgroup_memory_controller_test_root }}/normal/managed.dtb
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+
+        - name: Install drifted rollback helpers
+          check_mode: false
+          ansible.builtin.copy:
+            content: |-
+              #!/bin/sh
+              touch {{ cgroup_memory_controller_test_root }}/{{ item }}-executed
+              exit 0
+            dest: >-
+              /usr/local/libexec/cgroup-memory-controller-disabled-{{ item }}-test/manage-cgroup-memory-dtb
+            owner: root
+            group: root
+            mode: "0755"
+          loop:
+            - normal
+            - drifted
+
+        - name: Install exact rendered check-mode helper
+          check_mode: false
+          ansible.builtin.template:
+            src: >-
+              {{ cgroup_memory_controller_test_role_path }}/templates/manage-cgroup-memory-dtb.sh.j2
+            dest: "{{ cgroup_memory_controller_helper_path }}"
+            owner: root
+            group: root
+            mode: "0755"
+          vars:
+            cgroup_memory_controller_test_case: exact
+
+        - name: Install disabled-role kernel-hook fixtures
+          check_mode: false
+          ansible.builtin.copy:
+            content: "#!/bin/sh\nexit 0\n"
+            dest: >-
+              /etc/kernel/postinst.d/zz-cgroup-memory-controller-disabled-{{ item }}-test
+            owner: root
+            group: root
+            mode: "0755"
+          loop:
+            - normal
+            - exact
+            - drifted
+            - absent
+
+        - name: Initialize normal rollback failure result
+          when: not ansible_check_mode
+          ansible.builtin.set_fact:
+            cgroup_memory_controller_normal_rollback_failed: false
+
+        - name: Reject unsafe state with the rendered rollback helper
+          when: not ansible_check_mode
+          block:
+            - name: Run normal disabled-role rollback
+              ansible.builtin.include_role:
+                name: cgroup_memory_controller
+                public: true
+              vars:
+                cgroup_memory_controller_test_case: normal
+          rescue:
+            - name: Record expected normal rollback failure
+              ansible.builtin.set_fact:
+                cgroup_memory_controller_normal_rollback_failed: true
+
+        - name: Inspect normal rollback artifacts
+          when: not ansible_check_mode
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - >-
+              /usr/local/libexec/cgroup-memory-controller-disabled-normal-test/manage-cgroup-memory-dtb
+            - >-
+              /etc/kernel/postinst.d/zz-cgroup-memory-controller-disabled-normal-test
+            - "{{ cgroup_memory_controller_test_root }}/normal-executed"
+          register: cgroup_memory_controller_normal_rollback_artifacts
+
+        - name: Read installed normal rollback helper
+          when: not ansible_check_mode
+          ansible.builtin.slurp:
+            path: >-
+              /usr/local/libexec/cgroup-memory-controller-disabled-normal-test/manage-cgroup-memory-dtb
+          register: cgroup_memory_controller_normal_rollback_helper
+
+        - name: Require safe normal rollback failure behavior
+          when: not ansible_check_mode
+          ansible.builtin.assert:
+            that:
+              - cgroup_memory_controller_normal_rollback_failed
+              - cgroup_memory_controller_normal_rollback_artifacts.results[0].stat.exists
+              - cgroup_memory_controller_normal_rollback_artifacts.results[1].stat.exists
+              - not cgroup_memory_controller_normal_rollback_artifacts.results[2].stat.exists
+              - >-
+                "source_snapshot_path=''"
+                in (cgroup_memory_controller_normal_rollback_helper.content | b64decode)
+
+        - name: Exercise disabled-role check-mode cases
+          when: ansible_check_mode
+          ansible.builtin.include_tasks: assert-disabled-check-case.yml
+          loop:
+            - name: exact
+              helper_exists: true
+              hook_exists: true
+              expect_failure: true
+            - name: drifted
+              helper_exists: true
+              hook_exists: true
+              expect_failure: false
+            - name: absent
+              helper_exists: false
+              hook_exists: true
+              expect_failure: false
+            - name: fully-absent
+              helper_exists: false
+              hook_exists: false
+              expect_failure: false
+          loop_control:
+            loop_var: cgroup_memory_controller_disabled_case
+      always:
+        - name: Remove disabled-role test root
+          check_mode: false
+          ansible.builtin.file:
+            path: "{{ cgroup_memory_controller_test_root }}"
+            state: absent
+
+        - name: Remove disabled-role helper directories
+          check_mode: false
+          ansible.builtin.file:
+            path: >-
+              /usr/local/libexec/cgroup-memory-controller-disabled-{{ item }}-test
+            state: absent
+          loop: "{{ cgroup_memory_controller_test_cases }}"
+
+        - name: Remove disabled-role backup directories
+          check_mode: false
+          ansible.builtin.file:
+            path: >-
+              /var/lib/cgroup-memory-controller-disabled-{{ item }}-test
+            state: absent
+          loop: "{{ cgroup_memory_controller_test_cases }}"
+
+        - name: Remove disabled-role kernel hooks
+          check_mode: false
+          ansible.builtin.file:
+            path: >-
+              /etc/kernel/postinst.d/zz-cgroup-memory-controller-disabled-{{ item }}-test
+            state: absent
+          loop: "{{ cgroup_memory_controller_test_cases }}"

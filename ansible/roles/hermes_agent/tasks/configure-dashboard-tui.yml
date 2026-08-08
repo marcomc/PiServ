@@ -1,0 +1,409 @@
+---
+- name: Resolve Hermes dashboard terminal UI source path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-existing
+      - "{{ hermes_agent_install_dir }}/ui-tui"
+  register: hermes_agent_dashboard_tui_source_path
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Resolve Hermes dashboard terminal UI runtime path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_runtime_path
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Inspect Hermes dashboard terminal UI runtime path
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    follow: false
+  register: hermes_agent_dashboard_tui_runtime_path_stat
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Read existing Hermes dashboard terminal UI path identities
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/stat
+      - --format=%d:%i
+      - "{{ hermes_agent_install_dir }}/ui-tui"
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_path_identities
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+    - hermes_agent_dashboard_tui_runtime_path_stat.stat.exists
+    - hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir
+    - not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk
+
+- name: Require separate Hermes dashboard terminal UI source and runtime paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_dashboard_tui_runtime_path.stdout | trim !=
+        hermes_agent_dashboard_tui_source_path.stdout | trim
+      - >-
+        not (hermes_agent_dashboard_tui_runtime_path.stdout | trim).startswith(
+        (hermes_agent_dashboard_tui_source_path.stdout | trim) ~ '/')
+      - >-
+        not (hermes_agent_dashboard_tui_source_path.stdout | trim).startswith(
+        (hermes_agent_dashboard_tui_runtime_path.stdout | trim) ~ '/')
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        (hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir and
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk)
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        hermes_agent_dashboard_tui_path_identities.stdout_lines | length == 2
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        hermes_agent_dashboard_tui_path_identities.stdout_lines[0] !=
+        hermes_agent_dashboard_tui_path_identities.stdout_lines[1]
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Preflight Hermes dashboard asset build
+  ansible.builtin.import_tasks: dashboard-assets-preflight.yml
+
+- name: Inspect built Hermes dashboard terminal UI bundle
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_tui_dist
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Inspect Hermes dashboard terminal UI runtime revision
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_runtime_revision
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Read Hermes dashboard terminal UI runtime revision
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_runtime_revision_contents
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_runtime_revision.stat.exists
+
+- name: Inspect Hermes dashboard terminal UI managed state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_manifest
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Read Hermes dashboard terminal UI managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_manifest_contents
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_manifest.stat.exists
+
+- name: Parse Hermes dashboard terminal UI managed state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_manifest_data: >-
+      {{
+        hermes_agent_dashboard_tui_manifest_contents.content |
+        b64decode | from_yaml
+        if hermes_agent_dashboard_tui_manifest.stat.exists else {}
+      }}
+  check_mode: false
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Calculate desired Hermes dashboard terminal UI source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_install_dir }}/ui-tui"
+  register: hermes_agent_dashboard_tui_source_fingerprint
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_checkout.stat.exists
+
+- name: Calculate managed Hermes dashboard terminal UI source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_runtime_source_fingerprint
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard_chat
+
+- name: Recognize a recoverable current Hermes dashboard terminal UI runtime
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_runtime_recoverable: >-
+      {{
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.exists and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir and
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.mode == '0755' and
+        hermes_agent_dashboard_tui_dist.stat.isreg and
+        not hermes_agent_dashboard_tui_dist.stat.islnk and
+        hermes_agent_dashboard_tui_dist.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_dist.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_dist.stat.mode == '0644' and
+        hermes_agent_dashboard_tui_source_fingerprint.rc == 0 and
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.rc == 0 and
+        hermes_agent_dashboard_tui_source_fingerprint.stdout | trim ==
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.stdout | trim
+      }}
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Require absent or recognized Hermes dashboard terminal UI runtime
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.exists or
+        hermes_agent_dashboard_tui_runtime_recoverable or
+        (hermes_agent_dashboard_tui_runtime_path_stat.stat.isdir and
+        not hermes_agent_dashboard_tui_runtime_path_stat.stat.islnk and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_path_stat.stat.mode == '0755' and
+        hermes_agent_dashboard_tui_runtime_revision.stat.isreg and
+        not hermes_agent_dashboard_tui_runtime_revision.stat.islnk and
+        hermes_agent_dashboard_tui_runtime_revision.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_revision.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_runtime_revision.stat.mode == '0644' and
+        hermes_agent_dashboard_tui_manifest.stat.isreg and
+        not hermes_agent_dashboard_tui_manifest.stat.islnk and
+        hermes_agent_dashboard_tui_manifest.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_manifest.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_manifest.stat.mode == '0644' and
+        hermes_agent_dashboard_tui_dist.stat.isreg and
+        not hermes_agent_dashboard_tui_dist.stat.islnk and
+        hermes_agent_dashboard_tui_dist.stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_dist.stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_dist.stat.mode == '0644' and
+        hermes_agent_dashboard_tui_manifest_data is mapping and
+        hermes_agent_dashboard_tui_manifest_data.keys() | list | sort ==
+        ['entry_sha256', 'revision', 'source_sha256'] and
+        hermes_agent_dashboard_tui_manifest_data.revision is string and
+        hermes_agent_dashboard_tui_manifest_data.revision is
+        match('^[a-f0-9]{40}$') and
+        hermes_agent_dashboard_tui_manifest_data.source_sha256 is
+        match('^[a-f0-9]{64}$') and
+        hermes_agent_dashboard_tui_manifest_data.entry_sha256 is
+        match('^[a-f0-9]{64}$') and
+        hermes_agent_dashboard_tui_runtime_revision_contents.content |
+        b64decode | trim is match('^[a-f0-9]{40}$') and
+        hermes_agent_dashboard_tui_runtime_revision_contents.content |
+        b64decode | trim == hermes_agent_dashboard_tui_manifest_data.revision and
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.stdout | trim ==
+        hermes_agent_dashboard_tui_manifest_data.source_sha256 and
+        hermes_agent_dashboard_tui_dist.stat.checksum ==
+        hermes_agent_dashboard_tui_manifest_data.entry_sha256)
+    fail_msg: >-
+      Refusing to synchronize over an existing dashboard TUI runtime without
+      exact role-managed revision, manifest, source, bundle, and metadata
+      provenance.
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Detect stale Hermes dashboard terminal UI runtime
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_runtime_stale: >-
+      {{
+        not hermes_agent_dashboard_tui_runtime_revision.stat.exists or
+        not hermes_agent_dashboard_tui_manifest.stat.exists or
+        not hermes_agent_dashboard_tui_dist.stat.exists or
+        hermes_agent_dashboard_tui_source_fingerprint.rc != 0 or
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.rc != 0 or
+        hermes_agent_dashboard_tui_source_fingerprint.stdout | trim !=
+        hermes_agent_dashboard_tui_runtime_source_fingerprint.stdout | trim or
+        ('revision: ' ~ hermes_agent_repo_version) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
+        ('entry_sha256: ' ~ hermes_agent_dashboard_tui_dist.stat.checksum) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
+        ('source_sha256: ' ~
+        (hermes_agent_dashboard_tui_source_fingerprint.stdout | trim)) not in
+        (hermes_agent_dashboard_tui_manifest_contents.content | b64decode) or
+        (hermes_agent_dashboard_tui_runtime_revision_contents.content | b64decode | trim) !=
+        hermes_agent_repo_version
+      }}
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
+- name: Create Hermes dashboard terminal UI runtime directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+    - >-
+      not ansible_check_mode or
+      not hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Render Hermes dashboard terminal UI source into its managed runtime
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --delete
+      - --exclude=node_modules
+      - --exclude=dist
+      - "{{ hermes_agent_install_dir }}/ui-tui/"
+      - "{{ hermes_agent_dashboard_tui_runtime_dir }}/"
+  changed_when: true
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+    - >-
+      hermes_agent_install is changed or
+      not hermes_agent_dashboard_tui_dist.stat.exists or
+      hermes_agent_dashboard_tui_runtime_stale
+
+- name: Inspect Hermes dashboard terminal UI dependency source
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_install_dir }}/node_modules"
+  register: hermes_agent_dashboard_tui_dependencies
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Link Hermes terminal UI dependencies into its managed runtime
+  ansible.builtin.file:
+    src: "{{ hermes_agent_install_dir }}/node_modules"
+    dest: "{{ hermes_agent_dashboard_tui_runtime_dir }}/node_modules"
+    state: link
+    owner: root
+    group: root
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+    - >-
+      not ansible_check_mode or
+      hermes_agent_dashboard_tui_dependencies.stat.exists
+
+- name: Build Hermes terminal UI assets as the runtime identity
+  ansible.builtin.include_tasks: build-dashboard-tui.yml
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+    - >-
+      hermes_agent_install is changed or
+      not hermes_agent_dashboard_tui_dist.stat.exists or
+      hermes_agent_dashboard_tui_runtime_stale
+- name: Record Hermes dashboard terminal UI runtime revision
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_repo_version }}\n"
+    dest: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
+- name: Refresh Hermes dashboard terminal UI bundle state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_tui_dist
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Restrict Hermes dashboard terminal UI bundle permissions
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_dist.stat.exists
+
+- name: Record Hermes dashboard terminal UI managed state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'revision': hermes_agent_repo_version,
+        'source_sha256': hermes_agent_dashboard_tui_source_fingerprint.stdout | trim,
+        'entry_sha256': hermes_agent_dashboard_tui_dist.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
+- name: Refresh restricted Hermes dashboard terminal UI bundle state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_dist
+  when: hermes_agent_manage_dashboard_chat
+
+- name: Assert Hermes dashboard terminal UI bundle exists
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_tui_dist.stat.exists
+      - hermes_agent_dashboard_tui_dist.stat.isreg
+      - hermes_agent_dashboard_tui_dist.stat.pw_name == 'root'
+      - hermes_agent_dashboard_tui_dist.stat.gr_name == 'root'
+      - hermes_agent_dashboard_tui_dist.stat.mode == '0644'
+  when:
+    - hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode

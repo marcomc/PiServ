@@ -1,0 +1,115 @@
+---
+- name: Define cgroup memory-controller recovery artifacts
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_backup_artifacts:
+      - path: >-
+          {{ cgroup_memory_controller_backup_dir }}/{{ cgroup_memory_controller_config_backup_filename }}
+        source: "{{ cgroup_memory_controller_config_path }}"
+        source_index: 1
+      - path: >-
+          {{ cgroup_memory_controller_backup_dir }}/{{ cgroup_memory_controller_vendor_dtb_backup_filename }}
+        source: "{{ cgroup_memory_controller_vendor_dtb }}"
+        source_index: 0
+    cgroup_memory_controller_backup_manifest_path: >-
+      {{ cgroup_memory_controller_backup_dir }}/backup-checksums.sha256
+
+- name: Read initial cgroup memory-controller recovery set
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ cgroup_memory_controller_backup_artifacts[0].path }}"
+    - "{{ cgroup_memory_controller_backup_artifacts[1].path }}"
+    - "{{ cgroup_memory_controller_backup_manifest_path }}"
+  register: cgroup_memory_controller_initial_recovery_set
+  changed_when: false
+  become: true
+  check_mode: false
+
+- name: Require a complete or absent cgroup memory-controller recovery set
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_initial_recovery_set.results
+        | map(attribute='stat.exists') | unique | list | length == 1
+    fail_msg: >-
+      Recovery backups and their checksum manifest must be either all absent for
+      first creation or all present. Refusing to combine incomplete generations.
+
+- name: Classify fresh cgroup memory-controller recovery set
+  ansible.builtin.set_fact:
+    cgroup_memory_controller_backup_set_fresh: >-
+      {{ not cgroup_memory_controller_initial_recovery_set.results[0].stat.exists }}
+
+- name: Validate provenance before fresh recovery creation
+  when: cgroup_memory_controller_backup_set_fresh
+  block:
+    - name: Read firmware configuration before fresh recovery creation
+      ansible.builtin.slurp:
+        path: "{{ cgroup_memory_controller_config_path }}"
+      register: cgroup_memory_controller_fresh_config
+      become: true
+      check_mode: false
+
+    - name: Inspect managed Device Tree before fresh recovery creation
+      ansible.builtin.stat:
+        path: "{{ cgroup_memory_controller_managed_dtb_path }}"
+        follow: false
+      register: cgroup_memory_controller_fresh_managed_dtb
+      changed_when: false
+      become: true
+      check_mode: false
+
+    - name: Require pre-policy provenance for fresh recovery creation
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('# BEGIN ' ~ cgroup_memory_controller_config_marker)
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - >-
+            ('# END ' ~ cgroup_memory_controller_config_marker)
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - >-
+            ('device_tree=' ~ (cgroup_memory_controller_managed_dtb_path | basename))
+            not in (cgroup_memory_controller_fresh_config.content | b64decode).splitlines()
+          - not cgroup_memory_controller_fresh_managed_dtb.stat.exists
+        fail_msg: >-
+          Fresh recovery backups require unmodified pre-policy boot artifacts.
+          Refusing to preserve managed cgroup memory-controller state as recovery.
+
+- name: Create and validate cgroup memory-controller recovery set
+  block:
+    - name: Run cgroup memory-controller recovery-set transaction
+      ansible.builtin.include_tasks: create-and-validate-recovery-set.yml
+  rescue:
+    - name: Remove failed fresh cgroup memory-controller recovery set
+      when:
+        - cgroup_memory_controller_backup_set_fresh
+        - not ansible_check_mode
+      ansible.builtin.file:
+        path: "{{ cgroup_memory_controller_failed_backup_path }}"
+        state: absent
+      loop: >-
+        {{
+          cgroup_memory_controller_backup_artifacts | map(attribute='path') | list
+          + [cgroup_memory_controller_backup_manifest_path]
+        }}
+      loop_control:
+        loop_var: cgroup_memory_controller_failed_backup_path
+      become: true
+
+    - name: Rethrow cgroup memory-controller recovery-set failure
+      ansible.builtin.fail:
+        msg: >-
+          {{
+            (
+              ansible_failed_result.results | default([])
+              | selectattr('failed', 'defined')
+              | selectattr('failed')
+              | map(attribute='msg')
+              | first
+            )
+            | default(ansible_failed_result.msg, true)
+            | default(ansible_failed_result.stderr, true)
+            | default(ansible_failed_result | string, true)
+          }}

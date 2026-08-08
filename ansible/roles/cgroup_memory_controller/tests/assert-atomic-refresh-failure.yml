@@ -1,0 +1,45 @@
+---
+- name: Checksum managed state before injected commit failure
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ cgroup_memory_controller_test_config }}"
+      - "{{ cgroup_memory_controller_test_managed_dtb }}"
+      - "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
+  register: cgroup_memory_controller_before_commit_failure
+  changed_when: false
+
+- name: Inject managed-state commit failure
+  ansible.builtin.command:
+    argv:
+      - "{{ cgroup_memory_controller_test_helper }}"
+      - --apply
+  environment:
+    PATH: "{{ cgroup_memory_controller_test_directory.path }}/fake-bin:{{ lookup('ansible.builtin.env', 'PATH') }}"
+    FAIL_MV_DESTINATION: >-
+      {{ cgroup_memory_controller_failed_destination | default('') }}
+    FAIL_MV_AFTER_COMMIT: >-
+      {{ cgroup_memory_controller_fail_after_commit | default(false) | string | lower }}
+  register: cgroup_memory_controller_commit_failure
+  changed_when: false
+  failed_when: >-
+    cgroup_memory_controller_commit_failure.rc == 0
+    or 'injected managed-state commit failure'
+    not in cgroup_memory_controller_commit_failure.stderr
+
+- name: Rechecksum managed state after injected commit failure
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ cgroup_memory_controller_test_config }}"
+      - "{{ cgroup_memory_controller_test_managed_dtb }}"
+      - "{{ cgroup_memory_controller_test_backup_dir }}/current-source-state"
+  register: cgroup_memory_controller_after_commit_failure
+  changed_when: false
+
+- name: Require injected commit failure to preserve managed state
+  ansible.builtin.assert:
+    that:
+      - >-
+        cgroup_memory_controller_before_commit_failure.stdout
+        == cgroup_memory_controller_after_commit_failure.stdout

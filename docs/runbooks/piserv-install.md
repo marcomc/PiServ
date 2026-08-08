@@ -38,14 +38,17 @@ complete the required manual bootstrap before running the full entry point:
    multiple candidates or an identity mismatch.
 2. Create the ignored Freenove controller source with the
    [vendor-resource procedure](../../README.md#vendor-resources).
-3. Restore the non-empty `/etc/ha-mqtt-agent/config.toml` from the approved
+3. Configure Wi-Fi outage recovery target by creating `ansible/vars/wifi-watchdog.yml`
+   from the included example and setting `piserv_wifi_watchdog_connection` to the
+   non-empty NetworkManager profile used by your host.
+4. Restore the non-empty `/etc/ha-mqtt-agent/config.toml` from the approved
    secure source, as required by the
    [Home Assistant MQTT Agent runbook](ha-mqtt-agent.md).
-4. Apply `ansible/playbooks/tailscale.yml`, then complete the Tailscale login
+5. Apply `ansible/playbooks/tailscale.yml`, then complete the Tailscale login
    described in the [Tailscale access runbook](tailscale-access.md).
-5. Apply `ansible/playbooks/pcloudcc-install.yml` to install the client. It
+6. Apply `ansible/playbooks/pcloudcc-install.yml` to install the client. It
    stops before user-service management until a saved pCloud session exists.
-6. Complete the pCloud credential bootstrap in the
+7. Complete the pCloud credential bootstrap in the
    [pCloud storage runbook](pcloudcc-storage.md), then rerun
    `scripts/run-piserv-install.sh`.
 
@@ -102,17 +105,20 @@ The entry point imports these playbooks in order:
 2. `tailscale.yml`
 3. `firewall.yml`
 4. `piserv-base.yml`
-5. `external-storage.yml`
-6. `freenove-post-os.yml`
-7. `pcloudcc-install.yml`
-8. `ha-mqtt-agent.yml`
-9. `jackett.yml`
-10. `raiplaysound-cli-daily-sync.yml`
+5. `wifi-watchdog.yml`
+6. `external-storage.yml`
+7. `freenove-post-os.yml`
+8. `pcloudcc-install.yml`
+9. `ha-mqtt-agent.yml`
+10. `hermes-agent.yml`
+11. `jackett.yml`
+12. `raiplaysound-cli-daily-sync.yml`
 
 The storage preflight rejects an invalid identity before any host mutation.
 The remaining order keeps Tailscale and the firewall ready before the base
-playbook's listener preconditions, and installs pCloud before the RaiPlaySound
-workload that depends on its mount health.
+playbook's listener preconditions, configures Wi-Fi recovery with the base host
+policy, and installs pCloud before the RaiPlaySound workload that depends on
+its mount health.
 
 ## Excluded Playbooks
 

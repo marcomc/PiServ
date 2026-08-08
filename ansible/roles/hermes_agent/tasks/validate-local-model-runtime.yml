@@ -1,0 +1,355 @@
+---
+- name: Define local-model runtime managed outputs
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_runtime_outputs:
+      - path: "{{ hermes_agent_local_model_llama_cli_path }}"
+        marker: "{{ hermes_agent_local_model_llama_cli_managed_state_file }}"
+        binary: llama-cli
+      - path: "{{ hermes_agent_local_model_llama_server_path }}"
+        marker: "{{ hermes_agent_local_model_llama_server_managed_state_file }}"
+        binary: llama-server
+
+- name: Assert dedicated local-model runtime configuration
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_model_runtime_dir is match('^/[^/]+')
+      - >-
+        hermes_agent_local_model_runtime_dir is not
+        match('^/(boot|dev|etc|proc|run|sys|tmp|var/tmp|bin|sbin|lib|lib32|lib64|usr/bin|usr/sbin|usr/lib)(/|$)')
+      - >-
+        hermes_agent_local_model_runtime_managed_state_file ==
+        hermes_agent_local_model_runtime_dir ~ '/.hermes-agent-managed.yml'
+      - item.path is match('^/[^/]+')
+      - item.marker == item.path ~ '.hermes-agent-managed.yml'
+      - >-
+        item.path is not
+        match('^/(boot|dev|etc|proc|run|sys|tmp|var/tmp|bin|sbin|lib|lib32|lib64|usr/bin|usr/sbin|usr/lib)(/|$)')
+    fail_msg: >-
+      The llama.cpp runtime and active links must use dedicated absolute paths
+      outside protected system and shared temporary roots.
+  loop: "{{ hermes_agent_local_model_runtime_outputs }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Define configured local-model runtime output paths
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_runtime_output_paths: >-
+      {{
+        [hermes_agent_local_model_runtime_dir,
+         hermes_agent_local_model_runtime_managed_state_file] +
+        (hermes_agent_local_model_runtime_outputs | map(attribute='path') | list) +
+        (hermes_agent_local_model_runtime_outputs | map(attribute='marker') | list)
+      }}
+
+- name: Resolve local-model runtime output parent identities
+  ansible.builtin.command:
+    argv: [/usr/bin/realpath, --canonicalize-missing, "{{ item | dirname }}"]
+  loop: "{{ hermes_agent_local_model_runtime_output_paths }}"
+  register: hermes_agent_local_model_runtime_output_parent_identities
+  changed_when: false
+  check_mode: false
+
+- name: Initialize canonical local-model runtime output identities
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_runtime_output_identities:
+      results: []
+
+- name: Build canonical local-model runtime output identities
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_runtime_output_identities:
+      results: >-
+        {{
+          hermes_agent_local_model_runtime_output_identities.results | default([]) +
+          [{
+            'item': item.item,
+            'stdout': item.stdout ~ '/' ~ (item.item | basename)
+          }]
+        }}
+  loop: "{{ hermes_agent_local_model_runtime_output_parent_identities.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Require canonical distinct local-model runtime outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_local_model_runtime_output_identities.results |
+        map(attribute='stdout') | list ==
+        hermes_agent_local_model_runtime_output_paths
+      - >-
+        hermes_agent_local_model_runtime_output_identities.results |
+        map(attribute='stdout') | unique | length == 6
+      - >-
+        hermes_agent_local_model_runtime_outputs |
+        map(attribute='path') | reject('equalto', hermes_agent_local_model_runtime_dir) |
+        list | length == 2
+    fail_msg: >-
+      Local-model runtime, links, and provenance markers must be canonical and distinct.
+
+- name: Resolve other managed local-model collision candidates
+  ansible.builtin.command:
+    argv: [/usr/bin/realpath, --canonicalize-missing, "{{ item }}"]
+  loop:
+    - "{{ hermes_agent_install_dir }}"
+    - "{{ hermes_agent_codex_install_dir }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    - "{{ hermes_agent_download_cache_dir }}"
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_local_models_dir }}"
+    - "{{ hermes_agent_local_models_results_dir }}"
+    - "{{ hermes_agent_binary_path }}"
+    - "{{ hermes_agent_codex_binary_path }}"
+    - "{{ hermes_agent_codex_link_managed_state_file }}"
+    - "{{ hermes_agent_installer_path }}"
+    - "{{ hermes_agent_installer_path }}.inference-provenance.yml"
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    - "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+    - "{{ hermes_agent_local_model_benchmark_helper_path }}"
+    - "{{ hermes_agent_local_models_managed_state_file }}"
+    - "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+    - "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+    - "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
+  register: hermes_agent_local_model_other_identities
+  changed_when: false
+  check_mode: false
+
+- name: Reject local-model runtime topology collisions
+  ansible.builtin.assert:
+    that:
+      - item.0.stdout != item.1.stdout
+      - not item.0.stdout.startswith(item.1.stdout ~ '/')
+      - not item.1.stdout.startswith(item.0.stdout ~ '/')
+    fail_msg: >-
+      A local-model runtime output equals, contains, or resides beneath another managed path.
+  loop: >-
+    {{
+      hermes_agent_local_model_runtime_output_identities.results |
+      product(hermes_agent_local_model_other_identities.results) | list
+    }}
+  loop_control:
+    label: "{{ item.0.item }} versus {{ item.1.item }}"
+
+- name: Inspect local-model activation link parents
+  ansible.builtin.stat:
+    path: "{{ item.path | dirname }}"
+    follow: false
+  loop: "{{ hermes_agent_local_model_runtime_outputs }}"
+  register: hermes_agent_local_model_link_parents
+  changed_when: false
+  check_mode: false
+
+- name: Inspect local-model runtime parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_model_runtime_dir | dirname }}"
+    follow: false
+  register: hermes_agent_local_model_runtime_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require safe existing local-model runtime parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_local_model_runtime_parent.stat.exists or
+        (hermes_agent_local_model_runtime_parent.stat.isdir and
+         not hermes_agent_local_model_runtime_parent.stat.islnk and
+         hermes_agent_local_model_runtime_parent.stat.pw_name == 'root' and
+         hermes_agent_local_model_runtime_parent.stat.gr_name == 'root' and
+         hermes_agent_local_model_runtime_parent.stat.mode is
+         match('^0?[0-7][0145][0145]$'))
+    fail_msg: >-
+      An existing local-model runtime parent must be a root-owned directory
+      that is not writable by group or other users.
+
+- name: Require safe local-model activation link parents
+  ansible.builtin.assert:
+    that:
+      - item.stat.isdir
+      - not item.stat.islnk
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode is match('^0?[0-7][0145][0145]$')
+    fail_msg: >-
+      Existing local-model activation parents must be root-owned directories
+      that are not writable by group or other users.
+  loop: "{{ hermes_agent_local_model_link_parents.results }}"
+  loop_control:
+    label: "{{ item.item.path | dirname }}"
+
+- name: Inspect local-model runtime and managed outputs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{
+      [hermes_agent_local_model_runtime_dir,
+       hermes_agent_local_model_runtime_managed_state_file] +
+      (hermes_agent_local_model_runtime_outputs | map(attribute='path') | list) +
+      (hermes_agent_local_model_runtime_outputs | map(attribute='marker') | list)
+    }}
+  register: hermes_agent_local_model_runtime_output_states
+  changed_when: false
+  check_mode: false
+
+- name: Inspect sibling managed output inode identities
+  ansible.builtin.stat:
+    path: "{{ item.item }}"
+    follow: false
+  loop: "{{ hermes_agent_local_model_other_identities.results }}"
+  register: hermes_agent_local_model_other_output_states
+  changed_when: false
+  check_mode: false
+
+- name: Reject local-model inode aliases with sibling managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.0.stat.exists or not item.1.stat.exists or
+        item.0.stat.dev != item.1.stat.dev or
+        item.0.stat.inode != item.1.stat.inode
+    fail_msg: >-
+      A local-model runtime output or provenance marker aliases another managed
+      output inode.
+  loop: >-
+    {{
+      hermes_agent_local_model_runtime_output_states.results |
+      product(hermes_agent_local_model_other_output_states.results) | list
+    }}
+  loop_control:
+    label: "{{ item.0.item }} versus {{ item.1.item.item }}"
+
+- name: Read existing local-model provenance markers
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ hermes_agent_local_model_runtime_output_states.results }}"
+  register: hermes_agent_local_model_provenance_contents
+  when:
+    - item.item in ([hermes_agent_local_model_runtime_managed_state_file] + (hermes_agent_local_model_runtime_outputs | map(attribute='marker') | list))
+    - item.stat.exists
+
+- name: Initialize local-model provenance data
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_provenance_data: {}
+
+- name: Initialize existing local-model output inode identities
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_existing_inode_identities: []
+
+- name: Collect existing local-model output inode identities
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_existing_inode_identities: >-
+      {{
+        hermes_agent_local_model_existing_inode_identities | default([]) +
+        [item.stat.dev | string ~ ':' ~ item.stat.inode | string]
+      }}
+  loop: "{{ hermes_agent_local_model_runtime_output_states.results }}"
+  when: item.stat.exists
+
+- name: Reject local-model output inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_local_model_existing_inode_identities | default([]) | unique | length ==
+        hermes_agent_local_model_existing_inode_identities | default([]) | length
+    fail_msg: >-
+      Local-model runtime, activation links, and provenance markers must not
+      alias another managed output inode.
+
+- name: Parse local-model provenance markers
+  ansible.builtin.set_fact:
+    hermes_agent_local_model_provenance_data: >-
+      {{
+        hermes_agent_local_model_provenance_data | default({}) |
+        combine({item.item.item: (item.content | b64decode | from_yaml)})
+      }}
+  loop: "{{ hermes_agent_local_model_provenance_contents.results }}"
+  when: not item.skipped | default(false)
+
+- name: Inspect existing local-model runtime binaries
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_model_runtime_dir }}/{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - llama-cli
+    - llama-server
+  register: hermes_agent_prior_local_model_runtime_binaries
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_local_model_runtime_output_states.results[0].stat.exists
+
+- name: Require absent or positively managed local-model runtime
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not hermes_agent_local_model_runtime_output_states.results[0].stat.exists and
+         not hermes_agent_local_model_runtime_output_states.results[1].stat.exists) or
+        (hermes_agent_local_model_runtime_output_states.results[0].stat.isdir and
+         not hermes_agent_local_model_runtime_output_states.results[0].stat.islnk and
+         hermes_agent_local_model_runtime_output_states.results[0].stat.pw_name == 'root' and
+         hermes_agent_local_model_runtime_output_states.results[0].stat.gr_name == 'root' and
+         hermes_agent_local_model_runtime_output_states.results[0].stat.mode == '0755' and
+         hermes_agent_local_model_runtime_output_states.results[1].stat.isreg and
+         not hermes_agent_local_model_runtime_output_states.results[1].stat.islnk and
+         hermes_agent_local_model_runtime_output_states.results[1].stat.pw_name == 'root' and
+         hermes_agent_local_model_runtime_output_states.results[1].stat.gr_name == 'root' and
+         hermes_agent_local_model_runtime_output_states.results[1].stat.mode == '0600' and
+         runtime_data.keys() | list | sort ==
+         ['archive_checksum', 'binaries', 'managed_by', 'runtime_dir', 'runtime_version', 'schema_version'] and
+         runtime_data.managed_by == 'marcomc.hermes_agent' and
+         runtime_data.schema_version == 1 and
+         runtime_data.runtime_dir == hermes_agent_local_model_runtime_dir and
+         runtime_data.runtime_version == hermes_agent_local_model_runtime_version and
+         runtime_data.archive_checksum == hermes_agent_local_model_runtime_archive_checksum and
+         hermes_agent_prior_local_model_runtime_binaries.results[0].stat.isreg and
+         not hermes_agent_prior_local_model_runtime_binaries.results[0].stat.islnk and
+         hermes_agent_prior_local_model_runtime_binaries.results[1].stat.isreg and
+         not hermes_agent_prior_local_model_runtime_binaries.results[1].stat.islnk and
+         runtime_data.binaries.keys() | list | sort == ['llama-cli', 'llama-server'] and
+         runtime_data.binaries['llama-cli'] ==
+         hermes_agent_prior_local_model_runtime_binaries.results[0].stat.checksum and
+         runtime_data.binaries['llama-server'] ==
+         hermes_agent_prior_local_model_runtime_binaries.results[1].stat.checksum)
+    fail_msg: Refusing to populate a foreign or unproven llama.cpp runtime directory.
+  vars:
+    runtime_data: >-
+      {{
+        hermes_agent_local_model_provenance_data[
+          hermes_agent_local_model_runtime_managed_state_file
+        ] | default({})
+      }}
+
+- name: Require absent or positively managed local-model activation links
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not link_state.stat.exists and not marker_state.stat.exists) or
+        (link_state.stat.islnk and link_state.stat.pw_name == 'root' and
+         link_state.stat.gr_name == 'root' and marker_state.stat.isreg and
+         not marker_state.stat.islnk and marker_state.stat.mode == '0600' and
+         marker_state.stat.pw_name == 'root' and marker_state.stat.gr_name == 'root' and
+         marker_data.keys() | list | sort == ['link_path', 'managed_by', 'schema_version', 'target'] and
+         marker_data.managed_by == 'marcomc.hermes_agent' and
+         marker_data.schema_version == 1 and
+         marker_data.link_path == item.path and
+         marker_data.target == link_state.stat.lnk_target and
+         marker_data.target | basename == item.binary and
+         marker_data.target | dirname | dirname == hermes_agent_local_model_runtime_dir | dirname) or
+        (link_state.stat.islnk and link_state.stat.pw_name == 'root' and
+         link_state.stat.gr_name == 'root' and
+         link_state.stat.lnk_target == hermes_agent_local_model_runtime_dir ~ '/' ~ item.binary)
+    fail_msg: "Refusing to replace foreign local-model activation output {{ item.path }}."
+  loop: "{{ hermes_agent_local_model_runtime_outputs }}"
+  loop_control:
+    index_var: output_index
+    label: "{{ item.path }}"
+  vars:
+    link_state: "{{ hermes_agent_local_model_runtime_output_states.results[output_index + 2] }}"
+    marker_state: "{{ hermes_agent_local_model_runtime_output_states.results[output_index + 4] }}"
+    marker_data: "{{ hermes_agent_local_model_provenance_data[item.marker] | default({}) }}"

@@ -1,0 +1,12 @@
+---
+- name: Reject non-IPv4 Wi-Fi watchdog internet probes
+  hosts: localhost
+  gather_facts: false
+  vars:
+    wifi_watchdog_internet_probe_addresses:
+      - connectivity.example.invalid
+  tasks:
+    - name: Validate role input
+      ansible.builtin.include_role:
+        name: wifi_watchdog
+        tasks_from: validate-input.yml

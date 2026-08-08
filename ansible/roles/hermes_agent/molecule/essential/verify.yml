@@ -1,0 +1,172 @@
+---
+- name: Verify essential Hermes Agent capabilities
+  hosts: all
+  become: true
+  tasks:
+    - name: Read managed service states
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - "{{ item.command }}"
+          - "{{ item.unit }}"
+      loop:
+        - command: is-active
+          unit: hermes-agent-dashboard.service
+        - command: is-enabled
+          unit: hermes-agent-backup.timer
+      changed_when: false
+      register: hermes_agent_essential_service_states
+
+    - name: Verify loopback dashboard response
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9119/
+        status_code: 200
+
+    - name: Run scheduled backup service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - start
+          - hermes-agent-backup.service
+      changed_when: true
+
+    - name: Find Hermes Agent backup archive
+      ansible.builtin.find:
+        paths: /var/backups/hermes-agent
+        patterns: hermes-backup-*.zip
+        file_type: file
+      register: hermes_agent_essential_backup_archives
+
+    - name: Read installed CLI versions
+      ansible.builtin.command:
+        argv:
+          - "{{ item }}"
+          - --version
+      loop:
+        - /usr/local/bin/hermes
+        - /usr/local/bin/codex
+      changed_when: false
+      register: hermes_agent_essential_cli_versions
+
+    - name: Inspect essential managed artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
+        - /var/lib/hermes-agent/node/bin/npm
+        - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+        - /usr/local/lib/hermes-agent/.hermes-venv-managed.yml
+        - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+        - /etc/systemd/system/hermes-agent-dashboard.service
+        - /etc/systemd/system/hermes-agent-backup.timer
+      register: hermes_agent_essential_artifacts
+
+    - name: Inspect disabled local-model artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/lib/llama.cpp
+        - /usr/local/libexec/hermes-agent/benchmark-local-model
+        - /var/lib/hermes-models
+      register: hermes_agent_essential_local_model_artifacts
+
+    - name: Assert essential role contract
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_essential_service_states.results[0].stdout | trim == 'active'
+          - hermes_agent_essential_service_states.results[1].stdout | trim == 'enabled'
+          - hermes_agent_essential_backup_archives.matched | int == 1
+          - >-
+            hermes_agent_essential_cli_versions.results[0].stdout | trim ==
+            'Hermes Agent v0.20.0'
+          - >-
+            hermes_agent_essential_cli_versions.results[1].stdout | trim ==
+            'codex-cli 0.145.0'
+          - >-
+            hermes_agent_essential_artifacts.results |
+            rejectattr('stat.exists') | list | length == 0
+          - hermes_agent_essential_artifacts.results[0].stat.pw_name == 'root'
+          - hermes_agent_essential_artifacts.results[0].stat.gr_name == 'root'
+          - hermes_agent_essential_artifacts.results[0].stat.mode == '0644'
+          - >-
+            hermes_agent_essential_local_model_artifacts.results |
+            selectattr('stat.exists') | list | length == 0
+
+    - name: Create essential benchmark authorization mock directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-essential-benchmark-mocks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install permissive essential benchmark systemctl mock
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> /tmp/hermes-essential-benchmark-systemctl.log
+          exit 0
+        dest: /usr/local/lib/hermes-essential-benchmark-mocks/systemctl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render essential benchmark authorization helper
+      ansible.builtin.template:
+        src: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/templates/benchmark-hermes-local-model.sh.j2
+        dest: /usr/local/lib/hermes-essential-benchmark-helper
+        owner: root
+        group: root
+        mode: "0755"
+      vars:
+        hermes_agent_local_models:
+          - id: configured-essential
+        hermes_agent_local_models_host: 127.0.0.1
+        hermes_agent_local_models_results_dir: /var/lib/hermes-models/results
+        hermes_agent_local_models_benchmark_max_tokens: 64
+        hermes_agent_local_models_benchmark_request_timeout: 120
+        hermes_agent_manage_dashboard: false
+        hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
+        hermes_agent_dashboard_host: 127.0.0.1
+        hermes_agent_dashboard_port: 9119
+
+    - name: ShellCheck essential benchmark authorization helper
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - /usr/local/lib/hermes-essential-benchmark-helper
+      changed_when: false
+
+    - name: Reject unconfigured essential benchmark model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-essential-benchmark-helper
+          - foreign-stale
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-essential-benchmark-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      register: hermes_agent_essential_foreign_benchmark
+      changed_when: false
+      failed_when: >-
+        hermes_agent_essential_foreign_benchmark.rc != 64 or
+        'Unknown configured local model: foreign-stale' not in
+        hermes_agent_essential_foreign_benchmark.stderr
+
+    - name: Inspect essential benchmark systemctl invocation log
+      ansible.builtin.stat:
+        path: /tmp/hermes-essential-benchmark-systemctl.log
+      register: hermes_agent_essential_benchmark_systemctl_log
+
+    - name: Assert unconfigured benchmark model caused no systemd operation
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_essential_benchmark_systemctl_log.stat.exists
+
+    - name: Verify essential fail-before-mutation boundaries
+      ansible.builtin.include_tasks: tasks/preflight-safety.yml

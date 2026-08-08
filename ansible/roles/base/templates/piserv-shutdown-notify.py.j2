@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import socket
+import subprocess
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+RECIPIENT = {{ base_shutdown_notification_recipient | to_json }}
+SUBJECT_PREFIX = {{ base_shutdown_notification_subject_prefix | to_json }}
+MAIL_CONFIG_PATH = {{ base_shutdown_notification_condition_path | to_json }}
+JOURNAL_TIMEOUT_SECONDS = 10
+MAIL_TIMEOUT_SECONDS = 20
+FIELD_LENGTH_LIMIT = 512
+CORRELATION_WINDOW_MICROSECONDS = 5_000_000
+JOURNAL_RECORD_LIMIT = 256
+
+SUDO_COMMAND_DELIMITER = " ; COMMAND="
+SUDO_EXECUTABLE = "/usr/bin/sudo"
+LOGIND_EXECUTABLE = "/usr/lib/systemd/systemd-logind"
+LOGIND_SHUTDOWN_MESSAGE_ID = "98268866d1d54a499c4e98921d93bc40"
+
+
+@dataclass(frozen=True)
+class ShutdownEvidence:
+    shutdown_event_at: str
+    sudo_evidence_at: str
+    sudo_user: str
+    command: str
+
+
+def safe_field(value: object) -> str:
+    normalized = "".join(
+        character if character.isprintable() else " " for character in str(value)
+    )
+    return " ".join(normalized.split())[:FIELD_LENGTH_LIMIT]
+
+
+def mail_config_available() -> bool:
+    try:
+        config_path = Path(MAIL_CONFIG_PATH)
+        return config_path.is_file() and config_path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def system_state() -> str:
+    try:
+        result = subprocess.run(
+            ["/usr/bin/systemctl", "is-system-running"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=JOURNAL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def shutdown_in_progress() -> bool:
+    return system_state() in {"stopping", "offline"}
+
+
+def journal_records(*identifiers: str) -> list[dict[str, object]]:
+    if not identifiers:
+        return []
+
+    command = ["/usr/bin/journalctl", "--boot=0"]
+    for identifier in identifiers:
+        command.extend(["--identifier", identifier])
+    command.extend(
+        [
+            f"--lines={JOURNAL_RECORD_LIMIT}",
+            "--no-pager",
+            "--output=json",
+        ]
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=JOURNAL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    records: list[dict[str, object]] = []
+    for line in result.stdout.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def journal_timestamp_value(record: dict[str, object]) -> int | None:
+    for field_name in ("_SOURCE_REALTIME_TIMESTAMP", "__REALTIME_TIMESTAMP"):
+        try:
+            return int(str(record.get(field_name)))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def journal_monotonic_value(record: dict[str, object]) -> int | None:
+    try:
+        return int(str(record.get("__MONOTONIC_TIMESTAMP")))
+    except (TypeError, ValueError):
+        return None
+
+
+def journal_timestamp(record: dict[str, object]) -> str:
+    timestamp = journal_timestamp_value(record)
+    if timestamp is None:
+        return "unknown"
+    timestamp_seconds = timestamp / 1_000_000
+    return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(
+        timespec="seconds"
+    )
+
+
+def is_authenticated_logind_shutdown(record: dict[str, object]) -> bool:
+    return (
+        record.get("_COMM") == "systemd-logind"
+        and record.get("_EXE") == LOGIND_EXECUTABLE
+        and record.get("MESSAGE_ID") == LOGIND_SHUTDOWN_MESSAGE_ID
+    )
+
+
+def is_authenticated_sudo(record: dict[str, object]) -> bool:
+    return record.get("_COMM") == "sudo" and record.get("_EXE") == SUDO_EXECUTABLE
+
+
+def parse_sudo_evidence(record: dict[str, object]) -> tuple[str, str] | None:
+    message = record.get("MESSAGE")
+    if not isinstance(message, str):
+        return None
+
+    prefix, delimiter, command = message.partition(SUDO_COMMAND_DELIMITER)
+    if not delimiter or not command:
+        return None
+
+    sudo_user, user_delimiter, sudo_fields = prefix.partition(" : ")
+    sudo_user = safe_field(sudo_user)
+    command = safe_field(command)
+    if not user_delimiter or not sudo_user or not sudo_fields or not command:
+        return None
+
+    return sudo_user, command
+
+
+def correlate_shutdown_evidence(
+    records: list[dict[str, object]],
+) -> ShutdownEvidence | None:
+    shutdown_events = [
+        record
+        for record in records
+        if is_authenticated_logind_shutdown(record)
+        and journal_monotonic_value(record) is not None
+    ]
+    if not shutdown_events:
+        return None
+
+    shutdown_event = max(
+        shutdown_events,
+        key=lambda record: journal_monotonic_value(record) or 0,
+    )
+    shutdown_monotonic = journal_monotonic_value(shutdown_event)
+    if shutdown_monotonic is None:
+        return None
+
+    candidates: list[tuple[int, dict[str, object], str, str]] = []
+    for record in records:
+        if not is_authenticated_sudo(record):
+            continue
+        sudo_monotonic = journal_monotonic_value(record)
+        parsed = parse_sudo_evidence(record)
+        if sudo_monotonic is None or parsed is None:
+            continue
+        age = shutdown_monotonic - sudo_monotonic
+        if 0 < age <= CORRELATION_WINDOW_MICROSECONDS:
+            candidates.append((sudo_monotonic, record, *parsed))
+
+    if not candidates:
+        return None
+
+    _, sudo_record, sudo_user, command = max(
+        candidates,
+        key=lambda candidate: candidate[0],
+    )
+    return ShutdownEvidence(
+        shutdown_event_at=journal_timestamp(shutdown_event),
+        sudo_evidence_at=journal_timestamp(sudo_record),
+        sudo_user=sudo_user,
+        command=command,
+    )
+
+
+def shutdown_evidence(observed_monotonic: int) -> ShutdownEvidence | None:
+    records = journal_records("systemd-logind", "sudo")
+    recent_records = [
+        record
+        for record in records
+        if not is_authenticated_logind_shutdown(record)
+        or (
+            (event_monotonic := journal_monotonic_value(record)) is not None
+            and 0 <= observed_monotonic - event_monotonic
+            <= CORRELATION_WINDOW_MICROSECONDS
+        )
+    ]
+    return correlate_shutdown_evidence(recent_records)
+
+
+def notification_payload(hostname: str, evidence: ShutdownEvidence | None) -> str:
+    notification_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    hostname = safe_field(hostname)
+    subject = f"{safe_field(SUBJECT_PREFIX)} shutting down: {hostname}"
+    if evidence is None:
+        shutdown_event_at = "unknown"
+        sudo_evidence_at = "unknown"
+        sudo_user = "unknown"
+        command = "unknown"
+        evidence_note = (
+            "No temporally adjacent authenticated sudo evidence was found for "
+            "an authenticated systemd-logind shutdown event."
+        )
+    else:
+        shutdown_event_at = safe_field(evidence.shutdown_event_at)
+        sudo_evidence_at = safe_field(evidence.sudo_evidence_at)
+        sudo_user = safe_field(evidence.sudo_user)
+        command = safe_field(evidence.command)
+        evidence_note = (
+            "Authenticated sudo journal evidence within 5 seconds before the "
+            "latest authenticated systemd-logind shutdown event. This temporal "
+            "correlation is not proof that the command caused the shutdown."
+        )
+
+    return "\n".join(
+        [
+            f"To: {safe_field(RECIPIENT)}",
+            f"Subject: {subject}",
+            "",
+            f"Host: {hostname}",
+            f"Shutdown notification time (UTC): {notification_time}",
+            f"systemd-logind shutdown event time (UTC): {shutdown_event_at}",
+            f"Nearby sudo evidence time (UTC): {sudo_evidence_at}",
+            f"Nearby sudo user: {sudo_user}",
+            f"Nearby sudo command: {command}",
+            f"Evidence: {evidence_note}",
+            "",
+        ]
+    )
+
+
+def main() -> int:
+    helper_started_monotonic = time.monotonic_ns() // 1_000
+    if not mail_config_available() or not shutdown_in_progress():
+        return 0
+
+    hostname = socket.gethostname()
+    payload = notification_payload(
+        hostname,
+        shutdown_evidence(helper_started_monotonic),
+    )
+    subprocess.run(
+        ["/usr/sbin/sendmail", "-t"],
+        input=payload,
+        text=True,
+        check=True,
+        timeout=MAIL_TIMEOUT_SECONDS,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

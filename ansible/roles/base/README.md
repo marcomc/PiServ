@@ -20,7 +20,8 @@ This project-local role codifies live PiServ baseline hardening:
 - Cockpit HTTPS web console for system administration
 - disabled system services that are not part of the production baseline
 - unattended upgrades and reboot window
-- boot notification service
+- boot and shutdown notification services
+- optional managed kernel reboot mode with a stable pre-policy backup
 - SMART health inspection tooling for local storage validation
 - base host packages, including `jq` for JSON inspection
 - cloud-init disabled state
@@ -68,6 +69,19 @@ This project-local role codifies live PiServ baseline hardening:
 | `base_manage_reboot_notification` | `true` | Install and enable boot notification service |
 | `base_reboot_notification_recipient` | `root` | Local recipient for boot notification |
 | `base_reboot_notification_condition_path` | `/etc/msmtprc` | Path required before boot notification runs |
+| `base_reboot_notification_retry_attempts` | `6` | Maximum attempts after temporary mail delivery failure |
+| `base_reboot_notification_retry_delay_seconds` | `15` | Delay between temporary delivery attempts |
+| `base_reboot_notification_delivery_timeout_seconds` | `20` | Per-attempt mail delivery timeout |
+| `base_manage_kernel_reboot_mode` | `false` | Manage the kernel command-line reboot mode |
+| `base_kernel_reboot_mode` | `default` | Use `default`, `warm`, or `cold` reboot mode |
+| `base_kernel_cmdline_path` | `/boot/firmware/cmdline.txt` | Managed single-line kernel command line |
+| `base_kernel_cmdline_backup_path` | `/var/lib/piserv/reboot-policy/cmdline.txt.pre-managed-mode` | Stable pre-policy backup |
+| `base_kernel_reboot_runtime_mode_path` | `/sys/kernel/reboot/mode` | Active kernel reboot-mode control |
+| `base_manage_shutdown_notification` | `true` | Install and enable shutdown notification service |
+| `base_shutdown_notification_service_name` | `piserv-shutdown-notify.service` | Bounded concrete `.service` unit filename without path components |
+| `base_shutdown_notification_script_path` | `/usr/local/sbin/piserv-shutdown-notify` | Normalized absolute helper file path restricted to systemd-safe executable characters |
+| `base_shutdown_notification_recipient` | `root` | Local recipient for shutdown notification |
+| `base_shutdown_notification_condition_path` | `/etc/msmtprc` | Normalized absolute path required before shutdown notification runs |
 | `base_manage_smartmontools` | `true` | Install SMART health inspection tooling |
 | `base_smartmontools_packages` | `smartmontools` | Debian packages required for SMART inspection |
 | `base_validate_root_storage` | `true` | Validate the dynamically discovered root NVMe health |
@@ -107,8 +121,35 @@ cannot reach the plugin. Set `base_unattended_mail_to` to the required local
 recipient for both paths, or leave it empty to disable unattended-upgrades mail.
 
 The boot notification service is enabled by default, but systemd skips it until
-`base_reboot_notification_condition_path` exists. Configure a mail transport
-with a separate role before expecting delivery.
+`base_reboot_notification_condition_path` exists. It retries only `sendmail`
+temporary-failure exit `75` with a bounded policy; permanent mail errors remain
+failed and visible to systemd. It uses the local hostname without a DNS lookup.
+Its generated `TimeoutStartSec` covers the configured attempt budget plus a
+ten-second margin. The shutdown notification
+service remains active until `systemd` enters a shutdown transaction and sends
+before the network is stopped when
+`base_shutdown_notification_condition_path` exists. For the latest authenticated
+`systemd-logind` shutdown event observed within five seconds of helper execution,
+its message includes an authenticated `sudo` command, user, and timestamp only
+when that record precedes the event by at most five seconds. This is temporal
+correlation, not proof that the command caused the shutdown. Scheduled commands
+outside that window, direct-root and hardware
+paths, power loss, and kernel panic have no correlated `sudo` evidence; power
+loss and kernel panic may not send an email at all.
+The helper rechecks that the mail config is a non-empty regular file immediately
+before delivery. Configure a mail transport with a separate role before
+expecting delivery.
+
+Kernel reboot-mode management is disabled by default. When enabled, the role
+requires a non-empty single-line command file, preserves its first observed
+content in a validated private backup, removes existing `reboot=` tokens, and
+optionally appends one final `reboot=w` or `reboot=c` token. For warm or cold
+mode, it also activates and verifies the running kernel mode so the first reboot
+uses the selected path. Mode `default` removes the managed token and returns
+future boots to the Raspberry Pi device tree; it does not change the current
+kernel mode. Before any change, the role requires the runtime control, command
+line, and any existing backup to be distinct regular files, including distinct
+filesystem identities. The role never initiates a reboot.
 
 The role installs `smartmontools` and derives the physical parent disk from the
 root filesystem. It validates that PiServ is booted from NVMe and that the root
@@ -159,6 +200,8 @@ It also repairs a missing selector installation link on later runs.
 ```sh
 python3 tests/test_unattended_upgrade_digest.py
 ansible-playbook tests/test-unattended-upgrades.yml
+ANSIBLE_ROLES_PATH=.. ansible-playbook tests/test-reboot-mode.yml
+ANSIBLE_ROLES_PATH=.. ansible-playbook --check tests/test-reboot-mode-check.yml
 ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check tests/test.yml
 ansible-lint ansible/playbooks/piserv-base.yml ansible/roles/base
 ```

@@ -1,0 +1,41 @@
+---
+- name: Inspect Hermes Agent systemd unit targets
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_dashboard_service_name }}"
+    - "{{ hermes_agent_backup_service_name }}"
+    - "{{ hermes_agent_backup_timer_name }}"
+  register: hermes_agent_systemd_unit_targets
+  changed_when: false
+  check_mode: false
+
+- name: Read existing Hermes Agent systemd unit targets
+  ansible.builtin.slurp:
+    src: "/etc/systemd/system/{{ item.item }}"
+  loop: "{{ hermes_agent_systemd_unit_targets.results }}"
+  register: hermes_agent_systemd_unit_target_contents
+  changed_when: false
+  when:
+    - item.stat.exists
+    - item.stat.isreg
+    - not item.stat.islnk
+
+- name: Require absent or role-marked Hermes Agent systemd unit targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.0.stat.exists or
+        (item.0.stat.isreg and not item.0.stat.islnk and
+        item.0.stat.pw_name == 'root' and item.0.stat.gr_name == 'root' and
+        item.0.stat.mode == '0644' and
+        (item.1.content | default('') | b64decode).startswith(
+          '# Managed by marcomc.hermes_agent\n'
+        ))
+    fail_msg: >-
+      Refusing to overwrite or remove foreign systemd unit
+      {{ item.0.item }}.
+  loop: >-
+    {{ hermes_agent_systemd_unit_targets.results |
+    zip(hermes_agent_systemd_unit_target_contents.results) | list }}

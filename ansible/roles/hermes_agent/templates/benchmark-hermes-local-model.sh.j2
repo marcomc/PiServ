@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+relax_address_space_limit=false
+case "$#:${1-}" in
+  1:*) model_id="$1" ;;
+  2:--relax-address-space-limit)
+    relax_address_space_limit=true
+    model_id="$2"
+    ;;
+  *)
+    printf 'Usage: %s [--relax-address-space-limit] MODEL_ID\n' "$0" >&2
+    exit 64
+    ;;
+esac
+
+if [[ ! "${model_id}" =~ ^[a-z0-9-]+$ ]]; then
+  printf 'Invalid local model identifier: %s\n' "${model_id}" >&2
+  exit 64
+fi
+
+case "${model_id}" in
+{% for model in hermes_agent_local_models %}
+  {{ model.id }}) ;;
+{% endfor %}
+  *)
+    printf 'Unknown configured local model: %s\n' "${model_id}" >&2
+    exit 64
+    ;;
+esac
+
+service_name="hermes-local-model-${model_id}.service"
+if ! systemctl cat "${service_name}" >/dev/null; then
+  printf 'Unknown configured local model: %s\n' "${model_id}" >&2
+  exit 64
+fi
+
+model_port="$(systemctl show "${service_name}" --property=ExecStart --value \
+  | sed -n 's/.*--port \([0-9][0-9]*\).*/\1/p')"
+if [[ ! "${model_port}" =~ ^[0-9]+$ ]]; then
+  printf 'Unable to determine local model port: %s\n' "${model_id}" >&2
+  exit 70
+fi
+
+service_url="http://{{ hermes_agent_local_models_host }}:${model_port}"
+timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
+result_path="{{ hermes_agent_local_models_results_dir }}/${model_id}-${timestamp}.json"
+runtime_dropin_dir="/run/systemd/system/${service_name}.d"
+runtime_dropin_path=""
+runtime_dropin_dir_created=false
+service_stopped=false
+service_started_by_invocation=false
+
+assert_model_test_preflight() {
+  local controllers
+  local active_model_service
+  local memory_high
+  local memory_max
+  local memory_swap_max
+
+  controllers="$(< /sys/fs/cgroup/cgroup.controllers)"
+  if [[ " ${controllers} " != *' memory '* ]]; then
+    printf 'The cgroup v2 memory controller is unavailable.\n' >&2
+    exit 70
+  fi
+
+  active_model_service="$(systemctl list-units --type=service --state=active \
+    --plain --no-legend 'hermes-local-model-*.service' | awk 'NF { print $1; exit }')"
+  if [[ -n "${active_model_service}" ]]; then
+    printf 'Refusing to run while a local model service is active: %s\n' \
+      "${active_model_service}" >&2
+    exit 70
+  fi
+
+  memory_high="$(systemctl show "${service_name}" --property=MemoryHigh --value)"
+  memory_max="$(systemctl show "${service_name}" --property=MemoryMax --value)"
+  memory_swap_max="$(systemctl show "${service_name}" --property=MemorySwapMax --value)"
+  for memory_limit in "${memory_high}" "${memory_max}"; do
+    if [[ ! "${memory_limit}" =~ ^[1-9][0-9]*$ ]]; then
+      printf 'Local model cgroup memory policy is not effective: %s\n' \
+        "${service_name}" >&2
+      exit 70
+    fi
+  done
+  if [[ ! "${memory_swap_max}" =~ ^[0-9]+$ ]]; then
+    printf 'Local model cgroup swap policy is not effective: %s\n' \
+      "${service_name}" >&2
+    exit 70
+  fi
+  if (( memory_high > memory_max )); then
+    printf 'Local model cgroup memory policy has MemoryHigh above MemoryMax.\n' >&2
+    exit 70
+  fi
+
+{% if hermes_agent_manage_dashboard %}
+  if ! systemctl is-active --quiet {{ hermes_agent_dashboard_service_name }}; then
+    printf 'Hermes dashboard is not active before the local-model test.\n' >&2
+    exit 70
+  fi
+{% endif %}
+}
+
+relax_limit_as() {
+  local effective_limit_as
+
+  if [[ -L "${runtime_dropin_dir}" ]]; then
+    printf 'Refusing symlinked systemd runtime drop-in directory: %s\n' \
+      "${runtime_dropin_dir}" >&2
+    exit 70
+  fi
+  if [[ ! -e "${runtime_dropin_dir}" ]]; then
+    install -d -o root -g root -m 0755 "${runtime_dropin_dir}"
+    runtime_dropin_dir_created=true
+  elif [[ ! -d "${runtime_dropin_dir}" ]]; then
+    printf 'Systemd runtime drop-in path is not a directory: %s\n' \
+      "${runtime_dropin_dir}" >&2
+    exit 70
+  fi
+
+  runtime_dropin_path="$(mktemp "${runtime_dropin_dir}/90-hermes-local-model-benchmark.XXXXXX")"
+  printf '%s\n' '[Service]' 'LimitAS=infinity' > "${runtime_dropin_path}"
+  chmod 0644 "${runtime_dropin_path}"
+  mv -- "${runtime_dropin_path}" "${runtime_dropin_path}.conf"
+  runtime_dropin_path="${runtime_dropin_path}.conf"
+  systemctl daemon-reload
+
+  effective_limit_as="$(systemctl show "${service_name}" --property=LimitAS --value)"
+  if [[ "${effective_limit_as}" != "infinity" ]]; then
+    printf 'Unable to relax LimitAS for the controlled local-model test.\n' >&2
+    exit 70
+  fi
+}
+
+remove_limit_as_override() {
+  if [[ -n "${runtime_dropin_path}" ]]; then
+    rm -f -- "${runtime_dropin_path}"
+  fi
+  if [[ "${runtime_dropin_dir_created}" == true ]]; then
+    rmdir "${runtime_dropin_dir}" 2>/dev/null || true
+  fi
+  if [[ -n "${runtime_dropin_path}" || "${runtime_dropin_dir_created}" == true ]]; then
+    systemctl daemon-reload
+  fi
+}
+
+cleanup() {
+  local status=$?
+
+  if [[ "${service_started_by_invocation}" == true && "${service_stopped}" != true ]]; then
+    systemctl stop "${service_name}" || true
+  fi
+  remove_limit_as_override
+  exit "${status}"
+}
+trap cleanup EXIT
+
+assert_model_test_preflight
+if [[ "${relax_address_space_limit}" == true ]]; then
+  relax_limit_as
+fi
+
+memory_before="$(awk '/MemAvailable:/ { print $2 * 1024 }' /proc/meminfo)"
+swap_used_before="$(awk '/SwapTotal:/ { total = $2 * 1024 } /SwapFree:/ { free = $2 * 1024 } END { print total - free }' /proc/meminfo)"
+systemctl reset-failed "${service_name}" 2>/dev/null || true
+systemctl start "${service_name}"
+service_started_by_invocation=true
+
+for _ in $(seq 1 120); do
+  if curl --fail --silent --max-time 5 "${service_url}/health" >/dev/null 2>&1; then
+    break
+  fi
+  service_active_state="$(systemctl show "${service_name}" --property=ActiveState --value || true)"
+  if [[ "${service_active_state}" == "failed" ]]; then
+    printf 'Local model service failed before becoming healthy: %s\n' \
+      "${service_name}" >&2
+    exit 70
+  fi
+  sleep 5
+done
+
+curl --fail --silent --show-error --max-time 5 "${service_url}/health" >/dev/null
+properties="$(curl --fail --silent --show-error --max-time 5 "${service_url}/props")"
+model_control_group="$(systemctl show "${service_name}" --property=ControlGroup --value)"
+if [[ ! "${model_control_group}" =~ ^/system\.slice/hermes-local-model-[a-z0-9-]+\.service$ ]]; then
+  printf 'Unexpected local model control group: %s\n' "${model_control_group}" >&2
+  exit 70
+fi
+
+cgroup_directory="/sys/fs/cgroup${model_control_group}"
+for cgroup_file in memory.current memory.events memory.swap.current; do
+  if [[ ! -r "${cgroup_directory}/${cgroup_file}" ]]; then
+    printf 'Missing cgroup memory accounting file: %s\n' \
+      "${cgroup_directory}/${cgroup_file}" >&2
+    exit 70
+  fi
+done
+
+main_pid="$(systemctl show "${service_name}" --property=MainPID --value)"
+if [[ ! "${main_pid}" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'Unable to determine local model main PID: %s\n' "${main_pid}" >&2
+  exit 70
+fi
+
+memory_current_before="$(<"${cgroup_directory}/memory.current")"
+memory_swap_current_before="$(<"${cgroup_directory}/memory.swap.current")"
+memory_events_before="$(jq --raw-input 'split("\n") | map(select(length > 0) | split(" ") | {key: .[0], value: (.[1] | tonumber)}) | from_entries' < "${cgroup_directory}/memory.events")"
+rss_before="$(awk '/VmRSS:/ { print $2 * 1024 }' "/proc/${main_pid}/status")"
+request_started_nanoseconds="$(date +%s%N)"
+response="$(curl --fail --silent --show-error \
+  --max-time {{ hermes_agent_local_models_benchmark_request_timeout }} \
+  --header 'Content-Type: application/json' \
+  --data '{"model":"'"${model_id}"'","messages":[{"role":"user","content":"Reply with exactly: HERMES_LOCAL_MODEL_OK"}],"temperature":0,"max_tokens":{{ hermes_agent_local_models_benchmark_max_tokens }},"stream":false}' \
+  "${service_url}/v1/chat/completions")"
+request_finished_nanoseconds="$(date +%s%N)"
+memory_after="$(awk '/MemAvailable:/ { print $2 * 1024 }' /proc/meminfo)"
+swap_used_after="$(awk '/SwapTotal:/ { total = $2 * 1024 } /SwapFree:/ { free = $2 * 1024 } END { print total - free }' /proc/meminfo)"
+memory_current_after="$(<"${cgroup_directory}/memory.current")"
+memory_swap_current_after="$(<"${cgroup_directory}/memory.swap.current")"
+memory_events_after="$(jq --raw-input 'split("\n") | map(select(length > 0) | split(" ") | {key: .[0], value: (.[1] | tonumber)}) | from_entries' < "${cgroup_directory}/memory.events")"
+rss_after="$(awk '/VmRSS:/ { print $2 * 1024 }' "/proc/${main_pid}/status")"
+service_state="$(systemctl show "${service_name}" --property=MemoryCurrent --property=MemoryPeak --property=MemorySwapCurrent --property=ExecMainStatus)"
+response_finish_reason="$(jq --raw-output '.choices[0].finish_reason // empty' <<<"${response}")"
+response_content="$(jq --raw-output '.choices[0].message.content // empty' <<<"${response}")"
+request_latency_milliseconds="$(( (request_finished_nanoseconds - request_started_nanoseconds) / 1000000 ))"
+dashboard_active_state="$(systemctl is-active {{ hermes_agent_dashboard_service_name }} || true)"
+dashboard_http_status="$(curl --max-time 5 --output /dev/null --silent --write-out '%{http_code}' http://{{ hermes_agent_dashboard_host }}:{{ hermes_agent_dashboard_port }}/ || true)"
+
+systemctl stop "${service_name}"
+service_stopped=true
+cleanup_active_state="$(systemctl show "${service_name}" --property=ActiveState --value)"
+
+jq --null-input \
+  --arg model_id "${model_id}" \
+  --arg timestamp "${timestamp}" \
+  --arg service_name "${service_name}" \
+  --arg service_url "${service_url}" \
+  --arg service_state "${service_state}" \
+  --arg model_control_group "${model_control_group}" \
+  --argjson limit_as_relaxed "${relax_address_space_limit}" \
+  --argjson request_latency_milliseconds "${request_latency_milliseconds}" \
+  --argjson properties "${properties}" \
+  --argjson response "${response}" \
+  --argjson memory_before "${memory_before}" \
+  --argjson memory_after "${memory_after}" \
+  --argjson swap_used_before "${swap_used_before}" \
+  --argjson swap_used_after "${swap_used_after}" \
+  --argjson memory_current_before "${memory_current_before}" \
+  --argjson memory_current_after "${memory_current_after}" \
+  --argjson memory_swap_current_before "${memory_swap_current_before}" \
+  --argjson memory_swap_current_after "${memory_swap_current_after}" \
+  --argjson memory_events_before "${memory_events_before}" \
+  --argjson memory_events_after "${memory_events_after}" \
+  --argjson rss_before "${rss_before}" \
+  --argjson rss_after "${rss_after}" \
+  --arg dashboard_active_state "${dashboard_active_state}" \
+  --arg dashboard_http_status "${dashboard_http_status}" \
+  --arg cleanup_active_state "${cleanup_active_state}" \
+  '{
+    model_id: $model_id,
+    timestamp_utc: $timestamp,
+    service_name: $service_name,
+    service_url: $service_url,
+    model_control_group: $model_control_group,
+    limit_as_relaxed: $limit_as_relaxed,
+    request_latency_milliseconds: $request_latency_milliseconds,
+    memory_available_bytes: {
+      before: $memory_before,
+      after: $memory_after
+    },
+    host_swap_used_bytes: {
+      before: $swap_used_before,
+      after: $swap_used_after
+    },
+    cgroup_memory: {
+      current_before: $memory_current_before,
+      current_after: $memory_current_after,
+      swap_current_before: $memory_swap_current_before,
+      swap_current_after: $memory_swap_current_after,
+      events_before: $memory_events_before,
+      events_after: $memory_events_after
+    },
+    process_rss_bytes: {
+      before: $rss_before,
+      after: $rss_after
+    },
+    service_state: $service_state,
+    dashboard: {
+      active_state: $dashboard_active_state,
+      http_status: $dashboard_http_status
+    },
+    cleanup: {
+      active_state: $cleanup_active_state,
+      service_stopped: ($cleanup_active_state == "inactive")
+    },
+    server_properties: $properties,
+    response: {
+      finish_reason: $response.choices[0].finish_reason,
+      usage: $response.usage,
+      timings: $response.timings,
+      content: $response.choices[0].message.content,
+      content_length: ($response.choices[0].message.content // "" | length),
+      reasoning_content_present: (($response.choices[0].message.reasoning_content // "" | length) > 0),
+      reasoning_content_length: ($response.choices[0].message.reasoning_content // "" | length)
+    }
+  }' > "${result_path}"
+
+printf '%s\n' "${result_path}"
+
+if [[ "${response_finish_reason}" != "stop" || -z "${response_content}" ]]; then
+  printf 'Synthetic local-model probe did not return visible completed content: %s\n' \
+    "${model_id}" >&2
+  exit 65
+fi

@@ -1,0 +1,11 @@
+---
+- name: Remove obsolete Freenove task-manager artifact after service reconciliation
+  when:
+    - not (freenove_case_manage_sigterm_cleanup_fix | bool)
+    - freenove_case_manage_background_service | bool
+  ansible.builtin.file:
+    path: "{{ freenove_case_task_manager_runtime_path }}"
+    state: absent
+  become: true
+  become_user: "{{ freenove_case_install_user }}"
+  notify: Restart Freenove background service

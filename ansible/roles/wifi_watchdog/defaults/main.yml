@@ -1,0 +1,19 @@
+---
+wifi_watchdog_service_name: wifi-connectivity-watchdog.service
+wifi_watchdog_service_path: "/etc/systemd/system/{{ wifi_watchdog_service_name }}"
+wifi_watchdog_script_path: /usr/local/sbin/wifi-connectivity-watchdog
+wifi_watchdog_interface: wlan0
+wifi_watchdog_connection: ""
+wifi_watchdog_gateway_probe: ""
+wifi_watchdog_dns_probe: example.com
+wifi_watchdog_check_interval_seconds: 30
+wifi_watchdog_connection_recovery_after_seconds: 300
+wifi_watchdog_networkmanager_recovery_after_seconds: 600
+wifi_watchdog_reboot_after_seconds: 0
+wifi_watchdog_internet_probe_addresses:
+  - 1.1.1.1
+  - 8.8.8.8
+wifi_watchdog_networkmanager_service_name: NetworkManager.service
+wifi_watchdog_monotonic_clock_path: /proc/uptime
+wifi_watchdog_reboot_mode_path: ""
+wifi_watchdog_required_reboot_mode: ""

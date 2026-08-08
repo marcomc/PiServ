@@ -1,0 +1,168 @@
+---
+- name: Create the invalid-backup case directory
+  ansible.builtin.file:
+    path: "{{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}"
+    state: directory
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0700"
+  become: true
+
+- name: Select the invalid-backup command line
+  ansible.builtin.set_fact:
+    base_test_invalid_backup_cmdline_content: >-
+      {{
+        'console=tty1 systemd.setenv=NOTE="keep reboot=w value"\n'
+        if base_test_invalid_backup_kind == 'quoted'
+        else 'console=tty1 reboot=w\n'
+      }}
+
+- name: Create the invalid-backup command line
+  ansible.builtin.copy:
+    content: "{{ base_test_invalid_backup_cmdline_content }}"
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/cmdline.txt
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0600"
+  become: true
+
+- name: Create an independent runtime-control fixture
+  when: >-
+    base_test_invalid_backup_kind not in
+    ['runtime_cmdline_alias', 'runtime_backup_alias',
+    'runtime_cmdline_hardlink', 'runtime_backup_hardlink']
+  ansible.builtin.copy:
+    content: "{{ 'unknown\n' if base_test_invalid_backup_kind == 'runtime_unknown' else 'warm\n' }}"
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0600"
+  become: true
+
+- name: Create an invalid backup directory
+  when: base_test_invalid_backup_kind == 'directory'
+  ansible.builtin.file:
+    path: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+    state: directory
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0700"
+  become: true
+
+- name: Make the runtime-control fixture group/world writable
+  when: base_test_invalid_backup_kind == 'runtime_unsafe_mode'
+  ansible.builtin.file:
+    path: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
+    mode: "0622"
+  become: true
+
+- name: Create an invalid backup symlink
+  when: base_test_invalid_backup_kind == 'symlink'
+  ansible.builtin.file:
+    src: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/cmdline.txt
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+    state: link
+  become: true
+
+- name: Create an unsafe, empty, or hard-link-source backup file
+  when: >-
+    base_test_invalid_backup_kind in
+    ['unsafe_mode', 'empty', 'runtime_backup_hardlink']
+  ansible.builtin.copy:
+    content: >-
+      {{
+        'console=tty1\n'
+        if base_test_invalid_backup_kind in ['unsafe_mode', 'runtime_backup_hardlink']
+        else ''
+      }}
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "{{ '0644' if base_test_invalid_backup_kind == 'unsafe_mode' else '0600' }}"
+  become: true
+
+- name: Create a whitespace-only backup file
+  when: base_test_invalid_backup_kind == 'whitespace'
+  ansible.builtin.copy:
+    content: "{{ '   ' ~ '\x09' ~ '  ' ~ '\x0a' }}"
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+    owner: "{{ base_test_root_user.stdout }}"
+    group: "{{ base_test_root_group.stdout }}"
+    mode: "0600"
+  become: true
+
+- name: Create a runtime-control hard-link alias
+  when:
+    - base_test_invalid_backup_kind in ['runtime_cmdline_hardlink', 'runtime_backup_hardlink']
+  ansible.builtin.file:
+    src: >-
+      {{
+        base_test_reboot_mode_dir.path
+        ~ '/invalid-' ~ base_test_invalid_backup_kind
+        ~ (
+          '/cmdline.txt'
+          if base_test_invalid_backup_kind == 'runtime_cmdline_hardlink'
+          else '/backup.txt'
+        )
+      }}
+    dest: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/runtime-mode
+    state: hard
+    mode: "0600"
+  become: true
+
+- name: Initialize invalid-backup rejection state
+  ansible.builtin.set_fact:
+    base_test_invalid_backup_rejected: false
+
+- name: Require invalid backup rejection before command-line mutation
+  block:
+    - name: Apply reboot policy with the invalid backup
+      ansible.builtin.include_tasks: ../tasks/reboot-mode.yml
+      vars:
+        base_kernel_reboot_mode: cold
+        base_kernel_cmdline_path: >-
+          {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/cmdline.txt
+        base_kernel_cmdline_backup_path: >-
+          {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/backup.txt
+        base_kernel_cmdline_backup_owner: "{{ base_test_root_user.stdout }}"
+        base_kernel_cmdline_backup_group: "{{ base_test_root_group.stdout }}"
+        base_kernel_reboot_runtime_mode_path: >-
+          {{
+            base_test_reboot_mode_dir.path
+            ~ '/invalid-' ~ base_test_invalid_backup_kind
+            ~ (
+              '/cmdline.txt'
+              if base_test_invalid_backup_kind == 'runtime_cmdline_alias'
+              else '/backup.txt'
+              if base_test_invalid_backup_kind == 'runtime_backup_alias'
+              else '/runtime-mode'
+            )
+          }}
+  rescue:
+    - name: Record expected invalid-backup rejection
+      ansible.builtin.set_fact:
+        base_test_invalid_backup_rejected: true
+
+- name: Read command line after invalid-backup rejection
+  ansible.builtin.slurp:
+    path: >-
+      {{ base_test_reboot_mode_dir.path }}/invalid-{{ base_test_invalid_backup_kind }}/cmdline.txt
+  register: base_test_invalid_backup_cmdline
+  become: true
+
+- name: Verify the invalid backup failed closed
+  ansible.builtin.assert:
+    that:
+      - base_test_invalid_backup_rejected
+      - >-
+        (base_test_invalid_backup_cmdline.content | b64decode)
+        == base_test_invalid_backup_cmdline_content

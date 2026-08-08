@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+
+: "${WIFI_WATCHDOG_TEST_LOG:?WIFI_WATCHDOG_TEST_LOG must be set}"
+
+case "$*" in
+    '-I wlan0 -c 1 -W 2 192.0.2.1'|'-I wlan0 -c 1 -W 2 203.0.113.1')
+        printf '%s\n' "ping $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        ;;
+    '-c 1 -W 2 1.1.1.1')
+        printf '%s\n' "ping $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        if test "${WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE:-0}" != 0 || \
+            test "${WIFI_WATCHDOG_TEST_PRIMARY_INTERNET_PROBE_FAILURE:-0}" != 0; then
+            exit 1
+        fi
+        ;;
+    '-c 1 -W 2 8.8.8.8')
+        printf '%s\n' "ping $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        if test "${WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE:-0}" != 0 || \
+            test "${WIFI_WATCHDOG_TEST_SECONDARY_INTERNET_PROBE_FAILURE:-0}" != 0; then
+            exit 1
+        fi
+        ;;
+    '-I wlan0 -c 1 -W 2 1.1.1.1'|'-I wlan0 -c 1 -W 2 8.8.8.8')
+        printf '%s\n' "ping $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        test "${WIFI_WATCHDOG_TEST_INTERNET_PROBE_FAILURE:-0}" = 0
+        ;;
+    '-I eth0 -c 1 -W 2 1.1.1.1'|'-I eth0 -c 1 -W 2 8.8.8.8')
+        printf '%s\n' "ping $*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        test "${WIFI_WATCHDOG_TEST_ALTERNATE_ROUTE_PROBE_FAILURE:-0}" = 0
+        ;;
+    *)
+        printf 'unexpected ping invocation: %s\n' "$*" >&2
+        exit 1
+        ;;
+esac

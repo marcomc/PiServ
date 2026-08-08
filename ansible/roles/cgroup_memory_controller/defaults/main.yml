@@ -1,0 +1,22 @@
+---
+cgroup_memory_controller_manage: true
+cgroup_memory_controller_enabled: true
+cgroup_memory_controller_require_runtime: false
+cgroup_memory_controller_packages:
+  - device-tree-compiler
+cgroup_memory_controller_vendor_dtb: ""
+cgroup_memory_controller_config_path: /boot/firmware/config.txt
+cgroup_memory_controller_managed_dtb_path: /boot/firmware/ansible-cgroup-memory.dtb
+cgroup_memory_controller_disabled_argument: cgroup_disable=memory
+cgroup_memory_controller_helper_path: >-
+  /usr/local/libexec/cgroup-memory-controller/manage-cgroup-memory-dtb
+cgroup_memory_controller_kernel_hook_path: >-
+  /etc/kernel/postinst.d/zz-ansible-cgroup-memory-controller
+cgroup_memory_controller_kernel_refresh_dependency_path: ""
+cgroup_memory_controller_reboot_mode_path: ""
+cgroup_memory_controller_required_reboot_mode: ""
+cgroup_memory_controller_backup_dir: /var/lib/cgroup-memory-controller
+cgroup_memory_controller_config_backup_filename: config.before-cgroup-memory-controller
+cgroup_memory_controller_vendor_dtb_backup_filename: vendor.dtb.before-cgroup-memory-controller
+cgroup_memory_controller_config_marker: "ANSIBLE MANAGED: cgroup v2 memory controller"
+cgroup_memory_controller_runtime_systemd_service: ""

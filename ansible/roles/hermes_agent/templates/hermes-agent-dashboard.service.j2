@@ -1,0 +1,42 @@
+# Managed by marcomc.hermes_agent
+[Unit]
+Description=Hermes Agent private dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ hermes_agent_user }}
+Group={{ hermes_agent_group }}
+{% if hermes_agent_manage_backup %}
+SupplementaryGroups={{ hermes_agent_backup_group }}
+{% endif %}
+Environment=HOME={{ hermes_agent_home }}
+Environment=HERMES_HOME={{ hermes_agent_home }}
+Environment=CODEX_HOME={{ hermes_agent_codex_home }}
+{% if hermes_agent_manage_dashboard_chat %}
+Environment=HERMES_TUI_DIR={{ hermes_agent_dashboard_tui_runtime_dir }}
+{% endif %}
+{% if hermes_agent_manage_home_assistant_mcp %}
+EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file }}
+{% endif %}
+WorkingDirectory={{ hermes_agent_home }}/workspace
+ExecStart={{ hermes_agent_binary_path }} dashboard --host {{ hermes_agent_dashboard_host }} --port {{ hermes_agent_dashboard_port }} --no-open --skip-build
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ hermes_agent_home }}
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

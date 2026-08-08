@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+
+: "${WIFI_WATCHDOG_TEST_LOG:?WIFI_WATCHDOG_TEST_LOG must be set}"
+
+case "$*" in
+    'restart NetworkManager.service')
+        printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        test "${WIFI_WATCHDOG_TEST_NETWORKMANAGER_RESTART_FAILURE:-0}" = 0
+        ;;
+    reboot)
+        printf '%s\n' "$*" >> "${WIFI_WATCHDOG_TEST_LOG}"
+        ;;
+    *)
+        printf 'unexpected systemctl invocation: %s\n' "$*" >&2
+        exit 1
+        ;;
+esac

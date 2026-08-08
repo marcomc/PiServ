@@ -1,0 +1,9 @@
+---
+- name: Test cgroup_memory_controller role syntax
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: cgroup_memory_controller
+      vars:
+        cgroup_memory_controller_manage: false
+        cgroup_memory_controller_vendor_dtb: /boot/firmware/example.dtb
