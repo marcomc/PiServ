@@ -10,8 +10,12 @@
 - Added a local allowlist example, release runbook, and accepted decision for
   activity-scoped Hermes autonomy, critical-action confirmation, and HomeClaw's
   read-only observer role.
-- Recorded the current release blocker: PiServ cannot resolve the configured
-  Home Assistant MCP hostname.
+- Validated a live reversible light operation: Hermes changed the Home Assistant
+  entity, HomeClaw observed the corresponding Apple Home state, and Hermes
+  restored the original state through the same MCP path.
+- Repeated the same acceptance test after restarting the Hermes dashboard;
+  Home Assistant and HomeClaw again confirmed both the requested state and the
+  restored state.
 
 ## [0.4.0] - 2026-08-08
 

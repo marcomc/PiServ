@@ -51,8 +51,11 @@ ssh admin@PiServ.local \
   'sudo -u hermes-agent -H env HERMES_HOME=/var/lib/hermes-agent \
    CODEX_HOME=/var/lib/hermes-agent/codex hermes auth status openai-codex'
 ssh admin@PiServ.local \
-  'sudo -u hermes-agent -H env HERMES_HOME=/var/lib/hermes-agent \
-   CODEX_HOME=/var/lib/hermes-agent/codex hermes mcp test home-assistant-assist'
+  'sudo -u hermes-agent -H bash -c '\''set -a; \
+   . /var/lib/hermes-agent/home-assistant-mcp.env; set +a; \
+   HERMES_HOME=/var/lib/hermes-agent \
+   CODEX_HOME=/var/lib/hermes-agent/codex \
+   hermes mcp test home-assistant-assist'\'''
 ```
 
 The MCP test must resolve the configured Home Assistant hostname. A valid
@@ -145,12 +148,17 @@ PiServ transport for this fallback.
 
 ## Current Live Finding
 
-On 2026-08-08, PiServ reported valid `openai-codex` authentication and an
-enabled `home-assistant-assist` MCP configuration, but the configured hostname
-`home.piguard.home.arpa` did not resolve from PiServ. A read-only request to
-the currently resolved address `192.168.1.253` returned HTTP `401`, confirming
-that the HTTP service is reachable but not replacing the configured hostname
-as a permanent fix. The dashboard fallback also reached its sign-in page but
-had no authenticated browser session. The acceptance test is therefore not
-yet a release pass. Resolve the DNS path and authenticate the approved test
-driver first, then rerun the non-mutating preflight.
+On 2026-08-08, PiServ resolved `home.piguard.home.arpa`, the authenticated MCP
+probe discovered 21 tools, and the local preflight passed. The full acceptance
+test then changed `light.salotto_luce_divano_outlet` from `on` to `off` through
+Hermes, observed `off` through HomeClaw, and restored `on` through Hermes with
+Home Assistant and HomeClaw both confirming the result.
+
+The same test passed again after restarting `hermes-agent-dashboard.service`.
+The remaining persistence gate is a non-model-dependent backup-restore probe
+that can prove the restored MCP configuration without depending on the disabled
+Granite local-model verifier.
+
+The dashboard fallback reached its sign-in page but had no authenticated
+browser session, so the supported CLI driver was used for the successful test.
+Repeat this validation after a Hermes service restart and backup restore.

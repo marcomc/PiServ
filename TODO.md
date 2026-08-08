@@ -116,14 +116,15 @@
 - [ ] **Complete Hermes smart-home control through Home Assistant and Apple Home**
   - Priority: **High**
   - Assessment: Hermes already reaches Home Assistant through the official MCP
-    server and Assist exposure policy. The next release should stabilize this
-    path and use Home Assistant's HomeKit Bridge as the preferred route to
-    Apple Home and Siri.
+    server and Assist exposure policy. The local acceptance harness passed a
+    reversible Hermes to Home Assistant to Apple Home cycle before and after a
+    dashboard restart. The next release should complete the remaining policy,
+    backup-restore, and Apple Home/Siri gates.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
     - Revalidate Hermes-to-Home Assistant MCP authentication, tool discovery,
-      state reads, and reversible writes after service restart and backup
-      restore.
+      state reads, and reversible writes after backup restore with a
+      non-model-dependent restore probe.
     - Define and review the Home Assistant Assist exposure policy for the full
       desired operation surface; keep security-critical actions confirmation-
       gated even when activity-scoped autonomy is granted.
@@ -131,8 +132,6 @@
       entities, then verify Apple Home and Siri reflect the resulting states.
     - Run the local acceptance harness from the Mac with an explicit allowlist,
       scoped state capture, post-write verification, cleanup, and audit report.
-    - Resolve the current PiServ DNS/MCP reachability failure before marking
-      this release task complete.
     - Keep direct Apple Home control through HomeClaw in a later release; use
       SSH or authenticated Tailnet Supergateway only after a separate decision.
 

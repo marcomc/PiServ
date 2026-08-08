@@ -205,12 +205,12 @@ def remote_home_assistant_state(
 def invoke_hermes(
     config: dict[str, Any], prompt: str, timeout: float, max_turns: int
 ) -> dict[str, Any]:
-    remote_command = shlex.join(
+    token_file = config.get(
+        "home_assistant_token_env_file",
+        "/var/lib/hermes-agent/home-assistant-mcp.env",
+    )
+    hermes_command = shlex.join(
         [
-            "sudo",
-            "-u",
-            "hermes-agent",
-            "-H",
             "env",
             f"HERMES_HOME={config.get('hermes_home', '/var/lib/hermes-agent')}",
             f"CODEX_HOME={config.get('codex_home', '/var/lib/hermes-agent/codex')}",
@@ -224,6 +224,18 @@ def invoke_hermes(
             "--max-turns",
             str(max_turns),
         ]
+    )
+    remote_script = "\n".join(
+        [
+            "set -eu",
+            "set -a",
+            f". {shlex.quote(token_file)}",
+            "set +a",
+            f"exec {hermes_command}",
+        ]
+    )
+    remote_command = shlex.join(
+        ["sudo", "-u", "hermes-agent", "-H", "bash", "-c", remote_script]
     )
     result = run_command(
         ["ssh", *SSH_OPTIONS, config["ssh_target"], remote_command], timeout

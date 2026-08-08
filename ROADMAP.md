@@ -65,8 +65,9 @@ The acceptance harness is implemented in
 [`scripts/verify-hermes-home-apple-home.py`](scripts/verify-hermes-home-apple-home.py)
 with the procedure documented in
 [`docs/runbooks/hermes-home-apple-home.md`](docs/runbooks/hermes-home-apple-home.md).
-The release is not validated until PiServ can resolve and reach the configured
-Home Assistant MCP endpoint.
+The first live acceptance run passed on 2026-08-08. Remaining release gates are
+the Assist exposure-policy review, restart and backup-restore revalidation, and
+the selected Apple Home and Siri coverage.
 
 ## Later Releases
 

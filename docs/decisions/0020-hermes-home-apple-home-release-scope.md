@@ -49,8 +49,8 @@ The implementation is provided by:
 - [`verify-hermes-home-apple-home.py`](../../scripts/verify-hermes-home-apple-home.py)
 - [`hermes-home-apple-home.example.json`](../../scripts/hermes-home-apple-home.example.json)
 
-The first live preflight on 2026-08-08 confirmed HomeClaw readiness and Hermes
-Codex authentication, but failed MCP connectivity because
-`home.piguard.home.arpa` did not resolve from PiServ. A direct read-only HTTP
-probe to the address resolved by the Mac returned `401`, so the current
-evidence points to PiServ DNS configuration rather than service reachability.
+On 2026-08-08, the authenticated MCP probe discovered 21 Home Assistant tools.
+The first full acceptance run changed the configured non-critical light from
+`on` to `off` through Hermes, observed `off` in HomeClaw, then restored `on`
+through Hermes and verified the restored state in both systems. The same proof
+passed after a restart of `hermes-agent-dashboard.service`.
