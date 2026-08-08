@@ -1,0 +1,510 @@
+---
+- name: Assert dedicated Codex link configuration
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_codex_binary_path is match('^/[^/]+')
+      - hermes_agent_codex_link_managed_state_file is match('^/[^/]+')
+      - >-
+        hermes_agent_codex_link_managed_state_file ==
+        hermes_agent_codex_binary_path ~ '.hermes-agent-managed.yml'
+      - >-
+        hermes_agent_codex_binary_path is not
+        match(
+        '^/(boot|etc|run|bin|sbin|lib|lib32|lib64|usr/bin|usr/sbin|usr/lib|usr/lib32|usr/lib64)(/|$)'
+        )
+      - >-
+        hermes_agent_codex_link_managed_state_file is not
+        match(
+        '^/(boot|etc|run|bin|sbin|lib|lib32|lib64|usr/bin|usr/sbin|usr/lib|usr/lib32|usr/lib64)(/|$)'
+        )
+      - hermes_agent_codex_binary_path != hermes_agent_binary_path
+      - hermes_agent_codex_binary_path != hermes_agent_installer_path
+      - hermes_agent_codex_binary_path != hermes_agent_local_model_llama_cli_path
+      - hermes_agent_codex_binary_path != hermes_agent_local_model_llama_server_path
+      - >-
+        not hermes_agent_codex_binary_path.startswith(
+        hermes_agent_install_dir ~ '/')
+      - >-
+        not hermes_agent_codex_binary_path.startswith(
+        hermes_agent_codex_install_dir ~ '/')
+      - >-
+        not hermes_agent_codex_binary_path.startswith(
+        hermes_agent_dashboard_tui_runtime_dir ~ '/')
+      - >-
+        not hermes_agent_codex_binary_path.startswith(
+        hermes_agent_local_model_runtime_dir ~ '/')
+      - >-
+        not hermes_agent_codex_binary_path.startswith(
+        hermes_agent_download_cache_dir ~ '/')
+    fail_msg: >-
+      The active Codex link must use a dedicated absolute path outside protected
+      system executable directories and other managed roots or outputs.
+
+- name: Resolve Codex link parent through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_codex_binary_path | dirname }}"
+  register: hermes_agent_codex_link_parent_identity
+  changed_when: false
+  check_mode: false
+
+- name: Record canonical Codex link and marker output identities
+  ansible.builtin.set_fact:
+    hermes_agent_codex_link_output_identities:
+      - >-
+        {{ hermes_agent_codex_link_parent_identity.stdout }}/{{
+        hermes_agent_codex_binary_path | basename }}
+      - >-
+        {{ hermes_agent_codex_link_parent_identity.stdout }}/{{
+        hermes_agent_codex_link_managed_state_file | basename }}
+
+- name: Resolve other configurable managed root identities
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_install_dir }}"
+    - "{{ hermes_agent_codex_install_dir }}"
+    - "{{ hermes_agent_codex_install_dir | dirname }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    - "{{ hermes_agent_local_model_runtime_dir }}"
+    - "{{ hermes_agent_download_cache_dir }}"
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_local_models_dir }}"
+    - "{{ hermes_agent_local_models_results_dir }}"
+    - "{{ hermes_agent_installer_path | dirname }}"
+    - "{{ hermes_agent_uv_python_install_dir }}"
+    - "{{ hermes_agent_uv_python_bin_dir }}"
+    - "{{ hermes_agent_backup_dir }}"
+    - >-
+      {{ hermes_agent_codex_install_dir | dirname
+      }}.hermes-agent-staging
+  register: hermes_agent_codex_other_managed_root_identities
+  changed_when: false
+  check_mode: false
+
+- name: Require Codex link outputs outside other managed roots
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_codex_link_output_identities[0] != item.stdout
+      - hermes_agent_codex_link_output_identities[1] != item.stdout
+      - >-
+        not hermes_agent_codex_link_output_identities[0].startswith(
+        item.stdout ~ '/')
+      - >-
+        not hermes_agent_codex_link_output_identities[1].startswith(
+        item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_link_output_identities[0] ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_link_output_identities[1] ~ '/')
+    fail_msg: >-
+      The Codex link and provenance marker must not equal, contain, or reside
+      beneath another configurable managed root.
+  loop: "{{ hermes_agent_codex_other_managed_root_identities.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Define every configurable managed output file
+  ansible.builtin.set_fact:
+    hermes_agent_codex_other_managed_outputs:
+      - "{{ hermes_agent_codex_binary_path }}"
+      - "{{ hermes_agent_codex_link_managed_state_file }}"
+      - "{{ hermes_agent_binary_path }}"
+      - "{{ hermes_agent_installer_path }}"
+      - "{{ hermes_agent_installer_path }}.inference-provenance.yml"
+      - "{{ hermes_agent_venv_state_file }}"
+      - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+      - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+      - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+      - "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+      - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+      - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+      - "{{ hermes_agent_dashboard_service_managed_state_file }}"
+      - "{{ hermes_agent_backup_service_managed_state_file }}"
+      - "{{ hermes_agent_backup_timer_managed_state_file }}"
+      - "{{ hermes_agent_local_model_benchmark_helper_path }}"
+      - "{{ hermes_agent_local_models_managed_state_file }}"
+      - "{{ hermes_agent_local_model_llama_cli_path }}"
+      - "{{ hermes_agent_local_model_llama_server_path }}"
+      - "{{ hermes_agent_local_model_runtime_managed_state_file }}"
+      - "{{ hermes_agent_local_model_llama_cli_managed_state_file }}"
+      - "{{ hermes_agent_local_model_llama_server_managed_state_file }}"
+      - "{{ hermes_agent_home }}/.env"
+      - "{{ hermes_agent_home }}/config.yaml"
+      - >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+      - >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_plugin_name }}/__init__.py
+      - "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+      - "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+      - "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+      - "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
+      - >-
+        {{ hermes_agent_codex_install_dir | dirname
+        }}/.hermes-agent-managed.yml
+      - >-
+        {{ hermes_agent_codex_install_dir | dirname
+        }}.hermes-agent-staging.intent.yml
+      - >-
+        {{ hermes_agent_download_cache_dir }}/codex-{{
+        hermes_agent_codex_version }}-aarch64-linux.tar.gz
+      - "{{ hermes_agent_codex_install_dir }}/codex"
+      - "{{ hermes_agent_codex_install_dir }}/.hermes-agent-managed.yml"
+
+- name: Add configured local-model unit output files
+  ansible.builtin.set_fact:
+    hermes_agent_codex_other_managed_outputs: >-
+      {{
+        hermes_agent_codex_other_managed_outputs +
+        ['/etc/systemd/system/hermes-local-model-' ~ item.id ~ '.service']
+      }}
+  loop: "{{ hermes_agent_local_models }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Resolve every configurable managed output identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop: "{{ hermes_agent_codex_other_managed_outputs }}"
+  register: hermes_agent_codex_other_managed_output_identities
+  changed_when: false
+  check_mode: false
+
+- name: Reject canonical aliases between configurable managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.0.stdout != item.1.stdout or
+        ([item.0.item, item.1.item] | sort) ==
+        ([
+          hermes_agent_codex_binary_path,
+          hermes_agent_codex_install_dir ~ '/codex'
+        ] | sort)
+    fail_msg: >-
+      Configurable managed outputs must resolve to distinct paths except for
+      the declared active Codex link and its versioned target.
+  loop: >-
+    {{ hermes_agent_codex_other_managed_output_identities.results |
+    combinations(2) | list }}
+  loop_control:
+    label: "{{ item.0.item }} != {{ item.1.item }}"
+
+- name: Reject Codex parent staging aliases with managed roots
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout !=
+        item.stdout
+      - >-
+        not hermes_agent_codex_other_managed_root_identities.results[-1].stdout.startswith(
+        item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout ~ '/')
+    fail_msg: >-
+      Codex parent publication staging must not equal, contain, or reside
+      beneath another configurable managed root.
+  loop: "{{ hermes_agent_codex_other_managed_root_identities.results[:-1] }}"
+  loop_control:
+    label: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+      != {{ item.item }}
+
+- name: Reject Codex parent staging aliases with managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout !=
+        item.stdout
+      - >-
+        not hermes_agent_codex_other_managed_root_identities.results[-1].stdout.startswith(
+        item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout ~ '/')
+    fail_msg: >-
+      Codex parent publication staging must not equal, contain, or reside
+      beneath a configurable managed output.
+  loop: "{{ hermes_agent_codex_other_managed_output_identities.results }}"
+  loop_control:
+    label: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+      != {{ item.item }}
+
+- name: Require canonical Codex link parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_link_parent_identity.stdout ==
+        hermes_agent_codex_binary_path | dirname
+    fail_msg: >-
+      The active Codex link path must not contain parent traversal or a
+      symlink-parent alias.
+
+- name: Inspect Codex link parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_binary_path | dirname }}"
+    follow: false
+  register: hermes_agent_codex_link_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Codex link parent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_codex_link_parent.stat.isdir
+      - not hermes_agent_codex_link_parent.stat.islnk
+      - hermes_agent_codex_link_parent.stat.pw_name == 'root'
+      - hermes_agent_codex_link_parent.stat.gr_name == 'root'
+      - >-
+        hermes_agent_codex_link_parent.stat.mode is
+        match('^0?[0-7][0-5][0-5]$')
+
+- name: Inspect active Codex link without following it
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_binary_path }}"
+    follow: false
+  register: hermes_agent_codex_link_state
+  changed_when: false
+  check_mode: false
+
+- name: Inspect every configurable managed output file
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ hermes_agent_codex_other_managed_outputs }}"
+  register: hermes_agent_codex_other_managed_output_states
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Codex parent staging root
+  ansible.builtin.stat:
+    path: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+    follow: false
+  register: hermes_agent_codex_parent_staging_root_state
+  changed_when: false
+  check_mode: false
+
+- name: Inspect every other managed root for staging inode aliases
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{
+      hermes_agent_codex_other_managed_root_identities.results[:-1] |
+      map(attribute='item') | list +
+      hermes_agent_codex_other_managed_outputs
+    }}
+  register: hermes_agent_codex_other_root_and_output_states
+  changed_when: false
+  check_mode: false
+
+- name: Reject Codex parent staging inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_parent_staging_root_state.stat.exists or
+        not item.stat.exists or
+        hermes_agent_codex_parent_staging_root_state.stat.dev != item.stat.dev or
+        hermes_agent_codex_parent_staging_root_state.stat.inode != item.stat.inode
+    fail_msg: >-
+      Existing Codex parent publication staging must not alias another managed
+      root or output inode.
+  loop: "{{ hermes_agent_codex_other_root_and_output_states.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Reject inode aliases between configurable managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.0.stat.exists or
+        not item.1.stat.exists or
+        item.0.stat.dev != item.1.stat.dev or
+        item.0.stat.inode != item.1.stat.inode
+    fail_msg: >-
+      Every existing configurable managed output must use a distinct inode.
+  loop: >-
+    {{ hermes_agent_codex_other_managed_output_states.results |
+    combinations(2) | list }}
+  loop_control:
+    label: "{{ item.0.item }} != {{ item.1.item }}"
+
+- name: Inspect Codex link managed-state leaf
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_link_managed_state_file }}"
+    follow: false
+  register: hermes_agent_codex_link_managed_state
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Codex link managed-state leaf
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_link_managed_state.stat.exists or
+        (hermes_agent_codex_link_managed_state.stat.isreg and
+        not hermes_agent_codex_link_managed_state.stat.islnk and
+        hermes_agent_codex_link_managed_state.stat.pw_name == 'root' and
+        hermes_agent_codex_link_managed_state.stat.gr_name == 'root' and
+        hermes_agent_codex_link_managed_state.stat.mode == '0600')
+
+- name: Read Codex link managed-state leaf
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_codex_link_managed_state_file }}"
+  register: hermes_agent_codex_link_managed_state_contents
+  when: hermes_agent_codex_link_managed_state.stat.exists
+
+- name: Parse Codex link managed-state leaf
+  ansible.builtin.set_fact:
+    hermes_agent_codex_link_managed_state_data: >-
+      {{
+        hermes_agent_codex_link_managed_state_contents.content |
+        b64decode | from_yaml
+        if hermes_agent_codex_link_managed_state.stat.exists else {}
+      }}
+
+- name: Require exact Codex link managed-state schema
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_codex_link_managed_state_data is mapping
+      - >-
+        not hermes_agent_codex_link_managed_state.stat.exists or
+        (hermes_agent_codex_link_managed_state_data.keys() | list | sort ==
+        ['link_path', 'managed_by', 'target', 'version'] and
+        hermes_agent_codex_link_managed_state_data.managed_by ==
+        'marcomc.hermes_agent' and
+        hermes_agent_codex_link_managed_state_data.version == 1 and
+        hermes_agent_codex_link_managed_state_data.link_path ==
+        hermes_agent_codex_binary_path and
+        hermes_agent_codex_link_managed_state_data.target | basename ==
+        'codex' and
+        hermes_agent_codex_link_managed_state_data.target | dirname | basename
+        is match('^[A-Za-z0-9][A-Za-z0-9._-]*$') and
+        hermes_agent_codex_link_managed_state_data.target | dirname | dirname ==
+        hermes_agent_codex_install_dir | dirname)
+
+- name: Resolve recorded Codex target and configured version root
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-existing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_codex_link_managed_state_data.target }}"
+    - "{{ hermes_agent_codex_install_dir | dirname }}"
+  register: hermes_agent_codex_recorded_target_identities
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_codex_link_managed_state.stat.exists
+
+- name: Inspect recorded Codex target
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_link_managed_state_data.target }}"
+    follow: false
+  register: hermes_agent_codex_recorded_target_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_codex_link_managed_state.stat.exists
+
+- name: Require safe canonical recorded Codex target
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_recorded_target_identities.results[0].stdout ==
+        hermes_agent_codex_link_managed_state_data.target
+      - >-
+        hermes_agent_codex_recorded_target_identities.results[1].stdout ==
+        hermes_agent_codex_install_dir | dirname
+      - >-
+        hermes_agent_codex_link_managed_state_data.target | dirname | dirname ==
+        hermes_agent_codex_recorded_target_identities.results[1].stdout
+      - hermes_agent_codex_recorded_target_state.stat.isreg
+      - not hermes_agent_codex_recorded_target_state.stat.islnk
+      - hermes_agent_codex_recorded_target_state.stat.pw_name == 'root'
+      - hermes_agent_codex_recorded_target_state.stat.gr_name == 'root'
+      - >-
+        hermes_agent_codex_recorded_target_state.stat.mode is
+        match('^0?[0-7][0-7][1357]$')
+    fail_msg: >-
+      A recorded prior Codex target must be a canonical root-owned executable
+      beneath the real configured Codex version root.
+  when: hermes_agent_codex_link_managed_state.stat.exists
+
+- name: Require absent or recognized active Codex link
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not hermes_agent_codex_link_state.stat.exists and
+        not hermes_agent_codex_link_managed_state.stat.exists) or
+        (hermes_agent_codex_link_state.stat.islnk | default(false) and
+        hermes_agent_codex_link_state.stat.pw_name == 'root' and
+        hermes_agent_codex_link_state.stat.gr_name == 'root' and
+        (hermes_agent_codex_link_state.stat.lnk_target ==
+        hermes_agent_codex_install_dir ~ '/codex' or
+        (hermes_agent_codex_link_managed_state.stat.exists and
+        hermes_agent_codex_link_state.stat.lnk_target ==
+        hermes_agent_codex_link_managed_state_data.target)))
+    fail_msg: >-
+      Refusing to replace a foreign or unrecognized active Codex CLI target.
+
+- name: Resolve accepted active Codex target and version root
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-existing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_codex_link_state.stat.lnk_target }}"
+    - "{{ hermes_agent_codex_install_dir | dirname }}"
+  register: hermes_agent_codex_active_target_identities
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_codex_link_state.stat.exists
+
+- name: Inspect accepted active Codex target
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_link_state.stat.lnk_target }}"
+    follow: false
+  register: hermes_agent_codex_active_target_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_codex_link_state.stat.exists
+
+- name: Require real executable active Codex target
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_active_target_identities.results[0].stdout ==
+        hermes_agent_codex_link_state.stat.lnk_target
+      - >-
+        hermes_agent_codex_active_target_identities.results[1].stdout ==
+        hermes_agent_codex_install_dir | dirname
+      - >-
+        hermes_agent_codex_link_state.stat.lnk_target | dirname | dirname ==
+        hermes_agent_codex_active_target_identities.results[1].stdout
+      - hermes_agent_codex_active_target_state.stat.isreg
+      - not hermes_agent_codex_active_target_state.stat.islnk
+      - hermes_agent_codex_active_target_state.stat.pw_name == 'root'
+      - hermes_agent_codex_active_target_state.stat.gr_name == 'root'
+      - >-
+        hermes_agent_codex_active_target_state.stat.mode is
+        match('^0?[0-7][0-7][1357]$')
+    fail_msg: >-
+      The accepted active Codex target must be a canonical root-owned
+      executable beneath the real configured Codex version root.
+  when: hermes_agent_codex_link_state.stat.exists

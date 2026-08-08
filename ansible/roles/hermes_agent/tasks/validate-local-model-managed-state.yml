@@ -1,0 +1,103 @@
+---
+- name: Resolve local-model managed-state path through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_local_models_managed_state_file }}"
+  register: hermes_agent_local_models_managed_state_path
+  changed_when: false
+  check_mode: false
+
+- name: Require a canonical dedicated local-model managed-state path
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_local_models_managed_state_path.stdout ==
+        hermes_agent_local_models_managed_state_file
+      - >-
+        hermes_agent_local_models_managed_state_path.stdout not in
+        ['/', '/tmp', '/var/tmp', '/var', '/etc', '/etc/systemd',
+        '/etc/systemd/system', '/run', '/usr', '/usr/local']
+      - >-
+        hermes_agent_local_models_managed_state_path.stdout is not
+        match('^/(tmp|var/tmp)(/|$)')
+
+- name: Inspect local-model managed-state parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_managed_state_file | dirname }}"
+    follow: false
+  register: hermes_agent_local_models_managed_state_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe local-model managed-state parent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_models_managed_state_parent.stat.isdir
+      - not hermes_agent_local_models_managed_state_parent.stat.islnk
+      - hermes_agent_local_models_managed_state_parent.stat.pw_name == 'root'
+      - hermes_agent_local_models_managed_state_parent.stat.gr_name == 'root'
+      - >-
+        hermes_agent_local_models_managed_state_parent.stat.mode is
+        match('^0?[0-7][0-5][0-5]$')
+
+- name: Inspect local-model managed-state leaf
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_local_models_managed_state_file }}"
+    follow: false
+  register: hermes_agent_local_models_managed_state
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe local-model managed-state leaf
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_local_models_managed_state.stat.exists or
+        (hermes_agent_local_models_managed_state.stat.isreg and
+        not hermes_agent_local_models_managed_state.stat.islnk and
+        hermes_agent_local_models_managed_state.stat.pw_name == 'root' and
+        hermes_agent_local_models_managed_state.stat.gr_name == 'root' and
+        hermes_agent_local_models_managed_state.stat.mode == '0600')
+
+- name: Read local-model managed-state leaf
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_local_models_managed_state_file }}"
+  register: hermes_agent_local_models_managed_state_contents
+  when: hermes_agent_local_models_managed_state.stat.exists
+
+- name: Parse local-model managed-state leaf
+  ansible.builtin.set_fact:
+    hermes_agent_local_models_managed_state_data: >-
+      {{
+        hermes_agent_local_models_managed_state_contents.content |
+        b64decode | from_yaml
+        if hermes_agent_local_models_managed_state.stat.exists else
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'version': 1,
+          'units': {}
+        }
+      }}
+
+- name: Require exact local-model managed-state schema
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_local_models_managed_state_data is mapping
+      - >-
+        hermes_agent_local_models_managed_state_data.keys() | list | sort ==
+        ['managed_by', 'units', 'version']
+      - >-
+        hermes_agent_local_models_managed_state_data.managed_by ==
+        'marcomc.hermes_agent'
+      - hermes_agent_local_models_managed_state_data.version == 1
+      - hermes_agent_local_models_managed_state_data.units is mapping
+
+- name: Require valid local-model managed-state entries
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[a-z0-9][a-z0-9-]*$')
+      - item.value is match('^[a-f0-9]{64}$')
+  loop: >-
+    {{ hermes_agent_local_models_managed_state_data.units | dict2items }}

@@ -40,6 +40,11 @@
         comment: PiServ LAN Glances API
       - rule: allow
         from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
+        to_port: "9119"
+        protocol: tcp
+        comment: PiServ LAN Hermes dashboard
+      - rule: allow
+        from_ip: "{{ piserv_firewall_lan_ipv4_cidr }}"
         to_port: "5353"
         protocol: udp
         comment: PiServ LAN mDNS multicast and unicast queries

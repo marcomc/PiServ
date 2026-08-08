@@ -1,0 +1,97 @@
+---
+- name: "Create missing private state parent for {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.file:
+    path: "{{ hermes_agent_managed_unit_state_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - hermes_agent_managed_unit_should_exist
+    - not hermes_agent_managed_unit_state_parent.stat.exists
+
+- name: "Inspect managed state for {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_managed_unit_state_file }}"
+    follow: false
+  register: hermes_agent_managed_unit_state
+  changed_when: false
+  check_mode: false
+
+- name: "Read managed state for {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_managed_unit_state_file }}"
+  register: hermes_agent_managed_unit_state_contents
+  changed_when: false
+  when: hermes_agent_managed_unit_state.stat.exists
+
+- name: "Load managed state for {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.set_fact:
+    hermes_agent_managed_unit_record: >-
+      {{ ((hermes_agent_managed_unit_state_contents |
+      default({})).content | default('') | b64decode | from_yaml) or {} }}
+
+- name: "Require valid managed state for {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_managed_unit_state.stat.exists or
+        (hermes_agent_managed_unit_state.stat.isreg | default(false) and
+        not hermes_agent_managed_unit_state.stat.islnk | default(true) and
+        hermes_agent_managed_unit_state.stat.pw_name | default('') == 'root' and
+        hermes_agent_managed_unit_state.stat.gr_name | default('') == 'root' and
+        hermes_agent_managed_unit_state.stat.mode | default('') == '0600' and
+        hermes_agent_managed_unit_record.keys() | list | sort == ['name', 'sha256'] and
+        hermes_agent_managed_unit_record.name is match(hermes_agent_managed_unit_name_pattern) and
+        hermes_agent_managed_unit_record.sha256 is match('^[a-f0-9]{64}$'))
+    fail_msg: >-
+      {{ hermes_agent_managed_unit_label }} managed state must be a root-owned
+      complete record before reconciling a renamed unit.
+
+- name: "Inspect previously managed {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ hermes_agent_managed_unit_record.name }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: hermes_agent_previous_managed_unit
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_managed_unit_state.stat.exists
+
+- name: "Require recognized previously managed {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_previous_managed_unit.stat.exists | default(false) or
+        (hermes_agent_previous_managed_unit.stat.isreg | default(false) and
+        not hermes_agent_previous_managed_unit.stat.islnk | default(true) and
+        hermes_agent_previous_managed_unit.stat.pw_name | default('') == 'root' and
+        hermes_agent_previous_managed_unit.stat.gr_name | default('') == 'root' and
+        hermes_agent_previous_managed_unit.stat.mode | default('') == '0644' and
+        hermes_agent_previous_managed_unit.stat.checksum ==
+        hermes_agent_managed_unit_record.sha256)
+    fail_msg: >-
+      Refusing to retire changed or foreign previously managed
+      {{ hermes_agent_managed_unit_label }} {{ hermes_agent_managed_unit_record.name }}.
+  when: hermes_agent_managed_unit_state.stat.exists
+
+- name: "Stop and disable renamed {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_managed_unit_record.name }}"
+    enabled: false
+    state: stopped
+  when:
+    - hermes_agent_managed_unit_state.stat.exists
+    - hermes_agent_managed_unit_record.name != hermes_agent_managed_unit_name
+    - hermes_agent_previous_managed_unit.stat.exists | default(false)
+    - not ansible_check_mode
+
+- name: "Remove renamed {{ hermes_agent_managed_unit_label }}"
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ hermes_agent_managed_unit_record.name }}"
+    state: absent
+  when:
+    - hermes_agent_managed_unit_state.stat.exists
+    - hermes_agent_managed_unit_record.name != hermes_agent_managed_unit_name
+    - hermes_agent_previous_managed_unit.stat.exists | default(false)
+  notify: Reload systemd daemon

@@ -1,0 +1,75 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
+  pre_tasks:
+    - name: Load test fixture variables
+      ansible.builtin.include_tasks: tasks/fixture-vars.yml
+
+    - name: Inspect fresh local-model runtime before check-mode convergence
+      ansible.builtin.stat:
+        path: /usr/local/lib/llama.cpp/llama-server
+      changed_when: false
+      check_mode: false
+      register: hermes_agent_fixture_llama_server
+      when: ansible_check_mode
+
+    - name: Assert fresh local-model runtime is absent before check-mode convergence
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_fixture_llama_server.stat.exists
+      when: ansible_check_mode
+
+    - name: Inspect fresh download cache before check-mode convergence
+      ansible.builtin.stat:
+        path: /var/cache/hermes-agent
+      register: hermes_agent_fixture_download_cache_before_check
+      changed_when: false
+      check_mode: false
+      when: ansible_check_mode
+  tasks:
+    - name: Include tested role
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        # The fixture supplies a mock archive, so permit the CI container's
+        # architecture without weakening the role's ARM64 production default.
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_fixture_installer.stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_fixture_codex.stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_local_models: "{{ ansible_check_mode | bool }}"
+        hermes_agent_local_models: []
+        hermes_agent_local_model_runtime_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_local_model_runtime_archive_checksum: >-
+          sha256:{{ hermes_agent_fixture_codex.stat.checksum }}
+  post_tasks:
+    - name: Inspect fresh download cache after check-mode convergence
+      ansible.builtin.stat:
+        path: /var/cache/hermes-agent
+      register: hermes_agent_fixture_download_cache_after_check
+      changed_when: false
+      check_mode: false
+      when: ansible_check_mode
+
+    - name: Assert fresh download cache check mode made no mutation
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_fixture_download_cache_before_check.stat.exists
+          - not hermes_agent_fixture_download_cache_after_check.stat.exists
+      when: ansible_check_mode

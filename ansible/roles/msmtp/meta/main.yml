@@ -2,7 +2,7 @@
 galaxy_info:
   namespace: marcomc
   role_name: msmtp
-  author: Role maintainers
+  author: Marco Massari Calderone <marco@marcomc.com>
   description: Install and configure msmtp with managed, create-only, or unmanaged config modes.
   license: MIT
   min_ansible_version: "2.15"

@@ -8,12 +8,7 @@
       {{ ansible_facts.service_mgr | default('unknown') }}.
 
 - name: Require Wi-Fi watchdog runtime commands
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/env
-      - sh
-      - -c
-      - "command -v {{ item }}"
+  ansible.builtin.command: "/usr/bin/which {{ item }}"
   loop:
     - awk
     - bash

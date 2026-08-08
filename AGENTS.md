@@ -51,6 +51,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Shell scripts should wrap repeatable operator commands, preflight checks, or
   narrow tasks that do not fit cleanly in Ansible.
 - Keep automation idempotent where practical.
+- Before rendering a configurable timeout, retry, interval, or escalation value
+  into shell or service configuration, assert its explicit range and every
+  required relationship to related values; cover invalid values and ordering.
 - Name every top-level `import_playbook` entry in orchestration playbooks so
   Ansible Lint validates the full entry point.
 - When a PiServ playbook overrides a generic role's package or plugin set,
@@ -68,6 +71,12 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   and mount conflicts before package, group-membership, ACL, or service
   mutations. A placeholder fallback configuration must fail without changing
   host state.
+- For permanently attached SuperSpeed storage, record the negotiated link speed
+  at boot and do not attribute USB 2 fallback on a paired xHCI root-hub path to
+  filesystem or workload behavior without first checking the physical link.
+- Before reinitializing a USB controller to recover storage speed, verify that
+  it has no unrelated devices or open handles; sync and unmount the filesystem,
+  then verify the expected device identity before remounting.
 - Keep one-off migration cleanup out of steady-state playbooks after the live
   host reaches the new source of truth. Use a bounded migration command or
   temporary playbook for teardown, then remove it and update diagnostics to
@@ -84,9 +93,20 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   validate the uncast value and cross-setting ordering before applying an
   `int` filter; invalid input must not silently become zero.
 - For boot-time services that deliver through an external DNS-dependent
-  transport, treat `network-online.target` as insufficient readiness. Retry
-  only identified temporary delivery failures with a bounded policy, and leave
-  permanent failures visible to systemd.
+  transport, treat `network-online.target` as insufficient readiness. Do not
+  perform unbounded DNS or metadata work before the bounded delivery path; use
+  local identity where sufficient, otherwise include the prerequisite work in
+  the service timeout. Retry only identified temporary delivery failures with
+  a bounded policy, and leave permanent failures visible to systemd.
+- Before escalating an interface-recovery failure to an automatic host reboot,
+  distinguish the normal policy route from every eligible IPv4 default-route
+  interface. Prove that each route is unavailable, and cover the failed
+  preferred-route plus healthy alternate-route case in regression tests.
+- Negative Ansible tests that rely on `block`/`rescue` must fail explicitly
+  after an unexpected success and assert that the rescued failure came from
+  the intended validation task. For configurable systemd units, render a
+  non-default policy and assert the effective consuming directive, not only
+  template source text.
 - Document any intentionally non-idempotent operation in the relevant runbook.
 - Do not commit secrets, private keys, tokens, or host-specific credentials.
 - Keep real Wi-Fi SSIDs and NetworkManager profile names in ignored local vars;
@@ -107,6 +127,23 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   files with valid content. Reject both path and inode aliases before mutation,
   then activate and verify any required current-kernel reboot mode before
   changing the persistent command line or scheduling an automatic reboot.
+- For a managed vendor adaptation, render a separate deterministic runtime
+  artifact instead of editing the delivered source. Select it only in the
+  enabled service path, remove it when disabled, compare content and metadata,
+  and use structural validation plus enable/disable, unrelated-match, and
+  permission-drift regressions before restarting the service.
+- Normalize journal-derived command, user, and other fields to bounded
+  single-line text before interpolating them into plain-text notifications.
+  Bound the record count and accept command attribution only for the intended
+  operation class.
+- For an abrupt host stop, classify the last journal entry as correlation only
+  until retained pre-stop CPU, memory, temperature, I/O, and power or reset
+  telemetry establishes causation. Capture that bounded evidence before further
+  high-memory or hardware-stability testing.
+- Before increasing local-model address-space limits, verify that the cgroup v2
+  memory controller and effective systemd limits are enforcing containment.
+  Keep an independently effective `LimitAS` cap when cgroup memory controls
+  are unavailable.
 
 ## pCloud / FUSE Rules
 
@@ -137,6 +174,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Run `markdownlint --config "$HOME/.markdownlint.json"` on every
   Markdown file created or changed.
 - Run `shellcheck --enable=all` on every shell script created or changed.
+- Render every new Jinja shell template and run ShellCheck on the rendered
+  output before deployment; avoid or isolate Jinja delimiter sequences in
+  embedded shell syntax.
 - Set `check_mode: false` on read-only command tasks whose output is used by
   assertions, so `ansible-playbook --check` evaluates live state rather than
   skipped task results.

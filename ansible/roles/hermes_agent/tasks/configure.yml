@@ -1,0 +1,931 @@
+---
+- name: Inspect private Hermes runtime directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_home }}/workspace"
+  register: hermes_agent_runtime_directories
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_runtime_user_available
+
+- name: Require safe private Hermes runtime directories
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isdir and not item.stat.islnk)
+    fail_msg: >-
+      {{ item.item }} must be a directory rather than a symbolic link before
+      its ownership or permissions can be managed.
+  loop: "{{ hermes_agent_runtime_directories.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: hermes_agent_runtime_user_available
+
+- name: Create private Hermes runtime directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  loop:
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_home }}/workspace"
+  when: hermes_agent_runtime_user_available
+
+- name: Remove superseded managed inference provenance plugin files
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    state: absent
+  loop: "{{ hermes_agent_inference_provenance_recorded_artifacts.results[1:] }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_inference_provenance_marker.stat.exists
+    - not hermes_agent_manage_inference_provenance
+    - item.stat.exists
+
+- name: Remove empty superseded inference provenance plugin directory
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_recorded_plugin_name }}
+  register: hermes_agent_inference_provenance_rmdir
+  changed_when: hermes_agent_inference_provenance_rmdir.rc == 0
+  failed_when: hermes_agent_inference_provenance_rmdir.rc not in [0, 1]
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode
+    - hermes_agent_inference_provenance_marker.stat.exists
+    - not hermes_agent_manage_inference_provenance
+    - hermes_agent_inference_provenance_recorded_artifacts.results[0].stat.exists
+
+- name: Remove authenticated inference provenance state when disabled
+  ansible.builtin.file:
+    path: "{{ hermes_agent_installer_path }}.inference-provenance.yml"
+    state: absent
+  when:
+    - hermes_agent_runtime_user_available
+    - not hermes_agent_manage_inference_provenance
+    - hermes_agent_inference_provenance_marker.stat.exists
+
+- name: Inspect managed inference provenance plugin directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_home }}/plugins"
+    - "{{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}"
+    - "{{ hermes_agent_home }}/audit"
+  register: hermes_agent_inference_provenance_directories
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Require safe managed inference provenance plugin directories
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isdir and not item.stat.islnk)
+    fail_msg: >-
+      {{ item.item }} must be a directory rather than a symbolic link before
+      its ownership or permissions can be managed.
+  loop: "{{ hermes_agent_inference_provenance_directories.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Publish managed inference provenance plugin target
+  ansible.builtin.include_tasks: publish-inference-provenance.yml
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Retire prior managed inference provenance plugin after rename
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    state: absent
+  loop: "{{ hermes_agent_inference_provenance_recorded_artifacts.results[1:] }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+    - hermes_agent_inference_provenance_marker.stat.exists
+    - >-
+      hermes_agent_inference_provenance_recorded_plugin_name !=
+      hermes_agent_inference_provenance_plugin_name
+    - item.stat.exists
+
+- name: Remove empty prior inference provenance plugin directory after rename
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - >-
+        {{ hermes_agent_home }}/plugins/{{
+        hermes_agent_inference_provenance_recorded_plugin_name }}
+  register: hermes_agent_inference_provenance_rename_rmdir
+  changed_when: hermes_agent_inference_provenance_rename_rmdir.rc == 0
+  failed_when: hermes_agent_inference_provenance_rename_rmdir.rc not in [0, 1]
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode
+    - hermes_agent_manage_inference_provenance
+    - hermes_agent_inference_provenance_marker.stat.exists
+    - >-
+      hermes_agent_inference_provenance_recorded_plugin_name !=
+      hermes_agent_inference_provenance_plugin_name
+    - hermes_agent_inference_provenance_recorded_artifacts.results[0].stat.exists
+
+- name: Inspect installed inference provenance plugin files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/plugin.yaml
+    - >-
+      {{ hermes_agent_home }}/plugins/{{ hermes_agent_inference_provenance_plugin_name }}/__init__.py
+  register: hermes_agent_installed_inference_provenance_plugin_files
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Record managed inference provenance plugin state
+  ansible.builtin.copy:
+    content: |
+      plugin_name: {{ hermes_agent_inference_provenance_plugin_name }}
+      manifest_sha256: {{ hermes_agent_installed_inference_provenance_plugin_files.results[0].stat.checksum }}
+      implementation_sha256: {{ hermes_agent_installed_inference_provenance_plugin_files.results[1].stat.checksum }}
+    dest: >-
+      {{ hermes_agent_installer_path }}.inference-provenance.yml
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_manage_inference_provenance
+
+- name: Read Hermes dashboard authentication state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    follow: false
+  register: hermes_agent_dashboard_basic_auth_state
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a regular Hermes dashboard authentication state file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_basic_auth_state.stat.exists or
+        (hermes_agent_dashboard_basic_auth_state.stat.isreg and
+        not hermes_agent_dashboard_basic_auth_state.stat.islnk and
+        hermes_agent_dashboard_basic_auth_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_dashboard_basic_auth_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_dashboard_basic_auth_state.stat.mode == '0600')
+    fail_msg: >-
+      An existing dashboard authentication state file must already be a private,
+      role-owned regular file; foreign state is never normalized or overwritten.
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Inspect Hermes dashboard authentication state parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file | dirname }}"
+    follow: false
+  register: hermes_agent_dashboard_authentication_state_parent
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a safe Hermes dashboard authentication state parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_authentication_state_parent.stat.exists or
+        (hermes_agent_dashboard_authentication_state_parent.stat.isdir and
+        not hermes_agent_dashboard_authentication_state_parent.stat.islnk)
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Create missing private Hermes dashboard authentication state parent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_state_file | dirname }}"
+    state: directory
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0700"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not hermes_agent_dashboard_authentication_state_parent.stat.exists
+
+- name: Inspect Hermes dashboard bootstrap password parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file | dirname }}"
+    follow: false
+  register: hermes_agent_dashboard_bootstrap_password_parent
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Inspect Hermes dashboard bootstrap password file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_bootstrap_password_file
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Inspect Hermes dashboard bootstrap password managed state
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    follow: false
+  register: hermes_agent_dashboard_bootstrap_password_managed_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Read Hermes dashboard bootstrap password managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_bootstrap_password_managed_state_contents
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.isreg | default(false)
+    - not hermes_agent_dashboard_bootstrap_password_managed_state.stat.islnk | default(true)
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.pw_name | default('') == 'root'
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.gr_name | default('') == 'root'
+    - hermes_agent_dashboard_bootstrap_password_managed_state.stat.mode | default('') == '0600'
+
+- name: Load Hermes dashboard bootstrap password managed state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_bootstrap_password_managed_record: >-
+      {{
+        ((hermes_agent_dashboard_bootstrap_password_managed_state_contents |
+        default({})).content | default('') | b64decode | from_yaml) or {}
+      }}
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a recognized Hermes dashboard bootstrap password file
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not hermes_agent_dashboard_bootstrap_password_file.stat.exists and
+        not hermes_agent_dashboard_bootstrap_password_managed_state.stat.exists) or
+        (not hermes_agent_dashboard_bootstrap_password_file.stat.exists and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.isreg and
+        not hermes_agent_dashboard_bootstrap_password_managed_state.stat.islnk and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.pw_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.gr_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.mode == '0600' and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('path', '') ==
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('sha256', '')
+        is match('^[a-f0-9]{64}$')) or
+        (hermes_agent_dashboard_bootstrap_password_file.stat.isreg and
+        not hermes_agent_dashboard_bootstrap_password_file.stat.islnk and
+        hermes_agent_dashboard_bootstrap_password_file.stat.pw_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_file.stat.gr_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_file.stat.mode == '0600' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.isreg and
+        not hermes_agent_dashboard_bootstrap_password_managed_state.stat.islnk and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.pw_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.gr_name == 'root' and
+        hermes_agent_dashboard_bootstrap_password_managed_state.stat.mode == '0600' and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('path', '') ==
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file and
+        hermes_agent_dashboard_bootstrap_password_managed_record.get('sha256', '') ==
+        hermes_agent_dashboard_bootstrap_password_file.stat.checksum)
+    fail_msg: >-
+      An existing Hermes dashboard bootstrap password target must match its
+      root-owned managed-state record before it can be replaced.
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Require a safe Hermes dashboard bootstrap password parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_bootstrap_password_parent.stat.exists or
+        (hermes_agent_dashboard_bootstrap_password_parent.stat.isdir and
+        not hermes_agent_dashboard_bootstrap_password_parent.stat.islnk)
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+
+- name: Create missing private Hermes dashboard bootstrap password parent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not hermes_agent_dashboard_bootstrap_password_parent.stat.exists
+
+- name: Generate Hermes dashboard authentication material
+  ansible.builtin.command:
+    argv:
+      - "{{ hermes_agent_install_dir }}/venv/bin/python"
+      - -c
+      - |
+        import json
+        import secrets
+        from plugins.dashboard_auth.basic import hash_password
+
+        password = secrets.token_urlsafe(32)
+        print(json.dumps({
+            "username": "{{ hermes_agent_dashboard_basic_auth_username }}",
+            "password": password,
+            "password_hash": hash_password(password),
+            "secret": secrets.token_urlsafe(32),
+        }))
+    chdir: "{{ hermes_agent_install_dir }}"
+  become: true
+  become_user: "{{ hermes_agent_user }}"
+  register: hermes_agent_dashboard_basic_auth_generated
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Store root-only proposed Hermes dashboard password
+  ansible.builtin.copy:
+    content: >-
+      {{ (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Inspect stored Hermes dashboard bootstrap password
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_stored_bootstrap_password
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Record managed Hermes dashboard bootstrap password state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'path': hermes_agent_dashboard_basic_auth_bootstrap_password_file,
+        'sha256': hermes_agent_dashboard_stored_bootstrap_password.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Commit private Hermes dashboard authentication state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'username': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).username,
+        'password_hash': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password_hash,
+        'secret': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).secret,
+        'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_dashboard_basic_auth_state.stat.exists or
+      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
+      hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Read private Hermes dashboard authentication state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+  register: hermes_agent_dashboard_basic_auth_state_contents
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode or hermes_agent_dashboard_basic_auth_state.stat.exists
+
+- name: Load private Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_basic_auth: >-
+      {{ {
+        'username': hermes_agent_dashboard_basic_auth_username,
+        'password_hash': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).password_hash,
+        'secret': (hermes_agent_dashboard_basic_auth_state_contents.content |
+        b64decode | from_yaml).secret,
+        'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
+      } }}
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - hermes_agent_dashboard_basic_auth_state_contents is defined
+
+- name: Normalize private Hermes dashboard authentication state
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_basic_auth | to_nice_yaml(indent=2) }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+
+- name: Prepare check-mode Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_basic_auth:
+      username: "{{ hermes_agent_dashboard_basic_auth_username }}"
+      password_hash: ""
+      secret: ""
+      session_ttl_seconds: "{{ hermes_agent_dashboard_basic_auth_session_ttl_seconds }}"
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - ansible_check_mode
+    - not hermes_agent_dashboard_basic_auth_state.stat.exists
+
+- name: Clear one-shot Hermes dashboard password rotation request
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotate_basic_auth: false
+  no_log: true
+  when: hermes_agent_dashboard_rotate_basic_auth | bool
+
+- name: Install locked-down Hermes configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ hermes_agent_home }}/config.yaml"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  when: hermes_agent_runtime_user_available
+  notify: Restart Hermes Agent dashboard
+
+- name: Inspect Hermes environment file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home }}/.env"
+    follow: false
+  register: hermes_agent_environment_file
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Require a regular Hermes environment file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_environment_file.stat.exists or
+        (hermes_agent_environment_file.stat.isreg and
+        not hermes_agent_environment_file.stat.islnk)
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Restrict Hermes environment file metadata
+  ansible.builtin.file:
+    path: "{{ hermes_agent_home }}/.env"
+    state: touch
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+    access_time: preserve
+    modification_time: preserve
+  when:
+    - hermes_agent_runtime_user_available
+    - not ansible_check_mode or hermes_agent_checkout.stat.exists
+
+- name: Configure Hermes dashboard terminal UI runtime
+  ansible.builtin.include_tasks: configure-dashboard-tui.yml
+
+- name: Inspect disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+    - "{{ hermes_agent_dashboard_tui_runtime_dir }}/dist/entry.js"
+  register: hermes_agent_dashboard_tui_disabled_artifacts
+  changed_when: false
+  check_mode: false
+  when: not hermes_agent_manage_dashboard_chat
+
+- name: Read disabled Hermes dashboard terminal UI runtime revision
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
+  register: hermes_agent_dashboard_tui_disabled_revision_contents
+  changed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.isreg
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.islnk
+
+- name: Read disabled Hermes dashboard terminal UI managed state
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+  register: hermes_agent_dashboard_tui_disabled_manifest_contents
+  changed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.isreg
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.islnk
+
+- name: Load disabled Hermes dashboard terminal UI managed state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_tui_disabled_managed_state: >-
+      {{
+        ((hermes_agent_dashboard_tui_disabled_manifest_contents | default({})).content |
+        default('') | b64decode | from_yaml) or {}
+      }}
+  when: not hermes_agent_manage_dashboard_chat
+
+- name: Calculate disabled Hermes dashboard terminal UI runtime source fingerprint
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -o
+      - pipefail
+      - -c
+      - >-
+        find . -type f ! -path './node_modules/*' ! -path './dist/*' ! -name
+        '.hermes-revision' ! -name '.hermes-managed-state.yml' -print0 |
+        LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1
+  args:
+    chdir: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+  register: hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint
+  changed_when: false
+  failed_when: false
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists
+    - hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.isdir
+    - not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.islnk
+
+- name: Require a recognized disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.exists or
+        (hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.isdir and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[0].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[1].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[2].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.exists and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.isreg and
+        not hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.islnk and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.pw_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.gr_name == 'root' and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.mode == '0644' and
+        hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.rc == 0 and
+        ((hermes_agent_dashboard_tui_disabled_revision_contents | default({})).content |
+        default('') | b64decode | trim) ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('revision', '') and
+        hermes_agent_dashboard_tui_disabled_managed_state.get('revision', '')
+        is match('^[0-9a-f]{40}$') and
+        (hermes_agent_dashboard_tui_disabled_runtime_source_fingerprint.stdout | trim) ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('source_sha256', '') and
+        hermes_agent_dashboard_tui_disabled_artifacts.results[3].stat.checksum ==
+        hermes_agent_dashboard_tui_disabled_managed_state.get('entry_sha256', ''))
+  when: not hermes_agent_manage_dashboard_chat
+
+- name: Remove disabled Hermes dashboard terminal UI runtime
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+    state: absent
+  when:
+    - not hermes_agent_manage_dashboard_chat
+    - not ansible_check_mode
+
+- name: Reconcile previously managed Hermes dashboard service
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes dashboard service
+    hermes_agent_managed_unit_name: "{{ hermes_agent_dashboard_service_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_dashboard }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_dashboard_service_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_dashboard_service_state_targets.results[1] }}
+
+- name: Configure Hermes Agent dashboard service
+  ansible.builtin.template:
+    src: hermes-agent-dashboard.service.j2
+    dest: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: hermes_agent_manage_dashboard
+  notify: Restart Hermes Agent dashboard
+
+- name: Inspect configured Hermes dashboard service unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_configured_dashboard_unit
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode
+
+- name: Record managed Hermes dashboard service state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'name': hermes_agent_dashboard_service_name,
+        'sha256': hermes_agent_configured_dashboard_unit.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_service_managed_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode
+
+- name: Inspect disabled Hermes Agent dashboard unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+  register: hermes_agent_dashboard_unit
+  changed_when: false
+  when: not hermes_agent_manage_dashboard
+
+- name: Disable Hermes Agent dashboard
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_dashboard_service_name }}"
+    enabled: false
+    state: stopped
+  when:
+    - not hermes_agent_manage_dashboard
+    - hermes_agent_dashboard_unit.stat.exists
+    - not ansible_check_mode
+
+- name: Remove disabled Hermes Agent dashboard unit
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ hermes_agent_dashboard_service_name }}"
+    state: absent
+  when: not hermes_agent_manage_dashboard
+  notify: Reload systemd daemon
+
+- name: Enable Hermes Agent dashboard
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_agent_dashboard_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - hermes_agent_manage_dashboard
+    - not ansible_check_mode or hermes_agent_dashboard_dist.stat.exists
+
+- name: Reconcile previously managed Hermes Agent backup service
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes Agent backup service
+    hermes_agent_managed_unit_name: "{{ hermes_agent_backup_service_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.service$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_backup }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_backup_service_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_backup_service_state_targets.results[1] }}
+
+- name: Reconcile previously managed Hermes Agent backup timer
+  ansible.builtin.include_tasks: reconcile-managed-systemd-unit.yml
+  vars:
+    hermes_agent_managed_unit_label: Hermes Agent backup timer
+    hermes_agent_managed_unit_name: "{{ hermes_agent_backup_timer_name }}"
+    hermes_agent_managed_unit_name_pattern: >-
+      ^[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer$
+    hermes_agent_managed_unit_should_exist: "{{ hermes_agent_manage_backup }}"
+    hermes_agent_managed_unit_state_file: >-
+      {{ hermes_agent_backup_timer_managed_state_file }}
+    hermes_agent_managed_unit_state_parent: >-
+      {{ hermes_agent_backup_timer_state_targets.results[1] }}
+
+- name: Configure Hermes Agent backups
+  when:
+    - hermes_agent_manage_backup
+    - hermes_agent_runtime_user_available
+  block:
+    - name: Create private Hermes Agent backup directory
+      ansible.builtin.file:
+        path: "{{ hermes_agent_backup_dir }}"
+        state: directory
+        owner: "{{ hermes_agent_user }}"
+        group: "{{ hermes_agent_group }}"
+        mode: "0700"
+
+    - name: Install Hermes Agent backup service
+      ansible.builtin.template:
+        src: hermes-agent-backup.service.j2
+        dest: "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Inspect configured Hermes Agent backup service
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ hermes_agent_backup_service_name }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_configured_backup_service
+      changed_when: false
+      check_mode: false
+
+    - name: Record managed Hermes Agent backup service state
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'name': hermes_agent_backup_service_name,
+            'sha256': hermes_agent_configured_backup_service.stat.checksum
+          } | to_nice_yaml(indent=2) }}
+        dest: "{{ hermes_agent_backup_service_managed_state_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not ansible_check_mode
+
+    - name: Install Hermes Agent backup timer
+      ansible.builtin.template:
+        src: hermes-agent-backup.timer.j2
+        dest: "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Inspect configured Hermes Agent backup timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_configured_backup_timer
+      changed_when: false
+      check_mode: false
+
+    - name: Record managed Hermes Agent backup timer state
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'name': hermes_agent_backup_timer_name,
+            'sha256': hermes_agent_configured_backup_timer.stat.checksum
+          } | to_nice_yaml(indent=2) }}
+        dest: "{{ hermes_agent_backup_timer_managed_state_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not ansible_check_mode
+
+    - name: Enable Hermes Agent backup timer
+      ansible.builtin.systemd_service:
+        name: "{{ hermes_agent_backup_timer_name }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+
+- name: Inspect disabled Hermes Agent backup units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - "{{ hermes_agent_backup_service_name }}"
+    - "{{ hermes_agent_backup_timer_name }}"
+  register: hermes_agent_backup_units
+  changed_when: false
+  when: not hermes_agent_manage_backup
+
+- name: Disable Hermes Agent backup units
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ hermes_agent_backup_units.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - not hermes_agent_manage_backup
+    - item.stat.exists
+    - not ansible_check_mode
+
+- name: Remove disabled Hermes Agent backup units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - "{{ hermes_agent_backup_service_name }}"
+    - "{{ hermes_agent_backup_timer_name }}"
+  when: not hermes_agent_manage_backup
+  notify: Reload systemd daemon

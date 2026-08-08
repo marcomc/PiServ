@@ -1,0 +1,4333 @@
+---
+- name: Verify  # noqa complexity[play] - one ordered lifecycle regression scenario
+  hosts: all
+  become: true
+  vars:
+    # The fixture exercises role behavior on the container architecture; the
+    # production role default remains ARM64-only.
+    hermes_agent_supported_architectures:
+      - "{{ ansible_facts['architecture'] }}"
+  tasks:
+    - name: Pin expected fixture origin across dynamic role inclusions
+      ansible.builtin.set_fact:
+        hermes_agent_expected_repo_origin: /usr/local/src/hermes-agent-fixture/upstream
+
+    - name: Read Hermes Agent service state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - hermes-agent-dashboard.service
+      changed_when: false
+      register: hermes_agent_molecule_dashboard_state
+
+    - name: Read Hermes Agent backup timer state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-agent-backup.timer
+      changed_when: false
+      register: hermes_agent_molecule_backup_timer_state
+
+    - name: Verify loopback dashboard response
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9119/
+        status_code: 200
+        return_content: false
+
+    - name: Run scheduled backup service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - start
+          - hermes-agent-backup.service
+      changed_when: true
+
+    - name: Find Hermes Agent backup archive
+      ansible.builtin.find:
+        paths: /var/backups/hermes-agent
+        patterns: hermes-backup-*.zip
+        file_type: file
+      register: hermes_agent_molecule_backup_archives
+
+    - name: Read Hermes Agent version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/hermes
+          - --version
+      changed_when: false
+      register: hermes_agent_molecule_installed_hermes_version
+
+    - name: Read Codex CLI version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/codex
+          - --version
+      changed_when: false
+      register: hermes_agent_molecule_installed_codex_version
+
+    - name: Read fixture Hermes revision
+      ansible.builtin.slurp:
+        src: /usr/local/src/hermes-agent-fixture/revision
+      changed_when: false
+      register: hermes_agent_molecule_fixture_revision
+
+    - name: Read fixture artifact checksums
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        - /usr/local/src/hermes-agent-fixture/codex.tar.gz
+      register: hermes_agent_molecule_fixture_artifacts
+
+    - name: Read Hermes dashboard terminal UI runtime revision
+      ansible.builtin.command:
+        argv:
+          - cat
+          - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
+      changed_when: false
+      register: hermes_agent_molecule_dashboard_tui_revision
+
+    - name: Inspect Hermes dashboard terminal UI runtime bundle
+      ansible.builtin.stat:
+        path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+      register: hermes_agent_molecule_dashboard_tui_bundle
+
+    - name: Inspect installer-created Hermes node runtime file
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/node/bin/npm
+      register: hermes_agent_molecule_node_runtime_file
+
+    - name: Read dashboard build identity fixtures
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent/hermes_cli/web_dist/build-uid
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/build-uid
+      register: hermes_agent_molecule_dashboard_build_identities
+
+    - name: Verify local-model capability is inert by default
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-gemma-4-e2b.service
+        - /etc/systemd/system/hermes-local-model-granite-3-3-2b.service
+        - /usr/local/libexec/hermes-agent/benchmark-local-model
+        - /usr/local/lib/llama.cpp
+        - /var/lib/hermes-models
+      register: hermes_agent_molecule_local_model_artifacts
+
+    - name: Assert installed role behavior
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_dashboard_state.stdout | trim == 'active'
+          - hermes_agent_molecule_backup_timer_state.stdout | trim == 'enabled'
+          - hermes_agent_molecule_backup_archives.matched | int == 1
+          - hermes_agent_molecule_installed_hermes_version.stdout | trim == 'Hermes Agent v0.20.0'
+          - hermes_agent_molecule_installed_codex_version.stdout | trim == 'codex-cli 0.145.0'
+          - hermes_agent_molecule_dashboard_tui_revision.stdout | trim == (hermes_agent_molecule_fixture_revision.content | b64decode | trim)
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.exists
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.isreg
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.pw_name == 'root'
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.gr_name == 'root'
+          - hermes_agent_molecule_dashboard_tui_bundle.stat.mode == '0644'
+          - hermes_agent_molecule_node_runtime_file.stat.isreg
+          - hermes_agent_molecule_node_runtime_file.stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_node_runtime_file.stat.gr_name == 'hermes-agent'
+          - hermes_agent_molecule_node_runtime_file.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_dashboard_build_identities.results |
+            map(attribute='content') | map('b64decode') | map('trim') |
+            reject('equalto', '0') | list | length == 2
+          - >-
+            hermes_agent_molecule_local_model_artifacts.results |
+            selectattr('stat.exists') | list | length == 0
+
+    - name: Load role defaults for local-model capacity fixture
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+
+    - name: Create foreign regular Codex link target fixture
+      ansible.builtin.copy:
+        content: foreign codex executable
+        dest: /usr/local/bin/codex-foreign-regular-fixture
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign regular Codex link target fixture
+      block:
+        - name: Validate foreign regular Codex link target fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-foreign-regular-fixture
+
+        - name: Fail if foreign regular Codex target was accepted
+          ansible.builtin.fail:
+            msg: Foreign regular Codex targets must fail preflight.
+      rescue:
+        - name: Assert foreign regular Codex target failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read foreign regular Codex target after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-foreign-regular-fixture
+      register: hermes_agent_molecule_foreign_codex_regular
+
+    - name: Assert foreign regular Codex target was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_codex_regular.content | b64decode ==
+            'foreign codex executable'
+
+    - name: Create foreign symlink Codex target fixture
+      ansible.builtin.file:
+        src: /bin/true
+        dest: /usr/local/bin/codex-foreign-link-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Reject foreign symlink Codex target fixture
+      block:
+        - name: Validate foreign symlink Codex target fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-foreign-link-fixture
+
+        - name: Fail if foreign symlink Codex target was accepted
+          ansible.builtin.fail:
+            msg: Foreign symlink Codex targets must fail preflight.
+      rescue:
+        - name: Assert foreign symlink Codex target failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read foreign symlink Codex target after rejection
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/readlink
+          - /usr/local/bin/codex-foreign-link-fixture
+      register: hermes_agent_molecule_foreign_codex_link
+      changed_when: false
+
+    - name: Assert foreign symlink Codex target was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_codex_link.stdout == '/bin/true'
+
+    - name: Create Codex link symlink-parent fixture
+      ansible.builtin.file:
+        src: /usr/local/bin
+        dest: /usr/local/hermes-codex-link-parent-alias
+        state: link
+        owner: root
+        group: root
+
+    - name: Create Codex link alias preservation canary
+      ansible.builtin.copy:
+        content: alias canary preserved
+        dest: /usr/local/bin/codex-parent-alias-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject symlink-parent Codex link alias
+      block:
+        - name: Validate symlink-parent Codex link alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/hermes-codex-link-parent-alias/codex-parent-alias-fixture
+
+        - name: Fail if symlink-parent Codex alias was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent Codex link paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent Codex alias failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require canonical Codex link parent'
+
+    - name: Create lexical Codex link alias preservation canary
+      ansible.builtin.copy:
+        content: lexical canary preserved
+        dest: /usr/local/bin/codex-lexical-alias-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject lexical Codex link alias
+      block:
+        - name: Validate lexical Codex link alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/../bin/codex-lexical-alias-fixture
+
+        - name: Fail if lexical Codex alias was accepted
+          ansible.builtin.fail:
+            msg: Lexical Codex link paths must fail preflight.
+      rescue:
+        - name: Assert lexical Codex alias failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require canonical Codex link parent'
+
+    - name: Read rejected Codex link alias canaries
+      ansible.builtin.slurp:
+        src: "/usr/local/bin/{{ item }}"
+      loop:
+        - codex-parent-alias-fixture
+        - codex-lexical-alias-fixture
+      register: hermes_agent_molecule_codex_alias_canaries
+
+    - name: Assert rejected Codex link aliases preserved exact content
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_alias_canaries.results[0].content |
+            b64decode == 'alias canary preserved'
+          - >-
+            hermes_agent_molecule_codex_alias_canaries.results[1].content |
+            b64decode == 'lexical canary preserved'
+
+    - name: Inspect managed runtime roots before Codex equality rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        - "{{ hermes_agent_local_model_runtime_dir }}"
+      register: hermes_agent_molecule_codex_runtime_roots_before
+
+    - name: Reject Codex link equal to TUI runtime root
+      block:
+        - name: Validate Codex link equal to TUI runtime root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+
+        - name: Fail if TUI runtime root equality was accepted
+          ansible.builtin.fail:
+            msg: A Codex link equal to the TUI runtime root must fail preflight.
+      rescue:
+        - name: Record TUI runtime root equality rejection
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require Codex link outputs outside other managed roots'
+
+        - name: Record accepted TUI runtime root rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_tui_root_rejected: true
+
+    - name: Reject Codex link equal to local-model runtime root
+      block:
+        - name: Validate Codex link equal to local-model runtime root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_local_model_runtime_dir }}"
+
+        - name: Fail if local-model runtime root equality was accepted
+          ansible.builtin.fail:
+            msg: A Codex link equal to the local-model runtime root must fail preflight.
+      rescue:
+        - name: Record local-model runtime root equality rejection
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require Codex link outputs outside other managed roots'
+
+        - name: Record accepted local-model runtime root rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_local_runtime_root_rejected: true
+
+    - name: Inspect managed runtime roots after Codex equality rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ hermes_agent_dashboard_tui_runtime_dir }}"
+        - "{{ hermes_agent_local_model_runtime_dir }}"
+      register: hermes_agent_molecule_codex_runtime_roots_after
+
+    - name: Assert managed runtime root equality was rejected without mutation
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_tui_root_rejected | default(false)
+          - hermes_agent_molecule_codex_local_runtime_root_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.exists ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[0].stat.exists
+          - >-
+            not hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.exists or
+            hermes_agent_molecule_codex_runtime_roots_before.results[0].stat.inode ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[0].stat.inode
+          - >-
+            hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.exists ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[1].stat.exists
+          - >-
+            not hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.exists or
+            hermes_agent_molecule_codex_runtime_roots_before.results[1].stat.inode ==
+            hermes_agent_molecule_codex_runtime_roots_after.results[1].stat.inode
+
+    - name: Create Codex-version-root containment fixture directory
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/current-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Codex-version-root containment canary
+      ansible.builtin.copy:
+        content: codex root canary preserved
+        dest: /usr/local/lib/codex/current-fixture/link-inside-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject Codex link inside configured Codex version root
+      block:
+        - name: Validate Codex link inside configured version root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/lib/codex/current-fixture/link-inside-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if Codex link inside version root was accepted
+          ansible.builtin.fail:
+            msg: Codex link paths inside the version root must fail preflight.
+      rescue:
+        - name: Record Codex version-root containment rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_version_root_rejected: true
+
+    - name: Read Codex-version-root canary after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/lib/codex/current-fixture/link-inside-fixture
+      register: hermes_agent_molecule_codex_version_root_canary
+
+    - name: Create derived-marker managed-root collision fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create derived-marker managed-root collision canary
+      ansible.builtin.copy:
+        content: marker root canary preserved
+        dest: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml/canary
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject derived Codex marker equal to managed root
+      block:
+        - name: Validate derived Codex marker equal to managed root
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-marker-root-fixture
+            hermes_agent_dashboard_tui_runtime_dir: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml
+
+        - name: Fail if derived marker managed-root collision was accepted
+          ansible.builtin.fail:
+            msg: Derived Codex markers equal to managed roots must fail preflight.
+      rescue:
+        - name: Record derived-marker managed-root collision rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_marker_root_rejected: true
+
+    - name: Read derived-marker managed-root canary after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-marker-root-fixture.hermes-agent-managed.yml/canary
+      register: hermes_agent_molecule_codex_marker_root_canary
+
+    - name: Create protected Codex path fixture
+      ansible.builtin.copy:
+        content: protected codex path preserved
+        dest: /etc/codex-protected-fixture
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject protected Codex path fixture
+      block:
+        - name: Validate protected Codex path fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /etc/codex-protected-fixture
+
+        - name: Fail if protected Codex path was accepted
+          ansible.builtin.fail:
+            msg: Codex link paths beneath /etc must fail preflight.
+      rescue:
+        - name: Record protected Codex path rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_codex_protected_path_rejected: true
+
+    - name: Read protected Codex path fixture after rejection
+      ansible.builtin.slurp:
+        src: /etc/codex-protected-fixture
+      register: hermes_agent_molecule_codex_protected_path
+
+    - name: Assert explicit Codex root and protected-path regressions
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_version_root_rejected | default(false)
+          - hermes_agent_molecule_codex_marker_root_rejected | default(false)
+          - hermes_agent_molecule_codex_protected_path_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_version_root_canary.content | b64decode ==
+            'codex root canary preserved'
+          - >-
+            hermes_agent_molecule_codex_marker_root_canary.content | b64decode ==
+            'marker root canary preserved'
+          - >-
+            hermes_agent_molecule_codex_protected_path.content | b64decode ==
+            'protected codex path preserved'
+
+    - name: Create prior and current Codex upgrade directories
+      ansible.builtin.file:
+        path: "/usr/local/lib/codex/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - prior-fixture
+        - current-fixture
+
+    - name: Create prior and current Codex upgrade target fixtures
+      ansible.builtin.copy:
+        content: "{{ item }} codex fixture"
+        dest: "/usr/local/lib/codex/{{ item }}/codex"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - prior-fixture
+        - current-fixture
+
+    - name: Create prior managed active Codex link fixture
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/prior-fixture/codex
+        dest: /usr/local/bin/codex-upgrade-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record prior managed active Codex link fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-upgrade-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-upgrade-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Accept recognized prior-version Codex link during upgrade
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+      vars:
+        hermes_agent_codex_binary_path: /usr/local/bin/codex-upgrade-fixture
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+    - name: Create marker-only Codex provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-marker-only-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-marker-only-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject marker-only Codex provenance fixture
+      block:
+        - name: Validate marker-only Codex provenance fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-marker-only-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if marker-only Codex provenance was accepted
+          ansible.builtin.fail:
+            msg: A Codex provenance marker without its link must fail preflight.
+      rescue:
+        - name: Assert marker-only provenance failed link identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require absent or recognized active Codex link'
+
+    - name: Read marker-only Codex provenance after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-marker-only-fixture.hermes-agent-managed.yml
+      register: hermes_agent_molecule_codex_marker_only
+
+    - name: Assert marker-only Codex provenance was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_marker_only.content | b64decode ==
+            hermes_agent_molecule_codex_marker_only_expected
+      vars:
+        hermes_agent_molecule_codex_marker_only_expected: |
+          link_path: /usr/local/bin/codex-marker-only-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/prior-fixture/codex
+          version: 1
+
+    - name: Create current Codex link with malformed provenance fixture
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/current-fixture/codex
+        dest: /usr/local/bin/codex-malformed-marker-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create malformed Codex provenance fixture
+      ansible.builtin.copy:
+        content: "managed_by: foreign\n"
+        dest: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject malformed Codex provenance fixture
+      block:
+        - name: Validate malformed Codex provenance fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-malformed-marker-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if malformed Codex provenance was accepted
+          ansible.builtin.fail:
+            msg: Malformed Codex provenance must fail preflight.
+      rescue:
+        - name: Assert malformed provenance failed exact schema validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact Codex link managed-state schema'
+
+    - name: Read malformed Codex provenance after rejection
+      ansible.builtin.slurp:
+        src: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+      register: hermes_agent_molecule_codex_malformed_marker
+
+    - name: Assert malformed Codex provenance was preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_codex_malformed_marker.content | b64decode ==
+            'managed_by: foreign\n'
+
+    - name: Remove malformed marker for current-target markerless regression
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-malformed-marker-fixture.hermes-agent-managed.yml
+        state: absent
+
+    - name: Accept markerless link pointing at exact current Codex target
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+      vars:
+        hermes_agent_codex_binary_path: /usr/local/bin/codex-malformed-marker-fixture
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+    - name: Inspect installer before Codex collision regressions
+      ansible.builtin.stat:
+        path: "{{ hermes_agent_installer_path }}"
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_installer_before_codex_collisions
+
+    - name: Reject Codex link collision with installer output
+      block:
+        - name: Validate Codex link collision with installer output
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: "{{ hermes_agent_installer_path }}"
+
+        - name: Fail if installer output collision was accepted
+          ansible.builtin.fail:
+            msg: Codex link collision with installer output must fail preflight.
+      rescue:
+        - name: Record installer output collision rejection
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_installer_collision_rejected: true
+
+    - name: Remove stale Codex hard-link collision fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/codex-hardlink-fixture
+        state: absent
+
+    - name: Create Codex hard-link inode collision fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - "{{ hermes_agent_installer_path }}"
+          - /usr/local/bin/codex-hardlink-fixture
+      changed_when: true
+
+    - name: Reject Codex hard-link inode collision fixture
+      block:
+        - name: Validate Codex hard-link inode collision fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-hardlink-fixture
+
+        - name: Fail if Codex hard-link inode collision was accepted
+          ansible.builtin.fail:
+            msg: Codex hard-link aliases of managed outputs must fail preflight.
+      rescue:
+        - name: Assert hard-link collision failed inode validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject inode aliases between configurable managed outputs'
+
+    - name: Inspect installer and hard-link after collision rejections
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ hermes_agent_installer_path }}"
+        - /usr/local/bin/codex-hardlink-fixture
+      register: hermes_agent_molecule_codex_collision_outputs
+
+    - name: Assert installer and hard-link collisions were preserved
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_installer_collision_rejected | default(false)
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[0].stat.checksum ==
+            hermes_agent_molecule_installer_before_codex_collisions.stat.checksum
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[1].stat.checksum ==
+            hermes_agent_molecule_installer_before_codex_collisions.stat.checksum
+          - >-
+            hermes_agent_molecule_codex_collision_outputs.results[0].stat.inode ==
+            hermes_agent_molecule_codex_collision_outputs.results[1].stat.inode
+
+    - name: Remove stale Hermes environment hard-link fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/hermes-env-hardlink-fixture
+        state: absent
+
+    - name: Create Hermes environment hard-link collision fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - "{{ hermes_agent_home }}/.env"
+          - /usr/local/bin/hermes-env-hardlink-fixture
+      changed_when: true
+
+    - name: Reject Hermes environment hard-link collision fixture
+      block:
+        - name: Validate Hermes environment hard-link collision fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_dashboard_service_managed_state_file: >-
+              /usr/local/bin/hermes-env-hardlink-fixture
+
+        - name: Fail if the environment hard-link collision was accepted
+          ansible.builtin.fail:
+            msg: Hermes environment hard-link aliases must fail preflight.
+      rescue:
+        - name: Assert environment hard-link failed inode validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject inode aliases between configurable managed outputs'
+
+    - name: Inspect Hermes environment hard-link collision outputs
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ hermes_agent_home }}/.env"
+        - /usr/local/bin/hermes-env-hardlink-fixture
+      register: hermes_agent_molecule_environment_collision_outputs
+
+    - name: Assert Hermes environment hard-link collision was preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_environment_collision_outputs.results[0].stat.checksum ==
+            hermes_agent_molecule_environment_collision_outputs.results[1].stat.checksum
+          - >-
+            hermes_agent_molecule_environment_collision_outputs.results[0].stat.inode ==
+            hermes_agent_molecule_environment_collision_outputs.results[1].stat.inode
+
+    - name: Create real Codex target behind a symlinked version directory
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/real-symlink-version-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Codex target behind symlinked version directory
+      ansible.builtin.copy:
+        content: symlinked version codex
+        dest: /usr/local/lib/codex/real-symlink-version-fixture/codex
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create symlinked Codex version directory
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/real-symlink-version-fixture
+        dest: /usr/local/lib/codex/symlink-version-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create managed link through symlinked Codex version directory
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/symlink-version-fixture/codex
+        dest: /usr/local/bin/codex-symlink-version-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record symlinked Codex version provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-symlink-version-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/symlink-version-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-symlink-version-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject recorded target through symlinked Codex version directory
+      block:
+        - name: Validate target through symlinked Codex version directory
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-symlink-version-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if symlinked Codex version target was accepted
+          ansible.builtin.fail:
+            msg: Symlinked Codex version targets must fail preflight.
+      rescue:
+        - name: Assert symlinked version target failed canonical validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require safe canonical recorded Codex target'
+
+    - name: Create Codex link with parent-traversal recorded target
+      ansible.builtin.file:
+        src: /usr/local/lib/codex/../codex/prior-fixture/codex
+        dest: /usr/local/bin/codex-recorded-traversal-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Record parent-traversal Codex provenance fixture
+      ansible.builtin.copy:
+        content: |
+          link_path: /usr/local/bin/codex-recorded-traversal-fixture
+          managed_by: marcomc.hermes_agent
+          target: /usr/local/lib/codex/../codex/prior-fixture/codex
+          version: 1
+        dest: /usr/local/bin/codex-recorded-traversal-fixture.hermes-agent-managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject parent-traversal recorded Codex target
+      block:
+        - name: Validate parent-traversal recorded Codex target
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_codex_binary_path: /usr/local/bin/codex-recorded-traversal-fixture
+            hermes_agent_codex_install_dir: /usr/local/lib/codex/current-fixture
+
+        - name: Fail if parent-traversal recorded target was accepted
+          ansible.builtin.fail:
+            msg: Parent-traversal recorded Codex targets must fail preflight.
+      rescue:
+        - name: Assert traversal target failed exact provenance schema
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact Codex link managed-state schema'
+
+    - name: Reject an excessive Home Assistant MCP request timeout
+      block:
+        - name: Validate an excessive Home Assistant MCP request timeout
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_timeout: 301
+            hermes_agent_home_assistant_mcp_connect_timeout: 15
+
+        - name: Fail if the excessive Home Assistant MCP request timeout was accepted
+          ansible.builtin.fail:
+            msg: The Home Assistant MCP request timeout must not exceed 300 seconds.
+      rescue:
+        - name: Assert excessive request timeout failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive Home Assistant MCP request timeout
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_request_timeout_rejected: true
+
+    - name: Reject an excessive Home Assistant MCP connection timeout
+      block:
+        - name: Validate an excessive Home Assistant MCP connection timeout
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_timeout: 60
+            hermes_agent_home_assistant_mcp_connect_timeout: 61
+
+        - name: Fail if the excessive Home Assistant MCP connection timeout was accepted
+          ansible.builtin.fail:
+            msg: The Home Assistant MCP connection timeout must not exceed 60 seconds.
+      rescue:
+        - name: Assert excessive connection timeout failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive Home Assistant MCP connection timeout
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_connection_timeout_rejected: true
+
+    - name: Assert Home Assistant MCP timeout limits are enforced
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_request_timeout_rejected | default(false)
+          - hermes_agent_molecule_connection_timeout_rejected | default(false)
+
+    - name: Reject an excessive backup randomized delay
+      block:
+        - name: Validate an excessive backup randomized delay
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_randomized_delay: 999999w
+
+        - name: Fail if excessive backup randomized delay was accepted
+          ansible.builtin.fail:
+            msg: Backup randomized delay must not exceed one day.
+      rescue:
+        - name: Assert excessive backup randomized delay failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive backup randomized delay
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_backup_randomized_delay_rejected: true
+
+    - name: Reject an excessive dashboard authentication session lifetime
+      block:
+        - name: Validate excessive dashboard authentication session lifetime
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_session_ttl_seconds: 86401
+
+        - name: Fail if excessive dashboard authentication session lifetime was accepted
+          ansible.builtin.fail:
+            msg: Dashboard authentication session lifetime must not exceed one day.
+      rescue:
+        - name: Assert excessive dashboard authentication lifetime failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of excessive dashboard authentication session lifetime
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_dashboard_ttl_rejected: true
+
+    - name: Reject an unsafe inference provenance plugin name
+      block:
+        - name: Validate unsafe inference provenance plugin name
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_manage_inference_provenance: false
+            hermes_agent_inference_provenance_plugin_name: ../etc
+
+        - name: Fail if unsafe inference provenance plugin name was accepted
+          ansible.builtin.fail:
+            msg: Inference provenance plugin names must not contain path separators.
+      rescue:
+        - name: Assert unsafe inference provenance plugin name failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+        - name: Record rejection of unsafe inference provenance plugin name
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_plugin_name_rejected: true
+
+    - name: Assert dashboard and plugin validation limits are enforced
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_backup_randomized_delay_rejected | default(false)
+          - hermes_agent_molecule_dashboard_ttl_rejected | default(false)
+          - hermes_agent_molecule_plugin_name_rejected | default(false)
+
+    - name: Reject colliding configured systemd unit names
+      ansible.builtin.include_tasks:
+        file: tasks/unit-name-topology-case.yml
+      loop:
+        - dashboard: collision-fixture.service
+          backup_service: collision-fixture.service
+          backup_timer: collision-fixture.timer
+        - dashboard: hermes-local-model-gemma-4-e2b.service
+          backup_service: safe-backup-fixture.service
+          backup_timer: safe-backup-fixture.timer
+        - dashboard: safe-dashboard-fixture.service
+          backup_service: hermes-local-model-gemma-4-e2b.service
+          backup_timer: safe-backup-fixture.timer
+      loop_control:
+        loop_var: hermes_agent_molecule_unit_topology
+
+    - name: Reject an unsafe Codex archive binary name
+      block:
+        - name: Validate unsafe Codex archive binary name
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_codex_archive_binary_name: ../codex
+
+        - name: Fail if unsafe Codex archive binary name was accepted
+          ansible.builtin.fail:
+            msg: Codex archive binary names must be safe relative basenames.
+      rescue:
+        - name: Assert unsafe Codex archive binary name failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Reject the normalized Codex archive binary name
+      block:
+        - name: Validate normalized Codex archive binary name
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_codex_archive_binary_name: codex
+
+        - name: Fail if normalized Codex archive binary name was accepted
+          ansible.builtin.fail:
+            msg: The archive source must not alias the normalized Codex binary.
+      rescue:
+        - name: Assert normalized Codex archive binary name failed target validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Reject duplicate local-model filenames
+      block:
+        - name: Validate duplicate local-model filenames
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models:
+              - id: duplicate-one
+                display_name: Duplicate one
+                repository: example/model-one
+                revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                filename: duplicate.gguf
+                sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                size_bytes: 1024
+                port: 18081
+              - id: duplicate-two
+                display_name: Duplicate two
+                repository: example/model-two
+                revision: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                filename: duplicate.gguf
+                sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                size_bytes: 1024
+                port: 18082
+
+        - name: Fail if duplicate local-model filenames were accepted
+          ansible.builtin.fail:
+            msg: Duplicate local-model filenames must be rejected.
+      rescue:
+        - name: Assert duplicate local-model filenames failed validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert local-model storage configuration'
+
+    - name: Reject terminal UI metadata path overlapping runtime source
+      block:
+        - name: Validate overlapping terminal UI metadata path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-agent-runtime/tui/package.json
+
+        - name: Fail if overlapping terminal UI metadata path was accepted
+          ansible.builtin.fail:
+            msg: Terminal UI metadata paths must not overlap runtime source.
+      rescue:
+        - name: Assert overlapping terminal UI metadata path failed validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Create terminal UI metadata inode-alias fixture directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-tui-inode-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create terminal UI revision inode fixture
+      ansible.builtin.copy:
+        content: terminal UI metadata canary
+        dest: /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Create terminal UI manifest hard-link alias fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+          - /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+      changed_when: true
+
+    - name: Reject terminal UI metadata inode aliases
+      block:
+        - name: Validate terminal UI metadata inode aliases
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-tui-inode-fixture
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+            hermes_agent_dashboard_tui_runtime_manifest_file: >-
+              /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+
+        - name: Fail if terminal UI metadata inode aliases were accepted
+          ansible.builtin.fail:
+            msg: Terminal UI metadata inode aliases must be rejected.
+      rescue:
+        - name: Assert terminal UI metadata inode aliases failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject Hermes dashboard terminal UI metadata inode aliases'
+
+    - name: Read terminal UI metadata aliases after rejection
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-tui-inode-fixture/.hermes-revision
+        - /usr/local/lib/hermes-tui-inode-fixture/.hermes-managed-state.yml
+      register: hermes_agent_molecule_tui_metadata_aliases
+      changed_when: false
+
+    - name: Assert terminal UI metadata aliases are untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_tui_metadata_aliases.results[0].content |
+            b64decode == 'terminal UI metadata canary'
+          - >-
+            hermes_agent_molecule_tui_metadata_aliases.results[1].content |
+            b64decode == 'terminal UI metadata canary'
+
+    - name: Remove terminal UI metadata inode-alias fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-tui-inode-fixture
+        state: absent
+
+    - name: Reject lexical aliases for dashboard authentication outputs
+      block:
+        - name: Validate aliased dashboard authentication output paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: /root/hermes-auth-alias
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/./hermes-auth-alias
+
+        - name: Fail if aliased dashboard authentication outputs were accepted
+          ansible.builtin.fail:
+            msg: Lexically aliased dashboard authentication outputs must be rejected.
+      rescue:
+        - name: Assert aliased dashboard authentication outputs failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require distinct canonical Hermes dashboard authentication output paths'
+
+    - name: Reject auth state overlapping the derived bootstrap marker
+      block:
+        - name: Validate auth state overlapping the bootstrap marker path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: >-
+              /root/hermes-marker-alias.managed.yml
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-marker-alias
+
+        - name: Fail if auth state overlapping the bootstrap marker was accepted
+          ansible.builtin.fail:
+            msg: Auth state must not overlap the derived bootstrap marker.
+      rescue:
+        - name: Assert bootstrap marker path overlap failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require distinct canonical Hermes dashboard authentication output paths'
+
+    - name: Create dashboard authentication inode-alias fixture
+      ansible.builtin.copy:
+        content: inode alias canary
+        dest: /root/hermes-auth-inode-one
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create distinct dashboard bootstrap password inode fixture
+      ansible.builtin.copy:
+        content: distinct bootstrap canary
+        dest: /root/hermes-auth-inode-two
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create dashboard authentication marker hard-link alias fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - /root/hermes-auth-inode-one
+          - /root/hermes-auth-inode-two.managed.yml
+      changed_when: true
+
+    - name: Reject inode aliases for dashboard authentication outputs
+      block:
+        - name: Validate dashboard authentication output inode aliases
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: /root/hermes-auth-inode-one
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-auth-inode-two
+
+        - name: Fail if dashboard authentication inode aliases were accepted
+          ansible.builtin.fail:
+            msg: Dashboard authentication output inode aliases must be rejected.
+      rescue:
+        - name: Assert dashboard authentication inode aliases failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject Hermes dashboard authentication output inode aliases'
+
+    - name: Remove dashboard authentication inode-alias fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-auth-inode-one
+        - /root/hermes-auth-inode-two
+        - /root/hermes-auth-inode-two.managed.yml
+
+    - name: Create foreign dashboard bootstrap password target fixture
+      ansible.builtin.copy:
+        content: foreign bootstrap canary
+        dest: /root/hermes-foreign-bootstrap-target
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject foreign dashboard bootstrap password target
+      block:
+        - name: Apply role with foreign dashboard bootstrap password target
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-foreign-bootstrap-target
+
+        - name: Fail if foreign dashboard bootstrap target was accepted
+          ansible.builtin.fail:
+            msg: Foreign dashboard bootstrap targets must be rejected.
+      rescue:
+        - name: Assert foreign dashboard bootstrap target failed before overwrite
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a recognized Hermes dashboard bootstrap password file'
+
+    - name: Read foreign dashboard bootstrap target after rejection
+      ansible.builtin.slurp:
+        src: /root/hermes-foreign-bootstrap-target
+      register: hermes_agent_molecule_foreign_bootstrap_target
+      changed_when: false
+
+    - name: Inspect foreign dashboard bootstrap managed-state canary
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_foreign_bootstrap_marker
+
+    - name: Assert foreign dashboard bootstrap target is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_bootstrap_target.content |
+            b64decode == 'foreign bootstrap canary'
+          - not hermes_agent_molecule_foreign_bootstrap_marker.stat.exists
+
+    - name: Remove foreign dashboard bootstrap target fixture
+      ansible.builtin.file:
+        path: /root/hermes-foreign-bootstrap-target
+        state: absent
+
+    - name: Create marker-only dashboard bootstrap partial state
+      ansible.builtin.copy:
+        content: |
+          path: /root/hermes-foreign-bootstrap-target
+          sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        dest: /root/hermes-foreign-bootstrap-target.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Recover marker-only managed dashboard bootstrap password state
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: &dashboard_auth_fixture_vars
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_dashboard_manage_basic_auth: true
+        hermes_agent_dashboard_basic_auth_username: fixture-admin
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+          /root/hermes-foreign-bootstrap-target
+
+    - name: Assert marker-only managed dashboard bootstrap state converges
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target
+      register: hermes_agent_molecule_marker_only_bootstrap_password
+
+    - name: Verify marker-only managed dashboard bootstrap recovery
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_marker_only_bootstrap_password.stat.isreg
+          - hermes_agent_molecule_marker_only_bootstrap_password.stat.mode == '0600'
+
+    - name: Inspect established dashboard authentication commit point
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_established_bootstrap_auth_state
+
+    - name: Create malformed dashboard bootstrap partial state
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - path: /root/hermes-foreign-bootstrap-target
+          content: partial password canary
+        - path: /root/hermes-foreign-bootstrap-target.managed.yml
+          content: "path: [malformed\n"
+
+    - name: Reject malformed dashboard bootstrap managed state
+      block:
+        - name: Apply role with malformed dashboard bootstrap managed state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if malformed dashboard bootstrap state was accepted
+          ansible.builtin.fail:
+            msg: Malformed dashboard bootstrap state must be rejected.
+      rescue:
+        - name: Assert malformed dashboard bootstrap state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Load Hermes dashboard bootstrap password managed state'
+
+    - name: Read malformed dashboard bootstrap partial state after rejection
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_malformed_bootstrap_state
+      changed_when: false
+
+    - name: Inspect dashboard authentication commit point after partial-state refusal
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_partial_bootstrap_auth_state
+
+    - name: Assert malformed dashboard bootstrap partial state is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_malformed_bootstrap_state.results[0].content |
+            b64decode == 'partial password canary'
+          - >-
+            hermes_agent_molecule_malformed_bootstrap_state.results[1].content |
+            b64decode == 'path: [malformed\n'
+          - hermes_agent_molecule_partial_bootstrap_auth_state.stat.isreg
+          - >-
+            hermes_agent_molecule_partial_bootstrap_auth_state.stat.checksum ==
+            hermes_agent_molecule_established_bootstrap_auth_state.stat.checksum
+
+    - name: Remove dashboard bootstrap partial-state fixtures for recovery
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+
+    - name: Create foreign dashboard authentication state fixture
+      ansible.builtin.copy:
+        content: foreign dashboard authentication state
+        dest: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject foreign dashboard authentication state before overwrite
+      block:
+        - name: Apply role with foreign dashboard authentication state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if foreign dashboard authentication state was accepted
+          ansible.builtin.fail:
+            msg: Foreign dashboard authentication state must not be normalized.
+      rescue:
+        - name: Assert foreign dashboard authentication state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a regular Hermes dashboard authentication state file'
+
+    - name: Read foreign dashboard authentication state after rejection
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_foreign_dashboard_auth_state
+
+    - name: Assert foreign dashboard authentication state is untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_dashboard_auth_state.content |
+            b64decode == 'foreign dashboard authentication state'
+
+    - name: Remove foreign dashboard authentication state fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        state: absent
+
+    - name: Initialize managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: *dashboard_auth_fixture_vars
+
+    - name: Inspect initialized dashboard bootstrap password target
+      ansible.builtin.stat:
+        path: /root/hermes-foreign-bootstrap-target
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_initialized_bootstrap_target
+
+    - name: Delete managed dashboard bootstrap password while preserving state
+      ansible.builtin.file:
+        path: /root/hermes-foreign-bootstrap-target
+        state: absent
+
+    - name: Recover deleted managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars: *dashboard_auth_fixture_vars
+
+    - name: Inspect recovered dashboard bootstrap password artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_recovered_bootstrap_artifacts
+
+    - name: Read recovered dashboard bootstrap password and auth state
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_recovered_bootstrap_credentials
+      no_log: true
+
+    - name: Assert deleted managed dashboard bootstrap password converges
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.isreg
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[1].stat.isreg
+          - hermes_agent_molecule_recovered_bootstrap_artifacts.results[1].stat.mode == '0600'
+          - >-
+            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum !=
+            hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.checksum
+          - >-
+            (hermes_agent_molecule_recovered_bootstrap_credentials.results[1].content |
+            b64decode | from_yaml).password_hash ==
+            'fixture:' ~
+            (hermes_agent_molecule_recovered_bootstrap_credentials.results[0].content |
+            b64decode)
+      no_log: true
+
+    - name: Rotate managed dashboard bootstrap password target
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        <<: *dashboard_auth_fixture_vars
+        hermes_agent_dashboard_rotate_basic_auth: true
+
+    - name: Inspect rotated dashboard bootstrap password artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_rotated_bootstrap_artifacts
+
+    - name: Read rotated dashboard bootstrap password managed state
+      ansible.builtin.slurp:
+        src: /root/hermes-foreign-bootstrap-target.managed.yml
+      register: hermes_agent_molecule_rotated_bootstrap_marker
+      changed_when: false
+
+    - name: Assert managed dashboard bootstrap rotation is recognized
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.checksum !=
+            hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
+          - hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.mode == '0600'
+          - hermes_agent_molecule_rotated_bootstrap_artifacts.results[1].stat.mode == '0600'
+          - >-
+            (hermes_agent_molecule_rotated_bootstrap_marker.content |
+            b64decode | from_yaml).path == '/root/hermes-foreign-bootstrap-target'
+          - >-
+            (hermes_agent_molecule_rotated_bootstrap_marker.content |
+            b64decode | from_yaml).sha256 ==
+            hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
+
+    - name: Reset dashboard authentication fixture controls
+      ansible.builtin.set_fact:
+        hermes_agent_dashboard_manage_basic_auth: false
+        hermes_agent_dashboard_rotate_basic_auth: false
+
+    - name: Reject privileged Hermes runtime identity during preflight
+      block:
+        - name: Preflight privileged Hermes runtime identity
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_user: root
+            hermes_agent_group: root
+            hermes_agent_home: /var/lib/hermes-root-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-root-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-root-fixture
+
+        - name: Fail if privileged Hermes runtime identity was accepted
+          ansible.builtin.fail:
+            msg: Privileged runtime identities must fail preflight.
+      rescue:
+        - name: Assert privileged identity failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Assert Hermes Agent runtime identity names are unprivileged'
+
+    - name: Reject a system-root Hermes install path during preflight
+      block:
+        - name: Preflight system-root Hermes install path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_install_dir: /usr/local
+
+        - name: Fail if system-root Hermes install path was accepted
+          ansible.builtin.fail:
+            msg: System-root install paths must fail preflight.
+      rescue:
+        - name: Assert system-root path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Assert Hermes Agent runtime identity names are unprivileged'
+
+    - name: Inspect shared temporary directory before installer-path preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_before
+
+    - name: Reject a Hermes installer beneath a shared temporary directory
+      block:
+        - name: Preflight shared temporary Hermes installer path
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/runtime-user.yml"
+          vars:
+            hermes_agent_runtime_user_phase: preflight
+            hermes_agent_user: hermes-agent
+            hermes_agent_group: hermes-agent
+            hermes_agent_home: /var/lib/hermes-agent
+            hermes_agent_install_dir: /usr/local/lib/hermes-agent
+            hermes_agent_installer_path: /tmp/hermes-agent-installer
+
+        - name: Fail if shared temporary Hermes installer path was accepted
+          ansible.builtin.fail:
+            msg: Shared temporary installer paths must fail preflight.
+      rescue:
+        - name: Assert shared temporary installer path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject shared temporary Hermes installer paths'
+
+    - name: Inspect shared temporary directory after installer-path preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_after
+
+    - name: Assert rejected temporary installer path made no mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_tmp_after.stat.mode ==
+            hermes_agent_molecule_tmp_before.stat.mode
+          - >-
+            hermes_agent_molecule_tmp_after.stat.pw_name ==
+            hermes_agent_molecule_tmp_before.stat.pw_name
+          - >-
+            hermes_agent_molecule_tmp_after.stat.gr_name ==
+            hermes_agent_molecule_tmp_before.stat.gr_name
+
+    - name: Create disposable UID-zero alias fixture group
+      ansible.builtin.group:
+        name: hermes-uid-zero-fixture
+        gid: 3450
+        state: present
+
+    - name: Create disposable non-root-named UID-zero alias
+      ansible.builtin.user:
+        name: hermes-uid-zero-fixture
+        uid: 0
+        non_unique: true
+        group: hermes-uid-zero-fixture
+        home: /var/lib/hermes-uid-zero-fixture
+        shell: /usr/sbin/nologin
+        create_home: false
+        state: present
+
+    - name: Create disposable non-root-named GID-zero alias
+      ansible.builtin.group:
+        name: hermes-gid-zero-fixture
+        gid: 0
+        non_unique: true
+        state: present
+
+    - name: Create disposable GID-zero runtime user
+      ansible.builtin.user:
+        name: hermes-gid-zero-fixture
+        uid: 3451
+        group: hermes-gid-zero-fixture
+        home: /var/lib/hermes-gid-zero-fixture
+        shell: /usr/sbin/nologin
+        create_home: false
+        state: present
+
+    - name: Reject disposable UID-zero alias before mutation
+      block:
+        - name: Apply role with UID-zero identity alias
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-uid-zero-fixture
+            hermes_agent_group: hermes-uid-zero-fixture
+            hermes_agent_home: /var/lib/hermes-uid-zero-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-uid-zero-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-uid-zero-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if UID-zero identity alias was accepted
+          ansible.builtin.fail:
+            msg: UID-zero aliases must fail preflight.
+      rescue:
+        - name: Assert UID-zero identity alias failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Reject disposable GID-zero alias before mutation
+      block:
+        - name: Apply role with GID-zero identity alias
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-gid-zero-fixture
+            hermes_agent_group: hermes-gid-zero-fixture
+            hermes_agent_home: /var/lib/hermes-gid-zero-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-gid-zero-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-gid-zero-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if GID-zero identity alias was accepted
+          ansible.builtin.fail:
+            msg: GID-zero aliases must fail preflight.
+      rescue:
+        - name: Assert GID-zero identity alias failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create foreign Hermes Git checkout fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - init
+          - /usr/local/lib/hermes-foreign-checkout-fixture
+      changed_when: true
+
+    - name: Configure foreign Hermes Git checkout origin
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/lib/hermes-foreign-checkout-fixture
+          - remote
+          - add
+          - origin
+          - https://example.invalid/foreign/hermes.git
+      changed_when: true
+
+    - name: Reject foreign Hermes Git checkout before mutation
+      block:
+        - name: Apply role with foreign Hermes Git checkout
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-foreign-checkout-fixture
+            hermes_agent_group: hermes-foreign-checkout-fixture
+            hermes_agent_home: /var/lib/hermes-foreign-checkout-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-foreign-checkout-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-foreign-checkout-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if foreign Hermes Git checkout was accepted
+          ansible.builtin.fail:
+            msg: Foreign Git checkout origins must fail preflight.
+      rescue:
+        - name: Assert foreign checkout origin failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require expected Hermes Agent checkout origin'
+
+    - name: Exercise checkout provenance drift regressions
+      ansible.builtin.include_tasks: tasks/checkout-provenance-case.yml
+
+    - name: Exercise managed dashboard service rename regressions
+      ansible.builtin.include_tasks: tasks/dashboard-service-rename-case.yml
+
+    - name: Create incompatible runtime identity fixture group
+      ansible.builtin.group:
+        name: hermes-incompatible-fixture
+        gid: 2345
+        state: present
+
+    - name: Create incompatible runtime identity fixture user
+      ansible.builtin.user:
+        name: hermes-incompatible-fixture
+        uid: 2345
+        group: hermes-incompatible-fixture
+        home: /var/lib/hermes-incompatible-wrong-home
+        shell: /bin/sh
+        create_home: false
+        state: present
+
+    - name: Reject incompatible existing Hermes runtime identity
+      block:
+        - name: Apply role with incompatible existing runtime identity
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-incompatible-fixture
+            hermes_agent_group: hermes-incompatible-fixture
+            hermes_agent_home: /var/lib/hermes-incompatible-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-incompatible-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-incompatible-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if incompatible existing runtime identity was accepted
+          ansible.builtin.fail:
+            msg: Incompatible existing identities must fail preflight.
+      rescue:
+        - name: Assert incompatible identity failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create foreign Hermes persistent home fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-foreign-home-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign existing Hermes persistent home
+      block:
+        - name: Apply role with foreign existing persistent home
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-foreign-home-fixture
+            hermes_agent_group: hermes-foreign-home-fixture
+            hermes_agent_home: /var/lib/hermes-foreign-home-fixture
+            hermes_agent_install_dir: /usr/local/lib/hermes-foreign-home-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-foreign-home-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if foreign existing persistent home was accepted
+          ansible.builtin.fail:
+            msg: Foreign existing homes must fail preflight.
+      rescue:
+        - name: Assert foreign home failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
+
+    - name: Create Hermes symlink-parent target fixture
+      ansible.builtin.file:
+        path: /var/tmp/hermes-symlink-parent-target
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Hermes symlink-parent alias fixture
+      ansible.builtin.file:
+        src: /var/tmp/hermes-symlink-parent-target
+        dest: /var/lib/hermes-symlink-parent
+        state: link
+
+    - name: Reject Hermes managed path beneath a symlinked parent
+      block:
+        - name: Apply role with symlink-parent persistent home
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-symlink-parent-fixture
+            hermes_agent_group: hermes-symlink-parent-fixture
+            hermes_agent_home: /var/lib/hermes-symlink-parent/home
+            hermes_agent_install_dir: /usr/local/lib/hermes-symlink-parent-fixture
+            hermes_agent_installer_path: /usr/local/libexec/hermes-symlink-parent-fixture
+            hermes_agent_packages: [sl]
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+
+        - name: Fail if symlink-parent managed path was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent managed paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent path failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated Hermes Agent managed paths'
+
+    - name: Inspect preflight rejection mutation canaries
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/libexec/hermes-uid-zero-fixture
+        - /usr/local/libexec/hermes-gid-zero-fixture
+        - /usr/local/libexec/hermes-foreign-checkout-fixture
+        - /usr/local/libexec/hermes-incompatible-fixture
+        - /usr/local/libexec/hermes-foreign-home-fixture
+        - /usr/local/libexec/hermes-symlink-parent-fixture
+      register: hermes_agent_molecule_preflight_installer_canaries
+
+    - name: Read preflight rejection account and package canaries
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - ["getent", "passwd", "hermes-incompatible-fixture"]
+        - ["getent", "passwd", "hermes-foreign-home-fixture"]
+        - ["getent", "passwd", "hermes-symlink-parent-fixture"]
+        - ["getent", "group", "hermes-foreign-home-fixture"]
+        - ["getent", "group", "hermes-symlink-parent-fixture"]
+        - ["dpkg-query", "--show", "--showformat=${db:Status-Status}", "sl"]
+      register: hermes_agent_molecule_preflight_command_canaries
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unsafe preflights made no package account or install mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_preflight_installer_canaries.results |
+            selectattr('stat.exists') | list | length == 0
+          - >-
+            hermes_agent_molecule_preflight_command_canaries.results[0].stdout
+            is search(':/var/lib/hermes-incompatible-wrong-home:/bin/sh$')
+          - hermes_agent_molecule_preflight_command_canaries.results[1].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[2].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[3].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[4].rc != 0
+          - hermes_agent_molecule_preflight_command_canaries.results[5].rc != 0
+
+    - name: Inspect shared temporary directory before benchmark-helper validation
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_benchmark_tmp_before
+
+    - name: Reject local-model benchmark helper beneath shared temporary storage
+      block:
+        - name: Validate shared temporary benchmark helper path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_model_benchmark_helper_path: /tmp/hermes-benchmark
+            hermes_agent_local_models: []
+
+        - name: Fail if shared temporary benchmark helper path was accepted
+          ansible.builtin.fail:
+            msg: Shared temporary benchmark helper paths must be rejected.
+      rescue:
+        - name: Assert shared temporary benchmark helper failed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a dedicated local-model benchmark helper path'
+
+    - name: Inspect shared temporary directory after benchmark-helper validation
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_benchmark_tmp_after
+
+    - name: Assert rejected benchmark helper made no temporary-directory mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.mode ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.mode
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.pw_name ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.pw_name
+          - >-
+            hermes_agent_molecule_benchmark_tmp_after.stat.gr_name ==
+            hermes_agent_molecule_benchmark_tmp_before.stat.gr_name
+
+    - name: Create benchmark cleanup mock command directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-benchmark-cleanup-mocks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install benchmark cleanup systemctl mock
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          command=$1
+          shift
+          case "$command" in
+            cat) exit 0 ;;
+            list-units)
+              if [ "$MOCK_MODEL_ACTIVE" = true ]; then
+                echo "hermes-local-model-existing.service loaded active running"
+              fi
+              ;;
+            show)
+              case "$*" in
+                *ExecStart*) echo "/usr/bin/llama-server --port 18081" ;;
+                *MemoryHigh*) echo 1000 ;;
+                *MemoryMax*) echo 2000 ;;
+                *MemorySwapMax*) echo 0 ;;
+                *ActiveState*) echo failed ;;
+                *) echo 0 ;;
+              esac
+              ;;
+            is-active) exit 0 ;;
+            start|stop) echo "$command $*" >> "$MOCK_SYSTEMCTL_LOG" ;;
+            reset-failed|daemon-reload) ;;
+          esac
+        dest: /usr/local/lib/hermes-benchmark-cleanup-mocks/systemctl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install benchmark cleanup failure mocks
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit {{ item.exit_code }}
+        dest: "/usr/local/lib/hermes-benchmark-cleanup-mocks/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - name: curl
+          exit_code: 1
+        - name: sleep
+          exit_code: 0
+
+    - name: Render benchmark cleanup regression helper
+      ansible.builtin.template:
+        src: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/templates/benchmark-hermes-local-model.sh.j2
+        dest: /usr/local/lib/hermes-benchmark-cleanup-regression
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove stale benchmark cleanup regression logs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/hermes-benchmark-active-systemctl.log
+        - /tmp/hermes-benchmark-started-systemctl.log
+        - /tmp/hermes-benchmark-foreign-systemctl.log
+
+    - name: ShellCheck rendered benchmark cleanup helper
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+      changed_when: false
+
+    - name: Reject an installed but unconfigured local-model unit
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - foreign-stale
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "false"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-foreign-systemctl.log
+      register: hermes_agent_molecule_benchmark_foreign_rejection
+      changed_when: false
+      failed_when: >-
+        hermes_agent_molecule_benchmark_foreign_rejection.rc != 64 or
+        'Unknown configured local model: foreign-stale' not in
+        hermes_agent_molecule_benchmark_foreign_rejection.stderr
+
+    - name: Inspect foreign-model benchmark systemctl log
+      ansible.builtin.stat:
+        path: /tmp/hermes-benchmark-foreign-systemctl.log
+      register: hermes_agent_molecule_benchmark_foreign_log
+
+    - name: Assert foreign local-model unit was never operated
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_benchmark_foreign_log.stat.exists
+
+    - name: Exercise benchmark rejection with an already active model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - gemma-4-e2b
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "true"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-active-systemctl.log
+      register: hermes_agent_molecule_benchmark_active_rejection
+      changed_when: false
+      failed_when: hermes_agent_molecule_benchmark_active_rejection.rc != 70
+
+    - name: Inspect active-model benchmark systemctl log
+      ansible.builtin.stat:
+        path: /tmp/hermes-benchmark-active-systemctl.log
+      register: hermes_agent_molecule_benchmark_active_log
+
+    - name: Exercise benchmark failure after starting its model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - gemma-4-e2b
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "false"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-started-systemctl.log
+      register: hermes_agent_molecule_benchmark_started_failure
+      changed_when: false
+      failed_when: hermes_agent_molecule_benchmark_started_failure.rc == 0
+
+    - name: Read invocation-started benchmark systemctl log
+      ansible.builtin.slurp:
+        src: /tmp/hermes-benchmark-started-systemctl.log
+      register: hermes_agent_molecule_benchmark_started_log
+
+    - name: Assert benchmark cleanup owns only its started service
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_benchmark_active_log.stat.exists
+          - >-
+            'start hermes-local-model-gemma-4-e2b.service' in
+            (hermes_agent_molecule_benchmark_started_log.content | b64decode)
+          - >-
+            'stop hermes-local-model-gemma-4-e2b.service' in
+            (hermes_agent_molecule_benchmark_started_log.content | b64decode)
+
+    - name: Exercise local-provider proof cleanup ownership regression
+      ansible.builtin.command:
+        argv:
+          - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/../../../scripts/tests/test-verify-hermes-local-provider-cleanup.sh"
+      changed_when: false
+      become: false
+      delegate_to: localhost
+
+    - name: Exercise local-model runtime and activation safety regressions
+      ansible.builtin.include_tasks:
+        file: tasks/local-model-runtime-safety-case.yml
+
+    - name: Create foreign local-model storage fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-local-storage-foreign
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Read unrelated package state before invalid local-model storage
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${db:Status-Status}
+          - sl
+      register: hermes_agent_molecule_local_storage_package_before
+      changed_when: false
+      failed_when: false
+
+    - name: Reject foreign local-model storage before installation
+      block:
+        - name: Apply role with foreign local-model storage
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_user: hermes-local-storage-fixture
+            hermes_agent_group: hermes-local-storage-fixture
+            hermes_agent_home: /var/lib/hermes-local-storage-fixture
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_local_models: true
+            hermes_agent_packages:
+              - sl
+            hermes_agent_local_models_dir: /var/lib/hermes-local-storage-foreign
+            hermes_agent_local_models_results_dir: >-
+              /var/lib/hermes-local-storage-foreign/results
+            hermes_agent_local_models: []
+
+        - name: Fail if foreign local-model storage was accepted
+          ansible.builtin.fail:
+            msg: Foreign local-model storage must fail before installation begins.
+      rescue:
+        - name: Assert foreign local-model storage failed preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require role-owned local-model directories when they already exist'
+
+        - name: Record rejection of foreign local-model storage
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_local_storage_rejected: true
+
+    - name: Inspect foreign local-model storage after preflight rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-local-storage-foreign
+      register: hermes_agent_molecule_local_storage_after
+
+    - name: Read unrelated package state after invalid local-model storage
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${db:Status-Status}
+          - sl
+      register: hermes_agent_molecule_local_storage_package_after
+      changed_when: false
+      failed_when: false
+
+    - name: Read invalid local-model runtime identity state
+      ansible.builtin.command:
+        argv:
+          - getent
+          - passwd
+          - hermes-local-storage-fixture
+      register: hermes_agent_molecule_local_storage_user_after
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid local-model storage made no installation mutation
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_local_storage_rejected | default(false)
+          - hermes_agent_molecule_local_storage_after.stat.pw_name == 'root'
+          - hermes_agent_molecule_local_storage_after.stat.gr_name == 'root'
+          - hermes_agent_molecule_local_storage_after.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_local_storage_package_after.rc ==
+            hermes_agent_molecule_local_storage_package_before.rc
+          - >-
+            hermes_agent_molecule_local_storage_package_after.stdout ==
+            hermes_agent_molecule_local_storage_package_before.stdout
+          - hermes_agent_molecule_local_storage_user_after.rc != 0
+
+    - name: Create foreign backup directory fixture
+      ansible.builtin.file:
+        path: /var/backups/hermes-agent-foreign
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject foreign Hermes Agent backup directory before unit creation
+      block:
+        - name: Apply role with foreign Hermes Agent backup directory
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_installer_path: >-
+              /usr/local/libexec/hermes-foreign-backup-installer-fixture
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent-foreign
+            hermes_agent_backup_service_name: hermes-agent-foreign-backup.service
+            hermes_agent_backup_timer_name: hermes-agent-foreign-backup.timer
+
+        - name: Fail if foreign Hermes Agent backup directory was accepted
+          ansible.builtin.fail:
+            msg: Foreign Hermes Agent backup storage must fail before unit creation.
+      rescue:
+        - name: Assert foreign Hermes Agent backup directory failed preflight
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Require a dedicated Hermes Agent backup directory'
+
+        - name: Record rejection of foreign Hermes Agent backup directory
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_backup_directory_rejected: true
+
+    - name: Inspect foreign Hermes Agent backup artifacts after rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/backups/hermes-agent-foreign
+        - /usr/local/libexec/hermes-foreign-backup-installer-fixture
+        - /etc/systemd/system/hermes-agent-foreign-backup.service
+        - /etc/systemd/system/hermes-agent-foreign-backup.timer
+      register: hermes_agent_molecule_foreign_backup_artifacts
+
+    - name: Assert foreign Hermes Agent backup is unchanged without units
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_backup_directory_rejected | default(false)
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_backup_artifacts.results[0].stat.mode == '0755'
+          - not hermes_agent_molecule_foreign_backup_artifacts.results[1].stat.exists
+          - not hermes_agent_molecule_foreign_backup_artifacts.results[2].stat.exists
+          - not hermes_agent_molecule_foreign_backup_artifacts.results[3].stat.exists
+
+    - name: Create local-model capacity fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: hermes-agent
+        mode: "0750"
+      loop:
+        - /var/lib/hermes-model-capacity-fixture
+        - /var/lib/hermes-model-capacity-fixture/results
+
+    - name: Create pre-existing local-model capacity fixture files
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "/var/lib/hermes-model-capacity-fixture/{{ item.name }}"
+        owner: root
+        group: hermes-agent
+        mode: "0640"
+      loop:
+        - name: present.gguf
+          content: x
+        - name: partial.gguf.partial
+          content: "{{ 'x' * 512 }}"
+
+    - name: Validate local-model capacity with existing fixture files
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+      vars:
+        hermes_agent_manage_local_models: true
+        hermes_agent_local_models_dir: /var/lib/hermes-model-capacity-fixture
+        hermes_agent_local_models_results_dir: /var/lib/hermes-model-capacity-fixture/results
+        hermes_agent_local_models_min_free_bytes: 1073741824
+        hermes_agent_local_models:
+          - id: present
+            display_name: Present fixture
+            repository: fixture/present
+            revision: "0000000000000000000000000000000000000000"
+            filename: present.gguf
+            sha256: "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            size_bytes: 1024
+            port: 18081
+          - id: partial
+            display_name: Partial fixture
+            repository: fixture/partial
+            revision: "0000000000000000000000000000000000000000"
+            filename: partial.gguf
+            sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+            size_bytes: 2048
+            port: 18082
+
+    - name: Assert local-model capacity excludes present and partial bytes
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_local_models_required_download_bytes | int == 1536
+          - >-
+            hermes_agent_local_models_capacity_probe_path ==
+            '/var/lib/hermes-model-capacity-fixture'
+
+    - name: Create nearest-ancestor capacity fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-capacity-ancestor
+        state: directory
+        owner: root
+        group: hermes-agent
+        mode: "0750"
+
+    - name: Validate capacity for an absent nested local-model directory
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+      vars:
+        hermes_agent_manage_local_models: true
+        hermes_agent_local_models_dir: /var/lib/hermes-capacity-ancestor/absent/models
+        hermes_agent_local_models_results_dir: /var/lib/hermes-capacity-ancestor/absent/models/results
+        hermes_agent_local_models_min_free_bytes: 1073741824
+        hermes_agent_local_models: []
+
+    - name: Assert capacity uses the nearest existing ancestor
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_local_models_capacity_probe_path ==
+            '/var/lib/hermes-capacity-ancestor'
+
+    - name: Create local-model canonical-path rejection fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /var/lib/hermes-storage-canonical-fixture
+        - /var/lib/hermes-storage-path-canaries
+
+    - name: Create local-model storage symlink-parent fixture
+      ansible.builtin.file:
+        src: /var/lib/hermes-storage-canonical-fixture
+        dest: /var/lib/hermes-storage-alias-fixture
+        state: link
+        owner: root
+        group: root
+
+    - name: Create local-model canonical-path rejection canaries
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "/var/lib/hermes-storage-path-canaries/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - name: dotdot
+          content: dotdot preserved
+        - name: symlink
+          content: symlink preserved
+
+    - name: Reject parent-traversal local-model directory alias
+      block:
+        - name: Validate parent-traversal local-model directory alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models_dir: /var/lib/hermes-capacity-ancestor/../hermes-dotdot-models
+            hermes_agent_local_models_results_dir: /var/lib/hermes-capacity-ancestor/../hermes-dotdot-models/results
+            hermes_agent_local_models_min_free_bytes: 1073741824
+            hermes_agent_local_models: []
+
+        - name: Fail if parent-traversal storage alias was accepted
+          ansible.builtin.fail:
+            msg: Parent-traversal local-model paths must fail preflight.
+      rescue:
+        - name: Assert parent-traversal alias failed canonical identity
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated local-model directory identities'
+
+    - name: Reject symlink-parent local-model directory alias
+      block:
+        - name: Validate symlink-parent local-model directory alias
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-local-model-storage.yml"
+          vars:
+            hermes_agent_manage_local_models: true
+            hermes_agent_local_models_dir: /var/lib/hermes-storage-alias-fixture/models
+            hermes_agent_local_models_results_dir: /var/lib/hermes-storage-alias-fixture/models/results
+            hermes_agent_local_models_min_free_bytes: 1073741824
+            hermes_agent_local_models: []
+
+        - name: Fail if symlink-parent storage alias was accepted
+          ansible.builtin.fail:
+            msg: Symlink-parent local-model paths must fail preflight.
+      rescue:
+        - name: Assert symlink-parent alias failed canonical identity
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require canonical dedicated local-model directory identities'
+
+    - name: Inspect rejected local-model path artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-dotdot-models
+        - /var/lib/hermes-storage-canonical-fixture/models
+      register: hermes_agent_molecule_rejected_storage_alias_artifacts
+
+    - name: Read local-model canonical-path rejection canaries
+      ansible.builtin.slurp:
+        src: "/var/lib/hermes-storage-path-canaries/{{ item }}"
+      loop:
+        - dotdot
+        - symlink
+      register: hermes_agent_molecule_storage_path_canaries
+
+    - name: Assert rejected local-model aliases caused no mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_rejected_storage_alias_artifacts.results |
+            selectattr('stat.exists') | list | length == 0
+          - >-
+            hermes_agent_molecule_storage_path_canaries.results[0].content |
+            b64decode == 'dotdot preserved'
+          - >-
+            hermes_agent_molecule_storage_path_canaries.results[1].content |
+            b64decode == 'symlink preserved'
+
+    - name: Enable managed inference provenance plugin in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_inference_provenance: true
+        hermes_agent_inference_provenance_label: Fixture Codex provenance
+
+    - name: Inspect managed inference provenance plugin files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+      register: hermes_agent_molecule_inference_provenance_plugin_files
+
+    - name: Assert managed inference provenance plugin files are installed
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_inference_provenance_plugin_files.results |
+            selectattr('stat.exists') | list | length == 3
+          - >-
+            hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.pw_name ==
+            'root'
+          - >-
+            hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.gr_name ==
+            'root'
+          - hermes_agent_molecule_inference_provenance_plugin_files.results[2].stat.mode == '0600'
+
+    - name: Exercise provenance response when audit persistence fails
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import importlib.util
+            import pathlib
+
+            path = pathlib.Path(
+                "/var/lib/hermes-agent/plugins/inference-provenance/__init__.py"
+            )
+            spec = importlib.util.spec_from_file_location("provenance_fixture", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            def fail_audit(_record):
+                raise OSError("fixture audit write failure")
+
+            module._append_audit = fail_audit
+            result = module.add_provenance("fixture response", "session", "model", "platform")
+            assert result.endswith("[Inference: Fixture Codex provenance, model]")
+      register: hermes_agent_molecule_provenance_audit_failure
+      changed_when: false
+
+    - name: Assert audit write failure remains visible with provenance response
+      ansible.builtin.assert:
+        that:
+          - >-
+            'Failed to append inference provenance audit record' in
+            hermes_agent_molecule_provenance_audit_failure.stderr
+          - >-
+            'fixture audit write failure' in
+            hermes_agent_molecule_provenance_audit_failure.stderr
+
+    - name: Modify a role-managed inference provenance plugin file
+      ansible.builtin.copy:
+        content: operator-modified managed plugin
+        dest: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+
+    - name: Disable managed inference provenance plugin in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_inference_provenance: false
+
+    - name: Inspect disabled inference provenance plugin files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+      register: hermes_agent_molecule_disabled_inference_provenance_plugin_files
+
+    - name: Read modified inference provenance plugin file after disable
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+      register: hermes_agent_molecule_modified_provenance_plugin
+
+    - name: Assert disable preserves modified managed files only
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[0].stat.exists
+          - not hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[1].stat.exists
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.exists
+          - >-
+            hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.pw_name ==
+            'root'
+          - >-
+            hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.gr_name ==
+            'root'
+          - hermes_agent_molecule_disabled_inference_provenance_plugin_files.results[2].stat.mode == '0600'
+          - >-
+            hermes_agent_molecule_modified_provenance_plugin.content |
+            b64decode == 'operator-modified managed plugin'
+
+    - name: Remove preserved modified inference provenance fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        state: absent
+
+    - name: Create foreign safe-name inference provenance plugin file
+      ansible.builtin.copy:
+        content: foreign operator plugin
+        dest: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+
+    - name: Reapply disabled inference provenance lifecycle to foreign plugin
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_inference_provenance: false
+
+    - name: Read preserved foreign inference provenance plugin file
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+      register: hermes_agent_molecule_foreign_provenance_plugin
+
+    - name: Assert disabled lifecycle preserves foreign safe-name plugin files
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_provenance_plugin.content |
+            b64decode == 'foreign operator plugin'
+
+    - name: Pre-provision Home Assistant MCP token parent
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/mcp-token-fixture
+        state: directory
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0700"
+
+    - name: Pre-provision Home Assistant MCP token
+      ansible.builtin.copy:
+        content: "HASS_MCP_TOKEN=fixture-token\n"
+        dest: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+      no_log: true
+
+    - name: Enable Home Assistant MCP in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard_chat: true
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+    - name: Inspect enabled Home Assistant MCP artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-agent/mcp-token-fixture
+        - /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        - /var/lib/hermes-agent/config.yaml
+      register: hermes_agent_molecule_mcp_artifacts
+
+    - name: Read enabled Hermes Agent MCP configuration
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/config.yaml
+      register: hermes_agent_molecule_mcp_config
+      changed_when: false
+
+    - name: Assert enabled Home Assistant MCP boundary
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.exists
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.mode == '0700'
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[0].stat.gr_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.exists
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.mode == '0600'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.pw_name == 'hermes-agent'
+          - hermes_agent_molecule_mcp_artifacts.results[1].stat.gr_name == 'hermes-agent'
+          - >-
+            'Authorization: "Bearer ${HASS_MCP_TOKEN}"' in
+            (hermes_agent_molecule_mcp_config.content | b64decode)
+          - >-
+            'http://home-assistant.example.test/api/mcp' in
+            (hermes_agent_molecule_mcp_config.content | b64decode)
+
+    - name: Create existing system Home Assistant MCP token parent
+      ansible.builtin.file:
+        path: /var/lib/hermes-mcp-system-parent
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reject Home Assistant MCP under an existing system parent
+      block:
+        - name: Configure Home Assistant MCP under an existing system parent
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-mcp-system-parent/home-assistant-mcp.env
+
+        - name: Fail if existing system token parent was accepted
+          ansible.builtin.fail:
+            msg: Existing system token parents must be rejected.
+      rescue:
+        - name: Assert existing system token parent failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
+
+    - name: Inspect existing system Home Assistant MCP token parent
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/hermes-mcp-system-parent
+        - /var/lib/hermes-mcp-system-parent/home-assistant-mcp.env
+      register: hermes_agent_molecule_existing_mcp_parent_artifacts
+
+    - name: Assert existing system Home Assistant MCP token parent is unchanged
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.pw_name == 'root'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.gr_name == 'root'
+          - hermes_agent_molecule_existing_mcp_parent_artifacts.results[0].stat.mode == '0755'
+          - not hermes_agent_molecule_existing_mcp_parent_artifacts.results[1].stat.exists
+
+    - name: Create foreign Home Assistant MCP token file fixture
+      ansible.builtin.copy:
+        content: foreign token canary
+        dest: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Reject foreign Home Assistant MCP token file
+      block:
+        - name: Apply role with foreign Home Assistant MCP token file
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+        - name: Fail if foreign Home Assistant MCP token file was accepted
+          ansible.builtin.fail:
+            msg: Foreign token files must be rejected.
+      rescue:
+        - name: Assert foreign token file failed before mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
+
+    - name: Inspect foreign Home Assistant MCP token file after rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+      register: hermes_agent_molecule_foreign_mcp_token_file
+
+    - name: Read foreign Home Assistant MCP token file after rejection
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+      register: hermes_agent_molecule_foreign_mcp_token_contents
+      changed_when: false
+
+    - name: Assert foreign Home Assistant MCP token file is unchanged
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_mcp_token_file.stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_mcp_token_file.stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_mcp_token_file.stat.mode == '0640'
+          - >-
+            hermes_agent_molecule_foreign_mcp_token_contents.content |
+            b64decode == 'foreign token canary'
+
+    - name: Remove foreign Home Assistant MCP token fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        state: absent
+
+    - name: Restore valid Home Assistant MCP token fixture
+      ansible.builtin.copy:
+        content: "HASS_MCP_TOKEN=fixture-token\n"
+        dest: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+      no_log: true
+
+    - name: Create Home Assistant MCP token-parent symlink fixture
+      ansible.builtin.file:
+        src: /var/lib/hermes-mcp-system-parent
+        dest: /var/lib/hermes-mcp-token-parent-link
+        state: link
+
+    - name: Reject Home Assistant MCP token-parent symlink
+      block:
+        - name: Apply role with Home Assistant MCP token-parent symlink
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-mcp-token-parent-link/home-assistant-mcp.env
+
+        - name: Fail if Home Assistant MCP token-parent symlink was accepted
+          ansible.builtin.fail:
+            msg: Home Assistant MCP token-parent symlinks must be rejected.
+      rescue:
+        - name: Assert Home Assistant MCP token-parent symlink failed preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
+
+        - name: Record rejection of Home Assistant MCP token-parent symlink
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_mcp_token_parent_rejected: true
+
+    - name: Inspect Home Assistant MCP token-parent symlink after rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-mcp-token-parent-link
+        follow: false
+      register: hermes_agent_molecule_mcp_token_parent_link
+
+    - name: Assert Home Assistant MCP token-parent symlink is untouched
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_mcp_token_parent_rejected | default(false)
+          - hermes_agent_molecule_mcp_token_parent_link.stat.islnk
+          - >-
+            hermes_agent_molecule_mcp_token_parent_link.stat.lnk_source ==
+            '/var/lib/hermes-mcp-system-parent'
+
+    - name: Read valid Hermes dashboard terminal UI state before corruption
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/package.json
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+      register: hermes_agent_molecule_valid_tui_state
+      changed_when: false
+
+    - name: Corrupt managed Hermes dashboard terminal UI state
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - path: /usr/local/lib/hermes-agent-runtime/tui/package.json
+          content: '{"name":"corrupt-tui-fixture"}'
+        - path: /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+          content: 'export default { corrupt: true };'
+        - path: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+          content: 'not: [valid'
+
+    - name: Refuse malformed managed Hermes dashboard terminal UI state
+      block:
+        - name: Apply role with malformed managed terminal UI state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+        - name: Fail if malformed managed terminal UI state was accepted
+          ansible.builtin.fail:
+            msg: Malformed managed terminal UI state must block synchronization.
+      rescue:
+        - name: Assert malformed managed terminal UI state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Parse Hermes dashboard terminal UI managed state'
+
+    - name: Read malformed managed terminal UI state after rejection
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/package.json
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+      register: hermes_agent_molecule_rejected_tui_state
+      changed_when: false
+
+    - name: Assert malformed managed terminal UI state is preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_rejected_tui_state.results[0].content |
+            b64decode | trim) == '{"name":"corrupt-tui-fixture"}'
+          - >-
+            (hermes_agent_molecule_rejected_tui_state.results[1].content |
+            b64decode | trim) == 'export default { corrupt: true };'
+          - >-
+            (hermes_agent_molecule_rejected_tui_state.results[2].content |
+            b64decode) == 'not: [valid'
+
+    - name: Restore valid Hermes dashboard terminal UI state after rejection
+      ansible.builtin.copy:
+        content: "{{ item.content | b64decode }}"
+        dest: "{{ item.source }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ hermes_agent_molecule_valid_tui_state.results }}"
+
+    - name: Corrupt disabled Hermes dashboard terminal UI managed state fixture
+      ansible.builtin.copy:
+        content: "revision: [malformed\n"
+        dest: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Refuse disabled cleanup with malformed terminal UI managed state
+      block:
+        - name: Disable dashboard chat with malformed terminal UI managed state
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: true
+            hermes_agent_backup_group: root
+            hermes_agent_backup_dir: /var/backups/hermes-agent
+            hermes_agent_manage_dashboard: true
+            hermes_agent_manage_dashboard_chat: false
+            hermes_agent_manage_home_assistant_mcp: true
+            hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+            hermes_agent_home_assistant_mcp_token_env_file: >-
+              /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+        - name: Fail if malformed terminal UI managed state was accepted
+          ansible.builtin.fail:
+            msg: Malformed terminal UI managed state must block disabled cleanup.
+      rescue:
+        - name: Assert malformed terminal UI managed state failed safely
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Load disabled Hermes dashboard terminal UI managed state'
+
+    - name: Read terminal UI artifacts after malformed-state refusal
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
+        - /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+        - /usr/local/lib/hermes-agent-runtime/tui/package.json
+        - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
+      register: hermes_agent_molecule_malformed_tui_refusal_state
+      changed_when: false
+
+    - name: Assert malformed-state refusal leaves terminal UI untouched
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_malformed_tui_refusal_state.results[0].content |
+            b64decode | trim ==
+            hermes_agent_molecule_fixture_revision.content | b64decode | trim
+          - >-
+            hermes_agent_molecule_malformed_tui_refusal_state.results[1].content |
+            b64decode == 'revision: [malformed\n'
+          - >-
+            hermes_agent_molecule_malformed_tui_refusal_state.results[2].content |
+            b64decode | trim == '{"name":"hermes-tui-fixture"}'
+          - >-
+            hermes_agent_molecule_malformed_tui_refusal_state.results[3].content |
+            b64decode | trim == 'export default {};'
+
+    - name: Restore Hermes dashboard terminal UI managed state fixture
+      ansible.builtin.copy:
+        content: >-
+          {{ hermes_agent_molecule_valid_tui_state.results[2].content | b64decode }}
+        dest: /usr/local/lib/hermes-agent-runtime/tui/.hermes-managed-state.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add upgraded Hermes dashboard terminal UI fixture source
+      ansible.builtin.copy:
+        content: upgraded Hermes fixture revision
+        dest: /usr/local/src/hermes-agent-fixture/upstream/README.md
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Commit upgraded Hermes dashboard terminal UI fixture source
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - commit
+          - -am
+          - Upgraded terminal UI fixture
+      changed_when: true
+
+    - name: Read upgraded Hermes dashboard terminal UI fixture revision
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - rev-parse
+          - HEAD
+      register: hermes_agent_molecule_upgraded_tui_revision
+      changed_when: false
+
+    - name: Disable dashboard chat while the dashboard remains managed
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_upgraded_tui_revision.stdout | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: /var/backups/hermes-agent
+        hermes_agent_manage_dashboard: true
+        hermes_agent_manage_dashboard_chat: false
+        hermes_agent_manage_home_assistant_mcp: true
+        hermes_agent_home_assistant_mcp_url: http://home-assistant.example.test/api/mcp
+        hermes_agent_home_assistant_mcp_token_env_file: >-
+          /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+
+    - name: Inspect dashboard after dashboard chat cleanup
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/lib/hermes-agent-runtime/tui
+        - /etc/systemd/system/hermes-agent-dashboard.service
+      register: hermes_agent_molecule_dashboard_chat_cleanup
+
+    - name: Read dashboard unit after dashboard chat cleanup
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-agent-dashboard.service
+      register: hermes_agent_molecule_dashboard_without_chat
+      changed_when: false
+
+    - name: Assert dashboard chat cleanup preserves the dashboard service
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_dashboard_chat_cleanup.results[0].stat.exists
+          - hermes_agent_molecule_dashboard_chat_cleanup.results[1].stat.exists
+          - >-
+            'HERMES_TUI_DIR' not in
+            (hermes_agent_molecule_dashboard_without_chat.content | b64decode)
+
+    - name: Exercise managed backup timer rename regressions
+      ansible.builtin.include_tasks: tasks/backup-timer-rename-case.yml
+
+    - name: Disable dashboard and backup services in the fixture
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+        hermes_agent_manage_dashboard_chat: false
+
+    - name: Inspect disabled Hermes Agent units
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-agent-dashboard.service
+        - /etc/systemd/system/hermes-agent-backup.service
+        - /etc/systemd/system/hermes-agent-backup.timer
+        - /usr/local/lib/hermes-agent-runtime/tui
+      register: hermes_agent_molecule_disabled_units
+
+    - name: Read disabled Hermes Agent dashboard state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - hermes-agent-dashboard.service
+      register: hermes_agent_molecule_disabled_dashboard_state
+      changed_when: false
+      failed_when: false
+
+    - name: Read root group membership after backup disable
+      ansible.builtin.getent:
+        database: group
+        key: root
+
+    - name: Assert disabled feature cleanup
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_disabled_units.results |
+            selectattr('stat.exists') | list | length == 0
+          - hermes_agent_molecule_disabled_dashboard_state.rc != 0
+          - "'hermes-agent' not in ansible_facts.getent_group.root[2]"
+
+    - name: Create foreign Hermes dashboard terminal UI runtime directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/foreign-tui
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create foreign Hermes dashboard terminal UI runtime fixture
+      ansible.builtin.copy:
+        content: foreign
+        dest: /usr/local/lib/hermes-agent-runtime/foreign-tui/unmanaged.txt
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Refuse removal of foreign Hermes dashboard terminal UI runtime
+      block:
+        - name: Apply role with foreign Hermes dashboard terminal UI runtime
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: false
+            hermes_agent_manage_backup: false
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui
+            hermes_agent_dashboard_tui_runtime_revision_file: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui/.hermes-revision
+            hermes_agent_dashboard_tui_runtime_manifest_file: >-
+              /usr/local/lib/hermes-agent-runtime/foreign-tui/.hermes-managed-state.yml
+
+        - name: Fail if foreign Hermes dashboard terminal UI runtime was accepted
+          ansible.builtin.fail:
+            msg: Foreign Hermes dashboard terminal UI runtime must not be removed.
+      rescue:
+        - name: Assert foreign Hermes dashboard terminal UI runtime was refused
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require a recognized disabled Hermes dashboard terminal UI runtime'
+
+        - name: Record refusal of foreign Hermes dashboard terminal UI runtime
+          ansible.builtin.set_fact:
+            hermes_agent_molecule_foreign_tui_rejected: true
+
+    - name: Inspect foreign Hermes dashboard terminal UI runtime after refusal
+      ansible.builtin.stat:
+        path: /usr/local/lib/hermes-agent-runtime/foreign-tui/unmanaged.txt
+      register: hermes_agent_molecule_foreign_tui_artifact
+
+    - name: Assert foreign Hermes dashboard terminal UI runtime is untouched
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_tui_rejected | default(false)
+          - hermes_agent_molecule_foreign_tui_artifact.stat.exists
+          - hermes_agent_molecule_foreign_tui_artifact.stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_tui_artifact.stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_tui_artifact.stat.mode == '0644'
+
+    - name: Inspect shared temporary directory before cache preflight
+      ansible.builtin.stat:
+        path: /tmp
+      register: hermes_agent_molecule_tmp_before_cache_preflight
+
+    - name: Create foreign download cache fixture
+      ansible.builtin.file:
+        path: /var/cache/hermes-foreign-cache-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Create foreign download cache content fixture
+      ansible.builtin.copy:
+        content: foreign cache
+        dest: /var/cache/hermes-foreign-cache-fixture/canary
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create metadata-compatible foreign download cache fixture
+      ansible.builtin.file:
+        path: /var/cache/hermes-compatible-foreign-cache-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create metadata-compatible foreign cache content fixture
+      ansible.builtin.copy:
+        content: compatible foreign cache
+        dest: /var/cache/hermes-compatible-foreign-cache-fixture/canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject unsafe download cache paths
+      ansible.builtin.include_tasks:
+        file: tasks/download-cache-preflight-case.yml
+      loop:
+        - /tmp
+        - /var/cache/hermes-foreign-cache-fixture
+        - /var/cache/hermes-compatible-foreign-cache-fixture
+        - /usr/local/lib/hermes-agent
+      loop_control:
+        loop_var: hermes_agent_molecule_cache_case
+
+    - name: Inspect preserved download cache fixtures
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /tmp
+        - /var/cache/hermes-foreign-cache-fixture
+        - /var/cache/hermes-foreign-cache-fixture/canary
+        - /var/cache/hermes-compatible-foreign-cache-fixture
+        - /var/cache/hermes-compatible-foreign-cache-fixture/canary
+      register: hermes_agent_molecule_preserved_cache_fixtures
+
+    - name: Read metadata-compatible foreign cache after rejection
+      ansible.builtin.slurp:
+        src: /var/cache/hermes-compatible-foreign-cache-fixture/canary
+      register: hermes_agent_molecule_compatible_foreign_cache_content
+
+    - name: Assert cache preflight preserved shared and foreign metadata
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_preserved_cache_fixtures.results[0].stat.mode ==
+            hermes_agent_molecule_tmp_before_cache_preflight.stat.mode
+          - hermes_agent_molecule_preserved_cache_fixtures.results[1].stat.mode == '0700'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[2].stat.mode == '0600'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[3].stat.mode == '0755'
+          - hermes_agent_molecule_preserved_cache_fixtures.results[4].stat.mode == '0644'
+          - >-
+            hermes_agent_molecule_compatible_foreign_cache_content.content |
+            b64decode == 'compatible foreign cache'
+
+    - name: Reject foreign configured systemd unit targets
+      ansible.builtin.include_tasks:
+        file: tasks/foreign-systemd-unit-case.yml
+      loop:
+        - kind: dashboard
+          name: foreign-dashboard-fixture.service
+        - kind: backup-service
+          name: foreign-backup-fixture.service
+        - kind: backup-timer
+          name: foreign-backup-fixture.timer
+      loop_control:
+        loop_var: hermes_agent_molecule_unit_case
+
+    - name: Back up fixture npm before forced build failures
+      ansible.builtin.copy:
+        src: /var/lib/hermes-agent/node/bin/npm
+        dest: /var/tmp/hermes-fixture-npm-backup
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install forced-failure fixture npm
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit 42
+        dest: /var/lib/hermes-agent/node/bin/npm
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0755"
+
+    - name: Force dashboard build failure
+      block:
+        - name: Run failing dashboard build task path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/build-dashboard-assets.yml
+
+        - name: Fail if dashboard build unexpectedly succeeded
+          ansible.builtin.fail:
+            msg: Forced dashboard build failure unexpectedly succeeded.
+      rescue:
+        - name: Inspect dashboard workspace after forced failure
+          ansible.builtin.stat:
+            path: /usr/local/lib/hermes-agent/hermes_cli
+          register: hermes_agent_molecule_failed_dashboard_workspace
+
+        - name: Assert dashboard workspace ownership was restored
+          ansible.builtin.assert:
+            that:
+              - hermes_agent_molecule_failed_dashboard_workspace.stat.pw_name == 'root'
+              - hermes_agent_molecule_failed_dashboard_workspace.stat.gr_name == 'root'
+
+    - name: Create forced-failure terminal UI workspace fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Force terminal UI build failure
+      block:
+        - name: Run failing terminal UI build task path
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/build-dashboard-tui.yml
+          vars:
+            hermes_agent_dashboard_tui_runtime_dir: >-
+              /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+
+        - name: Fail if terminal UI build unexpectedly succeeded
+          ansible.builtin.fail:
+            msg: Forced terminal UI build failure unexpectedly succeeded.
+      rescue:
+        - name: Inspect terminal UI workspace after forced failure
+          ansible.builtin.stat:
+            path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+          register: hermes_agent_molecule_failed_tui_workspace
+
+        - name: Assert terminal UI workspace ownership was restored
+          ansible.builtin.assert:
+            that:
+              - hermes_agent_molecule_failed_tui_workspace.stat.pw_name == 'root'
+              - hermes_agent_molecule_failed_tui_workspace.stat.gr_name == 'root'
+
+    - name: Remove forced-failure terminal UI workspace fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-agent-runtime/forced-failure-tui
+        state: absent
+
+    - name: Restore fixture npm after forced build failures
+      ansible.builtin.copy:
+        src: /var/tmp/hermes-fixture-npm-backup
+        dest: /var/lib/hermes-agent/node/bin/npm
+        remote_src: true
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0755"
+
+    - name: Remove forced-build npm backup fixture
+      ansible.builtin.file:
+        path: /var/tmp/hermes-fixture-npm-backup
+        state: absent
+
+    - name: Create foreign Codex home directory fixture
+      ansible.builtin.file:
+        path: /var/lib/hermes-foreign-codex-home
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create foreign Codex home content fixture
+      ansible.builtin.copy:
+        content: foreign Codex state
+        dest: /var/lib/hermes-foreign-codex-home/canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject unsafe Codex home paths during preflight
+      ansible.builtin.include_tasks:
+        file: tasks/codex-home-preflight-case.yml
+      loop:
+        - /etc
+        - /var/lib/../etc
+        - /var/lib/hermes-foreign-codex-home
+      loop_control:
+        loop_var: hermes_agent_molecule_codex_home_case
+
+    - name: Inspect foreign Codex home fixture after rejection
+      ansible.builtin.stat:
+        path: /var/lib/hermes-foreign-codex-home
+      register: hermes_agent_molecule_foreign_codex_home
+
+    - name: Read foreign Codex home content after rejection
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-foreign-codex-home/canary
+      register: hermes_agent_molecule_foreign_codex_home_content
+
+    - name: Assert foreign Codex home fixture is preserved
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_foreign_codex_home.stat.isdir
+          - hermes_agent_molecule_foreign_codex_home.stat.pw_name == 'root'
+          - hermes_agent_molecule_foreign_codex_home.stat.gr_name == 'root'
+          - hermes_agent_molecule_foreign_codex_home.stat.mode == '0755'
+          - >-
+            hermes_agent_molecule_foreign_codex_home_content.content |
+            b64decode == 'foreign Codex state'
+
+    - name: Read dashboard authentication state before username change
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_auth_before_username_change
+
+    - name: Converge changed dashboard authentication username
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: >-
+          {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_dashboard_chat: false
+        hermes_agent_manage_backup: false
+        hermes_agent_dashboard_tui_runtime_dir: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent
+        hermes_agent_dashboard_tui_runtime_revision_file: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent/.hermes-revision
+        hermes_agent_dashboard_tui_runtime_manifest_file: >-
+          /usr/local/lib/hermes-agent-runtime/username-fixture-absent/.hermes-managed-state.yml
+        hermes_agent_dashboard_manage_basic_auth: true
+        hermes_agent_dashboard_basic_auth_username: fixture-renamed
+
+    - name: Read dashboard authentication state after username change
+      ansible.builtin.slurp:
+        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_auth_after_username_change
+
+    - name: Assert username converges without rotating dashboard secrets
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).username == 'fixture-renamed'
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).password_hash ==
+            (hermes_agent_molecule_auth_before_username_change.content |
+            b64decode | from_yaml).password_hash
+          - >-
+            (hermes_agent_molecule_auth_after_username_change.content |
+            b64decode | from_yaml).secret ==
+            (hermes_agent_molecule_auth_before_username_change.content |
+            b64decode | from_yaml).secret
+
+    - name: Create local-model unit reconciliation fixtures
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description={{ item.description }}
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/hermes-local-model-{{ item.id }}.service"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - id: obsolete-fixture
+          description: Obsolete managed fixture
+        - id: foreign-fixture
+          description: Foreign preserved fixture
+        - id: current-fixture
+          description: Current managed fixture
+
+    - name: Inspect local-model reconciliation fixture checksums
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/hermes-local-model-{{ item }}.service"
+        checksum_algorithm: sha256
+      loop:
+        - obsolete-fixture
+        - current-fixture
+      register: hermes_agent_molecule_local_model_fixture_units
+
+    - name: Create foreign desired local-model unit fixture
+      ansible.builtin.copy:
+        content: foreign desired unit
+        dest: /etc/systemd/system/hermes-local-model-foreign-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Record empty local-model manifest fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units: {}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate empty local-model manifest fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Reject foreign desired local-model unit fixture
+      block:
+        - name: Validate foreign desired local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-desired-local-model-units.yml
+          vars:
+            hermes_agent_local_models:
+              - id: foreign-desired-fixture
+
+        - name: Fail if foreign desired local-model unit was accepted
+          ansible.builtin.fail:
+            msg: Foreign desired local-model units must fail preflight.
+      rescue:
+        - name: Assert foreign desired unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized desired local-model service units'
+
+    - name: Read foreign desired local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-foreign-desired-fixture.service
+      register: hermes_agent_molecule_foreign_desired_unit
+
+    - name: Assert foreign desired local-model unit is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_foreign_desired_unit.content | b64decode ==
+            'foreign desired unit'
+
+    - name: Create prior managed desired local-model unit fixture
+      ansible.builtin.copy:
+        content: prior managed desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Inspect prior managed desired local-model unit checksum
+      ansible.builtin.stat:
+        path: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_managed_desired_unit
+
+    - name: Record prior managed desired local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units:
+            managed-desired-fixture: {{ hermes_agent_molecule_managed_desired_unit.stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate prior managed desired local-model manifest
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Accept unchanged prior managed desired local-model unit
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-desired-local-model-units.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Apply intentional desired local-model unit update fixture
+      ansible.builtin.copy:
+        content: intentionally updated desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Record intentional desired local-model unit update
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/record-local-model-unit-state.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Validate updated desired local-model manifest
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Accept converged intentional desired local-model unit update
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-desired-local-model-units.yml
+      vars:
+        hermes_agent_local_models:
+          - id: managed-desired-fixture
+
+    - name: Modify previously managed desired local-model unit externally
+      ansible.builtin.copy:
+        content: externally modified desired unit
+        dest: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject modified previously managed desired local-model unit
+      block:
+        - name: Validate modified managed desired local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-desired-local-model-units.yml
+          vars:
+            hermes_agent_local_models:
+              - id: managed-desired-fixture
+
+        - name: Fail if modified managed desired unit was accepted
+          ansible.builtin.fail:
+            msg: Modified previously managed desired units must fail preflight.
+      rescue:
+        - name: Assert modified desired unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized desired local-model service units'
+
+    - name: Read modified desired local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-managed-desired-fixture.service
+      register: hermes_agent_molecule_modified_desired_unit
+
+    - name: Assert modified desired local-model unit is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_modified_desired_unit.content | b64decode ==
+            'externally modified desired unit'
+
+    - name: Create foreign valid-looking local-model manifest fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: attacker.override
+          version: 1
+          units:
+            obsolete-fixture: {{ hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject foreign valid-looking local-model manifest fixture
+      block:
+        - name: Validate foreign local-model manifest fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/validate-local-model-managed-state.yml
+          vars:
+            hermes_agent_local_models_managed_by: attacker.override
+
+        - name: Fail if foreign local-model manifest was accepted
+          ansible.builtin.fail:
+            msg: Foreign local-model manifests must fail preflight.
+      rescue:
+        - name: Assert foreign local-model manifest failed exact schema
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact local-model managed-state schema'
+
+    - name: Read foreign local-model manifest after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_foreign_local_model_manifest
+
+    - name: Assert foreign local-model manifest is preserved exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            (hermes_agent_molecule_foreign_local_model_manifest.content |
+            b64decode) ==
+            ('managed_by: attacker.override\nversion: 1\nunits:\n  obsolete-fixture: ' ~
+            hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum ~
+            '\n')
+
+    - name: Record prior managed local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          version: 1
+          units:
+            obsolete-fixture: {{ hermes_agent_molecule_local_model_fixture_units.results[0].stat.checksum }}
+        dest: /etc/systemd/system/hermes-local-models.managed.yml
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Validate prior managed local-model unit fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Replace previously managed local-model unit with foreign content
+      ansible.builtin.copy:
+        content: foreign replacement
+        dest: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reject replaced foreign local-model unit during reconciliation
+      block:
+        - name: Reconcile replaced foreign local-model unit fixture
+          ansible.builtin.include_tasks:
+            file: >-
+              {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              }}/tasks/reconcile-local-model-units.yml
+          vars:
+            hermes_agent_local_models_managed_state_file: >-
+              /etc/systemd/system/hermes-local-models.managed.yml
+            hermes_agent_local_model_desired_ids:
+              - current-fixture
+
+        - name: Fail if replaced foreign local-model unit was removed
+          ansible.builtin.fail:
+            msg: Changed local-model units must not be removed as managed.
+      rescue:
+        - name: Assert replaced local-model unit failed identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require recognized obsolete managed local-model units'
+
+    - name: Read replaced foreign local-model unit after rejection
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+      register: hermes_agent_molecule_replaced_local_model_unit
+
+    - name: Assert replaced foreign local-model unit is preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_replaced_local_model_unit.content |
+            b64decode == 'foreign replacement'
+
+    - name: Restore managed obsolete local-model unit fixture
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Obsolete managed fixture
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/true
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable obsolete managed local-model unit fixture
+      ansible.builtin.systemd_service:
+        name: hermes-local-model-obsolete-fixture.service
+        enabled: true
+        daemon_reload: true
+
+    - name: Exercise managed local-model unit reconciliation
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+      vars:
+        hermes_agent_local_models_managed_state_file: >-
+          /etc/systemd/system/hermes-local-models.managed.yml
+        hermes_agent_local_models:
+          - id: current-fixture
+        hermes_agent_local_model_desired_ids:
+          - current-fixture
+
+    - name: Rewrite current managed local-model unit state fixture
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/record-local-model-unit-state.yml
+      vars:
+        hermes_agent_local_models_managed_state_file: >-
+          /etc/systemd/system/hermes-local-models.managed.yml
+        hermes_agent_local_models:
+          - id: current-fixture
+
+    - name: Flush local-model unit reconciliation handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Inspect reconciled and foreign local-model unit fixtures
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-obsolete-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+      register: hermes_agent_molecule_reconciled_local_model_units
+
+    - name: Read reconciled local-model managed state
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_reconciled_local_model_state
+
+    - name: Read obsolete local-model unit enablement after reconciliation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-local-model-obsolete-fixture.service
+      register: hermes_agent_molecule_obsolete_local_model_enablement
+      changed_when: false
+      failed_when: false
+
+    - name: Assert managed local-model reconciliation preserves foreign units
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_reconciled_local_model_units.results[0].stat.exists
+          - hermes_agent_molecule_reconciled_local_model_units.results[1].stat.exists
+          - hermes_agent_molecule_obsolete_local_model_enablement.rc != 0
+          - >-
+            (hermes_agent_molecule_reconciled_local_model_state.content |
+            b64decode | from_yaml).units.keys() | list == ['current-fixture']
+
+    - name: Validate enabled local-model manifest before disablement
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/validate-local-model-managed-state.yml
+
+    - name: Predict enabled-to-disabled local-model reconciliation in check mode
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+        apply:
+          check_mode: true
+      vars:
+        hermes_agent_local_model_desired_ids: []
+
+    - name: Inspect local-model artifacts after check-mode disable prediction
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-current-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+        - /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_check_disabled_local_model_artifacts
+
+    - name: Assert check mode predicts cleanup without mutation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_local_model_unit_removals.results |
+            selectattr('changed') | list | length == 1
+          - hermes_agent_local_model_manifest_retirement.changed
+          - >-
+            hermes_agent_molecule_check_disabled_local_model_artifacts.results |
+            selectattr('stat.exists') | list | length == 3
+
+    - name: Reconcile enabled local-model units during feature disablement
+      ansible.builtin.include_tasks:
+        file: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/tasks/reconcile-local-model-units.yml
+      vars:
+        hermes_agent_local_model_desired_ids: []
+
+    - name: Flush disabled local-model reconciliation handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Inspect local-model artifacts after feature disablement
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/hermes-local-model-current-fixture.service
+        - /etc/systemd/system/hermes-local-model-foreign-fixture.service
+        - /etc/systemd/system/hermes-local-models.managed.yml
+      register: hermes_agent_molecule_disabled_local_model_artifacts
+
+    - name: Read current local-model unit enablement after disablement
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - hermes-local-model-current-fixture.service
+      register: hermes_agent_molecule_disabled_local_model_enablement
+      changed_when: false
+      failed_when: false
+
+    - name: Assert disabled local-model lifecycle cleanup
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_disabled_local_model_artifacts.results[0].stat.exists
+          - hermes_agent_molecule_disabled_local_model_artifacts.results[1].stat.exists
+          - not hermes_agent_molecule_disabled_local_model_artifacts.results[2].stat.exists
+          - hermes_agent_molecule_disabled_local_model_enablement.rc != 0
+
+    - name: Create root-owned node symlink target canary
+      ansible.builtin.copy:
+        content: node ownership canary
+        dest: /var/tmp/hermes-node-ownership-canary
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Create nested Hermes node runtime symlink fixture
+      ansible.builtin.file:
+        src: /var/tmp/hermes-node-ownership-canary
+        dest: /var/lib/hermes-agent/node/bin/ownership-canary-link
+        state: link
+        owner: hermes-agent
+        group: hermes-agent
+        follow: false
+
+    - name: Add second fixture revision source file
+      ansible.builtin.copy:
+        content: second fixture revision
+        dest: /usr/local/src/hermes-agent-fixture/upstream/second-revision
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Commit second fixture revision
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - add
+          - second-revision
+      changed_when: true
+
+    - name: Record second fixture revision commit
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - commit
+          - -m
+          - Second fixture revision
+      changed_when: true
+
+    - name: Read second fixture revision
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/git
+          - -C
+          - /usr/local/src/hermes-agent-fixture/upstream
+          - rev-parse
+          - HEAD
+      register: hermes_agent_molecule_second_fixture_revision
+      changed_when: false
+
+    - name: Reinstall Hermes at second fixture revision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_repo_version: "{{ hermes_agent_molecule_second_fixture_revision.stdout }}"
+        hermes_agent_installer_url: >-
+          file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+
+    - name: Inspect node symlink target after bounded ownership handoff
+      ansible.builtin.stat:
+        path: /var/tmp/hermes-node-ownership-canary
+      register: hermes_agent_molecule_node_ownership_canary
+
+    - name: Assert bounded ownership handoff did not follow nested symlink
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_node_ownership_canary.stat.pw_name == 'root'
+          - hermes_agent_molecule_node_ownership_canary.stat.gr_name == 'root'
+          - hermes_agent_molecule_node_ownership_canary.stat.mode == '0644'
+
+    - name: Exercise isolated terminal UI lifecycle regressions
+      ansible.builtin.include_tasks:
+        file: tasks/dashboard-tui-lifecycle-case.yml
+        apply:
+          tags:
+            - tui-lifecycle
+      tags:
+        - tui-lifecycle
+      vars:
+        hermes_agent_user: hermes-agent
+        hermes_agent_group: hermes-agent
+        hermes_agent_home: /var/lib/hermes-agent
+        hermes_agent_install_dir: /usr/local/lib/hermes-agent
+
+    - name: Remove active Codex artifacts for interrupted-install fixture
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/codex
+        - /usr/local/bin/codex.hermes-agent-managed.yml
+        - /usr/local/lib/codex/0.145.0
+
+    - name: Create partial interrupted Codex staging fixture
+      ansible.builtin.file:
+        path: /usr/local/lib/codex/.hermes-codex-interrupted-fixture
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create partial interrupted Codex extraction fixture
+      ansible.builtin.copy:
+        content: partial extraction
+        dest: /usr/local/lib/codex/.hermes-codex-interrupted-fixture/codex-aarch64-unknown-linux-musl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Retry Codex installation with an interrupted staging sibling
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_codex_archive_url: >-
+          file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+        hermes_agent_manage_dashboard: false
+        hermes_agent_manage_backup: false
+
+    - name: Inspect Codex installation after interrupted retry
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - /usr/local/lib/codex/0.145.0
+        - /usr/local/lib/codex/0.145.0/codex
+        - /usr/local/lib/codex/.hermes-codex-interrupted-fixture
+      register: hermes_agent_molecule_codex_retry_artifacts
+
+    - name: Assert interrupted Codex staging does not poison retry
+      ansible.builtin.assert:
+        that:
+          - hermes_agent_molecule_codex_retry_artifacts.results[0].stat.isdir
+          - hermes_agent_molecule_codex_retry_artifacts.results[1].stat.isreg
+          - hermes_agent_molecule_codex_retry_artifacts.results[1].stat.mode == '0755'
+          - hermes_agent_molecule_codex_retry_artifacts.results[2].stat.isdir
+
+  handlers:
+    - name: Restart Hermes Agent dashboard
+      ansible.builtin.systemd_service:
+        name: "{{ hermes_agent_dashboard_service_name }}"
+        state: restarted
+        daemon_reload: true
+      when:
+        - hermes_agent_manage_dashboard | default(false)
+        - not ansible_check_mode

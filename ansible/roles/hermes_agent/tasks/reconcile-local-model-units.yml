@@ -1,0 +1,58 @@
+---
+- name: Calculate obsolete managed local-model IDs
+  ansible.builtin.set_fact:
+    hermes_agent_obsolete_local_model_ids: >-
+      {{
+        hermes_agent_local_models_managed_state_data.units.keys() | list |
+        difference(hermes_agent_local_model_desired_ids)
+      }}
+
+- name: Inspect obsolete managed local-model units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/hermes-local-model-{{ item }}.service"
+    checksum_algorithm: sha256
+    follow: false
+  loop: "{{ hermes_agent_obsolete_local_model_ids }}"
+  register: hermes_agent_obsolete_local_model_units
+  changed_when: false
+  check_mode: false
+
+- name: Require recognized obsolete managed local-model units
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isreg and not item.stat.islnk and
+        item.stat.pw_name == 'root' and item.stat.gr_name == 'root' and
+        item.stat.mode == '0644' and item.stat.checksum ==
+        hermes_agent_local_models_managed_state_data.units[item.item])
+    fail_msg: >-
+      Refusing to remove changed or foreign local-model unit
+      hermes-local-model-{{ item.item }}.service.
+  loop: "{{ hermes_agent_obsolete_local_model_units.results }}"
+
+- name: Stop and disable obsolete managed local-model units
+  ansible.builtin.systemd_service:
+    name: "hermes-local-model-{{ item.item }}.service"
+    state: stopped
+    enabled: false
+  loop: "{{ hermes_agent_obsolete_local_model_units.results }}"
+  when:
+    - not ansible_check_mode
+    - item.stat.exists
+
+- name: Remove obsolete managed local-model units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/hermes-local-model-{{ item.item }}.service"
+    state: absent
+  loop: "{{ hermes_agent_obsolete_local_model_units.results }}"
+  register: hermes_agent_local_model_unit_removals
+  notify: Reload systemd daemon
+
+- name: Retire empty local-model managed state when disabled
+  ansible.builtin.file:
+    path: "{{ hermes_agent_local_models_managed_state_file }}"
+    state: absent
+  register: hermes_agent_local_model_manifest_retirement
+  when:
+    - hermes_agent_local_model_desired_ids | length == 0

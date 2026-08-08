@@ -19,6 +19,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Cockpit web console and extensions](cockpit-web-console.md) | Operate the Cockpit HTTPS administration console and extensions |
 | [Cgroup memory controller](cgroup-memory-controller.md) | Manage the reversible cgroup v2 memory-controller DTB |
 | [Glances observability](glances-observability.md) | Operate the LAN-accessible Glances JSON API |
+| [Hermes Agent](hermes-agent.md) | Deploy, authenticate, validate, back up, and access Hermes |
 | [Jackett search](jackett.md) | Deploy and operate trusted-network Jackett search |
 | [PiServ installation and convergence](piserv-install.md) | Apply the ordered full-host installation entry point |
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |

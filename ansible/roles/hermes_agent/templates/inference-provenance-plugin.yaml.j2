@@ -1,0 +1,6 @@
+manifest_version: 1
+name: {{ hermes_agent_inference_provenance_plugin_name }}
+version: "1.0.0"
+description: Appends Codex provenance and writes metadata-only inference audit records.
+provides_hooks:
+  - transform_llm_output

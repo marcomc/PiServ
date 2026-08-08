@@ -1,0 +1,17 @@
+---
+- name: Read fixture revision
+  ansible.builtin.slurp:
+    path: /usr/local/src/hermes-agent-fixture/revision
+  register: hermes_agent_fixture_revision
+
+- name: Read fixture installer checksum
+  ansible.builtin.stat:
+    path: /usr/local/src/hermes-agent-fixture/hermes-agent-installer
+    checksum_algorithm: sha256
+  register: hermes_agent_fixture_installer
+
+- name: Read fixture Codex checksum
+  ansible.builtin.stat:
+    path: /usr/local/src/hermes-agent-fixture/codex.tar.gz
+    checksum_algorithm: sha256
+  register: hermes_agent_fixture_codex

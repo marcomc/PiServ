@@ -31,8 +31,9 @@ steady-state playbooks in this order:
 7. Freenove hardware
 8. pCloud installation
 9. Home Assistant MQTT Agent
-10. Jackett
-11. RaiPlaySound
+10. Hermes Agent
+11. Jackett
+12. RaiPlaySound
 
 The NVMe migration and pCloud health-check playbooks remain separate operator
 entry points. Individual configuration playbooks also remain available for

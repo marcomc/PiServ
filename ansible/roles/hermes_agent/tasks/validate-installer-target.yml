@@ -1,0 +1,26 @@
+---
+- name: Inspect Hermes installer destination
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_installer_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: hermes_agent_installer_target_state
+  changed_when: false
+  check_mode: false
+
+- name: Refuse foreign Hermes installer destinations
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_installer_checksum is match('^sha256:[a-fA-F0-9]{64}$')
+      - >-
+        not hermes_agent_installer_target_state.stat.exists or
+        (hermes_agent_installer_target_state.stat.isreg | default(false) and
+        not hermes_agent_installer_target_state.stat.islnk | default(true) and
+        hermes_agent_installer_target_state.stat.pw_name | default('') == 'root' and
+        hermes_agent_installer_target_state.stat.gr_name | default('') == 'root' and
+        hermes_agent_installer_target_state.stat.mode | default('') == '0755' and
+        hermes_agent_installer_target_state.stat.checksum | default('') ==
+        (hermes_agent_installer_checksum | regex_replace('^sha256:', '') | lower))
+    fail_msg: >-
+      An existing Hermes installer destination must be the root-owned,
+      checksum-pinned installer previously accepted by this role.

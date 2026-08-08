@@ -1,0 +1,127 @@
+---
+- name: Resolve Hermes Agent download cache through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_download_cache_dir }}"
+  register: hermes_agent_download_cache_path
+  changed_when: false
+  check_mode: false
+
+- name: Require canonical dedicated Hermes Agent download cache path
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_download_cache_dir is match('^/')
+      - hermes_agent_download_cache_path.stdout == hermes_agent_download_cache_dir
+      - >-
+        hermes_agent_download_cache_path.stdout not in
+        ['/', '/tmp', '/var/tmp', '/var', '/var/cache', '/usr', '/usr/local',
+        '/etc', '/run', '/home', '/opt']
+      - >-
+        hermes_agent_download_cache_path.stdout is not
+        match('^/(tmp|var/tmp)(/|$)')
+
+- name: Resolve destructive Hermes Agent managed roots
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ hermes_agent_install_dir }}"
+    - "{{ hermes_agent_home }}"
+    - "{{ hermes_agent_codex_home }}"
+    - "{{ hermes_agent_codex_install_dir }}"
+    - "{{ hermes_agent_local_model_runtime_dir }}"
+    - "{{ hermes_agent_local_models_dir }}"
+  register: hermes_agent_download_cache_managed_roots
+  changed_when: false
+  check_mode: false
+
+- name: Require download cache separation from managed roots
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_download_cache_path.stdout != item.stdout
+      - >-
+        not hermes_agent_download_cache_path.stdout.startswith(item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(hermes_agent_download_cache_path.stdout ~ '/')
+    fail_msg: >-
+      Download cache and managed root {{ item.item }} must not overlap.
+  loop: "{{ hermes_agent_download_cache_managed_roots.results }}"
+
+- name: Inspect Hermes Agent download cache parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_download_cache_dir | dirname }}"
+    follow: false
+  register: hermes_agent_download_cache_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe Hermes Agent download cache parent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_download_cache_parent.stat.isdir
+      - not hermes_agent_download_cache_parent.stat.islnk
+      - hermes_agent_download_cache_parent.stat.pw_name == 'root'
+      - hermes_agent_download_cache_parent.stat.gr_name == 'root'
+      - >-
+        hermes_agent_download_cache_parent.stat.mode is
+        match('^0?[0-7][0-5][0-5]$')
+
+- name: Inspect Hermes Agent download cache
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_download_cache_dir }}"
+    follow: false
+  register: hermes_agent_download_cache_state
+  changed_when: false
+  check_mode: false
+
+- name: Require absent or role-compatible Hermes Agent download cache
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_download_cache_state.stat.exists or
+        (hermes_agent_download_cache_state.stat.isdir and
+        not hermes_agent_download_cache_state.stat.islnk and
+        hermes_agent_download_cache_state.stat.pw_name == 'root' and
+        hermes_agent_download_cache_state.stat.gr_name == 'root' and
+        hermes_agent_download_cache_state.stat.mode == '0755')
+    fail_msg: >-
+      Existing download cache must already be a dedicated root-owned 0755
+      directory; foreign metadata is preserved and rejected.
+
+- name: Inspect Hermes Agent download cache managed marker
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
+    follow: false
+  register: hermes_agent_download_cache_marker
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_download_cache_state.stat.exists
+
+- name: Require a private Hermes Agent download cache managed marker
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_download_cache_marker.stat.isreg
+      - not hermes_agent_download_cache_marker.stat.islnk
+      - hermes_agent_download_cache_marker.stat.pw_name == 'root'
+      - hermes_agent_download_cache_marker.stat.gr_name == 'root'
+      - hermes_agent_download_cache_marker.stat.mode == '0600'
+  when: hermes_agent_download_cache_state.stat.exists
+
+- name: Read Hermes Agent download cache managed marker
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
+  register: hermes_agent_download_cache_marker_contents
+  changed_when: false
+  when: hermes_agent_download_cache_state.stat.exists
+
+- name: Require recognized Hermes Agent download cache managed marker
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_download_cache_marker_contents.content | b64decode ==
+        'managed_by: marcomc.hermes_agent\n'
+  when: hermes_agent_download_cache_state.stat.exists

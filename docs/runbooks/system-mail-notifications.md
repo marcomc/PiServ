@@ -25,8 +25,10 @@ without creating or owning SMTP credentials. PiServ's playbook preserves
 operator edits to the SMTP sender, user, password, and aliases. For Gmail SMTP,
 use a Gmail app password rather than the normal account password or the
 Mac-specific OAuth helper. Provider connectivity and one root-alias delivery
-test have been validated. The shutdown-notification service is implemented but
-pending deployment and live validation.
+test have been validated. The shutdown-notification service is implemented and
+deployed by the base role when `/etc/msmtprc` exists and is non-empty; live
+end-to-end evidence for planned reboot events is still part of the operational
+validation checklist.
 
 ## Automation
 

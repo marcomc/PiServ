@@ -1,0 +1,58 @@
+---
+- name: Inspect Home Assistant MCP token parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file | dirname }}"
+    follow: false
+  register: hermes_agent_home_assistant_mcp_token_parent
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_home_assistant_mcp
+
+- name: Inspect Home Assistant MCP token file
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+    follow: false
+  register: hermes_agent_home_assistant_mcp_token_file
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: hermes_agent_manage_home_assistant_mcp
+
+- name: Require a private operator-provisioned Home Assistant MCP token file
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_home_assistant_mcp_token_parent.stat.isdir | default(false)
+      - not (hermes_agent_home_assistant_mcp_token_parent.stat.islnk | default(false))
+      - hermes_agent_home_assistant_mcp_token_parent.stat.pw_name == hermes_agent_user
+      - hermes_agent_home_assistant_mcp_token_parent.stat.gr_name == hermes_agent_group
+      - hermes_agent_home_assistant_mcp_token_parent.stat.mode == '0700'
+      - hermes_agent_home_assistant_mcp_token_file.stat.isreg | default(false)
+      - not (hermes_agent_home_assistant_mcp_token_file.stat.islnk | default(false))
+      - hermes_agent_home_assistant_mcp_token_file.stat.pw_name == hermes_agent_user
+      - hermes_agent_home_assistant_mcp_token_file.stat.gr_name == hermes_agent_group
+      - hermes_agent_home_assistant_mcp_token_file.stat.mode == '0600'
+    fail_msg: >-
+      Home Assistant MCP requires an existing private token parent and regular
+      token file owned by the Hermes runtime identity.
+  no_log: true
+  when: hermes_agent_manage_home_assistant_mcp
+
+- name: Read operator-provisioned Home Assistant MCP token
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
+  register: hermes_agent_home_assistant_mcp_token_contents
+  changed_when: false
+  no_log: true
+  when: hermes_agent_manage_home_assistant_mcp
+
+- name: Require a populated Home Assistant MCP token assignment
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hermes_agent_home_assistant_mcp_token_contents.content | b64decode) is
+        match('^' ~ hermes_agent_home_assistant_mcp_token_env_var ~ '=[^\\r\\n]+\\n?$')
+    fail_msg: >-
+      The Home Assistant MCP token file must contain exactly the configured
+      environment variable with a non-empty single-line value.
+  no_log: true
+  when: hermes_agent_manage_home_assistant_mcp

@@ -1,0 +1,264 @@
+---
+- name: Rename managed Hermes Agent backup timer
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: &backup_timer_fixture_vars
+      hermes_agent_supported_architectures:
+        - "{{ ansible_facts['architecture'] }}"
+      hermes_agent_repo_version: >-
+        {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+      hermes_agent_installer_url: >-
+        file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+      hermes_agent_installer_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+      hermes_agent_codex_archive_url: >-
+        file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+      hermes_agent_codex_archive_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+      hermes_agent_manage_dashboard: false
+      hermes_agent_manage_dashboard_chat: false
+      hermes_agent_backup_group: root
+      hermes_agent_backup_dir: /var/backups/hermes-agent
+    hermes_agent_manage_backup: true
+
+- name: Apply renamed managed Hermes Agent backup timer
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: *backup_timer_fixture_vars
+    hermes_agent_manage_backup: true
+    hermes_agent_backup_service_name: hermes-agent-backup-renamed-fixture.service
+    hermes_agent_backup_timer_name: hermes-agent-backup-renamed-fixture.timer
+
+- name: Inspect Hermes Agent backup units after rename
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - hermes-agent-backup.service
+    - hermes-agent-backup.timer
+    - hermes-agent-backup-renamed-fixture.service
+    - hermes-agent-backup-renamed-fixture.timer
+  register: hermes_agent_molecule_renamed_backup_units
+
+- name: Read renamed Hermes Agent backup timer state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - hermes-agent-backup-renamed-fixture.timer
+  register: hermes_agent_molecule_renamed_backup_timer_state
+  changed_when: false
+
+- name: Assert managed backup rename retires the old units
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_molecule_renamed_backup_units.results[0].stat.exists
+      - not hermes_agent_molecule_renamed_backup_units.results[1].stat.exists
+      - hermes_agent_molecule_renamed_backup_units.results[2].stat.isreg
+      - hermes_agent_molecule_renamed_backup_units.results[3].stat.isreg
+      - hermes_agent_molecule_renamed_backup_timer_state.stdout | trim == 'enabled'
+
+- name: Disable backups under different configured unit names
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  vars:
+    <<: *backup_timer_fixture_vars
+    hermes_agent_manage_backup: false
+    hermes_agent_backup_service_name: hermes-agent-backup-disabled-fixture.service
+    hermes_agent_backup_timer_name: hermes-agent-backup-disabled-fixture.timer
+
+- name: Inspect backup units after disabled rename
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - hermes-agent-backup-renamed-fixture.service
+    - hermes-agent-backup-renamed-fixture.timer
+    - hermes-agent-backup-disabled-fixture.service
+    - hermes-agent-backup-disabled-fixture.timer
+  register: hermes_agent_molecule_disabled_renamed_backup_units
+
+- name: Read retired renamed backup timer state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - hermes-agent-backup-renamed-fixture.timer
+  register: hermes_agent_molecule_disabled_renamed_backup_timer_state
+  changed_when: false
+  failed_when: false
+
+- name: Assert disabled backup rename retires recorded and configured units
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_disabled_renamed_backup_units.results |
+        selectattr('stat.exists') | list | length == 0
+      - hermes_agent_molecule_disabled_renamed_backup_timer_state.rc != 0
+
+- name: Create foreign prior backup timer fixture
+  ansible.builtin.copy:
+    content: foreign backup timer fixture
+    dest: /etc/systemd/system/hermes-agent-backup-foreign-fixture.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Inspect foreign prior backup timer fixture
+  ansible.builtin.stat:
+    path: /etc/systemd/system/hermes-agent-backup-foreign-fixture.timer
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_foreign_backup_timer
+
+- name: Record foreign timer as managed then drift it
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'name': 'hermes-agent-backup-foreign-fixture.timer',
+        'sha256': hermes_agent_molecule_foreign_backup_timer.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Drift foreign prior backup timer fixture
+  ansible.builtin.copy:
+    content: changed foreign backup timer fixture
+    dest: /etc/systemd/system/hermes-agent-backup-foreign-fixture.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Refuse changed foreign prior backup timer
+  block:
+    - name: Converge backup timer after prior unit drift
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        <<: *backup_timer_fixture_vars
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_timer_name: hermes-agent-backup-third-fixture.timer
+
+    - name: Fail if changed foreign prior backup timer was accepted
+      ansible.builtin.fail:
+        msg: Changed foreign prior backup timer must be preserved and rejected.
+  rescue:
+    - name: Assert changed foreign prior backup timer failed safely
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Require recognized previously managed Hermes Agent backup timer'
+
+- name: Read changed foreign prior backup timer after refusal
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/hermes-agent-backup-foreign-fixture.timer
+  register: hermes_agent_molecule_preserved_foreign_backup_timer
+  changed_when: false
+
+- name: Assert changed foreign prior backup timer is preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_preserved_foreign_backup_timer.content | b64decode ==
+        'changed foreign backup timer fixture'
+
+- name: Create dashboard service marker inode fixture
+  ansible.builtin.copy:
+    content: dashboard marker inode fixture
+    dest: /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Remove backup service marker before inode alias fixture
+  ansible.builtin.file:
+    path: /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+    state: absent
+
+- name: Hard-link backup service marker to dashboard marker
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ln
+      - /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+      - /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+  changed_when: true
+
+- name: Reject managed systemd marker inode aliases
+  block:
+    - name: Validate managed systemd marker inode alias fixture
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+
+    - name: Fail if managed systemd marker inode alias was accepted
+      ansible.builtin.fail:
+        msg: Managed systemd state marker inode aliases must fail validation.
+  rescue:
+    - name: Assert managed systemd marker inode alias failed safely
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject managed systemd unit marker inode aliases'
+
+- name: Remove backup timer rename fixtures
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/hermes-agent-backup-foreign-fixture.timer
+    - /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+    - /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+    - /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
+
+- name: Read Codex link marker before cross-output alias test
+  ansible.builtin.stat:
+    path: /usr/local/bin/codex.hermes-agent-managed.yml
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_codex_marker_before_systemd_alias
+
+- name: Hard-link backup service marker to Codex link marker
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ln
+      - /usr/local/bin/codex.hermes-agent-managed.yml
+      - /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+  changed_when: true
+
+- name: Reject systemd marker alias to Codex link marker
+  block:
+    - name: Refresh systemd marker alias validation state
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+
+    - name: Validate cross-output marker inode topology
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+
+    - name: Fail if systemd marker alias to Codex marker was accepted
+      ansible.builtin.fail:
+        msg: Systemd markers must not alias the Codex link marker.
+  rescue:
+    - name: Assert cross-output marker alias failed safely
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject inode aliases between configurable managed outputs'
+
+- name: Read Codex link marker after cross-output alias rejection
+  ansible.builtin.stat:
+    path: /usr/local/bin/codex.hermes-agent-managed.yml
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_codex_marker_after_systemd_alias
+
+- name: Assert cross-output alias rejection preserved Codex provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_codex_marker_after_systemd_alias.stat.checksum ==
+        hermes_agent_molecule_codex_marker_before_systemd_alias.stat.checksum
+
+- name: Remove cross-output systemd marker alias fixture
+  ansible.builtin.file:
+    path: /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+    state: absent

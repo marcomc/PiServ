@@ -1,0 +1,5 @@
+---
+- name: Run no-op side effects
+  hosts: all
+  gather_facts: false
+  tasks: []

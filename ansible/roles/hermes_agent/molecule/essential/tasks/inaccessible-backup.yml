@@ -1,0 +1,64 @@
+---
+- name: Create inaccessible backup parent fixture
+  ansible.builtin.file:
+    path: /var/backups/hermes-inaccessible-parent
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Reject backup storage inaccessible to the runtime identity
+  block:
+    - name: Apply role with an inaccessible backup parent
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_user: hermes-inaccessible-backup
+        hermes_agent_group: hermes-inaccessible-backup
+        hermes_agent_home: /var/lib/hermes-inaccessible-backup
+        hermes_agent_install_dir: /usr/local/lib/hermes-inaccessible-backup
+        hermes_agent_installer_path: >-
+          /usr/local/libexec/hermes-inaccessible-backup-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: root
+        hermes_agent_backup_dir: >-
+          /var/backups/hermes-inaccessible-parent/backup
+        hermes_agent_backup_service_name: >-
+          hermes-inaccessible-backup.service
+        hermes_agent_backup_service_managed_state_file: >-
+          /etc/systemd/system/.hermes-inaccessible-backup-service.yml
+        hermes_agent_backup_timer_name: hermes-inaccessible-backup.timer
+        hermes_agent_backup_timer_managed_state_file: >-
+          /etc/systemd/system/.hermes-inaccessible-backup-timer.yml
+
+    - name: Fail if inaccessible backup storage was accepted
+      ansible.builtin.fail:
+        msg: Backup storage must be writable by the runtime identity.
+  rescue:
+    - name: Assert inaccessible backup storage failed at runtime access proof
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Prove backup storage access as the Hermes runtime identity'
+
+- name: Inspect inaccessible-backup publication canaries
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /var/backups/hermes-inaccessible-parent/backup
+    - /usr/local/libexec/hermes-inaccessible-backup-installer
+    - /etc/systemd/system/hermes-inaccessible-backup.service
+    - /etc/systemd/system/hermes-inaccessible-backup.timer
+  register: hermes_agent_essential_inaccessible_backup_canaries
+
+- name: Assert inaccessible backup storage published no leaf or units
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_inaccessible_backup_canaries.results |
+        selectattr('stat.exists') | list | length == 0
