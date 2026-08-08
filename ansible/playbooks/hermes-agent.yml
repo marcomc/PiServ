@@ -10,42 +10,12 @@
     -
       - ../vars/hermes-agent.yml
       - ../vars/hermes-agent.yml.example
+    -
+      - ../vars/external-storage.yml
+      - ../vars/external-storage.yml.example
   pre_tasks:
-    - name: Verify external backup filesystem is mounted before Hermes configuration
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/findmnt
-          - --target
-          - "{{ piserv_external_storage_mountpoint }}"
-          - --noheadings
-          - --output
-          - SOURCE
-      register: piserv_hermes_agent_backup_mount_source
-      changed_when: false
-      check_mode: false
-
-    - name: Read mounted external backup filesystem label
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/lsblk
-          - --noheadings
-          - --output
-          - LABEL
-          - "{{ piserv_hermes_agent_backup_mount_source.stdout | trim }}"
-      register: piserv_hermes_agent_backup_mount_label
-      changed_when: false
-      check_mode: false
-
-    - name: Require configured external backup filesystem
-      ansible.builtin.assert:
-        that:
-          - piserv_hermes_agent_backup_mount_source.stdout | trim | length > 0
-          - >-
-            piserv_hermes_agent_backup_mount_label.stdout | trim ==
-            piserv_external_storage_volume_label
-        fail_msg: >-
-          Mount the configured external-data filesystem before running the Hermes
-          playbook; backups must not fall back to the root filesystem.
+    - name: Validate concrete external backup storage identity and layout
+      ansible.builtin.include_tasks: ../tasks/external-storage-preflight.yml
 
     - name: Validate firewall policy for the network Hermes dashboard
       when: piserv_hermes_agent_dashboard_host == '0.0.0.0'

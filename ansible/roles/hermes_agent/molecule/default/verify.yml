@@ -716,7 +716,9 @@
         - name: Assert hard-link collision failed inode validation
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Reject existing Codex output inode aliases'
+              - >-
+                ansible_failed_task.name ==
+                'Reject inode aliases between configurable managed outputs'
 
     - name: Inspect installer and hard-link after collision rejections
       ansible.builtin.stat:

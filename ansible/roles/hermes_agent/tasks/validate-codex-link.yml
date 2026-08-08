@@ -109,9 +109,11 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: Define other configurable managed output files
+- name: Define every configurable managed output file
   ansible.builtin.set_fact:
     hermes_agent_codex_other_managed_outputs:
+      - "{{ hermes_agent_codex_binary_path }}"
+      - "{{ hermes_agent_codex_link_managed_state_file }}"
       - "{{ hermes_agent_binary_path }}"
       - "{{ hermes_agent_installer_path }}"
       - "{{ hermes_agent_installer_path }}.inference-provenance.yml"
@@ -122,6 +124,9 @@
       - "{{ hermes_agent_home_assistant_mcp_token_env_file }}"
       - "{{ hermes_agent_dashboard_tui_runtime_revision_file }}"
       - "{{ hermes_agent_dashboard_tui_runtime_manifest_file }}"
+      - "{{ hermes_agent_dashboard_service_managed_state_file }}"
+      - "{{ hermes_agent_backup_service_managed_state_file }}"
+      - "{{ hermes_agent_backup_timer_managed_state_file }}"
       - "{{ hermes_agent_local_model_benchmark_helper_path }}"
       - "{{ hermes_agent_local_models_managed_state_file }}"
       - "{{ hermes_agent_local_model_llama_cli_path }}"
@@ -156,7 +161,7 @@
   loop_control:
     label: "{{ item.id }}"
 
-- name: Resolve other configurable managed output identities
+- name: Resolve every configurable managed output identity
   ansible.builtin.command:
     argv:
       - /usr/bin/realpath
@@ -167,24 +172,24 @@
   changed_when: false
   check_mode: false
 
-- name: Require distinct canonical Codex link outputs
+- name: Reject canonical aliases between configurable managed outputs
   ansible.builtin.assert:
     that:
       - >-
-        hermes_agent_codex_link_output_identities[0] !=
-        hermes_agent_codex_link_output_identities[1]
-      - >-
-        hermes_agent_codex_link_output_identities[0] !=
-        item.stdout
-      - >-
-        hermes_agent_codex_link_output_identities[1] !=
-        item.stdout
+        item.0.stdout != item.1.stdout or
+        ([item.0.item, item.1.item] | sort) ==
+        ([
+          hermes_agent_codex_binary_path,
+          hermes_agent_codex_install_dir ~ '/codex'
+        ] | sort)
     fail_msg: >-
-      The Codex link and provenance marker must be distinct from every other
-      configurable managed output file.
-  loop: "{{ hermes_agent_codex_other_managed_output_identities.results }}"
+      Configurable managed outputs must resolve to distinct paths except for
+      the declared active Codex link and its versioned target.
+  loop: >-
+    {{ hermes_agent_codex_other_managed_output_identities.results |
+    combinations(2) | list }}
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.0.item }} != {{ item.1.item }}"
 
 - name: Require canonical Codex link parent
   ansible.builtin.assert:
@@ -223,7 +228,7 @@
   changed_when: false
   check_mode: false
 
-- name: Inspect other configurable managed output files
+- name: Inspect every configurable managed output file
   ansible.builtin.stat:
     path: "{{ item }}"
     follow: false
@@ -232,6 +237,22 @@
   changed_when: false
   check_mode: false
 
+- name: Reject inode aliases between configurable managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.0.stat.exists or
+        not item.1.stat.exists or
+        item.0.stat.dev != item.1.stat.dev or
+        item.0.stat.inode != item.1.stat.inode
+    fail_msg: >-
+      Every existing configurable managed output must use a distinct inode.
+  loop: >-
+    {{ hermes_agent_codex_other_managed_output_states.results |
+    combinations(2) | list }}
+  loop_control:
+    label: "{{ item.0.item }} != {{ item.1.item }}"
+
 - name: Inspect Codex link managed-state leaf
   ansible.builtin.stat:
     path: "{{ hermes_agent_codex_link_managed_state_file }}"
@@ -239,25 +260,6 @@
   register: hermes_agent_codex_link_managed_state
   changed_when: false
   check_mode: false
-
-- name: Reject existing Codex output inode aliases
-  ansible.builtin.assert:
-    that:
-      - >-
-        not hermes_agent_codex_link_state.stat.exists or
-        not item.stat.exists or
-        hermes_agent_codex_link_state.stat.dev != item.stat.dev or
-        hermes_agent_codex_link_state.stat.inode != item.stat.inode
-      - >-
-        not hermes_agent_codex_link_managed_state.stat.exists or
-        not item.stat.exists or
-        hermes_agent_codex_link_managed_state.stat.dev != item.stat.dev or
-        hermes_agent_codex_link_managed_state.stat.inode != item.stat.inode
-    fail_msg: >-
-      The Codex link or provenance marker aliases another managed output inode.
-  loop: "{{ hermes_agent_codex_other_managed_output_states.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 - name: Require safe Codex link managed-state leaf
   ansible.builtin.assert:

@@ -23,6 +23,39 @@
     hermes_agent_codex_archive_checksum: >-
       sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
 
+- name: Reject a systemd marker path aliased to another managed output
+  block:
+    - name: Prepare systemd marker alias validation state
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-target.yml
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_dashboard_basic_auth_state_file }}
+
+    - name: Validate systemd marker alias against managed outputs
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_dashboard_basic_auth_state_file }}
+
+    - name: Fail if systemd marker output alias was accepted
+      ansible.builtin.fail:
+        msg: Systemd marker aliases with managed outputs must be rejected.
+  rescue:
+    - name: Assert systemd marker alias failed during preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
 - name: Corrupt the installed Hermes virtual environment
   ansible.builtin.copy:
     content: unauthenticated virtual environment fixture

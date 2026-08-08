@@ -209,3 +209,56 @@
     - /etc/systemd/system/.hermes-agent-dashboard-managed.yml
     - /etc/systemd/system/.hermes-agent-backup-service-managed.yml
     - /etc/systemd/system/.hermes-agent-backup-timer-managed.yml
+
+- name: Read Codex link marker before cross-output alias test
+  ansible.builtin.stat:
+    path: /usr/local/bin/codex.hermes-agent-managed.yml
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_codex_marker_before_systemd_alias
+
+- name: Hard-link backup service marker to Codex link marker
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ln
+      - /usr/local/bin/codex.hermes-agent-managed.yml
+      - /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+  changed_when: true
+
+- name: Reject systemd marker alias to Codex link marker
+  block:
+    - name: Refresh systemd marker alias validation state
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+
+    - name: Validate cross-output marker inode topology
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+
+    - name: Fail if systemd marker alias to Codex marker was accepted
+      ansible.builtin.fail:
+        msg: Systemd markers must not alias the Codex link marker.
+  rescue:
+    - name: Assert cross-output marker alias failed safely
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject inode aliases between configurable managed outputs'
+
+- name: Read Codex link marker after cross-output alias rejection
+  ansible.builtin.stat:
+    path: /usr/local/bin/codex.hermes-agent-managed.yml
+    checksum_algorithm: sha256
+  register: hermes_agent_molecule_codex_marker_after_systemd_alias
+
+- name: Assert cross-output alias rejection preserved Codex provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_molecule_codex_marker_after_systemd_alias.stat.checksum ==
+        hermes_agent_molecule_codex_marker_before_systemd_alias.stat.checksum
+
+- name: Remove cross-output systemd marker alias fixture
+  ansible.builtin.file:
+    path: /etc/systemd/system/.hermes-agent-backup-service-managed.yml
+    state: absent
