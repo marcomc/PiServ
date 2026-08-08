@@ -101,16 +101,37 @@
     - Package the app as a systemd service and codify deployment in Ansible.
     - Document operator workflows in a runbook.
 
-- [ ] **Complete Hermes Agent provider and capability integration**
+- [ ] **Refresh Hermes Agent dependency audit after the next upstream release**
   - Assessment: the locked-down Nous Hermes Agent runtime, Codex CLI, private
     dashboard, authenticated LAN/Tailnet access, persistent state, daily backup,
-    and Ansible deployment are live.
-    Codex authentication and isolated state/provider-transport persistence
-    validation are complete; external capabilities remain incomplete.
+    Ansible deployment, and Home Assistant MCP path are live. The remaining
+    framework maintenance item is the transitive `undici` dependency audit.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
     - Pin the next Hermes upstream release that upgrades transitive `undici` to
       `6.28.0` or newer, then repeat the production dependency audit.
+
+- [ ] **Complete Hermes smart-home control through Home Assistant and Apple Home**
+  - Priority: **High**
+  - Assessment: Hermes already reaches Home Assistant through the official MCP
+    server and Assist exposure policy. The next release should stabilize this
+    path and use Home Assistant's HomeKit Bridge as the preferred route to
+    Apple Home and Siri.
+  - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
+  - Actions:
+    - Revalidate Hermes-to-Home Assistant MCP authentication, tool discovery,
+      state reads, and reversible writes after service restart and backup
+      restore.
+    - Define and review the Home Assistant Assist exposure policy for read-only
+      entities, lights, scenes, and other approved operations; exclude locks,
+      security devices, and configuration changes by default.
+    - Configure and validate Home Assistant's HomeKit Bridge for the selected
+      entities, then verify Apple Home and Siri reflect the resulting states.
+    - Add post-write state verification, failure handling, and audit evidence to
+      the Hermes runbook before enabling unattended actions.
+    - Decide whether direct Apple Home control through HomeClaw is still needed;
+      if so, select either the restricted SSH transport or the authenticated
+      Tailnet Supergateway transport and complete its validation track.
 
 - [ ] **Connect Hermes to Omar Shahine's HomeClaw MCP through SSH**
   - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)
