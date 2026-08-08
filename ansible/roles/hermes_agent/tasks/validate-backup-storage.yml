@@ -1,0 +1,27 @@
+---
+- name: Inspect configured Hermes Agent backup directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_backup_dir }}"
+    follow: false
+  register: hermes_agent_backup_directory_state
+  changed_when: false
+  check_mode: false
+  when: hermes_agent_manage_backup
+
+- name: Require a dedicated Hermes Agent backup directory
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_backup_dir is match('^/')
+      - hermes_agent_backup_dir not in ['/', '/tmp', '/var', '/var/backups', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
+      - >-
+        not hermes_agent_backup_directory_state.stat.exists or
+        (hermes_agent_backup_directory_state.stat.isdir and
+        not hermes_agent_backup_directory_state.stat.islnk and
+        hermes_agent_backup_directory_state.stat.pw_name == hermes_agent_user and
+        hermes_agent_backup_directory_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_backup_directory_state.stat.mode == '0700')
+    fail_msg: >-
+      hermes_agent_backup_dir must be a dedicated, non-symlinked directory owned
+      by the Hermes runtime user; system paths and directories owned by another
+      service are not safe backup targets.
+  when: hermes_agent_manage_backup

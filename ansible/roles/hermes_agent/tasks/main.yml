@@ -2,6 +2,15 @@
 - name: Validate Hermes Agent target and policy
   ansible.builtin.import_tasks: validate-target.yml
 
+- name: Validate Hermes Agent installer destination
+  ansible.builtin.import_tasks: validate-installer-target.yml
+
+- name: Validate managed inference provenance destination
+  ansible.builtin.import_tasks: validate-inference-provenance-target.yml
+
+- name: Validate Hermes Agent backup storage
+  ansible.builtin.import_tasks: validate-backup-storage.yml
+
 - name: Validate Hermes Agent systemd unit targets
   ansible.builtin.import_tasks: validate-systemd-unit-targets.yml
 

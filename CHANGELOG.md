@@ -68,6 +68,9 @@
 
 ### Hermes Agent
 
+- Made installer, inference-plugin, and backup-storage ownership checks fail
+  before package, identity, download, or service mutations, preserving foreign
+  destinations instead of overwriting them.
 - Updated Nous Hermes Agent to the pinned upstream `v2026.8.3` release
   (`0.20.0`) under a root-owned code path and an unprivileged `hermes-agent`
   runtime identity.

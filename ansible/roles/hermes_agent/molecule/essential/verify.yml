@@ -55,6 +55,9 @@
         - /usr/local/lib/hermes-agent-runtime/tui/dist/entry.js
         - /usr/local/lib/hermes-agent-runtime/tui/.hermes-revision
         - /var/lib/hermes-agent/node/bin/npm
+        - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
+        - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
+        - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
         - /etc/systemd/system/hermes-agent-dashboard.service
         - /etc/systemd/system/hermes-agent-backup.timer
       register: hermes_agent_essential_artifacts
@@ -89,3 +92,6 @@
           - >-
             hermes_agent_essential_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
+
+    - name: Verify essential fail-before-mutation boundaries
+      ansible.builtin.include_tasks: tasks/preflight-safety.yml
