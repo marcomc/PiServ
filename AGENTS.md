@@ -71,6 +71,12 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   and mount conflicts before package, group-membership, ACL, or service
   mutations. A placeholder fallback configuration must fail without changing
   host state.
+- For permanently attached SuperSpeed storage, record the negotiated link speed
+  at boot and do not attribute USB 2 fallback on a paired xHCI root-hub path to
+  filesystem or workload behavior without first checking the physical link.
+- Before reinitializing a USB controller to recover storage speed, verify that
+  it has no unrelated devices or open handles; sync and unmount the filesystem,
+  then verify the expected device identity before remounting.
 - Keep one-off migration cleanup out of steady-state playbooks after the live
   host reaches the new source of truth. Use a bounded migration command or
   temporary playbook for teardown, then remove it and update diagnostics to
