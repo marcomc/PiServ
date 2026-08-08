@@ -26,7 +26,7 @@ work is recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.0 Hermes Smart Home
 
-**Status:** Planned
+**Status:** In progress
 
 **Outcome:** Hermes can inspect and operate an explicitly approved smart-home
 surface through Home Assistant, while Apple Home remains part of the same
@@ -34,12 +34,12 @@ operational picture where the platform permits it.
 
 ### Scope
 
-1. Revalidate the existing Hermes to Home Assistant MCP path after restart and
-   backup restore, including authentication, discovery, reads, reversible
-   writes, timeout handling, and audit evidence.
-2. Define the Home Assistant Assist exposure policy for read-only entities,
-   lights, scenes, and approved operations. Locks, security devices,
-   configuration, and arbitrary administration remain excluded by default.
+1. Revalidate the existing Hermes to Home Assistant MCP path after backup
+   restore, including authentication, discovery, reads, reversible writes,
+   timeout handling, and audit evidence.
+2. Define the Home Assistant Assist exposure policy for the desired operation
+   surface. Hermes has activity-scoped autonomy; physical security actions
+   remain confirmation-gated.
 3. Validate Home Assistant HomeKit Bridge for the selected entities and verify
    the resulting state in Apple Home and Siri.
 4. Run a bounded feasibility test for Apple Home-only entities. HomeKit Bridge
@@ -65,9 +65,9 @@ The acceptance harness is implemented in
 [`scripts/verify-hermes-home-apple-home.py`](scripts/verify-hermes-home-apple-home.py)
 with the procedure documented in
 [`docs/runbooks/hermes-home-apple-home.md`](docs/runbooks/hermes-home-apple-home.md).
-The first live acceptance run passed on 2026-08-08. Remaining release gates are
-the Assist exposure-policy review, restart and backup-restore revalidation, and
-the selected Apple Home and Siri coverage.
+The acceptance run passed before and after a Hermes dashboard restart on
+2026-08-08. Remaining release gates are the Assist exposure-policy review,
+backup-restore revalidation, and the selected Apple Home and Siri coverage.
 
 ## Later Releases
 

@@ -130,8 +130,6 @@
       gated even when activity-scoped autonomy is granted.
     - Configure and validate Home Assistant's HomeKit Bridge for the selected
       entities, then verify Apple Home and Siri reflect the resulting states.
-    - Run the local acceptance harness from the Mac with an explicit allowlist,
-      scoped state capture, post-write verification, cleanup, and audit report.
     - Keep direct Apple Home control through HomeClaw in a later release; use
       SSH or authenticated Tailnet Supergateway only after a separate decision.
 

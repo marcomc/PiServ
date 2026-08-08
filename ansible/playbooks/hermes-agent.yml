@@ -101,3 +101,11 @@
         hermes_agent_backup_timezone: Europe/Rome
         # Re-enable only after a guarded 64K proof on hardware with more RAM.
         hermes_agent_manage_local_models: false
+  post_tasks:
+    - name: Install PiServ smart-home policy for Hermes workspace
+      ansible.builtin.copy:
+        src: ../files/hermes-smart-home-AGENTS.md
+        dest: /var/lib/hermes-agent/workspace/AGENTS.md
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"

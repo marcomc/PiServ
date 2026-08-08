@@ -231,6 +231,7 @@ def invoke_hermes(
             "set -a",
             f". {shlex.quote(token_file)}",
             "set +a",
+            "cd /var/lib/hermes-agent/workspace",
             f"exec {hermes_command}",
         ]
     )
@@ -325,8 +326,8 @@ def verify_entity(
         return
 
     action_prompt = (
-        "Hermes Home/Apple acceptance test v1. You are explicitly authorized "
-        "to complete this task autonomously and only this task. Use only the "
+        "Hermes Home/Apple acceptance test v1. You have explicit full autonomy "
+        "for this named, non-critical test activity only. Use only the "
         "home-assistant-assist MCP server. Before changing anything, preserve "
         "the current state of the named test entity in your task audit. Do not "
         "touch any other entity, automation, scene, configuration, lock, alarm, "
@@ -342,8 +343,9 @@ def verify_entity(
         if not mutation_attempted or target.get("restored") is not None:
             return
         restore_prompt = (
-            "Hermes Home/Apple acceptance test cleanup. You are authorized "
-            "to restore only the test entity and then verify it. Use only "
+            "Hermes Home/Apple acceptance test cleanup. You have explicit full "
+            "autonomy for this named, non-critical cleanup activity only. Restore "
+            "only the test entity and then verify it. Use only "
             "Home Assistant MCP. Restore entity "
             f"{entity['home_assistant_entity_id']} to "
             f"{'on' if before_power else 'off'} and touch nothing else."

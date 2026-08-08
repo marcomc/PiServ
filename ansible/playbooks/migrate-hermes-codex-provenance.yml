@@ -1,0 +1,215 @@
+---
+- name: Migrate verified legacy Codex installation provenance
+  hosts: piserv
+  become: true
+  gather_facts: false
+  vars:
+    codex_version: "0.145.0"
+    codex_archive_sha256: "d384f90bc842450b42bd675feef06a12a46a3b1ca97efcb22566b270e4a11227"
+    codex_binary_sha256: "57d79900fe95df2ab854adf581a28ec46d7442f07445032d86453a44b577dced"
+    codex_parent: /usr/local/lib/codex
+    codex_install_dir: /usr/local/lib/codex/0.145.0
+    codex_archive: /var/cache/hermes-agent/codex-0.145.0-aarch64-linux.tar.gz
+    download_cache_marker: /var/cache/hermes-agent/.hermes-agent-managed.yml
+    hermes_installer: /usr/local/libexec/hermes-agent-installer
+    inference_plugin: /var/lib/hermes-agent/plugins/piserv-inference-provenance
+    backup_units:
+      - hermes-agent-dashboard.service
+      - hermes-agent-backup.service
+      - hermes-agent-backup.timer
+
+  tasks:
+    - name: Inspect legacy Codex installation artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+      loop:
+        - "{{ codex_parent }}"
+        - "{{ codex_install_dir }}"
+        - "{{ codex_install_dir }}/codex"
+        - "{{ codex_archive }}"
+        - "{{ codex_parent }}/.hermes-agent-managed.yml"
+        - "{{ codex_install_dir }}/.hermes-agent-managed.yml"
+      register: legacy_codex_artifacts
+      changed_when: false
+
+    - name: Require exact verified legacy Codex installation
+      ansible.builtin.assert:
+        that:
+          - legacy_codex_artifacts.results[0].stat.isdir
+          - not legacy_codex_artifacts.results[0].stat.islnk
+          - legacy_codex_artifacts.results[0].stat.pw_name == 'root'
+          - legacy_codex_artifacts.results[0].stat.gr_name == 'root'
+          - legacy_codex_artifacts.results[0].stat.mode == '0755'
+          - legacy_codex_artifacts.results[1].stat.isdir
+          - not legacy_codex_artifacts.results[1].stat.islnk
+          - legacy_codex_artifacts.results[1].stat.pw_name == 'root'
+          - legacy_codex_artifacts.results[1].stat.gr_name == 'root'
+          - legacy_codex_artifacts.results[1].stat.mode == '0755'
+          - legacy_codex_artifacts.results[2].stat.isreg
+          - not legacy_codex_artifacts.results[2].stat.islnk
+          - legacy_codex_artifacts.results[2].stat.pw_name == 'root'
+          - legacy_codex_artifacts.results[2].stat.gr_name == 'root'
+          - legacy_codex_artifacts.results[2].stat.mode == '0755'
+          - legacy_codex_artifacts.results[2].stat.checksum == codex_binary_sha256
+          - legacy_codex_artifacts.results[3].stat.isreg
+          - not legacy_codex_artifacts.results[3].stat.islnk
+          - legacy_codex_artifacts.results[3].stat.pw_name == 'root'
+          - legacy_codex_artifacts.results[3].stat.gr_name == 'root'
+          - legacy_codex_artifacts.results[3].stat.mode == '0644'
+          - legacy_codex_artifacts.results[3].stat.checksum == codex_archive_sha256
+        fail_msg: >-
+          Legacy Codex installation does not exactly match the verified 0.145.0
+          archive and binary; refusing to add role provenance.
+
+    - name: Record verified Codex installation parent provenance
+      ansible.builtin.copy:
+        content: |
+          managed_by: marcomc.hermes_agent
+          path: /usr/local/lib/codex
+          version: 1
+        dest: "{{ codex_parent }}/.hermes-agent-managed.yml"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not legacy_codex_artifacts.results[4].stat.exists
+
+    - name: Record verified versioned Codex installation provenance
+      ansible.builtin.copy:
+        content: |
+          archive_sha256: d384f90bc842450b42bd675feef06a12a46a3b1ca97efcb22566b270e4a11227
+          binary_sha256: 57d79900fe95df2ab854adf581a28ec46d7442f07445032d86453a44b577dced
+          managed_by: marcomc.hermes_agent
+          version: 0.145.0
+        dest: "{{ codex_install_dir }}/.hermes-agent-managed.yml"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not legacy_codex_artifacts.results[5].stat.exists
+
+    - name: Inspect legacy Hermes download cache marker
+      ansible.builtin.stat:
+        path: "{{ download_cache_marker }}"
+        follow: false
+      register: legacy_download_cache_marker
+      changed_when: false
+
+    - name: Require the verified legacy Codex cache to be unmarked
+      ansible.builtin.assert:
+        that:
+          - legacy_codex_artifacts.results[3].stat.exists
+          - legacy_codex_artifacts.results[3].stat.checksum == codex_archive_sha256
+          - not legacy_download_cache_marker.stat.exists
+        fail_msg: >-
+          Hermes download cache provenance is not the expected verified legacy
+          state; refusing to add a role marker.
+
+    - name: Record verified Hermes download cache ownership
+      ansible.builtin.copy:
+        content: "managed_by: marcomc.hermes_agent\n"
+        dest: "{{ download_cache_marker }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Inspect legacy inference provenance plugin artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+      loop:
+        - "{{ inference_plugin }}"
+        - "{{ inference_plugin }}/plugin.yaml"
+        - "{{ inference_plugin }}/__init__.py"
+        - "{{ hermes_installer }}.inference-provenance.yml"
+      register: legacy_inference_provenance_artifacts
+      changed_when: false
+
+    - name: Require a private unmarked legacy inference provenance plugin
+      ansible.builtin.assert:
+        that:
+          - legacy_inference_provenance_artifacts.results[0].stat.isdir
+          - not legacy_inference_provenance_artifacts.results[0].stat.islnk
+          - legacy_inference_provenance_artifacts.results[0].stat.pw_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[0].stat.gr_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[0].stat.mode == '0700'
+          - legacy_inference_provenance_artifacts.results[1].stat.isreg
+          - not legacy_inference_provenance_artifacts.results[1].stat.islnk
+          - legacy_inference_provenance_artifacts.results[1].stat.pw_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[1].stat.gr_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[1].stat.mode == '0600'
+          - legacy_inference_provenance_artifacts.results[1].stat.checksum is match('^[a-f0-9]{64}$')
+          - legacy_inference_provenance_artifacts.results[2].stat.isreg
+          - not legacy_inference_provenance_artifacts.results[2].stat.islnk
+          - legacy_inference_provenance_artifacts.results[2].stat.pw_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[2].stat.gr_name == 'hermes-agent'
+          - legacy_inference_provenance_artifacts.results[2].stat.mode == '0600'
+          - legacy_inference_provenance_artifacts.results[2].stat.checksum is match('^[a-f0-9]{64}$')
+        fail_msg: >-
+          Legacy inference provenance plugin is not the expected private,
+          unmarked service-owned artifact; refusing to authorize mutation.
+
+    - name: Record legacy inference provenance plugin state
+      ansible.builtin.copy:
+        content: |
+          plugin_name: piserv-inference-provenance
+          manifest_sha256: {{ legacy_inference_provenance_artifacts.results[1].stat.checksum }}
+          implementation_sha256: {{ legacy_inference_provenance_artifacts.results[2].stat.checksum }}
+        dest: "{{ hermes_installer }}.inference-provenance.yml"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not legacy_inference_provenance_artifacts.results[3].stat.exists
+
+    - name: Inspect legacy Hermes backup unit targets
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ item }}"
+        follow: false
+      loop: "{{ backup_units }}"
+      register: legacy_backup_unit_targets
+      changed_when: false
+
+    - name: Read legacy Hermes backup unit targets
+      ansible.builtin.slurp:
+        src: "/etc/systemd/system/{{ item.item }}"
+      loop: "{{ legacy_backup_unit_targets.results }}"
+      register: legacy_backup_unit_contents
+      changed_when: false
+
+    - name: Require recognized legacy Hermes backup unit content
+      ansible.builtin.assert:
+        that:
+          - item.0.stat.isreg
+          - not item.0.stat.islnk
+          - item.0.stat.pw_name == 'root'
+          - item.0.stat.gr_name == 'root'
+          - item.0.stat.mode == '0644'
+          - >-
+            (item.1.content | b64decode).startswith('[Unit]\nDescription=') or
+            (item.1.content | b64decode).startswith(
+              '# Managed by marcomc.hermes_agent\n[Unit]\nDescription='
+            )
+          - >-
+            item.0.item != 'hermes-agent-dashboard.service' or
+            'ExecStart=/usr/local/bin/hermes dashboard' in (item.1.content | b64decode)
+          - >-
+            item.0.item != 'hermes-agent-backup.service' or
+            'ExecStart=/usr/local/bin/hermes backup --output /mnt/external-data/backups/hermes-agent' in
+            (item.1.content | b64decode)
+          - >-
+            item.0.item != 'hermes-agent-backup.timer' or
+            'Unit=hermes-agent-backup.service' in (item.1.content | b64decode)
+        fail_msg: >-
+          Legacy Hermes backup unit is not the expected root-owned regular
+          service or timer; refusing to add the role ownership header.
+      loop: >-
+        {{ legacy_backup_unit_targets.results |
+        zip(legacy_backup_unit_contents.results) | list }}
+
+    - name: Add role ownership header to recognized legacy backup units
+      ansible.builtin.lineinfile:
+        path: "/etc/systemd/system/{{ item }}"
+        line: "# Managed by marcomc.hermes_agent"
+        insertbefore: BOF
+      loop: "{{ backup_units }}"
