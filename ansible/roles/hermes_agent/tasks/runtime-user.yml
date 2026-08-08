@@ -115,6 +115,31 @@
   check_mode: false
   when: hermes_agent_runtime_user_phase == 'preflight'
 
+- name: Read configured Hermes Agent backup group
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/getent
+      - group
+      - "{{ hermes_agent_backup_group }}"
+  register: hermes_agent_backup_group_lookup
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_manage_backup
+
+- name: Require an existing Hermes Agent backup group
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_backup_group_lookup.rc == 0
+    fail_msg: >-
+      hermes_agent_backup_group must identify an existing group before package
+      or runtime-identity mutation.
+  when:
+    - hermes_agent_runtime_user_phase == 'preflight'
+    - hermes_agent_manage_backup
+
 - name: Inspect Hermes Agent install root
   ansible.builtin.stat:
     path: "{{ hermes_agent_install_dir }}"

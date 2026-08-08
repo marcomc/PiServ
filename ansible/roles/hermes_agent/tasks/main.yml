@@ -5,6 +5,9 @@
 - name: Validate Hermes Agent installer destination
   ansible.builtin.import_tasks: validate-installer-target.yml
 
+- name: Validate versioned Codex installation
+  ansible.builtin.import_tasks: validate-codex-installation.yml
+
 - name: Validate managed inference provenance destination
   ansible.builtin.import_tasks: validate-inference-provenance-target.yml
 

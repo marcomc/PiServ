@@ -16,6 +16,162 @@
     src: /usr/local/src/hermes-agent-fixture/revision
   register: hermes_agent_essential_fixture_revision
 
+- name: Pin essential fixture artifact checksums across role inclusions
+  ansible.builtin.set_fact:
+    hermes_agent_installer_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+    hermes_agent_codex_archive_checksum: >-
+      sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+
+- name: Read installed Codex binary and installation marker
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /usr/local/lib/codex/0.145.0/codex
+    - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_install_artifacts
+
+- name: Read installed Codex installation marker
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_install_marker_raw
+
+- name: Assert installed Codex provenance binds its binary
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).keys() | list | sort ==
+        ['archive_sha256', 'binary_sha256', 'managed_by', 'version']
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).binary_sha256 ==
+        hermes_agent_essential_codex_install_artifacts.results[0].stat.checksum
+      - >-
+        (hermes_agent_essential_codex_install_marker_raw.content |
+        b64decode | from_yaml).archive_sha256 ==
+        hermes_agent_essential_fixture_codex.stat.checksum
+
+- name: Reject a missing configured backup group
+  block:
+    - name: Apply role with a missing backup group
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_user: hermes-missing-backup-fixture
+        hermes_agent_group: hermes-missing-backup-fixture
+        hermes_agent_home: /var/lib/hermes-missing-backup-fixture
+        hermes_agent_install_dir: /usr/local/lib/hermes-missing-backup-fixture
+        hermes_agent_installer_path: >-
+          /usr/local/libexec/hermes-missing-backup-fixture-installer
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: hermes-backup-group-does-not-exist
+        hermes_agent_backup_dir: /var/backups/hermes-missing-backup-fixture
+
+    - name: Fail if a missing backup group was accepted
+      ansible.builtin.fail:
+        msg: A missing backup group must fail preflight.
+  rescue:
+    - name: Assert missing backup group failed at preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require an existing Hermes Agent backup group'
+
+- name: Inspect missing-backup-group mutation canaries
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/getent
+      - "{{ item.database }}"
+      - "{{ item.key }}"
+  loop:
+    - database: passwd
+      key: hermes-missing-backup-fixture
+    - database: group
+      key: hermes-missing-backup-fixture
+  register: hermes_agent_essential_missing_backup_identity_canaries
+  changed_when: false
+  failed_when: false
+
+- name: Inspect missing-backup-group installer canary
+  ansible.builtin.stat:
+    path: /usr/local/libexec/hermes-missing-backup-fixture-installer
+  register: hermes_agent_essential_missing_backup_installer_canary
+
+- name: Assert missing backup group caused no identity or installer mutation
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_missing_backup_identity_canaries.results |
+        selectattr('rc', 'equalto', 0) | list | length == 0
+      - not hermes_agent_essential_missing_backup_installer_canary.stat.exists
+
+- name: Create foreign unmarked Codex installation fixture
+  ansible.builtin.file:
+    path: /usr/local/lib/codex/foreign-essential
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install foreign unmarked Codex binary canary
+  ansible.builtin.copy:
+    content: foreign-codex-binary-canary
+    dest: /usr/local/lib/codex/foreign-essential/codex
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Reject a foreign unmarked Codex installation
+  block:
+    - name: Apply role with a foreign unmarked Codex installation
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_installer_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_installer.stat.checksum }}
+        hermes_agent_codex_version: foreign-essential
+        hermes_agent_codex_install_dir: /usr/local/lib/codex/foreign-essential
+        hermes_agent_codex_archive_checksum: >-
+          sha256:{{ hermes_agent_essential_fixture_codex.stat.checksum }}
+
+    - name: Fail if a foreign unmarked Codex installation was accepted
+      ansible.builtin.fail:
+        msg: A foreign Codex installation must fail preflight.
+  rescue:
+    - name: Assert foreign Codex installation failed at marker authentication
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Authenticate existing Codex installation artifacts'
+
+- name: Read foreign Codex binary after rejection
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/foreign-essential/codex
+  register: hermes_agent_essential_foreign_codex_canary
+
+- name: Inspect foreign Codex marker after rejection
+  ansible.builtin.stat:
+    path: /usr/local/lib/codex/foreign-essential/.hermes-agent-managed.yml
+  register: hermes_agent_essential_foreign_codex_marker
+
+- name: Assert foreign Codex installation was preserved
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_essential_foreign_codex_canary.content | b64decode ==
+        'foreign-codex-binary-canary'
+      - not hermes_agent_essential_foreign_codex_marker.stat.exists
+
 - name: Reject a foreign Hermes installer destination
   block:
     - name: Apply role with a foreign Hermes installer destination

@@ -1,0 +1,96 @@
+---
+- name: Inspect versioned Codex installation directory
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir }}"
+    follow: false
+  register: hermes_agent_codex_install_directory
+  changed_when: false
+  check_mode: false
+
+- name: Inspect versioned Codex installation binary and marker
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop:
+    - "{{ hermes_agent_codex_install_dir }}/codex"
+    - "{{ hermes_agent_codex_install_dir }}/.hermes-agent-managed.yml"
+  register: hermes_agent_codex_install_artifacts
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate existing Codex installation artifacts
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        (hermes_agent_codex_install_directory.stat.isdir and
+        not hermes_agent_codex_install_directory.stat.islnk and
+        hermes_agent_codex_install_directory.stat.pw_name == 'root' and
+        hermes_agent_codex_install_directory.stat.gr_name == 'root' and
+        hermes_agent_codex_install_directory.stat.mode == '0755')
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        (hermes_agent_codex_install_artifacts.results[0].stat.isreg | default(false) and
+        not hermes_agent_codex_install_artifacts.results[0].stat.islnk | default(true) and
+        hermes_agent_codex_install_artifacts.results[0].stat.pw_name | default('') == 'root' and
+        hermes_agent_codex_install_artifacts.results[0].stat.gr_name | default('') == 'root' and
+        hermes_agent_codex_install_artifacts.results[0].stat.mode | default('') == '0755')
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        (hermes_agent_codex_install_artifacts.results[1].stat.isreg | default(false) and
+        not hermes_agent_codex_install_artifacts.results[1].stat.islnk | default(true) and
+        hermes_agent_codex_install_artifacts.results[1].stat.pw_name | default('') == 'root' and
+        hermes_agent_codex_install_artifacts.results[1].stat.gr_name | default('') == 'root' and
+        hermes_agent_codex_install_artifacts.results[1].stat.mode | default('') == '0600')
+    fail_msg: >-
+      An existing Codex installation must be a root-owned version directory
+      containing a regular executable and private role provenance marker.
+
+- name: Read existing Codex installation marker
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_codex_install_dir }}/.hermes-agent-managed.yml"
+  register: hermes_agent_codex_install_marker_raw
+  when: hermes_agent_codex_install_directory.stat.exists
+
+- name: Load existing Codex installation marker
+  ansible.builtin.set_fact:
+    hermes_agent_codex_install_marker: >-
+      {{
+        (hermes_agent_codex_install_marker_raw.content | b64decode | from_yaml)
+        if hermes_agent_codex_install_directory.stat.exists else {}
+      }}
+
+- name: Require exact existing Codex installation provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        hermes_agent_codex_install_marker is mapping
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        hermes_agent_codex_install_marker.keys() | list | sort ==
+        ['archive_sha256', 'binary_sha256', 'managed_by', 'version']
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        hermes_agent_codex_install_marker.managed_by == 'marcomc.hermes_agent'
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        hermes_agent_codex_install_marker.version == hermes_agent_codex_version
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        hermes_agent_codex_install_marker.archive_sha256 ==
+        (hermes_agent_codex_archive_checksum | regex_replace('^sha256:', '') | lower)
+      - >-
+        not hermes_agent_codex_install_directory.stat.exists or
+        (hermes_agent_codex_install_marker.binary_sha256 is match('^[a-f0-9]{64}$') and
+        hermes_agent_codex_install_marker.binary_sha256 ==
+        hermes_agent_codex_install_artifacts.results[0].stat.checksum)
+    fail_msg: >-
+      Existing Codex installation provenance must exactly bind the configured
+      version and archive SHA-256 to the installed binary SHA-256.
+
+- name: Record validated versioned Codex binary state
+  ansible.builtin.set_fact:
+    hermes_agent_codex_binary: >-
+      {{ hermes_agent_codex_install_artifacts.results[0] }}
