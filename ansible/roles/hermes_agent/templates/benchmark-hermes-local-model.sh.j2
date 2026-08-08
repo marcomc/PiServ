@@ -82,10 +82,12 @@ assert_model_test_preflight() {
     exit 70
   fi
 
+{% if hermes_agent_manage_dashboard %}
   if ! systemctl is-active --quiet {{ hermes_agent_dashboard_service_name }}; then
     printf 'Hermes dashboard is not active before the local-model test.\n' >&2
     exit 70
   fi
+{% endif %}
 }
 
 relax_limit_as() {

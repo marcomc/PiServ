@@ -172,6 +172,35 @@
         'foreign-codex-binary-canary'
       - not hermes_agent_essential_foreign_codex_marker.stat.exists
 
+- name: Reject an unsupported Hermes binary path override
+  block:
+    - name: Apply role with an unsupported Hermes binary path
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        hermes_agent_supported_architectures:
+          - "{{ ansible_facts['architecture'] }}"
+        hermes_agent_binary_path: /usr/local/bin/hermes-custom-fixture
+
+    - name: Fail if an unsupported Hermes binary path was accepted
+      ansible.builtin.fail:
+        msg: Unsupported Hermes binary paths must fail target validation.
+  rescue:
+    - name: Assert unsupported Hermes binary path failed target validation
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+- name: Inspect unsupported Hermes binary path after rejection
+  ansible.builtin.stat:
+    path: /usr/local/bin/hermes-custom-fixture
+  register: hermes_agent_essential_custom_binary_path
+
+- name: Assert unsupported Hermes binary path was not provisioned
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_essential_custom_binary_path.stat.exists
+
 - name: Reject a foreign Hermes installer destination
   block:
     - name: Apply role with a foreign Hermes installer destination

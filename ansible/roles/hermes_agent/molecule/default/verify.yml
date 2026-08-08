@@ -1506,6 +1506,15 @@
         - /root/hermes-foreign-bootstrap-target.managed.yml
       register: hermes_agent_molecule_recovered_bootstrap_artifacts
 
+    - name: Read recovered dashboard bootstrap password and auth state
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /var/lib/hermes-agent/dashboard-basic-auth.yaml
+      register: hermes_agent_molecule_recovered_bootstrap_credentials
+      no_log: true
+
     - name: Assert deleted managed dashboard bootstrap password converges
       ansible.builtin.assert:
         that:
@@ -1516,6 +1525,13 @@
           - >-
             hermes_agent_molecule_initialized_bootstrap_target.stat.checksum !=
             hermes_agent_molecule_recovered_bootstrap_artifacts.results[0].stat.checksum
+          - >-
+            (hermes_agent_molecule_recovered_bootstrap_credentials.results[1].content |
+            b64decode | from_yaml).password_hash ==
+            'fixture:' ~
+            (hermes_agent_molecule_recovered_bootstrap_credentials.results[0].content |
+            b64decode)
+      no_log: true
 
     - name: Rotate managed dashboard bootstrap password target
       ansible.builtin.include_role:

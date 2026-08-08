@@ -32,7 +32,7 @@ argument_specs:
       hermes_agent_binary_path:
         type: path
         default: /usr/local/bin/hermes
-        description: Hermes CLI path created by the upstream installer.
+        description: Fixed Hermes CLI path created by the upstream installer.
       hermes_agent_repo_version:
         type: str
         default: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
