@@ -38,6 +38,15 @@
 - [ ] Validate the managed shutdown email notification path and confirm that a planned
   `sudo systemctl reboot` sends a message with the command, requesting user,
   and UTC request time before the network is stopped.
+- [ ] Reinstate Hermes Agent role CI in the dedicated standalone role repository,
+  and keep the role local workflow intentionally disabled in PiServ until that
+  repository owns the long-term CI matrix.
+- [ ] Add a CI target that executes the dedicated `wifi_watchdog` test harness
+  (`ansible/roles/wifi_watchdog/tests/test-watchdog.sh`) so it is enforced during
+  merges and does not regress in isolation.
+- [ ] Extend Hermes/cleanup regression coverage to assert side-effect boundaries
+  (for example, daemon-reload and override teardown in the mock harness) before
+  collapsing them back to no-op coverage.
 
 ## Propositions
 

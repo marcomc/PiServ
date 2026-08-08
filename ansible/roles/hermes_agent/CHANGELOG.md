@@ -4,6 +4,11 @@ All notable changes to this role are documented here.
 
 ## [Unreleased]
 
+- GitHub CI for this role is intentionally disabled in this repository while
+  Hermes Agent remains integrated inside PiServ. Local validation remains via
+  the project playbooks; full role-level Molecule + lint CI is deferred to the
+  future standalone role repository.
+
 - Added a deployment-agnostic `essential` Molecule scenario as the nested-role
   CI gate, while retaining the exhaustive `default` lifecycle and hardening
   matrix for explicit runs and future standalone Galaxy release validation.
