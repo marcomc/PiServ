@@ -44,6 +44,9 @@
       - hermes_agent_inference_provenance_label is not search('[\r\n]')
       - hermes_agent_binary_path == '/usr/local/bin/hermes'
       - >-
+        hermes_agent_venv_state_file ==
+        hermes_agent_install_dir ~ '/.hermes-venv-managed.yml'
+      - >-
         hermes_agent_codex_archive_binary_name is
         match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
       - hermes_agent_codex_archive_binary_name != 'codex'

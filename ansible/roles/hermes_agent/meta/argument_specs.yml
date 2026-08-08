@@ -25,6 +25,9 @@ argument_specs:
         type: path
         default: /usr/local/lib/hermes-agent
         description: Root-owned Hermes source and runtime directory.
+      hermes_agent_venv_state_file:
+        type: path
+        description: Root-private provenance record for the installed virtual environment.
       hermes_agent_expected_repo_origin:
         type: str
         default: https://github.com/NousResearch/hermes-agent.git
@@ -142,7 +145,7 @@ argument_specs:
         description: Full Home Assistant Assist MCP endpoint URL.
       hermes_agent_home_assistant_mcp_token_env_file:
         type: path
-        description: Private environment file containing the Home Assistant token.
+        description: Pre-provisioned private environment file containing the Home Assistant token.
       hermes_agent_home_assistant_mcp_token_env_var:
         type: str
         default: HASS_MCP_TOKEN

@@ -115,6 +115,7 @@
       - "{{ hermes_agent_binary_path }}"
       - "{{ hermes_agent_installer_path }}"
       - "{{ hermes_agent_installer_path }}.inference-provenance.yml"
+      - "{{ hermes_agent_venv_state_file }}"
       - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
       - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
       - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"

@@ -58,6 +58,7 @@
         - /var/lib/hermes-agent/plugins/inference-provenance/plugin.yaml
         - /var/lib/hermes-agent/plugins/inference-provenance/__init__.py
         - /usr/local/libexec/hermes-agent-installer.inference-provenance.yml
+        - /usr/local/lib/hermes-agent/.hermes-venv-managed.yml
         - /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
         - /etc/systemd/system/hermes-agent-dashboard.service
         - /etc/systemd/system/hermes-agent-backup.timer

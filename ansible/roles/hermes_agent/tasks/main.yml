@@ -54,6 +54,9 @@
   vars:
     hermes_agent_runtime_user_phase: mutate
 
+- name: Validate the operator-provisioned Home Assistant MCP token
+  ansible.builtin.import_tasks: validate-home-assistant-mcp-token.yml
+
 - name: Install pinned Hermes Agent runtime
   ansible.builtin.import_tasks: install-hermes.yml
 

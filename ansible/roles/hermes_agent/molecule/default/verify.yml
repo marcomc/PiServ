@@ -2678,6 +2678,23 @@
             hermes_agent_molecule_foreign_provenance_plugin.content |
             b64decode == 'foreign operator plugin'
 
+    - name: Pre-provision Home Assistant MCP token parent
+      ansible.builtin.file:
+        path: /var/lib/hermes-agent/mcp-token-fixture
+        state: directory
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0700"
+
+    - name: Pre-provision Home Assistant MCP token
+      ansible.builtin.copy:
+        content: "HASS_MCP_TOKEN=fixture-token\n"
+        dest: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+      no_log: true
+
     - name: Enable Home Assistant MCP in the fixture
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
@@ -2774,7 +2791,9 @@
         - name: Assert existing system token parent failed before mutation
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Require a safe Home Assistant MCP token parent'
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
 
     - name: Inspect existing system Home Assistant MCP token parent
       ansible.builtin.stat:
@@ -2832,7 +2851,9 @@
         - name: Assert foreign token file failed before mutation
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Require a regular Home Assistant MCP token file'
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
 
     - name: Inspect foreign Home Assistant MCP token file after rejection
       ansible.builtin.stat:
@@ -2859,6 +2880,15 @@
       ansible.builtin.file:
         path: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
         state: absent
+
+    - name: Restore valid Home Assistant MCP token fixture
+      ansible.builtin.copy:
+        content: "HASS_MCP_TOKEN=fixture-token\n"
+        dest: /var/lib/hermes-agent/mcp-token-fixture/home-assistant-mcp.env
+        owner: hermes-agent
+        group: hermes-agent
+        mode: "0600"
+      no_log: true
 
     - name: Create Home Assistant MCP token-parent symlink fixture
       ansible.builtin.file:
@@ -2897,7 +2927,9 @@
         - name: Assert Home Assistant MCP token-parent symlink failed preflight
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Require a safe Home Assistant MCP token parent'
+              - >-
+                ansible_failed_task.name ==
+                'Require a private operator-provisioned Home Assistant MCP token file'
 
         - name: Record rejection of Home Assistant MCP token-parent symlink
           ansible.builtin.set_fact:
