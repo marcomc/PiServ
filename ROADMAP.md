@@ -26,7 +26,7 @@ work is recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.0 Hermes Smart Home
 
-**Status:** In progress
+**Status:** Complete
 
 **Outcome:** Hermes can inspect and operate an explicitly approved smart-home
 surface through Home Assistant, while Apple Home remains part of the same
@@ -66,8 +66,9 @@ The acceptance harness is implemented in
 with the procedure documented in
 [`docs/runbooks/hermes-home-apple-home.md`](docs/runbooks/hermes-home-apple-home.md).
 The acceptance run passed before and after a Hermes dashboard restart on
-2026-08-08. Remaining release gates are the Assist exposure-policy review,
-backup-restore revalidation, and the selected Apple Home and Siri coverage.
+2026-08-08. The backup/import proof, Assist policy review, Apple Home-only
+observation, and manual Siri control check also passed. Advanced climate
+controls remain a separate allowlisted MCP-extension proposition.
 
 ## Later Releases
 

@@ -4,6 +4,14 @@
 
 ### Hermes Home Assistant and Apple Home
 
+- Activated the PiServ Hermes smart-home policy with protected mode,
+  activity-scoped autonomy, and confirmation for critical physical actions.
+- Validated an isolated Hermes backup/import MCP proof and a reversible
+  Home Assistant-to-Apple Home acceptance cycle with the policy active.
+- Confirmed manual Siri control and read-only observation of an Apple Home-only
+  accessory; documented that advanced climate controls require a future
+  allowlisted MCP extension.
+
 - Added a Mac-side acceptance harness that drives Hermes through its SSH CLI,
   verifies Home Assistant and Apple Home convergence through HomeClaw, restores
   reversible test entities, and writes local text and JSON reports.

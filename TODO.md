@@ -113,25 +113,18 @@
       requires earlier action. Then pin the release and repeat the production
       dependency audit before enabling it.
 
-- [ ] **Complete Hermes smart-home control through Home Assistant and Apple Home**
+- [ ] **Add allowlisted advanced climate controls to Hermes Home Assistant MCP**
   - Priority: **High**
-  - Assessment: Hermes already reaches Home Assistant through the official MCP
-    server and Assist exposure policy. The local acceptance harness passed a
-    reversible Hermes to Home Assistant to Apple Home cycle before and after a
-    dashboard restart. The next release should complete the remaining policy,
-    backup-restore, and Apple Home/Siri gates.
+  - Assessment: Hermes reaches Home Assistant through the official MCP and the
+    Assist exposure policy. The 0.5.0 acceptance harness passed a reversible
+    Hermes-to-Home Assistant-to-Apple Home cycle, backup/import proof, and
+    manual Siri verification. The stock MCP exposes climate temperature only;
+    HVAC mode, fan mode, and swing mode need a scoped extension.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Revalidate Hermes-to-Home Assistant MCP authentication, tool discovery,
-      state reads, and reversible writes after backup restore with a
-      non-model-dependent restore probe.
-    - Define and review the Home Assistant Assist exposure policy for the full
-      desired operation surface; keep security-critical actions confirmation-
-      gated even when activity-scoped autonomy is granted.
-    - Configure and validate Home Assistant's HomeKit Bridge for the selected
-      entities, then verify Apple Home and Siri reflect the resulting states.
-    - Keep direct Apple Home control through HomeClaw in a later release; use
-      SSH or authenticated Tailnet Supergateway only after a separate decision.
+    - Design an MCP extension limited to approved `climate` entities and the
+      supported HVAC, fan, and swing values.
+    - Preserve confirmation and audit policy for every write.
 
 - [ ] **Connect Hermes to Omar Shahine's HomeClaw MCP through SSH**
   - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)
