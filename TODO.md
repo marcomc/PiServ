@@ -35,7 +35,7 @@
 - When APT offers a WayVNC version newer than `0.9.1-1+rpt5`, run the
   three-restart acceptance test in the VNC runbook. Remove this item only if
   all restarts avoid `SIGSEGV`, `DSI-1` remains active, and VNC TCP is healthy.
-- Deploy the managed shutdown email notification and validate that a planned
+- [ ] Validate the managed shutdown email notification path and confirm that a planned
   `sudo systemctl reboot` sends a message with the command, requesting user,
   and UTC request time before the network is stopped.
 
