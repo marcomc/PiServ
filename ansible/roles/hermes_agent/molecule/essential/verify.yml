@@ -95,5 +95,78 @@
             hermes_agent_essential_local_model_artifacts.results |
             selectattr('stat.exists') | list | length == 0
 
+    - name: Create essential benchmark authorization mock directory
+      ansible.builtin.file:
+        path: /usr/local/lib/hermes-essential-benchmark-mocks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install permissive essential benchmark systemctl mock
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> /tmp/hermes-essential-benchmark-systemctl.log
+          exit 0
+        dest: /usr/local/lib/hermes-essential-benchmark-mocks/systemctl
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render essential benchmark authorization helper
+      ansible.builtin.template:
+        src: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+          }}/templates/benchmark-hermes-local-model.sh.j2
+        dest: /usr/local/lib/hermes-essential-benchmark-helper
+        owner: root
+        group: root
+        mode: "0755"
+      vars:
+        hermes_agent_local_models:
+          - id: configured-essential
+        hermes_agent_local_models_host: 127.0.0.1
+        hermes_agent_local_models_results_dir: /var/lib/hermes-models/results
+        hermes_agent_local_models_benchmark_max_tokens: 64
+        hermes_agent_local_models_benchmark_request_timeout: 120
+        hermes_agent_manage_dashboard: false
+        hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
+        hermes_agent_dashboard_host: 127.0.0.1
+        hermes_agent_dashboard_port: 9119
+
+    - name: ShellCheck essential benchmark authorization helper
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - /usr/local/lib/hermes-essential-benchmark-helper
+      changed_when: false
+
+    - name: Reject unconfigured essential benchmark model
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-essential-benchmark-helper
+          - foreign-stale
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-essential-benchmark-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      register: hermes_agent_essential_foreign_benchmark
+      changed_when: false
+      failed_when: >-
+        hermes_agent_essential_foreign_benchmark.rc != 64 or
+        'Unknown configured local model: foreign-stale' not in
+        hermes_agent_essential_foreign_benchmark.stderr
+
+    - name: Inspect essential benchmark systemctl invocation log
+      ansible.builtin.stat:
+        path: /tmp/hermes-essential-benchmark-systemctl.log
+      register: hermes_agent_essential_benchmark_systemctl_log
+
+    - name: Assert unconfigured benchmark model caused no systemd operation
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_essential_benchmark_systemctl_log.stat.exists
+
     - name: Verify essential fail-before-mutation boundaries
       ansible.builtin.include_tasks: tasks/preflight-safety.yml

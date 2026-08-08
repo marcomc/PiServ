@@ -2079,6 +2079,7 @@
       loop:
         - /tmp/hermes-benchmark-active-systemctl.log
         - /tmp/hermes-benchmark-started-systemctl.log
+        - /tmp/hermes-benchmark-foreign-systemctl.log
 
     - name: ShellCheck rendered benchmark cleanup helper
       ansible.builtin.command:
@@ -2087,6 +2088,33 @@
           - --enable=all
           - /usr/local/lib/hermes-benchmark-cleanup-regression
       changed_when: false
+
+    - name: Reject an installed but unconfigured local-model unit
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/hermes-benchmark-cleanup-regression
+          - foreign-stale
+      environment:
+        PATH: >-
+          /usr/local/lib/hermes-benchmark-cleanup-mocks:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        MOCK_MODEL_ACTIVE: "false"
+        MOCK_SYSTEMCTL_LOG: /tmp/hermes-benchmark-foreign-systemctl.log
+      register: hermes_agent_molecule_benchmark_foreign_rejection
+      changed_when: false
+      failed_when: >-
+        hermes_agent_molecule_benchmark_foreign_rejection.rc != 64 or
+        'Unknown configured local model: foreign-stale' not in
+        hermes_agent_molecule_benchmark_foreign_rejection.stderr
+
+    - name: Inspect foreign-model benchmark systemctl log
+      ansible.builtin.stat:
+        path: /tmp/hermes-benchmark-foreign-systemctl.log
+      register: hermes_agent_molecule_benchmark_foreign_log
+
+    - name: Assert foreign local-model unit was never operated
+      ansible.builtin.assert:
+        that:
+          - not hermes_agent_molecule_benchmark_foreign_log.stat.exists
 
     - name: Exercise benchmark rejection with an already active model
       ansible.builtin.command:

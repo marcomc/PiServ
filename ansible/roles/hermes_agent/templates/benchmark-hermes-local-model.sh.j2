@@ -19,6 +19,16 @@ if [[ ! "${model_id}" =~ ^[a-z0-9-]+$ ]]; then
   exit 64
 fi
 
+case "${model_id}" in
+{% for model in hermes_agent_local_models %}
+  {{ model.id }}) ;;
+{% endfor %}
+  *)
+    printf 'Unknown configured local model: %s\n' "${model_id}" >&2
+    exit 64
+    ;;
+esac
+
 service_name="hermes-local-model-${model_id}.service"
 if ! systemctl cat "${service_name}" >/dev/null; then
   printf 'Unknown configured local model: %s\n' "${model_id}" >&2
