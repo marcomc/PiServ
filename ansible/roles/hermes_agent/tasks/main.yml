@@ -42,17 +42,20 @@
   vars:
     hermes_agent_runtime_user_phase: preflight
 
+- name: Configure Hermes Agent runtime identity
+  ansible.builtin.include_tasks: runtime-user.yml
+  vars:
+    hermes_agent_runtime_user_phase: mutate
+
+- name: Validate Hermes Agent runtime access to backup storage
+  ansible.builtin.include_tasks: validate-backup-access.yml
+
 - name: Install Hermes Agent system packages
   ansible.builtin.apt:
     name: "{{ hermes_agent_packages }}"
     state: present
     update_cache: true
     cache_valid_time: 3600
-
-- name: Configure Hermes Agent runtime identity
-  ansible.builtin.include_tasks: runtime-user.yml
-  vars:
-    hermes_agent_runtime_user_phase: mutate
 
 - name: Validate the operator-provisioned Home Assistant MCP token
   ansible.builtin.import_tasks: validate-home-assistant-mcp-token.yml

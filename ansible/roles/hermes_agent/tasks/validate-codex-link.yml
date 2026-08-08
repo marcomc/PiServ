@@ -81,6 +81,9 @@
     - "{{ hermes_agent_uv_python_install_dir }}"
     - "{{ hermes_agent_uv_python_bin_dir }}"
     - "{{ hermes_agent_backup_dir }}"
+    - >-
+      {{ hermes_agent_codex_install_dir | dirname
+      }}.hermes-agent-staging
   register: hermes_agent_codex_other_managed_root_identities
   changed_when: false
   check_mode: false
@@ -134,6 +137,7 @@
       - "{{ hermes_agent_local_model_runtime_managed_state_file }}"
       - "{{ hermes_agent_local_model_llama_cli_managed_state_file }}"
       - "{{ hermes_agent_local_model_llama_server_managed_state_file }}"
+      - "{{ hermes_agent_home }}/.env"
       - "{{ hermes_agent_home }}/config.yaml"
       - >-
         {{ hermes_agent_home }}/plugins/{{
@@ -146,9 +150,16 @@
       - "/etc/systemd/system/{{ hermes_agent_backup_timer_name }}"
       - "{{ hermes_agent_download_cache_dir }}/.hermes-agent-managed.yml"
       - >-
+        {{ hermes_agent_codex_install_dir | dirname
+        }}/.hermes-agent-managed.yml
+      - >-
+        {{ hermes_agent_codex_install_dir | dirname
+        }}.hermes-agent-staging.intent.yml
+      - >-
         {{ hermes_agent_download_cache_dir }}/codex-{{
         hermes_agent_codex_version }}-aarch64-linux.tar.gz
       - "{{ hermes_agent_codex_install_dir }}/codex"
+      - "{{ hermes_agent_codex_install_dir }}/.hermes-agent-managed.yml"
 
 - name: Add configured local-model unit output files
   ansible.builtin.set_fact:
@@ -190,6 +201,48 @@
     combinations(2) | list }}
   loop_control:
     label: "{{ item.0.item }} != {{ item.1.item }}"
+
+- name: Reject Codex parent staging aliases with managed roots
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout !=
+        item.stdout
+      - >-
+        not hermes_agent_codex_other_managed_root_identities.results[-1].stdout.startswith(
+        item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout ~ '/')
+    fail_msg: >-
+      Codex parent publication staging must not equal, contain, or reside
+      beneath another configurable managed root.
+  loop: "{{ hermes_agent_codex_other_managed_root_identities.results[:-1] }}"
+  loop_control:
+    label: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+      != {{ item.item }}
+
+- name: Reject Codex parent staging aliases with managed outputs
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout !=
+        item.stdout
+      - >-
+        not hermes_agent_codex_other_managed_root_identities.results[-1].stdout.startswith(
+        item.stdout ~ '/')
+      - >-
+        not item.stdout.startswith(
+        hermes_agent_codex_other_managed_root_identities.results[-1].stdout ~ '/')
+    fail_msg: >-
+      Codex parent publication staging must not equal, contain, or reside
+      beneath a configurable managed output.
+  loop: "{{ hermes_agent_codex_other_managed_output_identities.results }}"
+  loop_control:
+    label: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+      != {{ item.item }}
 
 - name: Require canonical Codex link parent
   ansible.builtin.assert:
@@ -236,6 +289,44 @@
   register: hermes_agent_codex_other_managed_output_states
   changed_when: false
   check_mode: false
+
+- name: Inspect Codex parent staging root
+  ansible.builtin.stat:
+    path: >-
+      {{ hermes_agent_codex_other_managed_root_identities.results[-1].item }}
+    follow: false
+  register: hermes_agent_codex_parent_staging_root_state
+  changed_when: false
+  check_mode: false
+
+- name: Inspect every other managed root for staging inode aliases
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{
+      hermes_agent_codex_other_managed_root_identities.results[:-1] |
+      map(attribute='item') | list +
+      hermes_agent_codex_other_managed_outputs
+    }}
+  register: hermes_agent_codex_other_root_and_output_states
+  changed_when: false
+  check_mode: false
+
+- name: Reject Codex parent staging inode aliases
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_parent_staging_root_state.stat.exists or
+        not item.stat.exists or
+        hermes_agent_codex_parent_staging_root_state.stat.dev != item.stat.dev or
+        hermes_agent_codex_parent_staging_root_state.stat.inode != item.stat.inode
+    fail_msg: >-
+      Existing Codex parent publication staging must not alias another managed
+      root or output inode.
+  loop: "{{ hermes_agent_codex_other_root_and_output_states.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: Reject inode aliases between configurable managed outputs
   ansible.builtin.assert:

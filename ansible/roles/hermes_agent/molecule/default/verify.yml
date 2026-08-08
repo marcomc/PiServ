@@ -743,6 +743,58 @@
             hermes_agent_molecule_codex_collision_outputs.results[0].stat.inode ==
             hermes_agent_molecule_codex_collision_outputs.results[1].stat.inode
 
+    - name: Remove stale Hermes environment hard-link fixture
+      ansible.builtin.file:
+        path: /usr/local/bin/hermes-env-hardlink-fixture
+        state: absent
+
+    - name: Create Hermes environment hard-link collision fixture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/ln
+          - "{{ hermes_agent_home }}/.env"
+          - /usr/local/bin/hermes-env-hardlink-fixture
+      changed_when: true
+
+    - name: Reject Hermes environment hard-link collision fixture
+      block:
+        - name: Validate Hermes environment hard-link collision fixture
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-codex-link.yml"
+          vars:
+            hermes_agent_dashboard_service_managed_state_file: >-
+              /usr/local/bin/hermes-env-hardlink-fixture
+
+        - name: Fail if the environment hard-link collision was accepted
+          ansible.builtin.fail:
+            msg: Hermes environment hard-link aliases must fail preflight.
+      rescue:
+        - name: Assert environment hard-link failed inode validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject inode aliases between configurable managed outputs'
+
+    - name: Inspect Hermes environment hard-link collision outputs
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ hermes_agent_home }}/.env"
+        - /usr/local/bin/hermes-env-hardlink-fixture
+      register: hermes_agent_molecule_environment_collision_outputs
+
+    - name: Assert Hermes environment hard-link collision was preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_environment_collision_outputs.results[0].stat.checksum ==
+            hermes_agent_molecule_environment_collision_outputs.results[1].stat.checksum
+          - >-
+            hermes_agent_molecule_environment_collision_outputs.results[0].stat.inode ==
+            hermes_agent_molecule_environment_collision_outputs.results[1].stat.inode
+
     - name: Create real Codex target behind a symlinked version directory
       ansible.builtin.file:
         path: /usr/local/lib/codex/real-symlink-version-fixture

@@ -56,6 +56,27 @@
             ansible_failed_task.name ==
             'Reject canonical aliases between configurable managed outputs'
 
+- name: Reject the Hermes environment path aliased to another managed output
+  block:
+    - name: Validate a direct Hermes environment output collision
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: validate-codex-link.yml
+      vars:
+        hermes_agent_dashboard_service_managed_state_file: >-
+          {{ hermes_agent_home }}/.env
+
+    - name: Fail if the Hermes environment output collision was accepted
+      ansible.builtin.fail:
+        msg: The Hermes environment file must be a distinct managed output.
+  rescue:
+    - name: Assert the environment collision failed during preflight
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Reject canonical aliases between configurable managed outputs'
+
 - name: Corrupt the installed Hermes virtual environment
   ansible.builtin.copy:
     content: unauthenticated virtual environment fixture
@@ -119,6 +140,19 @@
     src: /usr/local/lib/codex/0.145.0/.hermes-agent-managed.yml
   register: hermes_agent_essential_codex_install_marker_raw
 
+- name: Inspect recognized Codex installation parent and provenance
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/lib/codex
+    - /usr/local/lib/codex/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_parent_artifacts
+
+- name: Read recognized Codex installation parent provenance
+  ansible.builtin.slurp:
+    src: /usr/local/lib/codex/.hermes-agent-managed.yml
+  register: hermes_agent_essential_codex_parent_marker_raw
+
 - name: Assert installed Codex provenance binds its binary
   ansible.builtin.assert:
     that:
@@ -134,6 +168,21 @@
         (hermes_agent_essential_codex_install_marker_raw.content |
         b64decode | from_yaml).archive_sha256 ==
         hermes_agent_essential_fixture_codex.stat.checksum
+      - hermes_agent_essential_codex_parent_artifacts.results[0].stat.isdir
+      - hermes_agent_essential_codex_parent_artifacts.results[0].stat.mode == '0755'
+      - hermes_agent_essential_codex_parent_artifacts.results[1].stat.isreg
+      - hermes_agent_essential_codex_parent_artifacts.results[1].stat.mode == '0600'
+      - >-
+        (hermes_agent_essential_codex_parent_marker_raw.content |
+        b64decode | from_yaml) ==
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'path': '/usr/local/lib/codex',
+          'version': 1
+        }
+
+- name: Verify Codex parent publication recovery and marker topology
+  ansible.builtin.include_tasks: codex-parent-publication.yml
 
 - name: Reject a missing configured backup group
   block:
@@ -193,6 +242,9 @@
         hermes_agent_essential_missing_backup_identity_canaries.results |
         selectattr('rc', 'equalto', 0) | list | length == 0
       - not hermes_agent_essential_missing_backup_installer_canary.stat.exists
+
+- name: Verify inaccessible backup storage fails before publication
+  ansible.builtin.include_tasks: inaccessible-backup.yml
 
 - name: Create foreign unmarked Codex installation fixture
   ansible.builtin.file:

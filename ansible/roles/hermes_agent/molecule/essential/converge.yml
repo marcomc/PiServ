@@ -8,6 +8,14 @@
     - name: Load shared fixture variables
       ansible.builtin.include_tasks: ../default/tasks/fixture-vars.yml
 
+    - name: Make essential backup parent writable by its configured group
+      ansible.builtin.file:
+        path: /var/backups
+        state: directory
+        owner: root
+        group: root
+        mode: "0770"
+
   tasks:
     - name: Include tested role
       ansible.builtin.include_role:

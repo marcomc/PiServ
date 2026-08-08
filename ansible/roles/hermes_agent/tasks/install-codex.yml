@@ -31,13 +31,96 @@
     mode: "0644"
   when: not ansible_check_mode
 
-- name: Create Codex installation parent directory
+- name: Record Codex installation parent publication intent
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'path': hermes_agent_codex_install_dir | dirname,
+          'staging_path': hermes_agent_codex_install_parent_staging_path,
+          'version': 1
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: "{{ hermes_agent_codex_install_parent_intent_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_install_parent.stat.exists
+    - not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists
+
+- name: Remove interrupted Codex installation parent staging directory
   ansible.builtin.file:
-    path: "{{ hermes_agent_codex_install_dir | dirname }}"
+    path: "{{ hermes_agent_codex_install_parent_staging_path }}"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - hermes_agent_codex_install_parent_publication_state.results[0].stat.exists
+
+- name: Create private Codex installation parent staging directory
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_parent_staging_path }}"
     state: directory
     owner: root
     group: root
+    mode: "0700"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_install_parent.stat.exists
+
+- name: Record Codex installation parent ownership
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'managed_by': 'marcomc.hermes_agent',
+          'path': hermes_agent_codex_install_dir | dirname,
+          'version': 1
+        } | to_nice_yaml(indent=2)
+      }}
+    dest: >-
+      {{ hermes_agent_codex_install_parent_staging_path
+      }}/.hermes-agent-managed.yml
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_install_parent.stat.exists
+
+- name: Set published Codex installation parent metadata in staging
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_parent_staging_path }}"
+    owner: root
+    group: root
     mode: "0755"
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_install_parent.stat.exists
+
+- name: Publish Codex installation parent atomically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - -T
+      - "{{ hermes_agent_codex_install_parent_staging_path }}"
+      - "{{ hermes_agent_codex_install_dir | dirname }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not hermes_agent_codex_install_parent.stat.exists
+
+- name: Remove completed Codex installation parent publication intent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_codex_install_parent_intent_path }}"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - >-
+      not hermes_agent_codex_install_parent.stat.exists or
+      hermes_agent_codex_install_parent_publication_state.results[1].stat.exists
 
 - name: Create temporary Codex installation directory
   ansible.builtin.tempfile:

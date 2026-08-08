@@ -1,4 +1,187 @@
 ---
+- name: Resolve Codex installation parent through existing parents
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - --canonicalize-missing
+      - "{{ hermes_agent_codex_install_dir | dirname }}"
+  register: hermes_agent_codex_install_parent_identity
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Codex installation parent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_codex_install_dir | dirname }}"
+    follow: false
+  register: hermes_agent_codex_install_parent
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Codex installation parent provenance
+  ansible.builtin.stat:
+    path: >-
+      {{ hermes_agent_codex_install_dir | dirname
+      }}/.hermes-agent-managed.yml
+    follow: false
+  register: hermes_agent_codex_install_parent_marker
+  changed_when: false
+  check_mode: false
+
+- name: Define Codex installation parent publication paths
+  ansible.builtin.set_fact:
+    hermes_agent_codex_install_parent_staging_path: >-
+      {{ hermes_agent_codex_install_dir | dirname }}.hermes-agent-staging
+    hermes_agent_codex_install_parent_intent_path: >-
+      {{ hermes_agent_codex_install_dir | dirname
+      }}.hermes-agent-staging.intent.yml
+
+- name: Inspect Codex installation parent publication state
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_codex_install_parent_staging_path }}"
+    - "{{ hermes_agent_codex_install_parent_intent_path }}"
+  register: hermes_agent_codex_install_parent_publication_state
+  changed_when: false
+  check_mode: false
+
+- name: Require safe Codex installation parent publication state
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[0].stat.exists or
+        (hermes_agent_codex_install_parent_publication_state.results[0].stat.isdir and
+        not hermes_agent_codex_install_parent_publication_state.results[0].stat.islnk and
+        hermes_agent_codex_install_parent_publication_state.results[0].stat.pw_name == 'root' and
+        hermes_agent_codex_install_parent_publication_state.results[0].stat.gr_name == 'root' and
+        hermes_agent_codex_install_parent_publication_state.results[0].stat.mode is
+        match('^0?7(00|55)$'))
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        (hermes_agent_codex_install_parent_publication_state.results[1].stat.isreg and
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.islnk and
+        hermes_agent_codex_install_parent_publication_state.results[1].stat.pw_name == 'root' and
+        hermes_agent_codex_install_parent_publication_state.results[1].stat.gr_name == 'root' and
+        hermes_agent_codex_install_parent_publication_state.results[1].stat.mode == '0600')
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[0].stat.exists or
+        hermes_agent_codex_install_parent_publication_state.results[1].stat.exists
+    fail_msg: >-
+      Codex parent staging is recoverable only with its private role-owned
+      publication intent.
+
+- name: Read Codex installation parent publication intent
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_codex_install_parent_intent_path }}"
+  register: hermes_agent_codex_install_parent_intent_raw
+  when: hermes_agent_codex_install_parent_publication_state.results[1].stat.exists
+
+- name: Load Codex installation parent publication intent
+  ansible.builtin.set_fact:
+    hermes_agent_codex_install_parent_intent: >-
+      {{
+        (hermes_agent_codex_install_parent_intent_raw.content |
+        b64decode | from_yaml)
+        if hermes_agent_codex_install_parent_publication_state.results[1].stat.exists
+        else {}
+      }}
+
+- name: Authenticate Codex installation parent publication intent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_codex_install_parent_intent is mapping
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        hermes_agent_codex_install_parent_intent.keys() | list | sort ==
+        ['managed_by', 'path', 'staging_path', 'version']
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        hermes_agent_codex_install_parent_intent.managed_by ==
+        'marcomc.hermes_agent'
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        hermes_agent_codex_install_parent_intent.path ==
+        hermes_agent_codex_install_dir | dirname
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        hermes_agent_codex_install_parent_intent.staging_path ==
+        hermes_agent_codex_install_parent_staging_path
+      - >-
+        not hermes_agent_codex_install_parent_publication_state.results[1].stat.exists or
+        hermes_agent_codex_install_parent_intent.version == 1
+    fail_msg: >-
+      Codex parent publication intent must exactly authenticate the configured
+      final and staging paths.
+
+- name: Require absent or safe canonical Codex installation parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_codex_install_parent_identity.stdout ==
+        hermes_agent_codex_install_dir | dirname
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        (hermes_agent_codex_install_parent.stat.isdir and
+        not hermes_agent_codex_install_parent.stat.islnk and
+        hermes_agent_codex_install_parent.stat.pw_name == 'root' and
+        hermes_agent_codex_install_parent.stat.gr_name == 'root' and
+        hermes_agent_codex_install_parent.stat.mode is
+        match('^0?[0-7][0-5][0-5]$'))
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        (hermes_agent_codex_install_parent_marker.stat.isreg | default(false) and
+        not hermes_agent_codex_install_parent_marker.stat.islnk | default(true) and
+        hermes_agent_codex_install_parent_marker.stat.pw_name | default('') == 'root' and
+        hermes_agent_codex_install_parent_marker.stat.gr_name | default('') == 'root' and
+        hermes_agent_codex_install_parent_marker.stat.mode | default('') == '0600')
+    fail_msg: >-
+      An existing Codex installation parent must be a canonical, root-owned,
+      non-symlink directory without group or other write access and carry
+      private role provenance.
+
+- name: Read existing Codex installation parent provenance
+  ansible.builtin.slurp:
+    src: >-
+      {{ hermes_agent_codex_install_dir | dirname
+      }}/.hermes-agent-managed.yml
+  register: hermes_agent_codex_install_parent_marker_raw
+  when: hermes_agent_codex_install_parent.stat.exists
+
+- name: Load existing Codex installation parent provenance
+  ansible.builtin.set_fact:
+    hermes_agent_codex_install_parent_marker_data: >-
+      {{
+        (hermes_agent_codex_install_parent_marker_raw.content |
+        b64decode | from_yaml)
+        if hermes_agent_codex_install_parent.stat.exists else {}
+      }}
+
+- name: Authenticate existing Codex installation parent provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        hermes_agent_codex_install_parent_marker_data is mapping
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        hermes_agent_codex_install_parent_marker_data.keys() | list | sort ==
+        ['managed_by', 'path', 'version']
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        hermes_agent_codex_install_parent_marker_data.managed_by ==
+        'marcomc.hermes_agent'
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        hermes_agent_codex_install_parent_marker_data.path ==
+        hermes_agent_codex_install_dir | dirname
+      - >-
+        not hermes_agent_codex_install_parent.stat.exists or
+        hermes_agent_codex_install_parent_marker_data.version == 1
+    fail_msg: >-
+      Existing Codex installation parent provenance must exactly identify the
+      configured canonical parent as owned by this role.
+
 - name: Inspect versioned Codex installation directory
   ansible.builtin.stat:
     path: "{{ hermes_agent_codex_install_dir }}"
