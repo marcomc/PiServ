@@ -17,13 +17,19 @@
                 f'runtime process lacks backup group {backup_group!r}'
             )
 
-        target = backup_path if os.path.exists(backup_path) else backup_parent
-        target_kind = 'backup directory' if target == backup_path else 'parent'
+        backup_dir_exists = os.path.isdir(backup_path)
+        target_kind = 'backup directory' if backup_dir_exists else 'parent directory'
+        target = backup_path if backup_dir_exists else backup_parent
+
         if not os.path.isdir(target):
             raise SystemExit(f'{target_kind} is not an existing directory: {target}')
-        if not os.access(target, os.X_OK | os.W_OK):
+
+        # When the backup directory is already present, require write and execute.
+        # When it will be created by the role, require only parent traversal.
+        required_access = os.X_OK | os.W_OK if backup_dir_exists else os.X_OK
+        if not os.access(target, required_access):
             raise SystemExit(
-                f'runtime process cannot traverse and write {target_kind}: {target}'
+                f'runtime process cannot access {target_kind}: {target}'
             )
       - "{{ hermes_agent_backup_dir }}"
       - "{{ hermes_agent_backup_dir | dirname }}"
