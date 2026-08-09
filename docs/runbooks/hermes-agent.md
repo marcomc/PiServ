@@ -34,9 +34,9 @@ Live state observed on 2026-07-31:
 | Persistent data | `/var/lib/hermes-agent`, mode `0700` |
 | Codex CLI | `0.145.0`, official ARM64 archive with SHA-256 verification |
 | Provider | `openai-codex`, authenticated through ChatGPT device authorization |
-| Enabled toolsets | `memory`, `skills` |
-| Write gates | Memory and skill writes require approval |
-| Disabled toolsets | Terminal, file, browser, code execution, Home Assistant, and all other bundled toolsets |
+| Enabled toolsets | `memory`, `skills`, `terminal` |
+| Write gates | Memory and skill writes require approval; smart-home writes follow the managed activity policy |
+| Disabled toolsets | File, browser, code execution, built-in Home Assistant, and all other bundled toolsets |
 | Dashboard | Authenticated on LAN and Tailnet, port `9119` |
 | Dashboard chat | Prebuilt terminal UI bundle; no runtime `npm install` |
 | Backups | Daily full archive on `/mnt/external-data/backups/hermes-agent` |
@@ -54,6 +54,11 @@ in 22 seconds without an API key.
 The pinned upstream revision contains a tracked, process-specific
 `.lazy-refresh-incomplete` marker. The role removes it after installation so
 the unprivileged runtime does not attempt package repair on every command.
+
+For smart-home work, the PiServ policy directs the terminal tool to the
+root-owned `/usr/local/bin/hass-cli` wrapper. It is the primary Home Assistant
+REST and WebSocket control path; the configured Assist MCP remains a secondary
+discovery and verification path.
 
 ## Planned Inference Routing
 

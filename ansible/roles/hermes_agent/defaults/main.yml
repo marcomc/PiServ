@@ -52,6 +52,7 @@ hermes_agent_enabled_toolsets:
   - memory
   - skills
 hermes_agent_disabled_toolsets:
+  - bfl
   - browser
   - clarify
   - code_execution

@@ -4,7 +4,15 @@
     that:
       - homeassistant_cli_runtime_user | length > 0
       - homeassistant_cli_runtime_group | length > 0
+      - >-
+        homeassistant_cli_install_dir is match(
+          '^/usr/local/lib/homeassistant-cli(-[A-Za-z0-9._-]+)?$'
+        )
+      - homeassistant_cli_venv_path == homeassistant_cli_install_dir + '/venv'
+      - homeassistant_cli_binary_path == homeassistant_cli_venv_path + '/bin/hass-cli'
+      - homeassistant_cli_wrapper_path is match('^/usr/local/bin/[A-Za-z0-9._-]+$')
       - homeassistant_cli_server is match('^https?://[^ ]+$')
+      - homeassistant_cli_token_env_file is match('^/\\S+$')
       - homeassistant_cli_token_env_file | length > 0
       - homeassistant_cli_token_env_var is match('^[A-Z_][A-Z0-9_]*$')
       - homeassistant_cli_expected_python is match('^[0-9]+\\.[0-9]+$')
@@ -87,21 +95,43 @@
     creates: "{{ homeassistant_cli_venv_path }}/bin/python"
   become: true
 
-- name: Assign Home Assistant CLI virtualenv to runtime user
+- name: Protect Home Assistant CLI virtualenv
   ansible.builtin.file:
     path: "{{ homeassistant_cli_venv_path }}"
     state: directory
-    owner: "{{ homeassistant_cli_runtime_user }}"
-    group: "{{ homeassistant_cli_runtime_group }}"
-    recurse: true
-  become: true
-
-- name: Set Home Assistant CLI virtualenv root mode
-  ansible.builtin.file:
-    path: "{{ homeassistant_cli_venv_path }}"
-    state: directory
+    owner: root
+    group: root
     mode: "0755"
   become: true
+
+- name: Find Home Assistant CLI virtualenv files not owned by root
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ homeassistant_cli_venv_path }}"
+      - -xdev
+      - "("
+      - '!'
+      - -user
+      - root
+      - -o
+      - '!'
+      - -group
+      - root
+      - ")"
+      - -print
+      - -quit
+  register: homeassistant_cli_nonroot_venv_paths
+  changed_when: false
+  check_mode: false
+
+- name: Require a root-owned Home Assistant CLI virtualenv
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_nonroot_venv_paths.stdout | trim == ''
+    fail_msg: >-
+      Home Assistant CLI virtualenv contains files not owned by root and must
+      be repaired by an explicit migration.
 
 - name: Install pinned Home Assistant CLI package
   ansible.builtin.command:
@@ -113,9 +143,6 @@
       - --disable-pip-version-check
       - "{{ homeassistant_cli_package }}"
   become: true
-  become_user: "{{ homeassistant_cli_runtime_user }}"
-  environment:
-    HOME: "{{ homeassistant_cli_runtime_user_home }}"
   register: homeassistant_cli_package_install
   changed_when: >-
     'Successfully installed' in homeassistant_cli_package_install.stdout

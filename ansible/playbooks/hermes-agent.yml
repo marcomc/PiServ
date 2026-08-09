@@ -99,6 +99,7 @@
           - skills
           - terminal
         hermes_agent_disabled_toolsets:
+          - bfl
           - browser
           - clarify
           - code_execution

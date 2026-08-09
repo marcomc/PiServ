@@ -63,6 +63,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   declare expected runtime registrations explicitly and guard live probes in
   check mode when the service is absent; validate both fresh and converged
   check-mode paths.
+- When a restricted Hermes deployment uses a deny-list, inspect the complete
+  live tool catalog after upstream updates and assert every non-approved
+  toolset is disabled; new upstream toolsets can otherwise become active by
+  default.
 - Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
   persistent device paths, and other host-specific identities from ignored
   local variables or a secure external source; use tracked placeholders only.

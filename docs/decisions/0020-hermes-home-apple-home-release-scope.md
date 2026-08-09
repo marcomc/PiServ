@@ -6,9 +6,11 @@ Accepted for `0.5.0` on 2026-08-08.
 
 ## Decision
 
-PiServ will use Home Assistant as Hermes' operational gateway. Hermes receives
-the full set of operations exposed by the Home Assistant MCP server, while
-Home Assistant remains authoritative for entity exposure and operation policy.
+PiServ will use Home Assistant as Hermes' operational gateway. Hermes uses the
+root-owned `hass-cli` wrapper as its primary full REST and WebSocket control
+path and retains the Home Assistant Assist MCP as a secondary discovery and
+verification path. Home Assistant remains authoritative for entity exposure and
+operation policy.
 
 Hermes uses a protected mode by default. An explicit instruction can grant
 autonomy for the current activity only; the grant expires when that activity
@@ -31,7 +33,8 @@ HomeClaw SSH or Supergateway to the Hermes runtime.
 
 - The Hermes role does not need a new generic MCP abstraction for `0.5.0`.
 - The Home Assistant Assist exposure policy is security-critical and must be
-  reviewed before adding entities or operations.
+  reviewed before adding MCP entities or operations. The `hass-cli` wrapper is
+  root-owned while its private token remains readable only by `hermes-agent`.
 - The acceptance fixture uses only an explicit local allowlist of reversible,
   non-critical entities.
 - Scenes are inspected but not triggered by the generic harness because a

@@ -50,15 +50,36 @@
 - name: Assert configured Hermes CLI toolsets
   ansible.builtin.assert:
     that:
-      - "'✓ enabled  memory' in hermes_agent_toolsets_output.stdout"
-      - "'✓ enabled  skills' in hermes_agent_toolsets_output.stdout"
+      - >-
+        hermes_agent_toolsets_output.stdout is search(
+          '(?m)^\\s*\\S+ enabled\\s+memory\\b'
+        )
+      - >-
+        hermes_agent_toolsets_output.stdout is search(
+          '(?m)^\\s*\\S+ enabled\\s+skills\\b'
+        )
       - >-
         (
-          "'✓ enabled  terminal'" if 'terminal' in hermes_agent_enabled_toolsets
-          else "'✗ disabled  terminal'"
-        ) in hermes_agent_toolsets_output.stdout
-      - "'✗ disabled  file' in hermes_agent_toolsets_output.stdout"
-      - "'✗ disabled  homeassistant' in hermes_agent_toolsets_output.stdout"
+          hermes_agent_toolsets_output.stdout is search(
+            '(?m)^\\s*\\S+ enabled\\s+terminal\\b'
+          )
+          if 'terminal' in hermes_agent_enabled_toolsets
+          else hermes_agent_toolsets_output.stdout is search(
+            '(?m)^\\s*\\S+ disabled\\s+terminal\\b'
+          )
+        )
+      - >-
+        hermes_agent_toolsets_output.stdout is search(
+          '(?m)^\\s*\\S+ disabled\\s+file\\b'
+        )
+      - >-
+        hermes_agent_toolsets_output.stdout is search(
+          '(?m)^\\s*\\S+ disabled\\s+bfl\\b'
+        )
+      - >-
+        hermes_agent_toolsets_output.stdout is search(
+          '(?m)^\\s*\\S+ disabled\\s+homeassistant\\b'
+        )
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_checkout.stat.exists
