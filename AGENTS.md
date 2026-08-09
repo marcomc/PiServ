@@ -54,6 +54,9 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Before rendering a configurable timeout, retry, interval, or escalation value
   into shell or service configuration, assert its explicit range and every
   required relationship to related values; cover invalid values and ordering.
+- When validating required managed files with `ansible.builtin.stat`, assert
+  that the result exists before reading nested metadata; cover an otherwise
+  compatible fixture with the required marker absent.
 - Name every top-level `import_playbook` entry in orchestration playbooks so
   Ansible Lint validates the full entry point.
 - When a PiServ playbook overrides a generic role's package or plugin set,
