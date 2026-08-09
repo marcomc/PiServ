@@ -143,3 +143,4 @@
         owner: hermes-agent
         group: hermes-agent
         mode: "0600"
+      when: hermes_agent_runtime_user_available | bool

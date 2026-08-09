@@ -142,9 +142,37 @@ ssh -N -L 9119:127.0.0.1:9119 admin@PiServ.local
 ```
 
 Open `http://127.0.0.1:9119` with Computer Use, send the exact prompt recorded
-in the test report, and then run the HomeClaw verification and cleanup steps
-from the runbook. Do not enable HomeClaw writes or create a persistent Mac to
-PiServ transport for this fallback.
+in the test report. Before closing the browser session, use the report's
+`home_assistant_entity_id`, `homeclaw_accessory`, and captured `before` state
+to perform a readback, restore the original state through the authenticated
+PiServ CLI, and perform a second readback. Set `PISERV_IP` to the current
+operator-supplied DHCP lease first if `PiServ.local` does not resolve.
+
+```sh
+accessory='<homeclaw-accessory-from-report>'
+entity_id='<home-assistant-entity-id-from-report>'
+initial_state='<on-or-off-from-report>'
+piserv_target="admin@${PISERV_IP:-PiServ.local}"
+
+homeclaw-cli get "${accessory}" --json | jq '{name, reachable, services}'
+ssh "${piserv_target}" \
+  "sudo -u hermes-agent -H /usr/local/bin/hass-cli -o json state get '${entity_id}'"
+
+case "${initial_state}" in
+  on)  restore_command=turn_on ;;
+  off) restore_command=turn_off ;;
+  *)   printf 'Invalid captured state: %s\n' "${initial_state}" >&2; exit 64 ;;
+esac
+ssh "${piserv_target}" \
+  "sudo -u hermes-agent -H /usr/local/bin/hass-cli state ${restore_command} '${entity_id}'"
+
+homeclaw-cli get "${accessory}" --json | jq '{name, reachable, services}'
+ssh "${piserv_target}" \
+  "sudo -u hermes-agent -H /usr/local/bin/hass-cli -o json state get '${entity_id}'"
+```
+
+Confirm both final readbacks match `initial_state`. Do not enable HomeClaw
+writes or create a persistent Mac to PiServ transport for this fallback.
 
 ## Current Live Finding
 
@@ -155,10 +183,10 @@ Hermes, observed `off` through HomeClaw, and restored `on` through Hermes with
 Home Assistant and HomeClaw both confirming the result.
 
 The same test passed again after restarting `hermes-agent-dashboard.service`.
-The remaining persistence gate is a non-model-dependent backup-restore probe
-that can prove the restored MCP configuration without depending on the disabled
-Granite local-model verifier.
+The non-model-dependent backup-restore probe also passed, proving the restored
+MCP configuration without depending on the disabled Granite local-model
+verifier.
 
 The dashboard fallback reached its sign-in page but had no authenticated
 browser session, so the supported CLI driver was used for the successful test.
-Repeat this validation after a Hermes service restart and backup restore.
+Repeat this validation after future Hermes service or backup-policy changes.

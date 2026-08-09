@@ -20,6 +20,12 @@ DEFAULT_REPORT_ROOT = Path("artifacts/hermes-home-apple-home")
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_POLL_INTERVAL = 2.0
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
+ENTITY_ID_PATTERN = re.compile(r"\b[a-z0-9_]+\.[a-z0-9_]+\b")
+ALLOWED_HERMES_MCP_TOOLS = {
+    "mcp__home_assistant_assist__GetLiveContext",
+    "mcp__home_assistant_assist__HassTurnOn",
+    "mcp__home_assistant_assist__HassTurnOff",
+}
 
 
 class VerificationError(RuntimeError):
@@ -96,6 +102,17 @@ def require_string(mapping: dict[str, Any], key: str, context: str) -> str:
     return value
 
 
+def ssh_target(config: dict[str, Any]) -> str:
+    configured_target = require_string(config, "ssh_target", "configuration")
+    override = os.environ.get("PISERV_IP")
+    if not override:
+        return configured_target
+    if any(character.isspace() or character in "@/" for character in override):
+        raise VerificationError("PISERV_IP must be a single current DHCP lease")
+    user = configured_target.rsplit("@", 1)[0] if "@" in configured_target else "admin"
+    return f"{user}@{override}"
+
+
 def validate_config(config: dict[str, Any]) -> None:
     ssh_target = require_string(config, "ssh_target", "configuration")
     if any(character.isspace() for character in ssh_target):
@@ -153,6 +170,79 @@ def homeclaw_state(accessory: str, characteristic: str, timeout: float) -> dict[
     )
 
 
+def require_reachable(state: dict[str, Any], label: str) -> None:
+    if state.get("reachable") is not True:
+        raise VerificationError(f"HomeClaw accessory is not reachable for {label}")
+
+
+def home_assistant_power_state(payload: dict[str, Any], label: str) -> bool:
+    state = payload.get("state")
+    if state not in {"on", "off"}:
+        raise VerificationError(
+            f"Home Assistant entity has unsupported state for {label}: {state!r}"
+        )
+    return state == "on"
+
+
+def audit_entity_ids(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return set(ENTITY_ID_PATTERN.findall(value))
+    if isinstance(value, dict):
+        return set().union(*(audit_entity_ids(item) for item in value.values()))
+    if isinstance(value, list):
+        return set().union(*(audit_entity_ids(item) for item in value))
+    return set()
+
+
+def validate_hermes_audit(
+    invocation: dict[str, Any], entity_id: str, label: str
+) -> dict[str, Any]:
+    if not invocation.get("audit_complete"):
+        raise VerificationError(f"Hermes task audit was not captured for {label}")
+
+    audited_tools: list[str] = []
+    for call in invocation.get("tool_calls", []):
+        function_name = call.get("name")
+        arguments = call.get("arguments", {})
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError as error:
+                raise VerificationError(
+                    f"Hermes task audit has invalid tool arguments for {label}"
+                ) from error
+        if not isinstance(arguments, dict):
+            raise VerificationError(f"Hermes task audit has invalid records for {label}")
+        if function_name == "tool_describe":
+            described_name = arguments.get("name")
+            if described_name not in ALLOWED_HERMES_MCP_TOOLS:
+                raise VerificationError(
+                    f"Hermes described a non-allowlisted tool for {label}: "
+                    f"{described_name!r}"
+                )
+            continue
+        if function_name == "tool_call":
+            called_name = arguments.get("name")
+            called_arguments = arguments.get("arguments", {})
+            if called_name not in ALLOWED_HERMES_MCP_TOOLS:
+                raise VerificationError(
+                    f"Hermes used a non-allowlisted tool for {label}: {called_name!r}"
+                )
+            audited_tools.append(called_name)
+            if audit_entity_ids(called_arguments) != {entity_id}:
+                raise VerificationError(
+                    f"Hermes addressed an entity outside the allowlist for {label}"
+                )
+            continue
+        raise VerificationError(
+            f"Hermes used an unexpected tool-call record for {label}: {function_name!r}"
+        )
+
+    if not audited_tools:
+        raise VerificationError(f"Hermes task audit recorded no operations for {label}")
+    return {"tool_names": audited_tools, "entity_ids": [entity_id]}
+
+
 def normalize_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -196,7 +286,7 @@ def remote_home_assistant_state(
             remote_script,
         ]
     )
-    command = ["ssh", *SSH_OPTIONS, config["ssh_target"], remote_command]
+    command = ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command]
     result = run_command(command, timeout)
     payload = checked_json(result, f"Home Assistant state for {entity_id}")
     return payload, compact_result(result)
@@ -209,12 +299,19 @@ def invoke_hermes(
         "home_assistant_token_env_file",
         "/var/lib/hermes-agent/home-assistant-mcp.env",
     )
+    hermes_home = config.get("hermes_home", "/var/lib/hermes-agent")
+    hermes_binary = config.get("hermes_binary", "/usr/local/bin/hermes")
+    if not isinstance(hermes_home, str) or not hermes_home.strip():
+        raise VerificationError("hermes_home must be a non-empty string")
+    if not isinstance(hermes_binary, str) or not hermes_binary.strip():
+        raise VerificationError("hermes_binary must be a non-empty string")
+    source_tag = f"piserv-home-apple-{time.time_ns()}-{os.getpid()}"
     hermes_command = shlex.join(
         [
             "env",
-            f"HERMES_HOME={config.get('hermes_home', '/var/lib/hermes-agent')}",
+            f"HERMES_HOME={hermes_home}",
             f"CODEX_HOME={config.get('codex_home', '/var/lib/hermes-agent/codex')}",
-            config.get("hermes_binary", "/usr/local/bin/hermes"),
+            hermes_binary,
             "chat",
             "--query",
             prompt,
@@ -223,6 +320,8 @@ def invoke_hermes(
             "home-assistant-assist",
             "--max-turns",
             str(max_turns),
+            "--source",
+            source_tag,
         ]
     )
     remote_script = "\n".join(
@@ -231,19 +330,40 @@ def invoke_hermes(
             "set -a",
             f". {shlex.quote(token_file)}",
             "set +a",
-            "cd /var/lib/hermes-agent/workspace",
-            f"exec {hermes_command}",
+            f"cd {shlex.quote(hermes_home)}/workspace",
+            'output_file="$(mktemp)"',
+            'error_file="$(mktemp)"',
+            'audit_file="$(mktemp)"',
+            "trap 'rm -f -- \"$output_file\" \"$error_file\" \"$audit_file\"' EXIT",
+            "set +e",
+            f"{hermes_command} >\"$output_file\" 2>\"$error_file\"",
+            "hermes_exit=$?",
+            "set -e",
+            "audit_complete=false",
+            "audit_json='[]'",
+            f"if {shlex.quote(hermes_binary)} sessions export - --format jsonl --source {shlex.quote(source_tag)} --newer-than 5m --redact >\"$audit_file\"; then",
+            "  audit_json=\"$(jq -s -c '[.[].messages[]? | .tool_calls[]?.function // empty]' \"$audit_file\" 2>/dev/null || printf '[]')\"",
+            "  audit_complete=true",
+            "fi",
+            "printf '{\"exit_code\":%s,\"audit_complete\":%s,\"tool_calls\":%s,\"stdout\":' \"$hermes_exit\" \"$audit_complete\" \"$audit_json\"",
+            "jq -Rs . <\"$output_file\"",
+            "printf ',\"stderr\":'",
+            "jq -Rs . <\"$error_file\"",
+            "printf '}\\n'",
         ]
     )
     remote_command = shlex.join(
         ["sudo", "-u", "hermes-agent", "-H", "bash", "-c", remote_script]
     )
     result = run_command(
-        ["ssh", *SSH_OPTIONS, config["ssh_target"], remote_command], timeout
+        ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
     )
-    result["stdout"] = redact(result["stdout"])
-    result["stderr"] = redact(result["stderr"])
-    return compact_result(result)
+    if result["exit_code"] != 0:
+        return result
+    payload = checked_json(result, "Hermes invocation audit wrapper")
+    payload["stdout"] = redact(payload.get("stdout", ""))
+    payload["stderr"] = redact(payload.get("stderr", ""))
+    return compact_result(payload)
 
 
 def poll(
@@ -272,7 +392,7 @@ def write_reports(report: dict[str, Any], report_dir: Path) -> None:
         f"status: {report['status']}",
         f"started: {report['started_at']}",
         f"finished: {report.get('finished_at', 'in progress')}",
-        f"target: {report.get('target_label', 'none')}",
+        f"target: {', '.join(target['label'] for target in report.get('targets', [])) or 'none'}",
         f"report: {json_path}",
     ]
     if report.get("failure"):
@@ -311,14 +431,18 @@ def verify_entity(
         config, entity["home_assistant_entity_id"], args.timeout
     )
     report["commands"].append(result)
+    require_reachable(before_homeclaw, entity["label"])
     before_power = normalize_bool(before_homeclaw["value"])
     desired_power = not before_power
+    before_home_assistant_power = home_assistant_power_state(
+        before_ha, entity["label"]
+    )
     target["before"] = {
         "homeclaw": before_homeclaw,
         "home_assistant_state": before_ha.get("state"),
     }
     target["desired_power"] = desired_power
-    if normalize_bool(before_ha.get("state") == "on") != before_power:
+    if before_home_assistant_power != before_power:
         raise VerificationError(
             f"Home Assistant and HomeClaw initial states differ for {entity['label']}"
         )
@@ -355,6 +479,12 @@ def verify_entity(
         )
         if target["hermes_restore"]["exit_code"] != 0:
             raise VerificationError(f"Hermes cleanup failed for {entity['label']}")
+        target["hermes_restore_audit"] = validate_hermes_audit(
+            target["hermes_restore"],
+            entity["home_assistant_entity_id"],
+            f"{entity['label']} restoration",
+        )
+        target["hermes_restore"].pop("tool_calls", None)
         target["restored"] = poll(
             lambda: expected_restore(config, entity, original_power, report, args.timeout),
             args.timeout,
@@ -369,16 +499,24 @@ def verify_entity(
         )
         if target["hermes_action"]["exit_code"] != 0:
             raise VerificationError(f"Hermes action failed for {entity['label']}")
+        target["hermes_action_audit"] = validate_hermes_audit(
+            target["hermes_action"],
+            entity["home_assistant_entity_id"],
+            entity["label"],
+        )
+        target["hermes_action"].pop("tool_calls", None)
 
         def expected_state() -> dict[str, Any] | None:
             homeclaw = homeclaw_state(
                 entity["homeclaw_accessory"], entity["homeclaw_characteristic"], args.timeout
             )
+            if homeclaw.get("reachable") is not True:
+                return None
             ha, result = remote_home_assistant_state(
                 config, entity["home_assistant_entity_id"], args.timeout
             )
             report["commands"].append(result)
-            if normalize_bool(ha.get("state") == "on") != desired_power:
+            if home_assistant_power_state(ha, entity["label"]) != desired_power:
                 return None
             if normalize_bool(homeclaw["value"]) != desired_power:
                 return None
@@ -457,7 +595,9 @@ def expected_restore(
     )
     report["commands"].append(result)
     expected = original_power == "true"
-    if normalize_bool(ha.get("state") == "on") != expected:
+    if homeclaw.get("reachable") is not True:
+        return None
+    if home_assistant_power_state(ha, entity["label"]) != expected:
         return None
     if normalize_bool(homeclaw["value"]) != expected:
         return None

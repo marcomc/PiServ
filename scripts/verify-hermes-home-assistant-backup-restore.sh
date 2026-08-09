@@ -15,6 +15,7 @@ fi
 
 api_url="$(jq --raw-output '.home_assistant_api_url' "${config_path}")"
 entity_id="$(jq --raw-output '.entities[0].home_assistant_entity_id' "${config_path}")"
+risk="$(jq --raw-output '.entities[0].risk // empty' "${config_path}")"
 
 if [[ ! "${api_url}" =~ ^http://[A-Za-z0-9.-]+:[0-9]+/api$ ]]; then
   printf 'Unsupported Home Assistant API URL in %s\n' "${config_path}" >&2
@@ -22,6 +23,10 @@ if [[ ! "${api_url}" =~ ^http://[A-Za-z0-9.-]+:[0-9]+/api$ ]]; then
 fi
 if [[ ! "${entity_id}" =~ ^(light|switch)\.[a-z0-9_]+$ ]]; then
   printf 'Unsupported reversible test entity in %s\n' "${config_path}" >&2
+  exit 64
+fi
+if [[ "${risk}" != non-critical ]]; then
+  printf 'The first configured entity must explicitly declare risk=non-critical.\n' >&2
   exit 64
 fi
 
@@ -62,7 +67,12 @@ cleanup() {
     fi
   fi
 
-  rm -rf -- "${work_dir}"
+  if (( cleanup_status != 0 )); then
+    printf 'Emergency restoration failed; work directory preserved for inspection: %s\n' \
+      "${work_dir}" >&2
+  else
+    rm -rf -- "${work_dir}"
+  fi
   if (( status == 0 && cleanup_status != 0 )); then
     status=${cleanup_status}
   fi
@@ -88,7 +98,7 @@ run_as_restored_hermes() {
     HOME="${restore_home}" \
     HERMES_HOME="${restore_home}" \
     CODEX_HOME="${restore_home}/codex" \
-    "$@"
+    bash -c 'cd -- "${HERMES_HOME}/workspace" && exec "$@"' bash "$@"
 }
 
 home_assistant_state() {
@@ -114,7 +124,7 @@ fi
 
 chmod 0711 "${work_dir}"
 install -d -o hermes-agent -g hermes-agent -m 0700 \
-  "${backup_dir}" "${restore_home}"
+  "${backup_dir}" "${restore_home}" "${restore_home}/workspace"
 run_as_source_hermes hermes backup --output "${backup_dir}" >/dev/null
 archive_path="$(find "${backup_dir}" -maxdepth 1 -type f -name 'hermes-backup-*.zip' -print -quit)"
 if [[ -z "${archive_path}" ]]; then

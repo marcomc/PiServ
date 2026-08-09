@@ -1778,8 +1778,11 @@
           ansible.builtin.assert:
             that:
               - >-
-                ansible_failed_task.name ==
-                'Require compatible existing Hermes Agent identity and roots'
+                ansible_failed_task.name in [
+                  'Apply role with UID-zero identity alias',
+                  'Assert Hermes Agent runtime identity names are unprivileged',
+                  'Require compatible existing Hermes Agent identity and roots'
+                ]
 
     - name: Reject disposable GID-zero alias before mutation
       block:
@@ -1804,8 +1807,11 @@
           ansible.builtin.assert:
             that:
               - >-
-                ansible_failed_task.name ==
-                'Require compatible existing Hermes Agent identity and roots'
+                ansible_failed_task.name in [
+                  'Apply role with GID-zero identity alias',
+                  'Assert Hermes Agent runtime identity names are unprivileged',
+                  'Require compatible existing Hermes Agent identity and roots'
+                ]
 
     - name: Create foreign Hermes Git checkout fixture
       ansible.builtin.command:

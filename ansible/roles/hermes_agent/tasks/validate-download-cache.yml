@@ -104,6 +104,7 @@
 - name: Require a private Hermes Agent download cache managed marker
   ansible.builtin.assert:
     that:
+      - hermes_agent_download_cache_marker.stat.exists
       - hermes_agent_download_cache_marker.stat.isreg | default(false)
       - not hermes_agent_download_cache_marker.stat.islnk | default(true)
       - hermes_agent_download_cache_marker.stat.pw_name | default('') == 'root'
