@@ -1,10 +1,10 @@
 import importlib.util
 import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 
 SCRIPT_PATH = Path(__file__).parents[1] / "verify-hermes-home-apple-home.py"
 SPEC = importlib.util.spec_from_file_location("verify_harness", SCRIPT_PATH)
@@ -177,7 +177,83 @@ class HarnessValidationTests(unittest.TestCase):
 
         remote_command = run_command.call_args.args[0][-1]
         self.assertIn("/opt/hermes/bin/hermes sessions export", remote_command)
-        self.assertIn("cd /srv/hermes/workspace", remote_command)
+        self.assertIn("--working-directory=/srv/hermes/workspace", remote_command)
+        self.assertEqual(remote_command.count("ProtectSystem=strict"), 2)
+        self.assertEqual(remote_command.count("NoNewPrivileges=yes"), 2)
+        self.assertEqual(remote_command.count("BindReadOnlyPaths="), 2)
+        self.assertIn(HARNESS.MANAGED_POLICY_PATH, remote_command)
+
+    def test_source_scoped_session_export_rejects_mixed_sources(self):
+        source = "acceptance-source"
+        call = {
+            "function": {
+                "name": "tool_call",
+                "arguments": {
+                    "name": "mcp__home_assistant_assist__HassTurnOn",
+                    "arguments": {"name": self.entity_id},
+                },
+            }
+        }
+        invocation = {
+            "audit_complete": True,
+            "source": source,
+            "audit_records": [
+                {"source": source, "messages": [{"tool_calls": [call]}]},
+                {"source": "sibling-source", "messages": []},
+            ],
+        }
+
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(invocation, self.entity_id, "fixture")
+
+    def test_default_report_directories_are_unique(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary_root,
+            patch.object(HARNESS, "DEFAULT_REPORT_ROOT", Path(temporary_root)),
+        ):
+            first = HARNESS.default_report_dir()
+            second = HARNESS.default_report_dir()
+
+        self.assertNotEqual(first, second)
+
+    def test_primary_and_cleanup_operational_failures_are_both_reported(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        with (
+            patch.object(
+                HARNESS,
+                "homeclaw_state",
+                return_value={"reachable": True, "value": False},
+            ),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(
+                HARNESS,
+                "invoke_hermes",
+                side_effect=[OSError("primary transport"), ValueError("cleanup payload")],
+            ),
+            self.assertRaisesRegex(
+                HARNESS.VerificationError,
+                "primary: primary transport; cleanup: cleanup payload",
+            ),
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        self.assertEqual(report["targets"][0]["primary_failure"], "primary transport")
+        self.assertEqual(report["targets"][0]["cleanup_failure"], "cleanup payload")
 
 
 if __name__ == "__main__":

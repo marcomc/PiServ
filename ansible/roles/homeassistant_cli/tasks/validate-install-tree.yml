@@ -1,0 +1,199 @@
+---
+- name: Canonicalize Home Assistant CLI managed paths
+  ansible.builtin.command:
+    argv:
+      - >-
+        {{ _homeassistant_cli_realpath_executable |
+           default('/usr/bin/realpath') }}
+      - --canonicalize-missing
+      - "{{ item }}"
+  loop:
+    - "{{ homeassistant_cli_install_dir | dirname }}"
+    - "{{ homeassistant_cli_install_dir }}"
+    - "{{ homeassistant_cli_venv_path }}"
+  register: homeassistant_cli_canonical_paths
+  changed_when: false
+  check_mode: false
+
+- name: Require canonical Home Assistant CLI managed paths
+  ansible.builtin.assert:
+    that:
+      - item.stdout == item.item
+    fail_msg: >-
+      Home Assistant CLI managed paths must be canonical and must not traverse
+      symlinked parents.
+  loop: "{{ homeassistant_cli_canonical_paths.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Inspect Home Assistant CLI install parent and directory
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ homeassistant_cli_install_dir | dirname }}"
+    - "{{ homeassistant_cli_install_dir }}"
+  register: homeassistant_cli_install_root_states
+  changed_when: false
+  check_mode: false
+
+- name: Capture concrete pre-run Home Assistant CLI install fact
+  ansible.builtin.set_fact:
+    homeassistant_cli_install_preexisting: >-
+      {{ homeassistant_cli_install_root_states.results[1].stat.exists }}
+
+- name: Authenticate Home Assistant CLI install parent
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_root_states.results[0].stat.exists
+      - homeassistant_cli_install_root_states.results[0].stat.isdir
+      - not homeassistant_cli_install_root_states.results[0].stat.islnk
+      - homeassistant_cli_install_root_states.results[0].stat.uid == 0
+      - homeassistant_cli_install_root_states.results[0].stat.gid == 0
+      - homeassistant_cli_install_root_states.results[0].stat.mode == '0755'
+    fail_msg: >-
+      Home Assistant CLI install parent must be an existing canonical,
+      root-owned 0755 directory.
+
+- name: Authenticate existing Home Assistant CLI install directory
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_root_states.results[1].stat.isdir
+      - not homeassistant_cli_install_root_states.results[1].stat.islnk
+      - homeassistant_cli_install_root_states.results[1].stat.uid == 0
+      - homeassistant_cli_install_root_states.results[1].stat.gid == 0
+      - homeassistant_cli_install_root_states.results[1].stat.mode == '0755'
+    fail_msg: >-
+      Refusing to inspect or mutate an existing Home Assistant CLI install path
+      that is not a canonical root-owned 0755 directory.
+  when: homeassistant_cli_install_preexisting
+
+- name: Inspect Home Assistant CLI install-tree children
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ homeassistant_cli_venv_path }}"
+    - "{{ homeassistant_cli_provenance_path }}"
+    - "{{ homeassistant_cli_binary_path }}"
+    - "{{ homeassistant_cli_wrapper_path }}"
+  register: homeassistant_cli_install_child_states
+  changed_when: false
+  check_mode: false
+
+- name: Capture concrete pre-run Home Assistant CLI child facts
+  ansible.builtin.set_fact:
+    homeassistant_cli_venv_preexisting: >-
+      {{ homeassistant_cli_install_child_states.results[0].stat.exists }}
+    homeassistant_cli_runtime_preexisting: >-
+      {{
+        homeassistant_cli_install_child_states.results[2].stat.exists and
+        homeassistant_cli_install_child_states.results[3].stat.exists
+      }}
+    homeassistant_cli_ownership_probe_required: >-
+      {{ not ansible_check_mode or
+         homeassistant_cli_install_child_states.results[0].stat.exists }}
+    homeassistant_cli_runtime_probe_required: >-
+      {{ not ansible_check_mode or
+         (homeassistant_cli_install_child_states.results[2].stat.exists and
+          homeassistant_cli_install_child_states.results[3].stat.exists) }}
+
+- name: Authenticate existing Home Assistant CLI provenance metadata
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_child_states.results[1].stat.exists
+      - homeassistant_cli_install_child_states.results[1].stat.isreg
+      - not homeassistant_cli_install_child_states.results[1].stat.islnk
+      - homeassistant_cli_install_child_states.results[1].stat.uid == 0
+      - homeassistant_cli_install_child_states.results[1].stat.gid == 0
+      - homeassistant_cli_install_child_states.results[1].stat.mode == '0600'
+    fail_msg: >-
+      Refusing to mutate an existing Home Assistant CLI install tree without
+      exact private root-owned role provenance.
+  when: homeassistant_cli_install_preexisting
+
+- name: Reject orphaned Home Assistant CLI install-tree artifacts
+  ansible.builtin.assert:
+    that:
+      - not homeassistant_cli_venv_preexisting
+      - not homeassistant_cli_install_child_states.results[1].stat.exists
+    fail_msg: >-
+      Home Assistant CLI virtualenv or provenance exists without its managed
+      install directory.
+  when: not homeassistant_cli_install_preexisting
+
+- name: Authenticate existing Home Assistant CLI virtualenv metadata
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_child_states.results[0].stat.isdir
+      - not homeassistant_cli_install_child_states.results[0].stat.islnk
+      - homeassistant_cli_install_child_states.results[0].stat.uid == 0
+      - homeassistant_cli_install_child_states.results[0].stat.gid == 0
+      - homeassistant_cli_install_child_states.results[0].stat.mode == '0755'
+    fail_msg: >-
+      Existing Home Assistant CLI virtualenv must be a canonical root-owned
+      0755 directory, not a file or symlink.
+  when: homeassistant_cli_venv_preexisting
+
+- name: Inspect existing Home Assistant CLI virtualenv ownership
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ homeassistant_cli_venv_path }}"
+      - -xdev
+      - "("
+      - '!'
+      - -uid
+      - "0"
+      - -o
+      - '!'
+      - -gid
+      - "0"
+      - ")"
+      - -print
+      - -quit
+  register: homeassistant_cli_preexisting_nonroot_venv_paths
+  changed_when: false
+  check_mode: false
+  when: homeassistant_cli_venv_preexisting
+
+- name: Authenticate existing Home Assistant CLI virtualenv ownership
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_preexisting_nonroot_venv_paths.stdout | trim == ''
+    fail_msg: >-
+      Refusing to mutate a Home Assistant CLI virtualenv containing paths not
+      owned by root; migrate the tree explicitly first.
+  when: homeassistant_cli_venv_preexisting
+
+- name: Authenticate existing Home Assistant CLI binary metadata
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_child_states.results[2].stat.isreg
+      - not homeassistant_cli_install_child_states.results[2].stat.islnk
+      - homeassistant_cli_install_child_states.results[2].stat.uid == 0
+      - homeassistant_cli_install_child_states.results[2].stat.gid == 0
+      - homeassistant_cli_install_child_states.results[2].stat.mode == '0755'
+    fail_msg: >-
+      Existing Home Assistant CLI binary must be a root-owned 0755 regular
+      file within the authenticated virtualenv.
+  when: homeassistant_cli_install_child_states.results[2].stat.exists
+
+- name: Read existing Home Assistant CLI install provenance
+  ansible.builtin.slurp:
+    src: "{{ homeassistant_cli_provenance_path }}"
+  register: homeassistant_cli_existing_provenance
+  changed_when: false
+  check_mode: false
+  when: homeassistant_cli_install_preexisting
+
+- name: Require exact Home Assistant CLI install provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        (homeassistant_cli_existing_provenance.content | b64decode) ==
+        homeassistant_cli_expected_provenance
+    fail_msg: >-
+      Existing Home Assistant CLI install provenance is corrupt, foreign, or
+      does not describe the configured role-owned tree.
+  when: homeassistant_cli_install_preexisting

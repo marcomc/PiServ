@@ -1,0 +1,24 @@
+---
+- name: Reset install-tree fixture
+  ansible.builtin.file:
+    path: "{{ homeassistant_cli_install_dir }}"
+    state: absent
+  check_mode: false
+
+- name: Recreate managed install-tree fixture
+  ansible.builtin.file:
+    path: "{{ homeassistant_cli_venv_path }}/bin"
+    state: directory
+    owner: root
+    group: 0
+    mode: "0755"
+  check_mode: false
+
+- name: Publish managed install-tree fixture provenance
+  ansible.builtin.template:
+    src: "{{ homeassistant_cli_test_role_path }}/templates/install-provenance.j2"
+    dest: "{{ homeassistant_cli_provenance_path }}"
+    owner: root
+    group: 0
+    mode: "0600"
+  check_mode: false

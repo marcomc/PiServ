@@ -1,0 +1,287 @@
+---
+- name: Test Home Assistant CLI install-tree lifecycle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+  vars:
+    homeassistant_cli_test_role_path: "{{ playbook_dir | dirname }}"
+    homeassistant_cli_package: homeassistant-cli==1.0.0
+    _homeassistant_cli_realpath_executable: >-
+      {{ lookup('ansible.builtin.pipe',
+                'command -v grealpath || command -v realpath') }}
+    homeassistant_cli_test_fixture_root: >-
+      {{ lookup('ansible.builtin.pipe',
+                '(grealpath --canonicalize-missing /var/tmp 2>/dev/null || '
+                ~ 'realpath /var/tmp)') }}
+    homeassistant_cli_expected_provenance: >-
+      {{ lookup('ansible.builtin.template',
+                homeassistant_cli_test_role_path
+                ~ '/templates/install-provenance.j2') }}
+    homeassistant_cli_wrapper_path: /nonexistent/hass-cli-wrapper
+  tasks:
+    - name: Create isolated root-owned install parent fixture
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ homeassistant_cli_test_fixture_root }}"
+        suffix: homeassistant-cli-install
+      register: homeassistant_cli_test_parent
+      check_mode: false
+
+    - name: Configure isolated install-tree paths
+      ansible.builtin.set_fact:
+        homeassistant_cli_install_dir: >-
+          {{ homeassistant_cli_test_parent.path }}/homeassistant-cli
+        homeassistant_cli_venv_path: >-
+          {{ homeassistant_cli_test_parent.path }}/homeassistant-cli/venv
+        homeassistant_cli_provenance_path: >-
+          {{ homeassistant_cli_test_parent.path }}/homeassistant-cli/.homeassistant-cli-managed
+        homeassistant_cli_binary_path: >-
+          {{ homeassistant_cli_test_parent.path }}/homeassistant-cli/venv/bin/hass-cli
+        homeassistant_cli_wrapper_path: >-
+          {{ homeassistant_cli_test_parent.path }}/hass-cli-wrapper
+
+    - name: Apply production install-parent metadata to fixture
+      ansible.builtin.file:
+        path: "{{ homeassistant_cli_test_parent.path }}"
+        state: directory
+        owner: root
+        group: 0
+        mode: "0755"
+      check_mode: false
+
+    - name: Exercise install-tree lifecycle states
+      block:
+        - name: Accept absent install tree
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require concrete absent pre-run facts
+          ansible.builtin.assert:
+            that:
+              - not homeassistant_cli_install_preexisting
+              - not homeassistant_cli_venv_preexisting
+              - not homeassistant_cli_runtime_preexisting
+              - >-
+                homeassistant_cli_ownership_probe_required ==
+                (not ansible_check_mode)
+              - >-
+                homeassistant_cli_runtime_probe_required ==
+                (not ansible_check_mode)
+
+        - name: Create converged install tree
+          ansible.builtin.include_tasks: reset-install-tree.yml
+
+        - name: Accept converged managed install tree
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require concrete converged pre-run facts
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_preexisting
+              - homeassistant_cli_venv_preexisting
+              - not homeassistant_cli_runtime_preexisting
+              - homeassistant_cli_ownership_probe_required
+              - >-
+                homeassistant_cli_runtime_probe_required ==
+                (not ansible_check_mode)
+
+        - name: Create concrete runtime artifacts for converged check mode
+          check_mode: false
+          block:
+            - name: Create Home Assistant CLI binary fixture
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 0\n"
+                dest: "{{ homeassistant_cli_binary_path }}"
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Create Home Assistant CLI wrapper fixture
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 0\n"
+                dest: "{{ homeassistant_cli_wrapper_path }}"
+                owner: root
+                group: 0
+                mode: "0755"
+
+        - name: Authenticate converged tree with runtime artifacts
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require converged mode to run concrete probes
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_preexisting
+              - homeassistant_cli_venv_preexisting
+              - homeassistant_cli_runtime_preexisting
+              - homeassistant_cli_ownership_probe_required
+              - homeassistant_cli_runtime_probe_required
+
+        - name: Remove concrete runtime artifacts after guard tests
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ homeassistant_cli_binary_path }}"
+            - "{{ homeassistant_cli_wrapper_path }}"
+          check_mode: false
+
+        - name: Create non-root-owned virtualenv fixture
+          ansible.builtin.copy:
+            content: "foreign ownership\n"
+            dest: "{{ homeassistant_cli_venv_path }}/foreign"
+            owner: 1
+            group: 1
+            mode: "0644"
+          check_mode: false
+
+        - name: Reject non-root-owned virtualenv content
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Authenticate existing Home Assistant CLI virtualenv ownership
+
+        - name: Restore fixture after virtualenv ownership rejection
+          ansible.builtin.include_tasks: reset-install-tree.yml
+
+        - name: Corrupt install-tree provenance marker
+          ansible.builtin.copy:
+            content: "managed_by=foreign\n"
+            dest: "{{ homeassistant_cli_provenance_path }}"
+            owner: root
+            group: 0
+            mode: "0600"
+          check_mode: false
+
+        - name: Reject corrupt install-tree provenance marker
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Require exact Home Assistant CLI install provenance
+
+        - name: Restore converged fixture after marker corruption
+          ansible.builtin.include_tasks: reset-install-tree.yml
+
+        - name: Apply wrong provenance metadata
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_provenance_path }}"
+            mode: "0644"
+          check_mode: false
+
+        - name: Reject wrong provenance metadata
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Authenticate existing Home Assistant CLI provenance metadata
+
+        - name: Replace install tree with a foreign file
+          check_mode: false
+          block:
+            - name: Remove managed install tree before file fixture
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_install_dir }}"
+                state: absent
+            - name: Write foreign install-tree file
+              ansible.builtin.copy:
+                content: "foreign\n"
+                dest: "{{ homeassistant_cli_install_dir }}"
+                owner: root
+                group: 0
+                mode: "0755"
+
+        - name: Reject install-tree file
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Authenticate existing Home Assistant CLI install directory
+
+        - name: Replace install tree with a symlink
+          check_mode: false
+          block:
+            - name: Remove install-tree file
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_install_dir }}"
+                state: absent
+            - name: Create install-tree symlink target
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_test_parent.path }}/foreign-tree"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Create install-tree symlink
+              ansible.builtin.file:
+                src: "{{ homeassistant_cli_test_parent.path }}/foreign-tree"
+                dest: "{{ homeassistant_cli_install_dir }}"
+                state: link
+
+        - name: Reject install-tree symlink
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Require canonical Home Assistant CLI managed paths
+
+        - name: Restore fixture before virtualenv alias test
+          ansible.builtin.include_tasks: reset-install-tree.yml
+
+        - name: Replace virtualenv with a symlink
+          check_mode: false
+          block:
+            - name: Remove managed virtualenv
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}"
+                state: absent
+            - name: Create virtualenv symlink target
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_test_parent.path }}/foreign-venv"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Create virtualenv symlink
+              ansible.builtin.file:
+                src: "{{ homeassistant_cli_test_parent.path }}/foreign-venv"
+                dest: "{{ homeassistant_cli_venv_path }}"
+                state: link
+
+        - name: Reject virtualenv alias
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Require canonical Home Assistant CLI managed paths
+
+        - name: Create parent-alias fixture
+          check_mode: false
+          block:
+            - name: Create parent-alias target
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_test_parent.path }}/alias-target"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Create parent alias
+              ansible.builtin.file:
+                src: "{{ homeassistant_cli_test_parent.path }}/alias-target"
+                dest: "{{ homeassistant_cli_test_parent.path }}/alias-parent"
+                state: link
+            - name: Point install variables through parent alias
+              ansible.builtin.set_fact:
+                homeassistant_cli_install_dir: >-
+                  {{ homeassistant_cli_test_parent.path }}/alias-parent/homeassistant-cli
+                homeassistant_cli_venv_path: >-
+                  {{ homeassistant_cli_test_parent.path }}/alias-parent/homeassistant-cli/venv
+                homeassistant_cli_provenance_path: >-
+                  {{ homeassistant_cli_test_parent.path }}/alias-parent/homeassistant-cli/.homeassistant-cli-managed
+                homeassistant_cli_binary_path: >-
+                  {{ homeassistant_cli_test_parent.path }}/alias-parent/homeassistant-cli/venv/bin/hass-cli
+
+        - name: Reject symlinked install parent alias
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Require canonical Home Assistant CLI managed paths
+      always:
+        - name: Remove isolated install-tree fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_test_parent.path }}"
+            state: absent
+          check_mode: false

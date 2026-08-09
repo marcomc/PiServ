@@ -1,0 +1,21 @@
+---
+- name: Initialize install-tree rejection evidence
+  ansible.builtin.set_fact:
+    homeassistant_cli_test_rejected: false
+    homeassistant_cli_test_failure_task: ""
+
+- name: Exercise rejected install-tree state
+  block:
+    - name: Attempt install-tree authentication
+      ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+  rescue:
+    - name: Record install-tree rejection evidence
+      ansible.builtin.set_fact:
+        homeassistant_cli_test_rejected: true
+        homeassistant_cli_test_failure_task: "{{ ansible_failed_task.name }}"
+
+- name: Require intended install-tree rejection
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_test_rejected
+      - homeassistant_cli_test_failure_task == homeassistant_cli_test_expected_failure

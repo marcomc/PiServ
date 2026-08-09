@@ -9,6 +9,9 @@
           '^/usr/local/lib/homeassistant-cli(-[A-Za-z0-9._-]+)?$'
         )
       - homeassistant_cli_venv_path == homeassistant_cli_install_dir + '/venv'
+      - >-
+        homeassistant_cli_provenance_path ==
+        homeassistant_cli_install_dir + '/.homeassistant-cli-managed'
       - homeassistant_cli_binary_path == homeassistant_cli_venv_path + '/bin/hass-cli'
       - homeassistant_cli_wrapper_path is match('^/usr/local/bin/[A-Za-z0-9._-]+$')
       - homeassistant_cli_server is match('^https?://[^ ]+$')
@@ -90,6 +93,14 @@
       configured runtime identity.
   no_log: true
 
+- name: Render expected Home Assistant CLI install provenance
+  ansible.builtin.set_fact:
+    homeassistant_cli_expected_provenance: >-
+      {{ lookup('ansible.builtin.template', 'install-provenance.j2') }}
+
+- name: Authenticate Home Assistant CLI install tree
+  ansible.builtin.include_tasks: validate-install-tree.yml
+
 - name: Install Home Assistant CLI runtime packages
   ansible.builtin.apt:
     name:
@@ -100,7 +111,7 @@
     cache_valid_time: 3600
   become: true
 
-- name: Ensure Home Assistant CLI install parent exists
+- name: Create Home Assistant CLI install directory
   ansible.builtin.file:
     path: "{{ homeassistant_cli_install_dir }}"
     state: directory
@@ -137,18 +148,20 @@
       - -xdev
       - "("
       - '!'
-      - -user
-      - root
+      - -uid
+      - "0"
       - -o
       - '!'
-      - -group
-      - root
+      - -gid
+      - "0"
       - ")"
       - -print
       - -quit
   register: homeassistant_cli_nonroot_venv_paths
   changed_when: false
   check_mode: false
+  when:
+    - homeassistant_cli_ownership_probe_required
 
 - name: Require a root-owned Home Assistant CLI virtualenv
   ansible.builtin.assert:
@@ -157,6 +170,8 @@
     fail_msg: >-
       Home Assistant CLI virtualenv contains files not owned by root and must
       be repaired by an explicit migration.
+  when:
+    - homeassistant_cli_ownership_probe_required
 
 - name: Install pinned Home Assistant CLI package
   ansible.builtin.command:
@@ -172,6 +187,16 @@
   changed_when: >-
     'Successfully installed' in homeassistant_cli_package_install.stdout
 
+- name: Publish Home Assistant CLI install provenance atomically
+  ansible.builtin.template:
+    src: install-provenance.j2
+    dest: "{{ homeassistant_cli_provenance_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+    unsafe_writes: false
+  become: true
+
 - name: Authenticate and publish Home Assistant CLI wrapper
   ansible.builtin.include_tasks: wrapper.yml
 
@@ -186,6 +211,8 @@
     HOME: "{{ homeassistant_cli_runtime_user_home }}"
   changed_when: false
   check_mode: false
+  when:
+    - homeassistant_cli_runtime_probe_required
 
 - name: Validate Home Assistant CLI authenticated read access
   ansible.builtin.command:
@@ -200,9 +227,13 @@
   changed_when: false
   check_mode: false
   no_log: true
+  when:
+    - homeassistant_cli_runtime_probe_required
 
 - name: Assert Home Assistant CLI authenticated read access
   ansible.builtin.assert:
     that:
       - homeassistant_cli_info.rc == 0
     fail_msg: Home Assistant CLI could not authenticate to the configured server.
+  when:
+    - homeassistant_cli_runtime_probe_required

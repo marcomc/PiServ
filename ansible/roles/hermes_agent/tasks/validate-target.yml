@@ -18,11 +18,11 @@
         (hermes_agent_dashboard_bind_read_only_paths | length)
       - >-
         (hermes_agent_dashboard_bind_read_only_paths |
-        selectattr('source', 'match', '^/[^:\r\n]+$') | list | length) ==
+        selectattr('source', 'match', '^/[^:\\s]+$') | list | length) ==
         (hermes_agent_dashboard_bind_read_only_paths | length)
       - >-
         (hermes_agent_dashboard_bind_read_only_paths |
-        selectattr('destination', 'match', '^/[^:\r\n]+$') | list | length) ==
+        selectattr('destination', 'match', '^/[^:\\s]+$') | list | length) ==
         (hermes_agent_dashboard_bind_read_only_paths | length)
       - >-
         (hermes_agent_dashboard_bind_read_only_paths |

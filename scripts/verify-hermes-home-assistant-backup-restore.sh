@@ -31,16 +31,23 @@ if [[ "${risk}" != non-critical ]]; then
 fi
 
 target="$(piserv_ssh_target)"
-unit_name="hermes-home-assistant-restore-proof-$(date -u +%Y%m%d%H%M%S)"
+unit_name="hermes-home-assistant-restore-proof-$(date -u +%Y%m%d%H%M%S)-$$"
+audit_helper_remote="/run/${unit_name}-audit.py"
+
+ssh -o BatchMode=yes "${target}" \
+  "sudo install -o root -g root -m 0600 /dev/stdin '${audit_helper_remote}'" \
+  <"${script_dir}/hermes_audit.py"
 
 printf 'Starting isolated MCP backup-restore proof unit: %s\n' "${unit_name}"
 ssh -o BatchMode=yes "${target}" \
-  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=15min --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=15min --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' --setenv='HERMES_AUDIT_HELPER=${audit_helper_remote}' /bin/bash -s" <<'REMOTE'
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent
 source_codex_home="${source_home}/codex"
 token_env_file="${source_home}/home-assistant-mcp.env"
+managed_policy=/etc/hermes-agent/policies/smart-home-AGENTS.md
+audit_helper="${HERMES_AUDIT_HELPER:?HERMES_AUDIT_HELPER is required}"
 api_url="${HOME_ASSISTANT_API_URL:?HOME_ASSISTANT_API_URL is required}"
 entity_id="${HOME_ASSISTANT_ENTITY:?HOME_ASSISTANT_ENTITY is required}"
 timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
@@ -52,15 +59,20 @@ initial_state=""
 restore_required=false
 
 cleanup() {
-  local status=$?
+  local primary_status=$?
   local cleanup_status=0
 
   if [[ "${restore_required}" == true && -n "${initial_state}" ]]; then
     if [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
       restore_prompt="Hermes backup-restore MCP emergency cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
-      if ! run_as_restored_hermes hermes chat --query "${restore_prompt}" --quiet \
-        --toolsets home-assistant-assist --max-turns 20 \
+      emergency_source="piserv-backup-restore-emergency-${timestamp}-$$"
+      if ! run_protected_hermes "${restore_home}" "${emergency_source}" \
+        chat --query "${restore_prompt}" --quiet \
+        --toolsets home-assistant-assist --max-turns 20 --source "${emergency_source}" \
         >"${work_dir}/emergency-restore.log" 2>&1; then
+        cleanup_status=70
+      elif ! export_and_validate_audit \
+        "${restore_home}" "${emergency_source}" "emergency restoration"; then
         cleanup_status=70
       elif [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
         cleanup_status=70
@@ -77,10 +89,17 @@ cleanup() {
   else
     rm -rf -- "${work_dir}"
   fi
-  if (( status == 0 && cleanup_status != 0 )); then
-    status=${cleanup_status}
+  rm -f -- "${audit_helper}"
+  if (( primary_status != 0 )); then
+    printf 'Primary acceptance failure status: %d\n' "${primary_status}" >&2
   fi
-  exit "${status}"
+  if (( cleanup_status != 0 )); then
+    printf 'Cleanup failure status: %d\n' "${cleanup_status}" >&2
+  fi
+  if (( primary_status == 0 && cleanup_status != 0 )); then
+    primary_status=${cleanup_status}
+  fi
+  exit "${primary_status}"
 }
 trap cleanup EXIT
 umask 077
@@ -104,6 +123,48 @@ run_as_restored_hermes() {
     HERMES_HOME="${restore_home}" \
     CODEX_HOME="${restore_home}/codex" \
     bash -c 'cd -- "${HERMES_HOME}/workspace" && exec "$@"' bash "$@"
+}
+
+run_protected_hermes() {
+  local hermes_home=$1
+  shift 2
+  local workspace="${hermes_home}/workspace"
+  local codex_home="${hermes_home}/codex"
+
+  test -f "${managed_policy}"
+  if [[ ! -e "${workspace}/AGENTS.md" ]]; then
+    install -o hermes-agent -g hermes-agent -m 0600 /dev/null \
+      "${workspace}/AGENTS.md"
+  fi
+  systemd-run --quiet --wait --pipe --collect --service-type=exec \
+    --uid=hermes-agent \
+    --property=RuntimeMaxSec=5min \
+    --property=NoNewPrivileges=yes \
+    --property=PrivateTmp=yes \
+    --property=ProtectSystem=strict \
+    --property=ProtectHome=yes \
+    --property="ReadWritePaths=${hermes_home}" \
+    --property="EnvironmentFile=${token_env_file}" \
+    --property="BindReadOnlyPaths=${managed_policy}:${workspace}/AGENTS.md" \
+    --property="RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6" \
+    --setenv="HOME=${hermes_home}" \
+    --setenv="HERMES_HOME=${hermes_home}" \
+    --setenv="CODEX_HOME=${codex_home}" \
+    --working-directory="${workspace}" \
+    -- hermes "$@"
+}
+
+export_and_validate_audit() {
+  local hermes_home=$1
+  local source_tag=$2
+  local label=$3
+  local export_path="${work_dir}/${source_tag}.jsonl"
+
+  run_protected_hermes "${hermes_home}" "${source_tag}" \
+    sessions export - --format jsonl --source "${source_tag}" \
+    --newer-than 5m --redact >"${export_path}"
+  python3 "${audit_helper}" --export "${export_path}" \
+    --source "${source_tag}" --entity "${entity_id}" --label "${label}"
 }
 
 load_hass_mcp_token() {
@@ -184,10 +245,14 @@ case "${initial_state}" in
 esac
 
 action_prompt="Hermes backup-restore MCP acceptance test ${timestamp}. Use only the home-assistant-assist MCP server. You are authorized to change only ${entity_id} to ${desired_state}, verify its state, and touch nothing else."
+action_source="piserv-backup-restore-action-${timestamp}-$$"
 restore_required=true
-run_as_restored_hermes hermes chat --query "${action_prompt}" --quiet \
-  --toolsets home-assistant-assist --max-turns 20 \
+run_protected_hermes "${restore_home}" "${action_source}" \
+  chat --query "${action_prompt}" --quiet \
+  --toolsets home-assistant-assist --max-turns 20 --source "${action_source}" \
   >"${work_dir}/action.log" 2>&1
+export_and_validate_audit \
+  "${restore_home}" "${action_source}" "backup-restore action"
 
 if [[ "$(home_assistant_state)" != "${desired_state}" ]]; then
   printf 'Restored Hermes home did not apply the requested state.\n' >&2
@@ -195,9 +260,13 @@ if [[ "$(home_assistant_state)" != "${desired_state}" ]]; then
 fi
 
 restore_prompt="Hermes backup-restore MCP cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
-run_as_restored_hermes hermes chat --query "${restore_prompt}" --quiet \
-  --toolsets home-assistant-assist --max-turns 20 \
+restore_source="piserv-backup-restore-cleanup-${timestamp}-$$"
+run_protected_hermes "${restore_home}" "${restore_source}" \
+  chat --query "${restore_prompt}" --quiet \
+  --toolsets home-assistant-assist --max-turns 20 --source "${restore_source}" \
   >"${work_dir}/restore.log" 2>&1
+export_and_validate_audit \
+  "${restore_home}" "${restore_source}" "backup-restore cleanup"
 
 if [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
   printf 'Restored Hermes home did not restore the original state.\n' >&2

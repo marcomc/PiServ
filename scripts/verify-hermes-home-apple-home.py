@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,16 +22,13 @@ DEFAULT_REPORT_ROOT = Path("artifacts/hermes-home-apple-home")
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_POLL_INTERVAL = 2.0
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
-ENTITY_ID_PATTERN = re.compile(r"\b[a-z0-9_]+\.[a-z0-9_]+\b")
-ALLOWED_HERMES_MCP_TOOLS = {
-    "mcp__home_assistant_assist__GetLiveContext",
-    "mcp__home_assistant_assist__HassTurnOn",
-    "mcp__home_assistant_assist__HassTurnOff",
-}
-HERMES_MUTATION_TOOLS = {
-    "mcp__home_assistant_assist__HassTurnOn",
-    "mcp__home_assistant_assist__HassTurnOff",
-}
+AUDIT_HELPER_PATH = Path(__file__).with_name("hermes_audit.py")
+AUDIT_SPEC = importlib.util.spec_from_file_location("hermes_audit", AUDIT_HELPER_PATH)
+if AUDIT_SPEC is None or AUDIT_SPEC.loader is None:
+    raise RuntimeError(f"cannot load Hermes audit helper: {AUDIT_HELPER_PATH}")
+HERMES_AUDIT = importlib.util.module_from_spec(AUDIT_SPEC)
+AUDIT_SPEC.loader.exec_module(HERMES_AUDIT)
+MANAGED_POLICY_PATH = "/etc/hermes-agent/policies/smart-home-AGENTS.md"
 
 
 class VerificationError(RuntimeError):
@@ -188,75 +187,21 @@ def home_assistant_power_state(payload: dict[str, Any], label: str) -> bool:
     return state == "on"
 
 
-def audit_entity_ids(value: Any) -> set[str]:
-    if isinstance(value, str):
-        return set(ENTITY_ID_PATTERN.findall(value))
-    if isinstance(value, dict):
-        return set().union(*(audit_entity_ids(item) for item in value.values()))
-    if isinstance(value, list):
-        return set().union(*(audit_entity_ids(item) for item in value))
-    return set()
-
-
 def validate_hermes_audit(
     invocation: dict[str, Any], entity_id: str, label: str
 ) -> dict[str, Any]:
     if not invocation.get("audit_complete"):
         raise VerificationError(f"Hermes task audit was not captured for {label}")
-
-    audited_tools: list[str] = []
-    mutation_tools: list[str] = []
-    for call in invocation.get("tool_calls", []):
-        if not isinstance(call, dict):
-            raise VerificationError(f"Hermes task audit has invalid records for {label}")
-        function_name = call.get("name")
-        arguments = call.get("arguments", {})
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError as error:
-                raise VerificationError(
-                    f"Hermes task audit has invalid tool arguments for {label}"
-                ) from error
-        if not isinstance(arguments, dict):
-            raise VerificationError(f"Hermes task audit has invalid records for {label}")
-        if function_name == "tool_describe":
-            described_name = arguments.get("name")
-            if described_name not in ALLOWED_HERMES_MCP_TOOLS:
-                raise VerificationError(
-                    f"Hermes described a non-allowlisted tool for {label}: "
-                    f"{described_name!r}"
-                )
-            continue
-        if function_name == "tool_call":
-            called_name = arguments.get("name")
-            called_arguments = arguments.get("arguments", {})
-            if called_name not in ALLOWED_HERMES_MCP_TOOLS:
-                raise VerificationError(
-                    f"Hermes used a non-allowlisted tool for {label}: {called_name!r}"
-                )
-            if not isinstance(called_arguments, dict):
-                raise VerificationError(
-                    f"Hermes task audit has invalid called-tool arguments for {label}"
-                )
-            audited_tools.append(called_name)
-            if (
-                called_name in HERMES_MUTATION_TOOLS
-                and audit_entity_ids(called_arguments) != {entity_id}
-            ):
-                raise VerificationError(
-                    f"Hermes addressed an entity outside the allowlist for {label}"
-                )
-            if called_name in HERMES_MUTATION_TOOLS:
-                mutation_tools.append(called_name)
-            continue
-        raise VerificationError(
-            f"Hermes used an unexpected tool-call record for {label}: {function_name!r}"
+    try:
+        if "audit_records" in invocation:
+            return HERMES_AUDIT.validate_session_export(
+                invocation["audit_records"], invocation.get("source", ""), entity_id, label
+            )
+        return HERMES_AUDIT.validate_tool_calls(
+            invocation.get("tool_calls", []), entity_id, label
         )
-
-    if not mutation_tools:
-        raise VerificationError(f"Hermes task audit recorded no mutation for {label}")
-    return {"tool_names": audited_tools, "entity_ids": [entity_id]}
+    except HERMES_AUDIT.AuditError as error:
+        raise VerificationError(str(error)) from error
 
 
 def normalize_bool(value: Any) -> bool:
@@ -340,28 +285,95 @@ def invoke_hermes(
             source_tag,
         ]
     )
+    workspace = f"{hermes_home}/workspace"
+    protected_command = shlex.join(
+        [
+            "sudo",
+            "systemd-run",
+            "--quiet",
+            "--wait",
+            "--pipe",
+            "--collect",
+            "--service-type=exec",
+            "--uid=hermes-agent",
+            f"--setenv=HOME={hermes_home}",
+            "--property=RuntimeMaxSec=5min",
+            "--property=NoNewPrivileges=yes",
+            "--property=PrivateTmp=yes",
+            "--property=ProtectSystem=strict",
+            "--property=ProtectHome=yes",
+            f"--property=ReadWritePaths={hermes_home}",
+            f"--property=EnvironmentFile={token_file}",
+            f"--property=BindReadOnlyPaths={MANAGED_POLICY_PATH}:{workspace}/AGENTS.md",
+            "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+            f"--working-directory={workspace}",
+            "--",
+            "bash",
+            "-c",
+            hermes_command,
+        ]
+    )
+    export_command = shlex.join(
+        [
+            "sudo",
+            "systemd-run",
+            "--quiet",
+            "--wait",
+            "--pipe",
+            "--collect",
+            "--service-type=exec",
+            "--uid=hermes-agent",
+            f"--setenv=HOME={hermes_home}",
+            "--property=RuntimeMaxSec=1min",
+            "--property=NoNewPrivileges=yes",
+            "--property=PrivateTmp=yes",
+            "--property=ProtectSystem=strict",
+            "--property=ProtectHome=yes",
+            f"--property=ReadWritePaths={hermes_home}",
+            f"--property=EnvironmentFile={token_file}",
+            f"--property=BindReadOnlyPaths={MANAGED_POLICY_PATH}:{workspace}/AGENTS.md",
+            f"--working-directory={workspace}",
+            "--",
+            "env",
+            f"HERMES_HOME={hermes_home}",
+            f"CODEX_HOME={config.get('codex_home', '/var/lib/hermes-agent/codex')}",
+            hermes_binary,
+            "sessions",
+            "export",
+            "-",
+            "--format",
+            "jsonl",
+            "--source",
+            source_tag,
+            "--newer-than",
+            "5m",
+            "--redact",
+        ]
+    )
     remote_script = "\n".join(
         [
             "set -eu",
             "set -a",
             f". {shlex.quote(token_file)}",
             "set +a",
-            f"cd {shlex.quote(hermes_home)}/workspace",
+            f"test -f {shlex.quote(MANAGED_POLICY_PATH)}",
+            f"test -d {shlex.quote(workspace)}",
+            f"if ! test -e {shlex.quote(workspace + '/AGENTS.md')}; then install -o hermes-agent -g hermes-agent -m 0600 /dev/null {shlex.quote(workspace + '/AGENTS.md')}; fi",
             'output_file="$(mktemp)"',
             'error_file="$(mktemp)"',
             'audit_file="$(mktemp)"',
             "trap 'rm -f -- \"$output_file\" \"$error_file\" \"$audit_file\"' EXIT",
             "set +e",
-            f"{hermes_command} >\"$output_file\" 2>\"$error_file\"",
+            f"{protected_command} >\"$output_file\" 2>\"$error_file\"",
             "hermes_exit=$?",
             "set -e",
             "audit_complete=false",
             "audit_json='[]'",
-            f"if {shlex.quote(hermes_binary)} sessions export - --format jsonl --source {shlex.quote(source_tag)} --newer-than 5m --redact >\"$audit_file\"; then",
-            "  audit_json=\"$(jq -s -c '[.[].messages[]? | .tool_calls[]?.function // empty]' \"$audit_file\" 2>/dev/null || printf '[]')\"",
+            f"if {export_command} >\"$audit_file\"; then",
+            "  audit_json=\"$(jq -s -c '.' \"$audit_file\" 2>/dev/null || printf '[]')\"",
             "  audit_complete=true",
             "fi",
-            "printf '{\"exit_code\":%s,\"audit_complete\":%s,\"tool_calls\":%s,\"stdout\":' \"$hermes_exit\" \"$audit_complete\" \"$audit_json\"",
+            f"printf '{{\"exit_code\":%s,\"audit_complete\":%s,\"source\":%s,\"audit_records\":%s,\"stdout\":' \"$hermes_exit\" \"$audit_complete\" {shlex.quote(json.dumps(source_tag))} \"$audit_json\"",
             "jq -Rs . <\"$output_file\"",
             "printf ',\"stderr\":'",
             "jq -Rs . <\"$error_file\"",
@@ -369,7 +381,7 @@ def invoke_hermes(
         ]
     )
     remote_command = shlex.join(
-        ["sudo", "-u", "hermes-agent", "-H", "bash", "-c", remote_script]
+        ["sudo", "bash", "-c", remote_script]
     )
     result = run_command(
         ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
@@ -403,7 +415,7 @@ def write_reports(report: dict[str, Any], report_dir: Path) -> None:
     report_dir.mkdir(parents=True, exist_ok=True)
     json_path = report_dir / "report.json"
     text_path = report_dir / "report.txt"
-    json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    write_text_atomic(json_path, json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary = [
         f"status: {report['status']}",
         f"started: {report['started_at']}",
@@ -413,7 +425,22 @@ def write_reports(report: dict[str, Any], report_dir: Path) -> None:
     ]
     if report.get("failure"):
         summary.append(f"failure: {report['failure']}")
-    text_path.write_text("\n".join(summary) + "\n")
+    write_text_atomic(text_path, "\n".join(summary) + "\n")
+
+
+def write_text_atomic(path: Path, content: str) -> None:
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False
+    ) as handle:
+        temporary_path = Path(handle.name)
+        handle.write(content)
+    temporary_path.replace(path)
+
+
+def default_report_dir() -> Path:
+    DEFAULT_REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    prefix = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ-")
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=DEFAULT_REPORT_ROOT))
 
 
 def parse_args() -> argparse.Namespace:
@@ -501,6 +528,7 @@ def verify_entity(
             f"{entity['label']} restoration",
         )
         target["hermes_restore"].pop("tool_calls", None)
+        target["hermes_restore"].pop("audit_records", None)
         target["restored"] = poll(
             lambda: expected_restore(config, entity, original_power, report, args.timeout),
             args.timeout,
@@ -508,6 +536,7 @@ def verify_entity(
             f"test entity restoration for {entity['label']}",
         )
 
+    primary_error: Exception | None = None
     try:
         mutation_attempted = True
         target["hermes_action"] = invoke_hermes(
@@ -521,6 +550,7 @@ def verify_entity(
             entity["label"],
         )
         target["hermes_action"].pop("tool_calls", None)
+        target["hermes_action"].pop("audit_records", None)
 
         def expected_state() -> dict[str, Any] | None:
             homeclaw = homeclaw_state(
@@ -544,15 +574,33 @@ def verify_entity(
             args.poll_interval,
             f"Home Assistant and Apple Home to converge for {entity['label']}",
         )
-    finally:
+    except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
+        primary_error = error
+
+    cleanup_error: Exception | None = None
+    try:
         restore()
+    except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
+        cleanup_error = error
+
+    if primary_error is not None:
+        target["primary_failure"] = str(primary_error)
+    if cleanup_error is not None:
+        target["cleanup_failure"] = str(cleanup_error)
+    if primary_error is not None or cleanup_error is not None:
+        failures = []
+        if primary_error is not None:
+            failures.append(f"primary: {primary_error}")
+        if cleanup_error is not None:
+            failures.append(f"cleanup: {cleanup_error}")
+        raise VerificationError("; ".join(failures))
 
 
 def main() -> int:
     args = parse_args()
     if args.timeout <= 0 or args.poll_interval <= 0 or args.max_turns <= 0:
         raise VerificationError("timeout, poll interval, and max turns must be positive")
-    report_dir = args.report_dir or DEFAULT_REPORT_ROOT / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    report_dir = args.report_dir or default_report_dir()
     report: dict[str, Any] = {
         "schema": 1,
         "status": "failed",

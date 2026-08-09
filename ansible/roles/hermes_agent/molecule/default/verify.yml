@@ -278,6 +278,88 @@
       ansible.builtin.include_vars:
         file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
 
+    - name: Accept current dashboard bind-read-only paths
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+      vars:
+        hermes_agent_dashboard_bind_read_only_paths:
+          - source: /etc/hermes-managed-policy
+            destination: /var/lib/hermes-agent/workspace/AGENTS.md
+
+    - name: Reject unsafe dashboard bind-read-only source paths
+      block:
+        - name: Validate unsafe dashboard bind-read-only source paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMJbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMLbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMMbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "/etc/hermes\rmanaged-policy"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "/etc/hermes\nmanaged-policy"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: /etc/hermes:managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+
+        - name: Fail if unsafe dashboard bind-read-only source paths were accepted
+          ansible.builtin.fail:
+            msg: Unsafe dashboard bind-read-only source paths must fail validation.
+      rescue:
+        - name: Assert exact source-path validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Reject unsafe dashboard bind-read-only destination paths
+      block:
+        - name: Validate unsafe dashboard bind-read-only destination paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes agent/workspace/AGENTS.md
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMJLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMLLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMMLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: "/var/lib/hermes-agent/workspace/AGENTS\r.md"
+              - source: /etc/hermes-managed-policy
+                destination: "/var/lib/hermes-agent/workspace/AGENTS\n.md"
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS:md
+
+        - name: Fail if unsafe dashboard bind-read-only destination paths were accepted
+          ansible.builtin.fail:
+            msg: Unsafe dashboard bind-read-only destination paths must fail validation.
+      rescue:
+        - name: Assert exact destination-path validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
     - name: Create foreign regular Codex link target fixture
       ansible.builtin.copy:
         content: foreign codex executable
