@@ -47,12 +47,16 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_checkout.stat.exists
 
-- name: Assert locked-down Hermes CLI toolsets
+- name: Assert configured Hermes CLI toolsets
   ansible.builtin.assert:
     that:
       - "'✓ enabled  memory' in hermes_agent_toolsets_output.stdout"
       - "'✓ enabled  skills' in hermes_agent_toolsets_output.stdout"
-      - "'✗ disabled  terminal' in hermes_agent_toolsets_output.stdout"
+      - >-
+        (
+          "'✓ enabled  terminal'" if 'terminal' in hermes_agent_enabled_toolsets
+          else "'✗ disabled  terminal'"
+        ) in hermes_agent_toolsets_output.stdout
       - "'✗ disabled  file' in hermes_agent_toolsets_output.stdout"
       - "'✗ disabled  homeassistant' in hermes_agent_toolsets_output.stdout"
   when:

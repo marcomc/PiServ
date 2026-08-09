@@ -67,6 +67,17 @@ ssh admin@PiServ.local \
   'sudo -u hermes-agent /usr/local/bin/hass-cli service list climate'
 ```
 
+On the same date, Hermes completed an explicitly authorized reversible
+acceptance test for `climate.camera_da_letto` through the dedicated wrapper:
+
+1. It confirmed the initial state was `off` and turned the entity on.
+2. It set target temperatures of 23 C and 25 C, verifying each result.
+3. It set the supported `low` and `high` fan modes, verifying each result.
+4. It turned the entity off; an independent `hass-cli state get` check
+   confirmed the final state was `off`.
+
+No other entity was addressed during the test.
+
 ## Recovery
 
 If authentication fails, verify the Home Assistant URL and rotate the existing

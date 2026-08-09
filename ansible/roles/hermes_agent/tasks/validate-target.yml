@@ -51,8 +51,10 @@
         match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
       - hermes_agent_codex_archive_binary_name != 'codex'
       - hermes_agent_provider == "openai-codex"
-      - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
-      - "'terminal' in hermes_agent_disabled_toolsets"
+      - >-
+        hermes_agent_enabled_toolsets | difference(["memory", "skills", "terminal"]) | length == 0
+      - >-
+        hermes_agent_enabled_toolsets | intersect(hermes_agent_disabled_toolsets) | length == 0
       - "'file' in hermes_agent_disabled_toolsets"
       - "'browser' in hermes_agent_disabled_toolsets"
       - "'code_execution' in hermes_agent_disabled_toolsets"

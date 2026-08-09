@@ -27,6 +27,9 @@
 - Added and validated `homeassistant-cli` on PiServ, using the existing private
   Hermes Home Assistant token and the remote REST API for full entity/service
   control. The Home Assistant Assist MCP remains available as a secondary path.
+- Enabled Hermes to use the dedicated `hass-cli` wrapper as its primary
+  Home Assistant control path while retaining the Assist MCP for secondary
+  discovery and verification.
 
 ## [0.4.0] - 2026-08-08
 

@@ -74,7 +74,9 @@ observation, and manual Siri control check also passed. Advanced climate
 controls remain a separate allowlisted MCP-extension proposition. The PiServ
 Home Assistant CLI is installed and validated against the same authenticated
 Home Assistant API token used by Hermes. It is the primary full-control entry
-point, while the Assist MCP remains a secondary limited observer/control path.
+point. Hermes is authorized to invoke the dedicated `hass-cli` wrapper for
+smart-home work, while the Assist MCP remains a secondary limited
+observer/control path.
 
 ## Later Releases
 

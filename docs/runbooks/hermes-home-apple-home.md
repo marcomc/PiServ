@@ -19,7 +19,7 @@ This runbook verifies the release path:
 Hermes CLI on PiServ
         |
         v
-Home Assistant MCP and state API
+Home Assistant MCP, CLI, and state API
         |
         v
 HomeKit Bridge

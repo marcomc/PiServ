@@ -94,6 +94,39 @@
           {{ piserv_hermes_agent_manage_home_assistant_mcp }}
         hermes_agent_home_assistant_mcp_url: >-
           {{ piserv_hermes_agent_home_assistant_mcp_url }}
+        hermes_agent_enabled_toolsets:
+          - memory
+          - skills
+          - terminal
+        hermes_agent_disabled_toolsets:
+          - browser
+          - clarify
+          - code_execution
+          - computer_use
+          - context_engine
+          - cronjob
+          - delegation
+          - discord
+          - discord_admin
+          - feishu_doc
+          - feishu_drive
+          - file
+          - homeassistant
+          - image_gen
+          - kanban
+          - project
+          - search
+          - session_search
+          - spotify
+          - stt
+          - todo
+          - tts
+          - video
+          - video_gen
+          - vision
+          - web
+          - x_search
+          - yuanbao
         hermes_agent_manage_backup: true
         hermes_agent_backup_group: external-data
         hermes_agent_backup_dir: /mnt/external-data/backups/hermes-agent
@@ -104,7 +137,7 @@
   post_tasks:
     - name: Install PiServ smart-home policy for Hermes workspace
       ansible.builtin.copy:
-        src: ../files/hermes-smart-home-AGENTS.md
+        src: hermes-smart-home-AGENTS.md
         dest: /var/lib/hermes-agent/workspace/AGENTS.md
         owner: hermes-agent
         group: hermes-agent

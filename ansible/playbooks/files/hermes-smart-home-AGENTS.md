@@ -1,8 +1,10 @@
 # PiServ Smart Home Policy
 
-Use Home Assistant only through the configured `home-assistant-assist` MCP
-server. Do not use terminal, filesystem, SSH, browser, or direct Home Assistant
-HTTP APIs for smart-home operations.
+Use `/usr/local/bin/hass-cli` through the terminal for full Home Assistant
+control. Use the configured `home-assistant-assist` MCP server as a secondary
+discovery and verification path. Do not use direct Home Assistant HTTP APIs,
+filesystem, SSH, browser, or any terminal command other than `hass-cli` for
+smart-home operations.
 
 ## Operating Modes
 
@@ -12,8 +14,7 @@ HTTP APIs for smart-home operations.
   grant expires when the activity finishes and must not be treated as a
   persistent permission.
 - Full autonomy may include Home Assistant configuration and automation changes
-  only when those capabilities are exposed through MCP and the activity names
-  the intended outcome.
+  through `hass-cli` when the activity names the intended outcome.
 
 ## Critical Actions
 
