@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+token_file={{ homeassistant_cli_token_env_file | quote }}
+if [ ! -r "${token_file}" ]; then
+    printf '%s\n' 'Home Assistant CLI token file is not readable.' >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "${token_file}"
+token_name={{ homeassistant_cli_token_env_var | quote }}
+eval "token_value=\${${token_name}:-}"
+if [ -z "${token_value}" ]; then
+    printf '%s\n' 'Home Assistant token is empty.' >&2
+    exit 1
+fi
+
+export HASS_SERVER={{ homeassistant_cli_server | quote }}
+export HASS_TOKEN="${token_value}"
+exec {{ homeassistant_cli_binary_path | quote }} "$@"

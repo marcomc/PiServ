@@ -49,6 +49,9 @@ operational picture where the platform permits it.
 5. Use HomeClaw locally as a read-only observer during an explicitly started
    acceptance test. Direct HomeClaw control through SSH or Supergateway remains
    a later release decision.
+6. Install and validate `homeassistant-cli` on PiServ against the same private
+   token and Home Assistant server used by Hermes. Use it as the full REST and
+   WebSocket control path; keep the Assist MCP available as a secondary path.
 
 ### Non-goals
 
@@ -68,7 +71,10 @@ with the procedure documented in
 The acceptance run passed before and after a Hermes dashboard restart on
 2026-08-08. The backup/import proof, Assist policy review, Apple Home-only
 observation, and manual Siri control check also passed. Advanced climate
-controls remain a separate allowlisted MCP-extension proposition.
+controls remain a separate allowlisted MCP-extension proposition. The PiServ
+Home Assistant CLI is installed and validated against the same authenticated
+Home Assistant API token used by Hermes. It is the primary full-control entry
+point, while the Assist MCP remains a secondary limited observer/control path.
 
 ## Later Releases
 

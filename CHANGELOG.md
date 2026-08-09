@@ -24,6 +24,9 @@
 - Repeated the same acceptance test after restarting the Hermes dashboard;
   Home Assistant and HomeClaw again confirmed both the requested state and the
   restored state.
+- Added and validated `homeassistant-cli` on PiServ, using the existing private
+  Hermes Home Assistant token and the remote REST API for full entity/service
+  control. The Home Assistant Assist MCP remains available as a secondary path.
 
 ## [0.4.0] - 2026-08-08
 

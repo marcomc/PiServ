@@ -147,6 +147,11 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   memory controller and effective systemd limits are enforcing containment.
   Keep an independently effective `LimitAS` cap when cgroup memory controls
   are unavailable.
+- For configurable privileged lifecycle artifacts, inventory every root,
+  output, staging, persistent, backup, recovery, cleanup, and runtime-consumer
+  path before mutation. Authenticate parent containment and inode identity,
+  publish atomically, and prove the eventual service identity has the required
+  access before enabling scheduled consumption.
 
 ## pCloud / FUSE Rules
 

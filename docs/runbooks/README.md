@@ -20,6 +20,7 @@ Runbooks document repeatable PiServ operations and recovery steps.
 | [Cgroup memory controller](cgroup-memory-controller.md) | Manage the reversible cgroup v2 memory-controller DTB |
 | [Glances observability](glances-observability.md) | Operate the LAN-accessible Glances JSON API |
 | [Hermes Agent](hermes-agent.md) | Deploy, authenticate, validate, back up, and access Hermes |
+| [Home Assistant CLI](homeassistant-cli.md) | Install and validate full Home Assistant API CLI access |
 | [Jackett search](jackett.md) | Deploy and operate trusted-network Jackett search |
 | [PiServ installation and convergence](piserv-install.md) | Apply the ordered full-host installation entry point |
 | [Migrate microSD to NVMe](migrate-sd-to-nvme.md) | Move the live system to NVMe boot |
