@@ -47,6 +47,124 @@
         status_code: 200
         return_content: false
 
+    - name: Read dashboard bind-read-only policy from unit source
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -F
+          - BindReadOnlyPaths=/etc/hermes-managed-policy:/var/lib/hermes-agent/workspace/AGENTS.md
+          - /etc/systemd/system/hermes-agent-dashboard.service
+      changed_when: false
+
+    - name: Read effective dashboard bind-read-only policy
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - hermes-agent-dashboard.service
+          - --property=BindReadOnlyPaths
+          - --value
+      register: hermes_agent_molecule_effective_bind_read_only_paths
+      changed_when: false
+
+    - name: Read dashboard service process identifier
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - hermes-agent-dashboard.service
+          - --property=MainPID
+          - --value
+      register: hermes_agent_molecule_dashboard_main_pid
+      changed_when: false
+
+    - name: Read managed policy through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - cat
+          - /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_read
+      changed_when: false
+
+    - name: Reject managed policy writes through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - sh
+          - -c
+          - printf mutation > /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_write
+      changed_when: false
+      failed_when: hermes_agent_molecule_managed_policy_write.rc == 0
+
+    - name: Reject managed policy unlink through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - rm
+          - /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_unlink
+      changed_when: false
+      failed_when: hermes_agent_molecule_managed_policy_unlink.rc == 0
+
+    - name: Assert managed policy bind-read-only contract
+      ansible.builtin.assert:
+        that:
+          - >-
+            '/etc/hermes-managed-policy:/var/lib/hermes-agent/workspace/AGENTS.md' in
+            hermes_agent_molecule_effective_bind_read_only_paths.stdout
+          - hermes_agent_molecule_dashboard_main_pid.stdout | int > 1
+          - hermes_agent_molecule_managed_policy_read.stdout == 'managed smart-home policy fixture'
+          - hermes_agent_molecule_managed_policy_write.rc != 0
+          - hermes_agent_molecule_managed_policy_unlink.rc != 0
+
+    - name: Enable unknown Hermes toolset fixture
+      ansible.builtin.file:
+        path: /tmp/hermes-enable-unknown-toolset
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject an unknown newly enabled Hermes CLI toolset
+      block:
+        - name: Validate installation with unknown enabled toolset
+          ansible.builtin.include_tasks: >-
+            {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-install.yml
+
+        - name: Fail if unknown enabled toolset was accepted
+          ansible.builtin.fail:
+            msg: Unknown newly enabled toolsets must fail validation.
+      rescue:
+        - name: Assert exact enabled-toolset validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert configured Hermes CLI toolsets'
+      always:
+        - name: Disable unknown Hermes toolset fixture
+          ansible.builtin.file:
+            path: /tmp/hermes-enable-unknown-toolset
+            state: absent
+
     - name: Run scheduled backup service
       ansible.builtin.command:
         argv:
@@ -1790,11 +1908,8 @@
           ansible.builtin.assert:
             that:
               - >-
-                ansible_failed_task.name in [
-                  'Apply role with UID-zero identity alias',
-                  'Assert Hermes Agent runtime identity names are unprivileged',
-                  'Require compatible existing Hermes Agent identity and roots'
-                ]
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
 
     - name: Reject disposable GID-zero alias before mutation
       block:
@@ -1820,11 +1935,8 @@
           ansible.builtin.assert:
             that:
               - >-
-                ansible_failed_task.name in [
-                  'Apply role with GID-zero identity alias',
-                  'Assert Hermes Agent runtime identity names are unprivileged',
-                  'Require compatible existing Hermes Agent identity and roots'
-                ]
+                ansible_failed_task.name ==
+                'Require compatible existing Hermes Agent identity and roots'
 
     - name: Create foreign Hermes Git checkout fixture
       ansible.builtin.command:

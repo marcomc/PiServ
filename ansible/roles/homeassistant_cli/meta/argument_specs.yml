@@ -33,6 +33,3 @@ argument_specs:
       homeassistant_cli_token_env_var:
         type: str
         required: true
-      homeassistant_cli_expected_python:
-        type: str
-        required: true

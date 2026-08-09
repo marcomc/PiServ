@@ -1,0 +1,82 @@
+---
+- name: Inspect Home Assistant CLI wrapper parent
+  ansible.builtin.stat:
+    path: "{{ homeassistant_cli_wrapper_path | dirname }}"
+    follow: false
+  register: homeassistant_cli_wrapper_parent
+  changed_when: false
+  check_mode: false
+
+- name: Require the Home Assistant CLI wrapper parent to exist
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_wrapper_parent.stat.exists
+    fail_msg: >-
+      Home Assistant CLI wrapper parent must exist before wrapper publication.
+
+- name: Authenticate the Home Assistant CLI wrapper parent
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_wrapper_parent.stat.isdir
+      - not homeassistant_cli_wrapper_parent.stat.islnk
+      - homeassistant_cli_wrapper_parent.stat.uid == 0
+      - homeassistant_cli_wrapper_parent.stat.gid == 0
+      - homeassistant_cli_wrapper_parent.stat.mode == '0755'
+    fail_msg: >-
+      Home Assistant CLI wrapper parent must be a root-owned 0755 directory,
+      not a symlink.
+
+- name: Inspect Home Assistant CLI wrapper destination
+  ansible.builtin.stat:
+    path: "{{ homeassistant_cli_wrapper_path }}"
+    follow: false
+  register: homeassistant_cli_wrapper_destination
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate existing Home Assistant CLI wrapper metadata
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_wrapper_destination.stat.isreg
+      - not homeassistant_cli_wrapper_destination.stat.islnk
+      - homeassistant_cli_wrapper_destination.stat.uid == 0
+      - homeassistant_cli_wrapper_destination.stat.gid == 0
+      - homeassistant_cli_wrapper_destination.stat.mode == '0755'
+    fail_msg: >-
+      Refusing to replace a Home Assistant CLI wrapper that is not a
+      root-owned 0755 regular file.
+  when: homeassistant_cli_wrapper_destination.stat.exists
+
+- name: Read existing Home Assistant CLI wrapper provenance
+  ansible.builtin.slurp:
+    src: "{{ homeassistant_cli_wrapper_path }}"
+  register: homeassistant_cli_wrapper_existing
+  changed_when: false
+  check_mode: false
+  when: homeassistant_cli_wrapper_destination.stat.exists
+
+- name: Require existing Home Assistant CLI wrapper provenance
+  ansible.builtin.assert:
+    that:
+      - >-
+        (homeassistant_cli_wrapper_existing.content | b64decode).startswith(
+          '#!/bin/sh\n# Managed by Ansible role homeassistant_cli.\n'
+        )
+        or
+        (homeassistant_cli_wrapper_existing.content | b64decode) ==
+        lookup('ansible.builtin.template', 'hass-cli-legacy.j2')
+    fail_msg: >-
+      Refusing to replace an existing wrapper without the homeassistant_cli
+      role provenance marker or an exact legacy role-managed payload; migrate
+      or remove it explicitly.
+  when: homeassistant_cli_wrapper_destination.stat.exists
+
+- name: Publish Home Assistant CLI wrapper atomically
+  ansible.builtin.template:
+    src: hass-cli.j2
+    dest: "{{ homeassistant_cli_wrapper_path }}"
+    owner: root
+    group: 0
+    mode: "0755"
+    unsafe_writes: false
+  become: true

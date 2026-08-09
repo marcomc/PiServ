@@ -8,6 +8,30 @@
       - hermes_agent_dashboard_tui_runtime_dir is match('^/')
       - hermes_agent_dashboard_tui_runtime_revision_file is match('^/')
       - hermes_agent_dashboard_tui_runtime_manifest_file is match('^/')
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        map(attribute='source') | unique | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        map(attribute='destination') | unique | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        selectattr('source', 'match', '^/[^:\r\n]+$') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        selectattr('destination', 'match', '^/[^:\r\n]+$') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('source', 'equalto', '/') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('destination', 'equalto', '/') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
       - hermes_agent_dashboard_tui_runtime_dir not in ['/', '/tmp', '/var', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
       - >-
         hermes_agent_dashboard_tui_runtime_revision_file ==

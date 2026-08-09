@@ -8,6 +8,14 @@
     - name: Load test fixture variables
       ansible.builtin.include_tasks: tasks/fixture-vars.yml
 
+    - name: Install root-controlled policy fixture source
+      ansible.builtin.copy:
+        src: ../resources/hermes-managed-policy
+        dest: /etc/hermes-managed-policy
+        owner: root
+        group: root
+        mode: "0644"
+
     - name: Inspect fresh local-model runtime before check-mode convergence
       ansible.builtin.stat:
         path: /usr/local/lib/llama.cpp/llama-server
@@ -50,6 +58,9 @@
           sha256:{{ hermes_agent_fixture_codex.stat.checksum }}
         hermes_agent_manage_backup: true
         hermes_agent_manage_dashboard_chat: true
+        hermes_agent_dashboard_bind_read_only_paths:
+          - source: /etc/hermes-managed-policy
+            destination: /var/lib/hermes-agent/workspace/AGENTS.md
         hermes_agent_backup_group: root
         hermes_agent_backup_dir: /var/backups/hermes-agent
         hermes_agent_manage_local_models: "{{ ansible_check_mode | bool }}"

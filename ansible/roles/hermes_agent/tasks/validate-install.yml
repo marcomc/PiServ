@@ -51,35 +51,13 @@
   ansible.builtin.assert:
     that:
       - >-
-        hermes_agent_toolsets_output.stdout is search(
-          '(?m)^\\s*\\S+ enabled\\s+memory\\b'
-        )
-      - >-
-        hermes_agent_toolsets_output.stdout is search(
-          '(?m)^\\s*\\S+ enabled\\s+skills\\b'
-        )
-      - >-
-        (
-          hermes_agent_toolsets_output.stdout is search(
-            '(?m)^\\s*\\S+ enabled\\s+terminal\\b'
-          )
-          if 'terminal' in hermes_agent_enabled_toolsets
-          else hermes_agent_toolsets_output.stdout is search(
-            '(?m)^\\s*\\S+ disabled\\s+terminal\\b'
-          )
-        )
-      - >-
-        hermes_agent_toolsets_output.stdout is search(
-          '(?m)^\\s*\\S+ disabled\\s+file\\b'
-        )
-      - >-
-        hermes_agent_toolsets_output.stdout is search(
-          '(?m)^\\s*\\S+ disabled\\s+bfl\\b'
-        )
-      - >-
-        hermes_agent_toolsets_output.stdout is search(
-          '(?m)^\\s*\\S+ disabled\\s+homeassistant\\b'
-        )
+        hermes_agent_toolsets_output.stdout |
+        regex_findall('(?m)^\\s*\\S+\\s+enabled\\s+([A-Za-z0-9_-]+)\\s*$') |
+        unique | sort == hermes_agent_enabled_toolsets | unique | sort
+    fail_msg: >-
+      The complete enabled Hermes CLI toolset set must exactly match
+      hermes_agent_enabled_toolsets. Live output:
+      {{ hermes_agent_toolsets_output.stdout | to_json }}
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_checkout.stat.exists

@@ -26,6 +26,10 @@ ALLOWED_HERMES_MCP_TOOLS = {
     "mcp__home_assistant_assist__HassTurnOn",
     "mcp__home_assistant_assist__HassTurnOff",
 }
+HERMES_MUTATION_TOOLS = {
+    "mcp__home_assistant_assist__HassTurnOn",
+    "mcp__home_assistant_assist__HassTurnOff",
+}
 
 
 class VerificationError(RuntimeError):
@@ -201,7 +205,10 @@ def validate_hermes_audit(
         raise VerificationError(f"Hermes task audit was not captured for {label}")
 
     audited_tools: list[str] = []
+    mutation_tools: list[str] = []
     for call in invocation.get("tool_calls", []):
+        if not isinstance(call, dict):
+            raise VerificationError(f"Hermes task audit has invalid records for {label}")
         function_name = call.get("name")
         arguments = call.get("arguments", {})
         if isinstance(arguments, str):
@@ -228,18 +235,27 @@ def validate_hermes_audit(
                 raise VerificationError(
                     f"Hermes used a non-allowlisted tool for {label}: {called_name!r}"
                 )
+            if not isinstance(called_arguments, dict):
+                raise VerificationError(
+                    f"Hermes task audit has invalid called-tool arguments for {label}"
+                )
             audited_tools.append(called_name)
-            if audit_entity_ids(called_arguments) != {entity_id}:
+            if (
+                called_name in HERMES_MUTATION_TOOLS
+                and audit_entity_ids(called_arguments) != {entity_id}
+            ):
                 raise VerificationError(
                     f"Hermes addressed an entity outside the allowlist for {label}"
                 )
+            if called_name in HERMES_MUTATION_TOOLS:
+                mutation_tools.append(called_name)
             continue
         raise VerificationError(
             f"Hermes used an unexpected tool-call record for {label}: {function_name!r}"
         )
 
-    if not audited_tools:
-        raise VerificationError(f"Hermes task audit recorded no operations for {label}")
+    if not mutation_tools:
+        raise VerificationError(f"Hermes task audit recorded no mutation for {label}")
     return {"tool_names": audited_tools, "entity_ids": [entity_id]}
 
 

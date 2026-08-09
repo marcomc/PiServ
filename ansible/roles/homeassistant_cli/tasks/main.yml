@@ -15,10 +15,9 @@
       - homeassistant_cli_token_env_file is match('^/\\S+$')
       - homeassistant_cli_token_env_file | length > 0
       - homeassistant_cli_token_env_var is match('^[A-Z_][A-Z0-9_]*$')
-      - homeassistant_cli_expected_python is match('^[0-9]+\\.[0-9]+$')
     fail_msg: >-
       Home Assistant CLI requires a runtime identity, server URL, token file,
-      token variable name, and Python version.
+      and token variable name.
 
 - name: Read Home Assistant CLI runtime account
   ansible.builtin.getent:
@@ -38,6 +37,28 @@
   changed_when: false
   check_mode: false
 
+- name: Require the Home Assistant CLI token parent to exist
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_token_parent.stat.exists
+    fail_msg: >-
+      Home Assistant CLI token parent does not exist; provision the private
+      token directory before applying this role.
+  no_log: true
+
+- name: Authenticate the Home Assistant CLI token parent
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_token_parent.stat.isdir
+      - not homeassistant_cli_token_parent.stat.islnk
+      - homeassistant_cli_token_parent.stat.pw_name == homeassistant_cli_runtime_user
+      - homeassistant_cli_token_parent.stat.gr_name == homeassistant_cli_runtime_group
+      - homeassistant_cli_token_parent.stat.mode == '0700'
+    fail_msg: >-
+      Home Assistant CLI token parent must be a private directory owned by the
+      configured runtime identity.
+  no_log: true
+
 - name: Inspect Home Assistant CLI token file
   ansible.builtin.stat:
     path: "{{ homeassistant_cli_token_env_file }}"
@@ -47,16 +68,20 @@
   check_mode: false
   no_log: true
 
-- name: Require the existing private Home Assistant token file
+- name: Require the Home Assistant CLI token file to exist
   ansible.builtin.assert:
     that:
-      - homeassistant_cli_token_parent.stat.isdir | default(false)
-      - not (homeassistant_cli_token_parent.stat.islnk | default(false))
-      - homeassistant_cli_token_parent.stat.pw_name == homeassistant_cli_runtime_user
-      - homeassistant_cli_token_parent.stat.gr_name == homeassistant_cli_runtime_group
-      - homeassistant_cli_token_parent.stat.mode == '0700'
-      - homeassistant_cli_token_file.stat.isreg | default(false)
-      - not (homeassistant_cli_token_file.stat.islnk | default(false))
+      - homeassistant_cli_token_file.stat.exists
+    fail_msg: >-
+      Home Assistant CLI token file does not exist; provision it before
+      applying this role.
+  no_log: true
+
+- name: Authenticate the private Home Assistant token file
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_token_file.stat.isreg
+      - not homeassistant_cli_token_file.stat.islnk
       - homeassistant_cli_token_file.stat.pw_name == homeassistant_cli_runtime_user
       - homeassistant_cli_token_file.stat.gr_name == homeassistant_cli_runtime_group
       - homeassistant_cli_token_file.stat.mode == '0600'
@@ -87,7 +112,7 @@
 - name: Create Home Assistant CLI virtualenv
   ansible.builtin.command:
     argv:
-      - /usr/bin/python{{ homeassistant_cli_expected_python }}
+      - /usr/bin/python3
       - -m
       - venv
       - "{{ homeassistant_cli_venv_path }}"
@@ -147,14 +172,8 @@
   changed_when: >-
     'Successfully installed' in homeassistant_cli_package_install.stdout
 
-- name: Install Home Assistant CLI wrapper
-  ansible.builtin.template:
-    src: hass-cli.j2
-    dest: "{{ homeassistant_cli_wrapper_path }}"
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
+- name: Authenticate and publish Home Assistant CLI wrapper
+  ansible.builtin.include_tasks: wrapper.yml
 
 - name: Validate Home Assistant CLI version
   ansible.builtin.command:

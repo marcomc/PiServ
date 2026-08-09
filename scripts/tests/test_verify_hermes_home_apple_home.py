@@ -73,6 +73,90 @@ class HarnessValidationTests(unittest.TestCase):
         with self.assertRaises(HARNESS.VerificationError):
             HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
 
+    def test_hermes_audit_allows_context_without_entity_arguments(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__HassTurnOn",
+                        "arguments": {"name": self.entity_id, "domain": "light"},
+                    },
+                },
+            ],
+        }
+
+        audit = HARNESS.validate_hermes_audit(
+            invocation, self.entity_id, "test fixture"
+        )
+
+        self.assertEqual(
+            audit["tool_names"],
+            [
+                "mcp__home_assistant_assist__GetLiveContext",
+                "mcp__home_assistant_assist__HassTurnOn",
+            ],
+        )
+
+    def test_hermes_audit_rejects_unknown_tool(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__HassDeleteEverything",
+                        "arguments": {"name": self.entity_id},
+                    },
+                }
+            ],
+        }
+
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
+
+    def test_hermes_audit_rejects_malformed_called_arguments(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__HassTurnOff",
+                        "arguments": "not-json-object",
+                    },
+                }
+            ],
+        }
+
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
+
+    def test_hermes_audit_rejects_context_without_mutation(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                }
+            ],
+        }
+
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
+
     def test_hermes_invocation_uses_configured_binary_for_audit_export(self):
         result = {
             "exit_code": 0,

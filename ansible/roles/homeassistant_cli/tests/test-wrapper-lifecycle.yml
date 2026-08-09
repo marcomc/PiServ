@@ -1,0 +1,196 @@
+---
+- name: Test Home Assistant CLI wrapper publication lifecycle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+  vars:
+    homeassistant_cli_test_role_path: "{{ playbook_dir | dirname }}"
+    homeassistant_cli_server: http://homeassistant.invalid:8123
+    homeassistant_cli_token_env_file: /nonexistent/test-token.env
+    homeassistant_cli_token_env_var: HASS_TOKEN
+    homeassistant_cli_binary_path: /nonexistent/hass-cli
+  tasks:
+    - name: Create isolated root-owned wrapper fixture
+      ansible.builtin.tempfile:
+        state: directory
+        path: /var/tmp
+        suffix: homeassistant-cli-wrapper
+      register: homeassistant_cli_test_directory
+
+    - name: Set wrapper fixture path
+      ansible.builtin.set_fact:
+        homeassistant_cli_wrapper_path: >-
+          {{ homeassistant_cli_test_directory.path }}/hass-cli
+
+    - name: Apply production wrapper-parent permissions to fixture
+      ansible.builtin.file:
+        path: "{{ homeassistant_cli_test_directory.path }}"
+        state: directory
+        owner: root
+        group: 0
+        mode: "0755"
+
+    - name: Exercise wrapper publication states
+      block:
+        - name: Publish an absent wrapper
+          ansible.builtin.include_role:
+            name: homeassistant_cli
+            tasks_from: wrapper
+
+        - name: Read newly published wrapper
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_wrapper_path }}"
+          register: homeassistant_cli_test_new_wrapper
+
+        - name: Require a marked newly published wrapper
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_test_new_wrapper.content | b64decode).startswith(
+                  '#!/bin/sh\n# Managed by Ansible role homeassistant_cli.\n'
+                )
+
+        - name: Reconcile an existing managed wrapper
+          ansible.builtin.include_role:
+            name: homeassistant_cli
+            tasks_from: wrapper
+
+        - name: Remove wrapper before legacy fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_wrapper_path }}"
+            state: absent
+
+        - name: Render exact legacy role-managed wrapper
+          ansible.builtin.template:
+            src: >-
+              {{ homeassistant_cli_test_role_path }}/templates/hass-cli-legacy.j2
+            dest: "{{ homeassistant_cli_wrapper_path }}"
+            owner: root
+            group: 0
+            mode: "0755"
+
+        - name: Upgrade exact legacy role-managed wrapper
+          ansible.builtin.include_role:
+            name: homeassistant_cli
+            tasks_from: wrapper
+
+        - name: Read upgraded legacy wrapper
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_wrapper_path }}"
+          register: homeassistant_cli_test_upgraded_wrapper
+
+        - name: Require legacy wrapper upgrade to add provenance
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_test_upgraded_wrapper.content | b64decode).startswith(
+                  '#!/bin/sh\n# Managed by Ansible role homeassistant_cli.\n'
+                )
+
+        - name: Write foreign wrapper fixture
+          ansible.builtin.copy:
+            content: "foreign wrapper\n"
+            dest: "{{ homeassistant_cli_wrapper_path }}"
+            owner: root
+            group: 0
+            mode: "0755"
+
+        - name: Initialize foreign-wrapper rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_foreign_rejected: false
+            homeassistant_cli_test_foreign_failure_task: ""
+
+        - name: Reject foreign wrapper fixture
+          block:
+            - name: Attempt foreign wrapper replacement
+              ansible.builtin.include_role:
+                name: homeassistant_cli
+                tasks_from: wrapper
+          rescue:
+            - name: Record foreign-wrapper rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_foreign_rejected: true
+                homeassistant_cli_test_foreign_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Read rejected foreign wrapper
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_wrapper_path }}"
+          register: homeassistant_cli_test_foreign_wrapper
+
+        - name: Require exact foreign-wrapper rejection and preservation
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_foreign_rejected
+              - >-
+                homeassistant_cli_test_foreign_failure_task ==
+                'Require existing Home Assistant CLI wrapper provenance'
+              - >-
+                (homeassistant_cli_test_foreign_wrapper.content | b64decode) ==
+                'foreign wrapper\n'
+
+        - name: Remove foreign wrapper fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_wrapper_path }}"
+            state: absent
+
+        - name: Write wrapper symlink sentinel
+          ansible.builtin.copy:
+            content: "symlink sentinel\n"
+            dest: "{{ homeassistant_cli_test_directory.path }}/sentinel"
+            owner: root
+            group: 0
+            mode: "0600"
+
+        - name: Create wrapper destination symlink
+          ansible.builtin.file:
+            src: "{{ homeassistant_cli_test_directory.path }}/sentinel"
+            dest: "{{ homeassistant_cli_wrapper_path }}"
+            state: link
+
+        - name: Initialize wrapper-symlink rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_symlink_rejected: false
+            homeassistant_cli_test_symlink_failure_task: ""
+
+        - name: Reject wrapper destination symlink
+          block:
+            - name: Attempt wrapper symlink replacement
+              ansible.builtin.include_role:
+                name: homeassistant_cli
+                tasks_from: wrapper
+          rescue:
+            - name: Record wrapper-symlink rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_symlink_rejected: true
+                homeassistant_cli_test_symlink_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Inspect rejected wrapper destination symlink
+          ansible.builtin.stat:
+            path: "{{ homeassistant_cli_wrapper_path }}"
+            follow: false
+          register: homeassistant_cli_test_wrapper_symlink
+
+        - name: Read wrapper symlink sentinel
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_test_directory.path }}/sentinel"
+          register: homeassistant_cli_test_symlink_sentinel
+
+        - name: Require exact symlink rejection and preservation
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_symlink_rejected
+              - >-
+                homeassistant_cli_test_symlink_failure_task ==
+                'Authenticate existing Home Assistant CLI wrapper metadata'
+              - homeassistant_cli_test_wrapper_symlink.stat.islnk
+              - >-
+                (homeassistant_cli_test_symlink_sentinel.content | b64decode) ==
+                'symlink sentinel\n'
+      always:
+        - name: Remove isolated wrapper fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_test_directory.path }}"
+            state: absent

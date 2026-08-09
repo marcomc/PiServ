@@ -25,11 +25,22 @@ role defaults.
 
 ## Preconditions
 
-- PiServ resolves as `PiServ.local`; use the matching `.home.arpa` name if
-  `.local` does not resolve.
+- PiServ resolves as `PiServ.local`. If mDNS fails, obtain the current DHCP
+  lease independently and export it as `PISERV_IP`; never derive the fallback
+  through mDNS.
 - `ansible/vars/hermes-agent.yml` contains the private Home Assistant MCP URL.
 - PiServ contains `/var/lib/hermes-agent/home-assistant-mcp.env`, owned by
   `hermes-agent:hermes-agent` with mode `0600`.
+
+Validate an operator-supplied fallback directly for both SSH and Ansible:
+
+```bash
+: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
+ssh "admin@${PISERV_IP}" 'sudo -n true'
+ansible-playbook -i ansible/inventory.ini \
+  ansible/playbooks/homeassistant-cli.yml \
+  -e "ansible_host=${PISERV_IP}"
+```
 
 ## Install and validate
 

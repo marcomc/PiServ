@@ -50,6 +50,22 @@
               Apply ansible/playbooks/firewall.yml before exposing Hermes. UFW
               must have default incoming deny, a source-scoped LAN dashboard
               rule, and PiServ Tailscale ingress policy.
+
+    - name: Create root-controlled Hermes policy directory
+      ansible.builtin.file:
+        path: /etc/hermes-agent/policies
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install root-controlled PiServ smart-home policy source
+      ansible.builtin.copy:
+        src: hermes-smart-home-AGENTS.md
+        dest: /etc/hermes-agent/policies/smart-home-AGENTS.md
+        owner: root
+        group: root
+        mode: "0644"
   roles:
     - role: hermes_agent
       vars:
@@ -128,6 +144,9 @@
           - web
           - x_search
           - yuanbao
+        hermes_agent_dashboard_bind_read_only_paths:
+          - source: /etc/hermes-agent/policies/smart-home-AGENTS.md
+            destination: /var/lib/hermes-agent/workspace/AGENTS.md
         hermes_agent_manage_backup: true
         hermes_agent_backup_group: external-data
         hermes_agent_backup_dir: /mnt/external-data/backups/hermes-agent
@@ -135,12 +154,3 @@
         hermes_agent_backup_timezone: Europe/Rome
         # Re-enable only after a guarded 64K proof on hardware with more RAM.
         hermes_agent_manage_local_models: false
-  post_tasks:
-    - name: Install PiServ smart-home policy for Hermes workspace
-      ansible.builtin.copy:
-        src: hermes-smart-home-AGENTS.md
-        dest: /var/lib/hermes-agent/workspace/AGENTS.md
-        owner: hermes-agent
-        group: hermes-agent
-        mode: "0600"
-      when: hermes_agent_runtime_user_available | bool

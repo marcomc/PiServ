@@ -45,7 +45,8 @@ api_url="${HOME_ASSISTANT_API_URL:?HOME_ASSISTANT_API_URL is required}"
 entity_id="${HOME_ASSISTANT_ENTITY:?HOME_ASSISTANT_ENTITY is required}"
 timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
 work_dir="$(mktemp -d /run/hermes-home-assistant-restore.XXXXXX)"
-backup_dir="${work_dir}/backup"
+backup_stage="${work_dir}/backup-stage"
+evidence_dir="${work_dir}/evidence"
 restore_home="${work_dir}/restore"
 initial_state=""
 restore_required=false
@@ -68,6 +69,9 @@ cleanup() {
   fi
 
   if (( cleanup_status != 0 )); then
+    setfacl --remove user:hermes-agent "${work_dir}" 2>/dev/null || true
+    chown -R root:root "${work_dir}"
+    chmod -R go-rwx "${work_dir}"
     printf 'Emergency restoration failed; work directory preserved for inspection: %s\n' \
       "${work_dir}" >&2
   else
@@ -79,6 +83,7 @@ cleanup() {
   exit "${status}"
 }
 trap cleanup EXIT
+umask 077
 
 if [[ ! -f "${token_env_file}" ]]; then
   printf 'MCP token environment file is missing.\n' >&2
@@ -101,6 +106,28 @@ run_as_restored_hermes() {
     bash -c 'cd -- "${HERMES_HOME}/workspace" && exec "$@"' bash "$@"
 }
 
+load_hass_mcp_token() {
+  local line
+  local assignment_count=0
+
+  HASS_MCP_TOKEN=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ ^HASS_MCP_TOKEN=([A-Za-z0-9._~-]+)$ ]]; then
+      ((assignment_count += 1))
+      HASS_MCP_TOKEN="${BASH_REMATCH[1]}"
+      continue
+    fi
+    printf 'MCP token environment file must contain only one data assignment.\n' >&2
+    return 65
+  done <"${token_env_file}"
+
+  if (( assignment_count != 1 )) || [[ -z "${HASS_MCP_TOKEN}" ]]; then
+    printf 'MCP token environment file must define HASS_MCP_TOKEN exactly once.\n' >&2
+    return 65
+  fi
+  export HASS_MCP_TOKEN
+}
+
 home_assistant_state() {
   local curl_config
 
@@ -112,27 +139,27 @@ home_assistant_state() {
   rm -f -- "${curl_config}"
 }
 
-set -a
-# shellcheck disable=SC1090
-source "${token_env_file}"
-set +a
+load_hass_mcp_token
 
-if [[ -z "${HASS_MCP_TOKEN:-}" ]]; then
-  printf 'MCP token environment file did not define HASS_MCP_TOKEN.\n' >&2
-  exit 65
-fi
-
-chmod 0711 "${work_dir}"
+setfacl --modify user:hermes-agent:--x "${work_dir}"
 install -d -o hermes-agent -g hermes-agent -m 0700 \
-  "${backup_dir}" "${restore_home}" "${restore_home}/workspace"
-run_as_source_hermes hermes backup --output "${backup_dir}" >/dev/null
-archive_path="$(find "${backup_dir}" -maxdepth 1 -type f -name 'hermes-backup-*.zip' -print -quit)"
-if [[ -z "${archive_path}" ]]; then
+  "${backup_stage}" "${restore_home}" "${restore_home}/workspace"
+install -d -o root -g root -m 0700 "${evidence_dir}"
+run_as_source_hermes hermes backup --output "${backup_stage}" >/dev/null
+staged_archive="$(find "${backup_stage}" -maxdepth 1 -type f -name 'hermes-backup-*.zip' -print -quit)"
+if [[ -z "${staged_archive}" ]]; then
   printf 'Hermes backup did not create an archive.\n' >&2
   exit 66
 fi
+archive_path="${evidence_dir}/$(basename -- "${staged_archive}")"
+install -o root -g root -m 0600 "${staged_archive}" "${archive_path}"
+install -o hermes-agent -g hermes-agent -m 0600 \
+  "${archive_path}" "${restore_home}/hermes-backup.zip"
+rm -rf -- "${backup_stage}"
 
-run_as_restored_hermes hermes import --force "${archive_path}" >/dev/null
+run_as_restored_hermes hermes import --force \
+  "${restore_home}/hermes-backup.zip" >/dev/null
+rm -f -- "${restore_home}/hermes-backup.zip"
 run_as_restored_hermes hermes mcp test home-assistant-assist \
   >"${work_dir}/mcp-test.log" 2>&1
 
