@@ -94,13 +94,19 @@ def validate_tool_calls(
 
     if not mutation_tools:
         raise AuditError(f"Hermes task audit recorded no mutation for {label}")
+    if len(mutation_tools) > 2:
+        raise AuditError(
+            f"Hermes task audit recorded more than two mutations for {label}"
+        )
     expected_tool = {
         "on": "mcp__home_assistant_assist__HassTurnOn",
         "off": "mcp__home_assistant_assist__HassTurnOff",
     }.get(expected_state)
     if expected_state is not None and expected_tool is None:
         raise AuditError(f"unsupported expected state for {label}: {expected_state!r}")
-    if expected_tool is not None and set(mutation_tools) != {expected_tool}:
+    if expected_tool is not None and any(
+        mutation_tool != expected_tool for mutation_tool in mutation_tools
+    ):
         raise AuditError(
             f"Hermes mutation did not match requested {expected_state} state for {label}"
         )

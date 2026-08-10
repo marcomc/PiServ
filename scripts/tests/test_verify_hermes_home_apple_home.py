@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import math
 import os
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +17,105 @@ SPEC.loader.exec_module(HARNESS)
 
 class HarnessValidationTests(unittest.TestCase):
     entity_id = "light.test_fixture"
+
+    def test_acceptance_budgets_are_finite_bounded_and_ordered(self):
+        valid = (
+            (HARNESS.DEFAULT_TIMEOUT, HARNESS.DEFAULT_POLL_INTERVAL),
+            (HARNESS.MAX_TIMEOUT, HARNESS.MAX_POLL_INTERVAL),
+        )
+        invalid = (
+            (0.0, 1.0),
+            (-1.0, 1.0),
+            (math.nan, 1.0),
+            (math.inf, 1.0),
+            (-math.inf, 1.0),
+            (HARNESS.MAX_TIMEOUT + 0.1, 1.0),
+            (10.0, 0.0),
+            (10.0, -1.0),
+            (10.0, math.nan),
+            (10.0, math.inf),
+            (10.0, HARNESS.MAX_POLL_INTERVAL + 0.1),
+            (1.0, 1.1),
+        )
+
+        for timeout, poll_interval in valid:
+            with self.subTest(valid=(timeout, poll_interval)):
+                HARNESS.validate_args(
+                    Namespace(
+                        timeout=timeout, poll_interval=poll_interval, max_turns=1
+                    )
+                )
+        for timeout, poll_interval in invalid:
+            with (
+                self.subTest(invalid=(timeout, poll_interval)),
+                self.assertRaises(HARNESS.VerificationError),
+            ):
+                HARNESS.validate_args(
+                    Namespace(
+                        timeout=timeout, poll_interval=poll_interval, max_turns=1
+                    )
+                )
+
+    def test_invalid_acceptance_budget_fails_before_report_creation(self):
+        args = Namespace(
+            timeout=math.inf,
+            poll_interval=1.0,
+            max_turns=1,
+            report_dir=None,
+        )
+        with (
+            patch.object(HARNESS, "parse_args", return_value=args),
+            patch.object(HARNESS, "default_report_dir") as report_dir,
+            self.assertRaises(HARNESS.VerificationError),
+        ):
+            HARNESS.main()
+
+        report_dir.assert_not_called()
+
+    def test_shared_audit_accepts_two_mutations_and_rejects_three(self):
+        mutation = {
+            "name": "tool_call",
+            "arguments": {
+                "name": "mcp__home_assistant_assist__HassTurnOn",
+                "arguments": {"name": self.entity_id},
+            },
+        }
+
+        summary = HARNESS.HERMES_AUDIT.validate_tool_calls(
+            [mutation, mutation], self.entity_id, "test fixture", "on"
+        )
+        self.assertEqual(len(summary["tool_names"]), 2)
+        with self.assertRaises(HARNESS.HERMES_AUDIT.AuditError):
+            HARNESS.HERMES_AUDIT.validate_tool_calls(
+                [mutation, mutation, mutation],
+                self.entity_id,
+                "test fixture",
+                "on",
+            )
+
+    def test_exported_session_preserves_mutations_across_records(self):
+        mutation = {
+            "function": {
+                "name": "tool_call",
+                "arguments": {
+                    "name": "mcp__home_assistant_assist__HassTurnOn",
+                    "arguments": {"name": self.entity_id},
+                },
+            }
+        }
+        record = {
+            "source": "fixture",
+            "messages": [{"tool_calls": [mutation]}],
+        }
+
+        with self.assertRaises(HARNESS.HERMES_AUDIT.AuditError):
+            HARNESS.HERMES_AUDIT.validate_session_export(
+                [record, record, record],
+                "fixture",
+                self.entity_id,
+                "test fixture",
+                "on",
+            )
 
     def test_home_assistant_unavailable_state_is_rejected(self):
         with self.assertRaises(HARNESS.VerificationError):

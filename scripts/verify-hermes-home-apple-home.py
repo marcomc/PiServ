@@ -23,6 +23,8 @@ DEFAULT_CONFIG = Path(__file__).with_name("hermes-home-apple-home.local.json")
 DEFAULT_REPORT_ROOT = Path("artifacts/hermes-home-apple-home")
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_POLL_INTERVAL = 2.0
+MAX_TIMEOUT = 300.0
+MAX_POLL_INTERVAL = 30.0
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 AUDIT_HELPER_PATH = Path(__file__).with_name("hermes_audit.py")
 AUDIT_SPEC = importlib.util.spec_from_file_location("hermes_audit", AUDIT_HELPER_PATH)
@@ -603,6 +605,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_args(args: argparse.Namespace) -> None:
+    """Reject unsafe acceptance budgets before creating artifacts or probing."""
+    if (
+        not math.isfinite(args.timeout)
+        or args.timeout <= 0
+        or args.timeout > MAX_TIMEOUT
+    ):
+        raise VerificationError(
+            f"timeout must be finite and within (0, {MAX_TIMEOUT:g}] seconds"
+        )
+    if (
+        not math.isfinite(args.poll_interval)
+        or args.poll_interval <= 0
+        or args.poll_interval > MAX_POLL_INTERVAL
+        or args.poll_interval > args.timeout
+    ):
+        raise VerificationError(
+            "poll interval must be finite, positive, no greater than "
+            f"{MAX_POLL_INTERVAL:g} seconds, and no greater than timeout"
+        )
+    if args.max_turns <= 0:
+        raise VerificationError("max turns must be positive")
+
+
 def verify_entity(
     config: dict[str, Any],
     entity: dict[str, Any],
@@ -802,8 +828,7 @@ def verify_entity(
 
 def main() -> int:
     args = parse_args()
-    if args.timeout <= 0 or args.poll_interval <= 0 or args.max_turns <= 0:
-        raise VerificationError("timeout, poll interval, and max turns must be positive")
+    validate_args(args)
     report_dir = args.report_dir or default_report_dir()
     report: dict[str, Any] = {
         "schema": 1,
