@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import ipaddress
 import json
 import os
 import re
@@ -108,13 +109,16 @@ def require_string(mapping: dict[str, Any], key: str, context: str) -> str:
 
 def ssh_target(config: dict[str, Any]) -> str:
     configured_target = require_string(config, "ssh_target", "configuration")
-    override = os.environ.get("PISERV_IP")
-    if not override:
+    if "PISERV_IP" not in os.environ:
         return configured_target
-    if any(character.isspace() or character in "@/" for character in override):
+    override = os.environ["PISERV_IP"]
+    try:
+        address = ipaddress.ip_address(override)
+    except ValueError:
         raise VerificationError("PISERV_IP must be a single current DHCP lease")
+    formatted_host = f"[{override}]" if address.version == 6 else override
     user = configured_target.rsplit("@", 1)[0] if "@" in configured_target else "admin"
-    return f"{user}@{override}"
+    return f"{user}@{formatted_host}"
 
 
 def validate_config(config: dict[str, Any]) -> None:

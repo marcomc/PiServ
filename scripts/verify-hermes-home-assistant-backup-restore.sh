@@ -96,11 +96,14 @@ work_dir="$(mktemp -d /run/hermes-home-assistant-restore.XXXXXX)"
 backup_stage="${work_dir}/backup-stage"
 evidence_dir="${work_dir}/evidence"
 restore_home="${work_dir}/restore"
+restored_config="${evidence_dir}/restored-config.yaml"
 initial_state=""
 restore_required=false
 primary_deadline_seconds=600
 operation_timeout_seconds=60
 deadline_pid=""
+active_inner_unit=""
+inner_unit_sequence=0
 
 on_primary_deadline() {
   printf 'Primary acceptance deadline exceeded; starting emergency cleanup.\n' >&2
@@ -109,15 +112,37 @@ on_primary_deadline() {
 
 trap on_primary_deadline TERM
 
+stop_active_inner_unit() {
+  local unit=${active_inner_unit}
+
+  if [[ -z "${unit}" ]]; then
+    return 0
+  fi
+  if ! timeout --kill-after=5s 30s systemctl stop "${unit}.service"; then
+    printf 'Failed to stop nested Hermes unit %s before restoration.\n' \
+      "${unit}" >&2
+    return 1
+  fi
+  if systemctl is-active --quiet "${unit}.service"; then
+    printf 'Nested Hermes unit %s remained active after stop.\n' "${unit}" >&2
+    return 1
+  fi
+  systemctl reset-failed "${unit}.service" 2>/dev/null || true
+  active_inner_unit=""
+}
+
 cleanup() {
   local primary_status=$?
   local cleanup_status=0
 
-  if [[ "${restore_required}" == true && -n "${initial_state}" ]]; then
+  if ! stop_active_inner_unit; then
+    cleanup_status=70
+  elif [[ "${restore_required}" == true && -n "${initial_state}" ]]; then
     if [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
       restore_prompt="Hermes backup-restore MCP emergency cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
       emergency_source="piserv-backup-restore-emergency-${timestamp}-$$"
-      if ! run_protected_hermes "${restore_home}" "${emergency_source}" \
+      if ! run_protected_hermes \
+        "${restore_home}" "${emergency_source}" "${restored_config}" \
         chat --query "${restore_prompt}" --quiet \
         --toolsets home-assistant-assist --max-turns 20 --source "${emergency_source}" \
         >"${work_dir}/emergency-restore.log" 2>&1; then
@@ -189,18 +214,28 @@ run_as_restored_hermes() {
 
 run_protected_hermes() {
   local hermes_home=$1
-  shift 2
+  local source_tag=$2
+  local config_artifact=$3
+  local command_status
+  shift 3
   local workspace="${hermes_home}/workspace"
   local codex_home="${hermes_home}/codex"
 
   test -f "${managed_policy}"
-  test -f "${managed_config}"
+  test -f "${config_artifact}"
+  test ! -L "${config_artifact}"
+  test "$(realpath -e -- "${config_artifact}")" = "${config_artifact}"
+  test "$(stat -c '%U:%G:%a' -- "${config_artifact}")" = \
+    'root:hermes-agent:640'
   test -e "${hermes_home}/config.yaml"
   if [[ ! -e "${workspace}/AGENTS.md" ]]; then
     install -o hermes-agent -g hermes-agent -m 0600 /dev/null \
       "${workspace}/AGENTS.md"
   fi
-  systemd-run --quiet --wait --pipe --collect --service-type=exec \
+  ((inner_unit_sequence += 1))
+  active_inner_unit="hermes-restore-proof-${source_tag}-${inner_unit_sequence}"
+  if systemd-run --quiet --wait --pipe --collect --service-type=exec \
+    --unit="${active_inner_unit}" \
     --uid=hermes-agent \
     --property=RuntimeMaxSec=1min \
     --property=NoNewPrivileges=yes \
@@ -208,7 +243,7 @@ run_protected_hermes() {
     --property=ProtectSystem=strict \
     --property=ProtectHome=yes \
     --property="ReadWritePaths=${hermes_home}" \
-    --property="BindReadOnlyPaths=${managed_config}:${hermes_home}/config.yaml" \
+    --property="BindReadOnlyPaths=${config_artifact}:${hermes_home}/config.yaml" \
     --property="EnvironmentFile=${token_env_file}" \
     --property="BindReadOnlyPaths=${managed_policy}:${workspace}/AGENTS.md" \
     --property="RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6" \
@@ -216,7 +251,14 @@ run_protected_hermes() {
     --setenv="HERMES_HOME=${hermes_home}" \
     --setenv="CODEX_HOME=${codex_home}" \
     --working-directory="${workspace}" \
-    -- hermes "$@"
+    -- hermes "$@"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  # systemd-run --wait has proven normal quiescence; cleanup handles interruption.
+  active_inner_unit=""
+  return "${command_status}"
 }
 
 export_and_validate_audit() {
@@ -226,7 +268,8 @@ export_and_validate_audit() {
   local expected_state=$4
   local export_path="${work_dir}/${source_tag}.jsonl"
 
-  run_protected_hermes "${hermes_home}" "${source_tag}" \
+  run_protected_hermes \
+    "${hermes_home}" "${source_tag}" "${restored_config}" \
     sessions export - --format jsonl --source "${source_tag}" \
     --newer-than 5m --redact >"${export_path}"
   timeout --signal=TERM --kill-after=10s "${operation_timeout_seconds}" \
@@ -278,7 +321,7 @@ setfacl --modify user:hermes-agent:--x "${work_dir}"
 install -d -o hermes-agent -g hermes-agent -m 0700 \
   "${backup_stage}" "${restore_home}" "${restore_home}/workspace"
 install -d -o root -g root -m 0700 "${evidence_dir}"
-run_protected_hermes "${source_home}" "backup" \
+run_protected_hermes "${source_home}" "backup" "${managed_config}" \
   backup --output "${backup_stage}" >/dev/null
 staged_archive="$(find "${backup_stage}" -maxdepth 1 -type f -name 'hermes-backup-*.zip' -print -quit)"
 if [[ -z "${staged_archive}" ]]; then
@@ -294,7 +337,27 @@ rm -rf -- "${backup_stage}"
 run_as_restored_hermes hermes import --force \
   "${restore_home}/hermes-backup.zip" >/dev/null
 rm -f -- "${restore_home}/hermes-backup.zip"
-run_protected_hermes "${restore_home}" "mcp-test" \
+imported_config="${restore_home}/config.yaml"
+if [[ ! -f "${imported_config}" || -L "${imported_config}" ]] || \
+  [[ "$(realpath -e -- "${imported_config}")" != "${imported_config}" ]] || \
+  [[ "$(stat -c '%U:%G' -- "${imported_config}")" != \
+  'hermes-agent:hermes-agent' ]]; then
+  printf 'Imported Hermes configuration is absent or has unsafe provenance.\n' >&2
+  exit 67
+fi
+if [[ "$(realpath -m -- "${restored_config}")" == "${imported_config}" ]]; then
+  printf 'Imported and protected Hermes configuration paths must be distinct.\n' >&2
+  exit 67
+fi
+install -o root -g hermes-agent -m 0640 \
+  "${imported_config}" "${restored_config}"
+if [[ "$(stat -c '%d:%i' -- "${imported_config}")" == \
+  "$(stat -c '%d:%i' -- "${restored_config}")" ]] || \
+  ! cmp --silent -- "${imported_config}" "${restored_config}"; then
+  printf 'Protected restored configuration differs from the imported source.\n' >&2
+  exit 67
+fi
+run_protected_hermes "${restore_home}" "mcp-test" "${restored_config}" \
   mcp test home-assistant-assist \
   >"${work_dir}/mcp-test.log" 2>&1
 
@@ -321,7 +384,8 @@ esac
 action_prompt="Hermes backup-restore MCP acceptance test ${timestamp}. Use only the home-assistant-assist MCP server. You are authorized to change only ${entity_id} to ${desired_state}, verify its state, and touch nothing else."
 action_source="piserv-backup-restore-action-${timestamp}-$$"
 restore_required=true
-run_protected_hermes "${restore_home}" "${action_source}" \
+run_protected_hermes \
+  "${restore_home}" "${action_source}" "${restored_config}" \
   chat --query "${action_prompt}" --quiet \
   --toolsets home-assistant-assist --max-turns 20 --source "${action_source}" \
   >"${work_dir}/action.log" 2>&1
@@ -336,7 +400,8 @@ fi
 
 restore_prompt="Hermes backup-restore MCP cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
 restore_source="piserv-backup-restore-cleanup-${timestamp}-$$"
-run_protected_hermes "${restore_home}" "${restore_source}" \
+run_protected_hermes \
+  "${restore_home}" "${restore_source}" "${restored_config}" \
   chat --query "${restore_prompt}" --quiet \
   --toolsets home-assistant-assist --max-turns 20 --source "${restore_source}" \
   >"${work_dir}/restore.log" 2>&1

@@ -37,18 +37,31 @@ assert_count 1 "trap 'cleanup_remote_launch 143' TERM"
 assert_count 1 "systemctl stop \\\"\${unit_name}.service\\\""
 assert_count 1 "rm -f -- \\\"\${audit_helper_remote}\\\""
 assert_count 1 '--property=RuntimeMaxSec=1min'
+assert_count 1 "--unit=\"\${active_inner_unit}\""
+assert_count 1 'stop_active_inner_unit() {'
+assert_count 1 'if ! stop_active_inner_unit; then'
+assert_count 1 "systemctl is-active --quiet \"\${unit}.service\""
+assert_count 1 "restored_config=\"\${evidence_dir}/restored-config.yaml\""
+assert_count 1 'install -o root -g hermes-agent -m 0640'
+assert_count 2 "\"\${imported_config}\" \"\${restored_config}\""
+assert_count 1 "BindReadOnlyPaths=\${config_artifact}:\${hermes_home}/config.yaml"
+if grep --fixed-strings --quiet \
+  "BindReadOnlyPaths=\${managed_config}:\${hermes_home}/config.yaml" "${script_path}"; then
+  printf 'Restored commands must not substitute the live managed configuration.\n' >&2
+  exit 1
+fi
 assert_count 3 \
   "timeout --signal=TERM --kill-after=10s \"\${operation_timeout_seconds}\""
 assert_count 2 'timeout --signal=TERM --kill-after=2s 15s'
-assert_count 6 'timeout --kill-after=5s 30s'
+assert_count 7 'timeout --kill-after=5s 30s'
 
 primary_seconds="$(sed -n 's/^primary_deadline_seconds=//p' "${script_path}")"
 outer_seconds="$(sed -n 's/^outer_runtime_seconds=//p' "${script_path}")"
 operation_seconds="$(sed -n 's/^operation_timeout_seconds=//p' "${script_path}")"
-# Emergency restore + export + audit + state read + four cleanup operations,
+# Emergency restore + export + audit + state read + five cleanup operations,
 # plus a full operation-sized scheduling reserve.
 worst_case_seconds=$((
-  primary_seconds + operation_seconds * 3 + 15 + 30 * 4 + operation_seconds
+  primary_seconds + operation_seconds * 3 + 15 + 30 * 5 + operation_seconds
 ))
 if (( outer_seconds <= worst_case_seconds )); then
   printf 'Outer runtime %s does not exceed worst-case budget %s.\n' \
@@ -62,6 +75,12 @@ grep --fixed-strings --quiet \
   "\"\${restore_home}\" \"\${action_source}\" \"backup-restore action\"" "${script_path}"
 grep --fixed-strings --quiet \
   "\"\${restore_home}\" \"\${restore_source}\" \"backup-restore cleanup\"" "${script_path}"
+grep --fixed-strings --quiet \
+  "\"\${restore_home}\" \"\${action_source}\" \"\${restored_config}\"" "${script_path}"
+grep --fixed-strings --quiet \
+  "\"\${restore_home}\" \"\${restore_source}\" \"\${restored_config}\"" "${script_path}"
+grep --fixed-strings --quiet \
+  "\"\${source_home}\" \"backup\" \"\${managed_config}\"" "${script_path}"
 
 mkdir "${test_dir}/bin"
 touch "${test_dir}/config.json"

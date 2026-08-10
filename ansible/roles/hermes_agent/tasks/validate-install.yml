@@ -35,6 +35,25 @@
   changed_when: false
   check_mode: false
 
+- name: Assert authoritative Hermes configuration metadata
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_managed_config_state.stat.exists
+      - hermes_agent_managed_config_state.stat.isreg
+      - not hermes_agent_managed_config_state.stat.islnk
+      - hermes_agent_managed_config_state.stat.pw_name == 'root'
+      - hermes_agent_managed_config_state.stat.gr_name == hermes_agent_group
+      - hermes_agent_managed_config_state.stat.mode == '0640'
+    fail_msg: >-
+      The authoritative Hermes configuration must be a regular non-symlink
+      owned by root:{{ hermes_agent_group }} with mode 0640.
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+    - >-
+      not ansible_check_mode or
+      (hermes_agent_managed_config_state.stat.exists | default(false))
+
 - name: Read enabled Hermes CLI toolsets
   ansible.builtin.command:
     argv:

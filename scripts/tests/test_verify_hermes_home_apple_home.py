@@ -76,6 +76,31 @@ class HarnessValidationTests(unittest.TestCase):
         with patch.dict(os.environ, {"PISERV_IP": "192.0.2.10"}):
             self.assertEqual(HARNESS.ssh_target(config), "admin@192.0.2.10")
 
+    def test_piserv_ipv6_override_is_bracketed_for_ssh(self):
+        config = {"ssh_target": "operator@PiServ.local"}
+        with patch.dict(os.environ, {"PISERV_IP": "2001:db8::10"}):
+            self.assertEqual(HARNESS.ssh_target(config), "operator@[2001:db8::10]")
+
+    def test_piserv_ip_rejects_non_literal_targets(self):
+        config = {"ssh_target": "admin@PiServ.local"}
+        invalid_targets = (
+            "",
+            "piserv.example.com",
+            "operator@192.0.2.10",
+            " 192.0.2.10",
+            "192.0.2.10 ",
+            "192.0.2.10/24",
+            "-oProxyCommand=fixture",
+        )
+
+        for target in invalid_targets:
+            with (
+                self.subTest(target=target),
+                patch.dict(os.environ, {"PISERV_IP": target}),
+                self.assertRaises(HARNESS.VerificationError),
+            ):
+                HARNESS.ssh_target(config)
+
     def test_hermes_audit_accepts_only_the_named_entity(self):
         invocation = {
             "audit_complete": True,

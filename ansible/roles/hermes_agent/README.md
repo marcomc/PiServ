@@ -95,7 +95,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_group` | `hermes-agent` | Runtime group. |
 | `hermes_agent_home` | `/var/lib/hermes-agent` | Private persistent state. |
 | `hermes_agent_install_dir` | `/usr/local/lib/hermes-agent` | Root-owned Hermes checkout. |
-| `hermes_agent_managed_config_path` | install-tree artifact | Root-owned configuration bound read-only over runtime `config.yaml`. |
+| `hermes_agent_managed_config_path` | install-tree artifact | Regular non-symlink configuration published as `root:{{ hermes_agent_group }}` mode `0640` and bound read-only over runtime `config.yaml`. |
 | `hermes_agent_venv_state_file` | `{{ hermes_agent_install_dir }}/.hermes-venv-managed.yml` | Root-private revision and digest record for the installed virtual environment. |
 | `hermes_agent_expected_repo_origin` | canonical upstream URL | Required origin for an existing checkout. |
 | `hermes_agent_binary_path` | `/usr/local/bin/hermes` | Fixed Hermes CLI path installed upstream. |

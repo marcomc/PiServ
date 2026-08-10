@@ -551,8 +551,9 @@
     src: config.yaml.j2
     dest: "{{ hermes_agent_managed_config_path }}"
     owner: root
-    group: root
-    mode: "0644"
+    group: "{{ hermes_agent_group }}"
+    mode: "0640"
+  no_log: true
   when: hermes_agent_runtime_user_available
   notify: Restart Hermes Agent dashboard
 
@@ -563,6 +564,7 @@
     owner: "{{ hermes_agent_user }}"
     group: "{{ hermes_agent_group }}"
     mode: "0600"
+  no_log: true
   when: hermes_agent_runtime_user_available
   notify: Restart Hermes Agent dashboard
 
