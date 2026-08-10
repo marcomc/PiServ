@@ -1,4 +1,10 @@
 ---
+- name: Authenticate recoverable Home Assistant CLI virtualenv runtime
+  ansible.builtin.include_tasks: authenticate-venv-runtime.yml
+  vars:
+    homeassistant_cli_venv_runtime_required: false
+  when: homeassistant_cli_venv_preexisting
+
 - name: Verify Home Assistant CLI virtualenv pip readiness
   ansible.builtin.command:
     argv:
@@ -10,14 +16,17 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  when: homeassistant_cli_venv_preexisting
+  when:
+    - homeassistant_cli_venv_preexisting
+    - homeassistant_cli_venv_runtime_authenticated
 
 - name: Capture Home Assistant CLI virtualenv pip readiness
   ansible.builtin.set_fact:
     homeassistant_cli_venv_pip_ready: >-
       {{
         not homeassistant_cli_venv_preexisting or
-        homeassistant_cli_venv_pip_probe.rc == 0
+        (homeassistant_cli_venv_runtime_authenticated | default(false) and
+         homeassistant_cli_venv_pip_probe.rc == 0)
       }}
 
 - name: Require pip readiness for a complete Home Assistant CLI install

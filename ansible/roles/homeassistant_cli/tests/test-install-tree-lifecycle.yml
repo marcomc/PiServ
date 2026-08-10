@@ -230,6 +230,51 @@
           changed_when: true
           when: not ansible_check_mode
 
+        - name: Add writable nested virtualenv fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_venv_path }}/lib/hostile"
+            state: directory
+            owner: root
+            group: 0
+            mode: "0775"
+          check_mode: false
+          when: not ansible_check_mode
+
+        - name: Initialize writable-virtualenv rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_writable_venv_rejected: false
+            homeassistant_cli_test_writable_venv_failure_task: ""
+          when: not ansible_check_mode
+
+        - name: Reject writable nested virtualenv entry
+          when: not ansible_check_mode
+          block:
+            - name: Attempt writable virtualenv runtime authentication
+              ansible.builtin.include_tasks: >-
+                ../tasks/authenticate-venv-runtime.yml
+          rescue:
+            - name: Record writable-virtualenv rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_writable_venv_rejected: true
+                homeassistant_cli_test_writable_venv_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Require intended writable-virtualenv rejection
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_writable_venv_rejected
+              - >-
+                homeassistant_cli_test_writable_venv_failure_task ==
+                'Reject writable Home Assistant CLI virtualenv entries'
+          when: not ansible_check_mode
+
+        - name: Repair writable nested virtualenv fixture
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_venv_path }}/lib/hostile"
+            state: absent
+          check_mode: false
+          when: not ansible_check_mode
+
         - name: Verify rebuilt virtualenv pip readiness
           ansible.builtin.command:
             argv:

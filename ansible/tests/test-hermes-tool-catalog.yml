@@ -6,16 +6,72 @@
   vars:
     hermes_agent_enabled_toolsets:
       - memory
-      - terminal
+      - skills
     hermes_agent_disabled_toolsets:
+      - bfl
       - browser
+      - clarify
+      - code_execution
+      - computer_use
+      - context_engine
+      - cronjob
+      - delegation
+      - discord
+      - discord_admin
+      - feishu_doc
+      - feishu_drive
       - file
+      - homeassistant
+      - image_gen
+      - kanban
+      - project
+      - search
+      - session_search
+      - spotify
+      - stt
+      - terminal
+      - todo
+      - tts
+      - video
+      - video_gen
+      - vision
+      - web
+      - x_search
+      - yuanbao
     valid_catalog: |
       Built-in toolsets (cli):
         yes enabled  memory  Memory
-        yes enabled  terminal  Terminal
+        yes enabled  skills  Skills
+        no disabled  bfl  BFL
         no disabled  browser  Browser
+        no disabled  clarify  Clarify
+        no disabled  code_execution  Code execution
+        no disabled  computer_use  Computer use
+        no disabled  context_engine  Context engine
+        no disabled  cronjob  Cronjob
+        no disabled  delegation  Delegation
+        no disabled  discord  Discord
+        no disabled  discord_admin  Discord admin
+        no disabled  feishu_doc  Feishu document
+        no disabled  feishu_drive  Feishu drive
         no disabled  file  Files
+        no disabled  homeassistant  Home Assistant
+        no disabled  image_gen  Image generation
+        no disabled  kanban  Kanban
+        no disabled  project  Project
+        no disabled  search  Search
+        no disabled  session_search  Session search
+        no disabled  spotify  Spotify
+        no disabled  stt  Speech to text
+        no disabled  terminal  Terminal
+        no disabled  todo  Todo
+        no disabled  tts  Text to speech
+        no disabled  video  Video
+        no disabled  video_gen  Video generation
+        no disabled  vision  Vision
+        no disabled  web  Web
+        no disabled  x_search  X search
+        no disabled  yuanbao  Yuanbao
   tasks:
     - name: Accept the exact configured Hermes tool catalog
       ansible.builtin.include_tasks: ../roles/hermes_agent/tasks/validate-tool-catalog-result.yml
@@ -27,15 +83,15 @@
       ansible.builtin.include_tasks: reject-hermes-tool-catalog.yml
       loop:
         - name: unknown-enabled
-          stdout: "{{ valid_catalog }}  yes enabled  vision  Vision\n"
+          stdout: >-
+            {{ valid_catalog }}  yes enabled  upstream_future_toolset  Future toolset
         - name: unknown-disabled
-          stdout: "{{ valid_catalog }}  no disabled  vision  Vision\n"
+          stdout: "{{ valid_catalog }}  no disabled  upstream_future_toolset  Future toolset\n"
         - name: missing-configured
           stdout: |-
             Built-in toolsets (cli):
               yes enabled  memory  Memory
-              no disabled  browser  Browser
-              no disabled  file  Files
+              yes enabled  skills  Skills
         - name: duplicate
           stdout: "{{ valid_catalog }}  yes enabled  memory  Memory again\n"
         - name: malformed-status

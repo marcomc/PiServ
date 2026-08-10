@@ -110,6 +110,9 @@
 - name: Authenticate Home Assistant CLI install tree
   ansible.builtin.include_tasks: validate-install-tree.yml
 
+- name: Authenticate Home Assistant CLI wrapper before package mutation
+  ansible.builtin.include_tasks: authenticate-wrapper.yml
+
 - name: Install Home Assistant CLI runtime packages
   ansible.builtin.apt:
     name:
@@ -231,6 +234,10 @@
       be repaired by an explicit migration.
   when:
     - homeassistant_cli_ownership_probe_required
+
+- name: Authenticate Home Assistant CLI virtualenv before package mutation
+  ansible.builtin.include_tasks: authenticate-venv-runtime.yml
+  when: homeassistant_cli_ownership_probe_required
 
 - name: Install pinned Home Assistant CLI package
   ansible.builtin.command:

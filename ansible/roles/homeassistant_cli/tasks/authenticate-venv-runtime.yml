@@ -1,0 +1,69 @@
+---
+- name: Find writable Home Assistant CLI virtualenv entries
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/find
+      - "{{ homeassistant_cli_venv_path }}"
+      - -xdev
+      - "("
+      - -perm
+      - "-020"
+      - -o
+      - -perm
+      - "-002"
+      - ")"
+      - -print
+      - -quit
+  register: homeassistant_cli_writable_venv_paths
+  changed_when: false
+  check_mode: false
+
+- name: Reject writable Home Assistant CLI virtualenv entries
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_writable_venv_paths.stdout | trim == ''
+    fail_msg: >-
+      Refusing root Python execution from a Home Assistant CLI virtualenv
+      containing group- or other-writable files or directories.
+
+- name: Reauthenticate Home Assistant CLI virtualenv interpreter
+  ansible.builtin.stat:
+    path: "{{ homeassistant_cli_venv_path }}/bin/python"
+    follow: true
+  register: homeassistant_cli_venv_python
+  changed_when: false
+  check_mode: false
+
+- name: Find imported Home Assistant CLI pip package tree
+  ansible.builtin.find:
+    paths:
+      - "{{ homeassistant_cli_venv_path }}/lib"
+    patterns: pip
+    file_type: directory
+    recurse: true
+  register: homeassistant_cli_pip_trees
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Capture authenticated Home Assistant CLI pip runtime state
+  ansible.builtin.set_fact:
+    homeassistant_cli_venv_runtime_authenticated: >-
+      {{
+        homeassistant_cli_venv_python.stat.exists and
+        homeassistant_cli_venv_python.stat.isreg and
+        not homeassistant_cli_venv_python.stat.islnk and
+        homeassistant_cli_venv_python.stat.uid == 0 and
+        homeassistant_cli_venv_python.stat.gid == 0 and
+        homeassistant_cli_venv_python.stat.mode == '0755' and
+        homeassistant_cli_pip_trees.matched == 1
+      }}
+
+- name: Require authenticated Home Assistant CLI pip runtime
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_venv_runtime_authenticated
+    fail_msg: >-
+      Home Assistant CLI root Python execution requires one private root-owned
+      interpreter and exactly one imported pip package tree.
+  when: homeassistant_cli_venv_runtime_required | default(true)

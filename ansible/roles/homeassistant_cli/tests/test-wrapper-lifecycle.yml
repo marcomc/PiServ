@@ -96,6 +96,11 @@
             group: 0
             mode: "0755"
 
+        - name: Set package-mutation sentinel path
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_package_mutation: >-
+              {{ homeassistant_cli_test_directory.path }}/package-mutated
+
         - name: Initialize foreign-wrapper rejection evidence
           ansible.builtin.set_fact:
             homeassistant_cli_test_foreign_rejected: false
@@ -103,10 +108,17 @@
 
         - name: Reject foreign wrapper fixture
           block:
-            - name: Attempt foreign wrapper replacement
+            - name: Authenticate wrapper before simulated package mutation
               ansible.builtin.include_role:
                 name: homeassistant_cli
-                tasks_from: wrapper
+                tasks_from: authenticate-wrapper
+            - name: Simulate package mutation after wrapper authentication
+              ansible.builtin.copy:
+                content: "package mutated\n"
+                dest: "{{ homeassistant_cli_test_package_mutation }}"
+                owner: root
+                group: 0
+                mode: "0600"
           rescue:
             - name: Record foreign-wrapper rejection evidence
               ansible.builtin.set_fact:
@@ -119,6 +131,11 @@
             src: "{{ homeassistant_cli_wrapper_path }}"
           register: homeassistant_cli_test_foreign_wrapper
 
+        - name: Inspect package-mutation sentinel
+          ansible.builtin.stat:
+            path: "{{ homeassistant_cli_test_package_mutation }}"
+          register: homeassistant_cli_test_package_mutation_result
+
         - name: Require exact foreign-wrapper rejection and preservation
           ansible.builtin.assert:
             that:
@@ -129,6 +146,7 @@
               - >-
                 (homeassistant_cli_test_foreign_wrapper.content | b64decode) ==
                 'foreign wrapper\n'
+              - not homeassistant_cli_test_package_mutation_result.stat.exists
 
         - name: Remove foreign wrapper fixture
           ansible.builtin.file:
