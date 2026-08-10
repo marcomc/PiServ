@@ -45,7 +45,7 @@ helper_staged=false
 unit_launch_attempted=false
 
 cleanup_remote_launch() {
-  local primary_status=$?
+  local primary_status=${1:-$?}
   local cleanup_status=0
 
   trap - EXIT INT TERM
@@ -64,7 +64,9 @@ cleanup_remote_launch() {
   fi
   exit "${primary_status}"
 }
-trap cleanup_remote_launch EXIT INT TERM
+trap cleanup_remote_launch EXIT
+trap 'cleanup_remote_launch 130' INT
+trap 'cleanup_remote_launch 143' TERM
 
 # The validated local helper path is intentionally expanded here.
 # shellcheck disable=SC2029
@@ -121,7 +123,8 @@ cleanup() {
         >"${work_dir}/emergency-restore.log" 2>&1; then
         cleanup_status=70
       elif ! export_and_validate_audit \
-        "${restore_home}" "${emergency_source}" "emergency restoration"; then
+        "${restore_home}" "${emergency_source}" "emergency restoration" \
+        "${initial_state}"; then
         cleanup_status=70
       elif [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
         cleanup_status=70
@@ -220,6 +223,7 @@ export_and_validate_audit() {
   local hermes_home=$1
   local source_tag=$2
   local label=$3
+  local expected_state=$4
   local export_path="${work_dir}/${source_tag}.jsonl"
 
   run_protected_hermes "${hermes_home}" "${source_tag}" \
@@ -227,7 +231,8 @@ export_and_validate_audit() {
     --newer-than 5m --redact >"${export_path}"
   timeout --signal=TERM --kill-after=10s "${operation_timeout_seconds}" \
     python3 "${audit_helper}" --export "${export_path}" \
-    --source "${source_tag}" --entity "${entity_id}" --label "${label}"
+    --source "${source_tag}" --entity "${entity_id}" --label "${label}" \
+    --expected-state "${expected_state}"
 }
 
 load_hass_mcp_token() {
@@ -321,7 +326,8 @@ run_protected_hermes "${restore_home}" "${action_source}" \
   --toolsets home-assistant-assist --max-turns 20 --source "${action_source}" \
   >"${work_dir}/action.log" 2>&1
 export_and_validate_audit \
-  "${restore_home}" "${action_source}" "backup-restore action"
+  "${restore_home}" "${action_source}" "backup-restore action" \
+  "${desired_state}"
 
 if [[ "$(home_assistant_state)" != "${desired_state}" ]]; then
   printf 'Restored Hermes home did not apply the requested state.\n' >&2
@@ -335,7 +341,8 @@ run_protected_hermes "${restore_home}" "${restore_source}" \
   --toolsets home-assistant-assist --max-turns 20 --source "${restore_source}" \
   >"${work_dir}/restore.log" 2>&1
 export_and_validate_audit \
-  "${restore_home}" "${restore_source}" "backup-restore cleanup"
+  "${restore_home}" "${restore_source}" "backup-restore cleanup" \
+  "${initial_state}"
 
 if [[ "$(home_assistant_state)" != "${initial_state}" ]]; then
   printf 'Restored Hermes home did not restore the original state.\n' >&2

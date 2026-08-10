@@ -22,6 +22,51 @@ class HarnessValidationTests(unittest.TestCase):
                 {"state": "unavailable"}, "test fixture"
             )
 
+    def test_poll_passes_only_the_remaining_deadline_to_probe(self):
+        observed = []
+
+        def check(remaining):
+            observed.append(remaining)
+            return "ready"
+
+        with patch.object(HARNESS.time, "monotonic", side_effect=[10.0, 10.25, 10.25]):
+            self.assertEqual(HARNESS.poll(check, 1.0, 0.1, "fixture"), "ready")
+
+        self.assertEqual(len(observed), 1)
+        self.assertAlmostEqual(observed[0], 0.75)
+
+    def test_restore_probe_reduces_budget_between_sequential_commands(self):
+        observed = []
+        entity = {
+            "label": "fixture",
+            "homeclaw_accessory": "Fixture",
+            "homeclaw_characteristic": "On",
+            "home_assistant_entity_id": self.entity_id,
+        }
+
+        def homeclaw_state(_accessory, _characteristic, timeout):
+            observed.append(("homeclaw", timeout))
+            return {"reachable": True, "value": True}
+
+        def home_assistant_state(_config, _entity_id, timeout):
+            observed.append(("home-assistant", timeout))
+            return {"state": "on"}, {"command": "fixture"}
+
+        with (
+            patch.object(HARNESS.time, "monotonic", side_effect=[10.0, 10.4]),
+            patch.object(HARNESS, "homeclaw_state", side_effect=homeclaw_state),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                side_effect=home_assistant_state,
+            ),
+        ):
+            result = HARNESS.expected_restore({}, entity, "true", {"commands": []}, 1.0)
+
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(observed[0][1], 1.0)
+        self.assertAlmostEqual(observed[1][1], 0.6)
+
     def test_unreachable_homeclaw_accessory_is_rejected(self):
         with self.assertRaises(HARNESS.VerificationError):
             HARNESS.require_reachable({"reachable": False}, "test fixture")
@@ -72,6 +117,24 @@ class HarnessValidationTests(unittest.TestCase):
         }
         with self.assertRaises(HARNESS.VerificationError):
             HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
+
+    def test_hermes_audit_rejects_wrong_mutation_direction(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__HassTurnOn",
+                        "arguments": {"name": self.entity_id},
+                    },
+                }
+            ],
+        }
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(
+                invocation, self.entity_id, "test fixture", "off"
+            )
 
     def test_hermes_audit_allows_context_without_entity_arguments(self):
         invocation = {
@@ -420,6 +483,7 @@ class HarnessValidationTests(unittest.TestCase):
 
         self.assertEqual(report["targets"][0]["primary_failure"], "primary transport")
         self.assertEqual(report["targets"][0]["cleanup_failure"], "cleanup payload")
+        self.assertIn(self.entity_id, report["targets"][0]["action_prompt"])
 
 
 if __name__ == "__main__":

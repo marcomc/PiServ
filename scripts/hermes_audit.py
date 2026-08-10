@@ -50,7 +50,7 @@ def _object(value: Any, context: str) -> dict[str, Any]:
 
 
 def validate_tool_calls(
-    tool_calls: Iterable[Any], entity_id: str, label: str
+    tool_calls: Iterable[Any], entity_id: str, label: str, expected_state: str | None = None
 ) -> dict[str, Any]:
     """Validate audited tool calls against the shared smart-home allowlist."""
     audited_tools: list[str] = []
@@ -94,11 +94,22 @@ def validate_tool_calls(
 
     if not mutation_tools:
         raise AuditError(f"Hermes task audit recorded no mutation for {label}")
+    expected_tool = {
+        "on": "mcp__home_assistant_assist__HassTurnOn",
+        "off": "mcp__home_assistant_assist__HassTurnOff",
+    }.get(expected_state)
+    if expected_state is not None and expected_tool is None:
+        raise AuditError(f"unsupported expected state for {label}: {expected_state!r}")
+    if expected_tool is not None and set(mutation_tools) != {expected_tool}:
+        raise AuditError(
+            f"Hermes mutation did not match requested {expected_state} state for {label}"
+        )
     return {"tool_names": audited_tools, "entity_ids": [entity_id]}
 
 
 def validate_session_export(
-    records: Iterable[Any], source: str, entity_id: str, label: str
+    records: Iterable[Any], source: str, entity_id: str, label: str,
+    expected_state: str | None = None,
 ) -> dict[str, Any]:
     """Validate exact source provenance and tool calls from exported sessions."""
     records = list(records)
@@ -126,7 +137,7 @@ def validate_session_export(
                 )
                 tool_calls.append(function)
 
-    summary = validate_tool_calls(tool_calls, entity_id, label)
+    summary = validate_tool_calls(tool_calls, entity_id, label, expected_state)
     summary["source"] = source
     summary["session_records"] = len(records)
     return summary
@@ -151,10 +162,12 @@ def main() -> int:
     parser.add_argument("--source", required=True)
     parser.add_argument("--entity", required=True)
     parser.add_argument("--label", required=True)
+    parser.add_argument("--expected-state", required=True, choices=("on", "off"))
     args = parser.parse_args()
     try:
         summary = validate_session_export(
-            load_jsonl(args.export), args.source, args.entity, args.label
+            load_jsonl(args.export), args.source, args.entity, args.label,
+            args.expected_state,
         )
     except (AuditError, OSError) as error:
         print(f"Hermes audit rejected: {error}", file=sys.stderr)

@@ -189,17 +189,19 @@ def home_assistant_power_state(payload: dict[str, Any], label: str) -> bool:
 
 
 def validate_hermes_audit(
-    invocation: dict[str, Any], entity_id: str, label: str
+    invocation: dict[str, Any], entity_id: str, label: str,
+    expected_state: str | None = None,
 ) -> dict[str, Any]:
     if not invocation.get("audit_complete"):
         raise VerificationError(f"Hermes task audit was not captured for {label}")
     try:
         if "audit_records" in invocation:
             return HERMES_AUDIT.validate_session_export(
-                invocation["audit_records"], invocation.get("source", ""), entity_id, label
+                invocation["audit_records"], invocation.get("source", ""), entity_id,
+                label, expected_state,
             )
         return HERMES_AUDIT.validate_tool_calls(
-            invocation.get("tool_calls", []), entity_id, label
+            invocation.get("tool_calls", []), entity_id, label, expected_state
         )
     except HERMES_AUDIT.AuditError as error:
         raise VerificationError(str(error)) from error
@@ -456,14 +458,17 @@ def poll(
     deadline = time.monotonic() + timeout
     last_error = "not observed"
     while time.monotonic() <= deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
-            value = check()
+            value = check(remaining)
             if value:
                 return value
             last_error = "observed state did not match"
         except VerificationError as error:
             last_error = str(error)
-        time.sleep(interval)
+        time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
     raise VerificationError(f"timeout waiting for {description}: {last_error}")
 
 
@@ -559,6 +564,7 @@ def verify_entity(
         f"{'on' if desired_power else 'off'}, then read it back and report the "
         "result. This entity is explicitly classified as non-critical."
     )
+    target["action_prompt"] = action_prompt
     original_power = "true" if before_power else "false"
     mutation_attempted = False
 
@@ -589,11 +595,14 @@ def verify_entity(
             target["hermes_restore"],
             entity["home_assistant_entity_id"],
             f"{entity['label']} restoration",
+            "on" if before_power else "off",
         )
         target["hermes_restore"].pop("tool_calls", None)
         target["hermes_restore"].pop("audit_records", None)
         target["restored"] = poll(
-            lambda: expected_restore(config, entity, original_power, report, args.timeout),
+            lambda remaining: expected_restore(
+                config, entity, original_power, report, remaining
+            ),
             args.timeout,
             args.poll_interval,
             f"test entity restoration for {entity['label']}",
@@ -621,18 +630,23 @@ def verify_entity(
             target["hermes_action"],
             entity["home_assistant_entity_id"],
             entity["label"],
+            "on" if desired_power else "off",
         )
         target["hermes_action"].pop("tool_calls", None)
         target["hermes_action"].pop("audit_records", None)
 
-        def expected_state() -> dict[str, Any] | None:
+        def expected_state(remaining: float) -> dict[str, Any] | None:
+            attempt_deadline = time.monotonic() + remaining
             homeclaw = homeclaw_state(
-                entity["homeclaw_accessory"], entity["homeclaw_characteristic"], args.timeout
+                entity["homeclaw_accessory"], entity["homeclaw_characteristic"], remaining
             )
             if homeclaw.get("reachable") is not True:
                 return None
+            remaining = attempt_deadline - time.monotonic()
+            if remaining <= 0:
+                return None
             ha, result = remote_home_assistant_state(
-                config, entity["home_assistant_entity_id"], args.timeout
+                config, entity["home_assistant_entity_id"], remaining
             )
             report["commands"].append(result)
             if home_assistant_power_state(ha, entity["label"]) != desired_power:
@@ -735,9 +749,13 @@ def expected_restore(
     report: dict[str, Any],
     timeout: float,
 ) -> dict[str, Any] | None:
+    attempt_deadline = time.monotonic() + timeout
     homeclaw = homeclaw_state(
         entity["homeclaw_accessory"], entity["homeclaw_characteristic"], timeout
     )
+    timeout = attempt_deadline - time.monotonic()
+    if timeout <= 0:
+        return None
     ha, result = remote_home_assistant_state(
         config, entity["home_assistant_entity_id"], timeout
     )

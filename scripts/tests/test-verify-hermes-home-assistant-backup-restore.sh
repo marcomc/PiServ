@@ -31,7 +31,9 @@ assert_count 1 'outer_runtime_seconds=1200'
 assert_count 1 'outer_stop_seconds=300'
 assert_count 1 "--property=RuntimeMaxSec=\${outer_runtime_seconds}s"
 assert_count 1 "--property=TimeoutStopSec=\${outer_stop_seconds}s"
-assert_count 1 'trap cleanup_remote_launch EXIT INT TERM'
+assert_count 1 'trap cleanup_remote_launch EXIT'
+assert_count 1 "trap 'cleanup_remote_launch 130' INT"
+assert_count 1 "trap 'cleanup_remote_launch 143' TERM"
 assert_count 1 "systemctl stop \\\"\${unit_name}.service\\\""
 assert_count 1 "rm -f -- \\\"\${audit_helper_remote}\\\""
 assert_count 1 '--property=RuntimeMaxSec=1min'
@@ -114,12 +116,42 @@ assert_log_count 1 'systemctl stop "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'systemctl reset-failed "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'rm -f -- "/run/hermes-home-assistant-restore-proof-'
 
+cat >"${test_dir}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+command_text=${*: -1}
+printf '%s\n' "${command_text}" >>"${SSH_TEST_LOG:?}"
+if [[ "${command_text}" == *'systemd-run'* ]]; then
+  sleep 30
+fi
+EOF
+chmod +x "${test_dir}/bin/ssh"
+: >"${test_dir}/ssh.log"
+PATH="${test_dir}/bin:${PATH}" SSH_TEST_LOG="${test_dir}/ssh.log" \
+  PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
+  >"${test_dir}/signal-stdout" 2>"${test_dir}/signal-stderr" &
+signal_pid=$!
+for _ in {1..50}; do
+  if grep --fixed-strings --quiet 'systemd-run --unit=' "${test_dir}/ssh.log"; then
+    break
+  fi
+  sleep 0.1
+done
+kill -TERM "${signal_pid}"
+set +e
+wait "${signal_pid}"
+signal_status=$?
+set -e
+if (( signal_status != 143 )); then
+  printf 'Expected signal cleanup status 143, got %s.\n' "${signal_status}" >&2
+  exit 1
+fi
+
 cat >"${test_dir}/malformed-audit.jsonl" <<'EOF'
 {"source":"fixture","messages":[{"tool_calls":[{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__HassTurnOn","arguments":{"name":"light.test"}}}},{"function":null}]}]}
 EOF
 if python3 "${repo_root}/scripts/hermes_audit.py" \
   --export "${test_dir}/malformed-audit.jsonl" \
-  --source fixture --entity light.test --label fixture \
+  --source fixture --entity light.test --label fixture --expected-state on \
   >/dev/null 2>&1; then
   printf 'Expected a null tool-call function record to fail closed.\n' >&2
   exit 1
