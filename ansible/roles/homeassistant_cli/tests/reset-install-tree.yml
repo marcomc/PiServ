@@ -22,3 +22,6 @@
     group: 0
     mode: "0600"
   check_mode: false
+  vars:
+    homeassistant_cli_provenance_state: >-
+      {{ homeassistant_cli_test_provenance_state | default('in_progress') }}

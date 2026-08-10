@@ -220,12 +220,9 @@ def remote_home_assistant_state(
         "home_assistant_token_env_file",
         "/var/lib/hermes-agent/home-assistant-mcp.env",
     )
-    remote_script = "\n".join(
+    curl_script = "\n".join(
         [
             "set -eu",
-            "set -a",
-            f". {shlex.quote(token_file)}",
-            "set +a",
             'curl_config="$(mktemp)"',
             'trap \'rm -f -- "$curl_config"\' EXIT',
             'chmod 0600 "$curl_config"',
@@ -239,12 +236,21 @@ def remote_home_assistant_state(
     remote_command = shlex.join(
         [
             "sudo",
-            "-u",
-            "hermes-agent",
-            "-H",
+            "systemd-run",
+            "--quiet",
+            "--wait",
+            "--pipe",
+            "--collect",
+            "--service-type=exec",
+            "--uid=hermes-agent",
+            f"--property=EnvironmentFile={token_file}",
+            "--property=NoNewPrivileges=yes",
+            "--property=PrivateTmp=yes",
+            "--property=ProtectSystem=strict",
+            "--",
             "sh",
             "-c",
-            remote_script,
+            curl_script,
         ]
     )
     command = ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command]
@@ -267,6 +273,10 @@ def invoke_hermes(
     if not isinstance(hermes_binary, str) or not hermes_binary.strip():
         raise VerificationError("hermes_binary must be a non-empty string")
     source_tag = f"piserv-home-apple-{time.time_ns()}-{os.getpid()}"
+    unit_suffix = hashlib.sha256(source_tag.encode()).hexdigest()[:16]
+    action_unit = f"piserv-hermes-action-{unit_suffix}.service"
+    export_unit = f"piserv-hermes-export-{unit_suffix}.service"
+    associated_units = [action_unit, export_unit]
     hermes_command = shlex.join(
         [
             "env",
@@ -294,6 +304,7 @@ def invoke_hermes(
             "--wait",
             "--pipe",
             "--collect",
+            f"--unit={action_unit.removesuffix('.service')}",
             "--service-type=exec",
             "--uid=hermes-agent",
             f"--setenv=HOME={hermes_home}",
@@ -321,6 +332,7 @@ def invoke_hermes(
             "--wait",
             "--pipe",
             "--collect",
+            f"--unit={export_unit.removesuffix('.service')}",
             "--service-type=exec",
             "--uid=hermes-agent",
             f"--setenv=HOME={hermes_home}",
@@ -353,9 +365,6 @@ def invoke_hermes(
     remote_script = "\n".join(
         [
             "set -eu",
-            "set -a",
-            f". {shlex.quote(token_file)}",
-            "set +a",
             f"test -f {shlex.quote(MANAGED_POLICY_PATH)}",
             f"test -d {shlex.quote(workspace)}",
             f"if ! test -e {shlex.quote(workspace + '/AGENTS.md')}; then install -o hermes-agent -g hermes-agent -m 0600 /dev/null {shlex.quote(workspace + '/AGENTS.md')}; fi",
@@ -386,12 +395,48 @@ def invoke_hermes(
     result = run_command(
         ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
     )
+    result["associated_units"] = associated_units
+    if result.get("timed_out"):
+        cleanup_complete, cleanup_failure = cleanup_transient_units(
+            config, associated_units, timeout
+        )
+        result["transient_cleanup_complete"] = cleanup_complete
+        if cleanup_failure:
+            result["transient_cleanup_failure"] = cleanup_failure
     if result["exit_code"] != 0:
         return result
     payload = checked_json(result, "Hermes invocation audit wrapper")
     payload["stdout"] = redact(payload.get("stdout", ""))
     payload["stderr"] = redact(payload.get("stderr", ""))
     return compact_result(payload)
+
+
+def cleanup_transient_units(
+    config: dict[str, Any], units: list[str], timeout: float
+) -> tuple[bool, str | None]:
+    """Stop timed-out acceptance units and prove that all are inactive."""
+    cleanup_timeout = max(1.0, min(timeout, 15.0))
+    target = ssh_target(config)
+    stop_command = shlex.join(["sudo", "systemctl", "stop", *units])
+    stop_result = run_command(
+        ["ssh", *SSH_OPTIONS, target, stop_command], cleanup_timeout
+    )
+    unit_arguments = " ".join(shlex.quote(unit) for unit in units)
+    checks = (
+        f"status=0; for unit in {unit_arguments}; do "
+        'if sudo systemctl is-active --quiet "$unit"; then status=1; fi; '
+        'done; exit "$status"'
+    )
+    wait_result = run_command(
+        ["ssh", *SSH_OPTIONS, target, checks], cleanup_timeout
+    )
+    if wait_result["exit_code"] != 0:
+        details = "timed-out transient units remained active"
+        if stop_result["exit_code"] != 0:
+            stop_error = redact(stop_result["stderr"]).strip()
+            details = f"{details}; transient unit stop failed: {stop_error}"
+        return False, details
+    return True, None
 
 
 def poll(
@@ -520,6 +565,13 @@ def verify_entity(
         target["hermes_restore"] = invoke_hermes(
             config, restore_prompt, args.timeout * 2, args.max_turns
         )
+        if target["hermes_restore"].get("transient_cleanup_complete") is False:
+            raise VerificationError(
+                target["hermes_restore"].get(
+                    "transient_cleanup_failure",
+                    "timed-out restoration unit cleanup was not confirmed",
+                )
+            )
         if target["hermes_restore"]["exit_code"] != 0:
             raise VerificationError(f"Hermes cleanup failed for {entity['label']}")
         target["hermes_restore_audit"] = validate_hermes_audit(
@@ -537,11 +589,21 @@ def verify_entity(
         )
 
     primary_error: Exception | None = None
+    restoration_allowed = True
+    timeout_cleanup_error: Exception | None = None
     try:
         mutation_attempted = True
         target["hermes_action"] = invoke_hermes(
             config, action_prompt, args.timeout * 2, args.max_turns
         )
+        if target["hermes_action"].get("transient_cleanup_complete") is False:
+            restoration_allowed = False
+            timeout_cleanup_error = VerificationError(
+                target["hermes_action"].get(
+                    "transient_cleanup_failure",
+                    "timed-out transient unit cleanup was not confirmed",
+                )
+            )
         if target["hermes_action"]["exit_code"] != 0:
             raise VerificationError(f"Hermes action failed for {entity['label']}")
         target["hermes_action_audit"] = validate_hermes_audit(
@@ -578,10 +640,13 @@ def verify_entity(
         primary_error = error
 
     cleanup_error: Exception | None = None
-    try:
-        restore()
-    except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
-        cleanup_error = error
+    if timeout_cleanup_error is not None:
+        cleanup_error = timeout_cleanup_error
+    elif restoration_allowed:
+        try:
+            restore()
+        except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
+            cleanup_error = error
 
     if primary_error is not None:
         target["primary_failure"] = str(primary_error)

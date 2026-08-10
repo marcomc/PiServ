@@ -14,10 +14,6 @@
       {{ lookup('ansible.builtin.pipe',
                 '(grealpath --canonicalize-missing /var/tmp 2>/dev/null || '
                 ~ 'realpath /var/tmp)') }}
-    homeassistant_cli_expected_provenance: >-
-      {{ lookup('ansible.builtin.template',
-                homeassistant_cli_test_role_path
-                ~ '/templates/install-provenance.j2') }}
     homeassistant_cli_wrapper_path: /nonexistent/hass-cli-wrapper
   tasks:
     - name: Create isolated root-owned install parent fixture
@@ -50,6 +46,24 @@
         mode: "0755"
       check_mode: false
 
+    - name: Render in-progress install provenance fixture schema
+      ansible.builtin.set_fact:
+        homeassistant_cli_in_progress_provenance: >-
+          {{ lookup('ansible.builtin.template',
+                    homeassistant_cli_test_role_path
+                    ~ '/templates/install-provenance.j2') }}
+      vars:
+        homeassistant_cli_provenance_state: in_progress
+
+    - name: Render complete install provenance fixture schema
+      ansible.builtin.set_fact:
+        homeassistant_cli_complete_provenance: >-
+          {{ lookup('ansible.builtin.template',
+                    homeassistant_cli_test_role_path
+                    ~ '/templates/install-provenance.j2') }}
+      vars:
+        homeassistant_cli_provenance_state: complete
+
     - name: Exercise install-tree lifecycle states
       block:
         - name: Accept absent install tree
@@ -67,6 +81,231 @@
               - >-
                 homeassistant_cli_runtime_probe_required ==
                 (not ansible_check_mode)
+
+        - name: Simulate interruption after initial authenticated publication
+          check_mode: false
+          block:
+            - name: Create initially published install directory
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_install_dir }}"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Publish initial in-progress provenance fixture
+              ansible.builtin.template:
+                src: >-
+                  {{ homeassistant_cli_test_role_path
+                     }}/templates/install-provenance.j2
+                dest: "{{ homeassistant_cli_provenance_path }}"
+                owner: root
+                group: 0
+                mode: "0600"
+              vars:
+                homeassistant_cli_provenance_state: in_progress
+
+        - name: Accept retry after initial authenticated publication
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require authenticated initial-publication retry state
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_preexisting
+              - not homeassistant_cli_venv_preexisting
+              - homeassistant_cli_install_state == 'in_progress'
+
+        - name: Simulate virtualenv creation before interruption
+          ansible.builtin.file:
+            path: "{{ homeassistant_cli_venv_path }}/bin"
+            state: directory
+            owner: root
+            group: 0
+            mode: "0755"
+          check_mode: false
+
+        - name: Accept retry after interrupted virtualenv creation
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require authenticated virtualenv retry state
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_preexisting
+              - homeassistant_cli_venv_preexisting
+              - homeassistant_cli_install_state == 'in_progress'
+
+        - name: Simulate successful retry completion
+          check_mode: false
+          block:
+            - name: Publish retried Home Assistant CLI binary fixture
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 0\n"
+                dest: "{{ homeassistant_cli_binary_path }}"
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Promote retried install provenance to complete
+              ansible.builtin.template:
+                src: >-
+                  {{ homeassistant_cli_test_role_path
+                     }}/templates/install-provenance.j2
+                dest: "{{ homeassistant_cli_provenance_path }}"
+                owner: root
+                group: 0
+                mode: "0600"
+              vars:
+                homeassistant_cli_provenance_state: complete
+
+        - name: Accept successfully completed interrupted first install
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require completed retry lifecycle state
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_state == 'complete'
+              - homeassistant_cli_install_child_states.results[2].stat.exists
+
+        - name: Create exact canonical markerless legacy install tree
+          check_mode: false
+          block:
+            - name: Remove managed install tree before legacy fixture
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_install_dir }}"
+                state: absent
+            - name: Create canonical legacy virtualenv directories
+              ansible.builtin.file:
+                path: "{{ item }}"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+              loop:
+                - "{{ homeassistant_cli_venv_path }}"
+                - "{{ homeassistant_cli_venv_path }}/bin"
+            - name: Create canonical legacy virtualenv executables
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 0\n"
+                dest: "{{ item }}"
+                owner: root
+                group: 0
+                mode: "0755"
+              loop:
+                - "{{ homeassistant_cli_venv_path }}/bin/python"
+                - "{{ homeassistant_cli_binary_path }}"
+
+        - name: Authenticate exact canonical markerless legacy install tree
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require exact legacy adoption eligibility
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_preexisting
+              - homeassistant_cli_venv_preexisting
+              - homeassistant_cli_install_state == 'legacy'
+              - not homeassistant_cli_install_child_states.results[1].stat.exists
+
+        - name: Snapshot legacy payload before provenance adoption
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            checksum_algorithm: sha256
+          loop:
+            - "{{ homeassistant_cli_venv_path }}/bin/python"
+            - "{{ homeassistant_cli_binary_path }}"
+          register: homeassistant_cli_legacy_payload_before_adoption
+          changed_when: false
+          check_mode: false
+
+        - name: Exercise production legacy provenance adoption
+          ansible.builtin.include_tasks: ../tasks/adopt-legacy-install.yml
+          vars:
+            homeassistant_cli_install_provenance_template: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            homeassistant_cli_provenance_group: 0
+
+        - name: Read adopted legacy install provenance
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_provenance_path }}"
+          register: homeassistant_cli_adopted_legacy_provenance
+          changed_when: false
+          check_mode: false
+          when: not ansible_check_mode
+
+        - name: Snapshot legacy payload after provenance adoption
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            checksum_algorithm: sha256
+          loop:
+            - "{{ homeassistant_cli_venv_path }}/bin/python"
+            - "{{ homeassistant_cli_binary_path }}"
+          register: homeassistant_cli_legacy_payload_after_adoption
+          changed_when: false
+          check_mode: false
+          when: not ansible_check_mode
+
+        - name: Require in-progress publication before package mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_adopted_legacy_provenance.content |
+                 b64decode) == homeassistant_cli_in_progress_provenance
+              - >-
+                homeassistant_cli_legacy_payload_after_adoption.results |
+                map(attribute='stat.checksum') | list ==
+                homeassistant_cli_legacy_payload_before_adoption.results |
+                map(attribute='stat.checksum') | list
+          when: not ansible_check_mode
+
+        - name: Create malformed incomplete markerless legacy tree
+          check_mode: false
+          block:
+            - name: Remove adopted legacy install tree
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_install_dir }}"
+                state: absent
+            - name: Create markerless legacy virtualenv without executable
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+
+        - name: Reject incomplete markerless legacy install tree
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Require complete Home Assistant CLI install-tree artifacts
+
+        - name: Add foreign entry to otherwise exact markerless legacy tree
+          check_mode: false
+          block:
+            - name: Recreate markerless legacy executable directory
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}/bin"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Recreate exact markerless legacy executable path
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 0\n"
+                dest: "{{ homeassistant_cli_binary_path }}"
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Add foreign markerless legacy entry
+              ansible.builtin.copy:
+                content: "foreign legacy payload\n"
+                dest: "{{ homeassistant_cli_install_dir }}/foreign"
+                owner: root
+                group: 0
+                mode: "0600"
+
+        - name: Reject foreign markerless legacy install tree
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Reject foreign Home Assistant CLI install-tree entries
 
         - name: Create converged install tree
           ansible.builtin.include_tasks: reset-install-tree.yml
@@ -102,6 +341,17 @@
                 owner: root
                 group: 0
                 mode: "0755"
+            - name: Publish complete install provenance fixture
+              ansible.builtin.template:
+                src: >-
+                  {{ homeassistant_cli_test_role_path
+                     }}/templates/install-provenance.j2
+                dest: "{{ homeassistant_cli_provenance_path }}"
+                owner: root
+                group: 0
+                mode: "0600"
+              vars:
+                homeassistant_cli_provenance_state: complete
 
         - name: Authenticate converged tree with runtime artifacts
           ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
@@ -123,6 +373,27 @@
             - "{{ homeassistant_cli_binary_path }}"
             - "{{ homeassistant_cli_wrapper_path }}"
           check_mode: false
+
+        - name: Restore retryable state after complete-state guard tests
+          ansible.builtin.include_tasks: reset-install-tree.yml
+
+        - name: Add foreign top-level partial artifact
+          ansible.builtin.copy:
+            content: "foreign partial\n"
+            dest: "{{ homeassistant_cli_install_dir }}/foreign-partial"
+            owner: root
+            group: 0
+            mode: "0600"
+          check_mode: false
+
+        - name: Reject foreign partial install-tree schema
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
+          vars:
+            homeassistant_cli_test_expected_failure: >-
+              Reject foreign Home Assistant CLI install-tree entries
+
+        - name: Restore fixture after foreign partial rejection
+          ansible.builtin.include_tasks: reset-install-tree.yml
 
         - name: Create non-root-owned virtualenv fixture
           ansible.builtin.copy:

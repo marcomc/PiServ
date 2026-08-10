@@ -93,10 +93,19 @@
       configured runtime identity.
   no_log: true
 
-- name: Render expected Home Assistant CLI install provenance
+- name: Render exact Home Assistant CLI install provenance schemas
   ansible.builtin.set_fact:
-    homeassistant_cli_expected_provenance: >-
+    homeassistant_cli_in_progress_provenance: >-
       {{ lookup('ansible.builtin.template', 'install-provenance.j2') }}
+  vars:
+    homeassistant_cli_provenance_state: in_progress
+
+- name: Render complete Home Assistant CLI install provenance schema
+  ansible.builtin.set_fact:
+    homeassistant_cli_complete_provenance: >-
+      {{ lookup('ansible.builtin.template', 'install-provenance.j2') }}
+  vars:
+    homeassistant_cli_provenance_state: complete
 
 - name: Authenticate Home Assistant CLI install tree
   ansible.builtin.include_tasks: validate-install-tree.yml
@@ -111,14 +120,61 @@
     cache_valid_time: 3600
   become: true
 
-- name: Create Home Assistant CLI install directory
-  ansible.builtin.file:
-    path: "{{ homeassistant_cli_install_dir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+- name: Publish authenticated in-progress Home Assistant CLI install tree
+  when:
+    - not homeassistant_cli_install_preexisting
+    - not ansible_check_mode
   become: true
+  block:
+    - name: Create private Home Assistant CLI publication staging directory
+      ansible.builtin.tempfile:
+        path: "{{ homeassistant_cli_install_dir | dirname }}"
+        prefix: .homeassistant-cli-staging-
+        state: directory
+      register: homeassistant_cli_install_staging
+
+    - name: Apply published Home Assistant CLI install-tree metadata
+      ansible.builtin.file:
+        path: "{{ homeassistant_cli_install_staging.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Stage authenticated in-progress Home Assistant CLI provenance
+      ansible.builtin.template:
+        src: install-provenance.j2
+        dest: >-
+          {{ homeassistant_cli_install_staging.path }}/.homeassistant-cli-managed
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        homeassistant_cli_provenance_state: in_progress
+
+    - name: Publish in-progress Home Assistant CLI install tree atomically
+      ansible.builtin.command:
+        argv:
+          - /bin/mv
+          - "{{ homeassistant_cli_install_staging.path }}"
+          - "{{ homeassistant_cli_install_dir }}"
+      args:
+        creates: "{{ homeassistant_cli_install_dir }}"
+  rescue:
+    - name: Roll back unpublished Home Assistant CLI staging directory
+      ansible.builtin.file:
+        path: "{{ homeassistant_cli_install_staging.path }}"
+        state: absent
+      when:
+        - homeassistant_cli_install_staging is defined
+        - homeassistant_cli_install_staging.path is defined
+
+    - name: Report failed Home Assistant CLI initial publication
+      ansible.builtin.fail:
+        msg: Failed to publish the authenticated Home Assistant CLI install tree.
+
+- name: Adopt authenticated legacy Home Assistant CLI installation
+  ansible.builtin.include_tasks: adopt-legacy-install.yml
 
 - name: Create Home Assistant CLI virtualenv
   ansible.builtin.command:
@@ -196,6 +252,8 @@
     mode: "0600"
     unsafe_writes: false
   become: true
+  vars:
+    homeassistant_cli_provenance_state: complete
 
 - name: Authenticate and publish Home Assistant CLI wrapper
   ansible.builtin.include_tasks: wrapper.yml

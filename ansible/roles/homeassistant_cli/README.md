@@ -26,9 +26,24 @@ the file as shell code.
 The role constrains its managed files to a dedicated `/usr/local` runtime tree,
 authenticates canonical root-owned install paths before mutation, and requires
 every virtualenv file to be root-owned. Existing trees require an exact private
-role-provenance marker. The marker is published atomically only after the
-pinned package installation succeeds. The runtime user receives only the
-executable wrapper and its existing private token file.
+role-provenance marker. A staged directory containing exact private
+`in_progress` provenance is atomically published before the role first mutates
+the install tree. Interrupted first installs can therefore resume after initial
+publication or virtualenv creation. Successful package installation atomically
+promotes the marker to the exact `complete` schema. Foreign entries, unknown
+schemas, and partial trees claiming completion are rejected.
+
+The role performs one bounded legacy adoption for a markerless tree only when
+the install directory and virtualenv are canonical root-owned `0755`
+directories, every virtualenv entry is root-owned, the expected `hass-cli`
+executable is a root-owned `0755` regular file, and no foreign top-level entry
+exists. It publishes exact private `in_progress` provenance before package or
+virtualenv mutation inside the authenticated install tree. Incomplete, aliased,
+non-root-owned, or extended markerless trees fail closed and require explicit
+operator migration.
+
+The runtime user receives only the executable wrapper and its existing private
+token file.
 
 The virtual environment is created with Debian's `/usr/bin/python3`, supporting
 the distribution Python supplied by Debian bookworm and trixie. Before atomic

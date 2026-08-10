@@ -68,6 +68,32 @@
       that is not a canonical root-owned 0755 directory.
   when: homeassistant_cli_install_preexisting
 
+- name: Enumerate existing Home Assistant CLI install-tree entries
+  ansible.builtin.find:
+    paths:
+      - "{{ homeassistant_cli_install_dir }}"
+    hidden: true
+    recurse: false
+    file_type: any
+  register: homeassistant_cli_install_entries
+  changed_when: false
+  check_mode: false
+  when: homeassistant_cli_install_preexisting
+
+- name: Reject foreign Home Assistant CLI install-tree entries
+  ansible.builtin.assert:
+    that:
+      - >-
+        homeassistant_cli_install_entries.files |
+        map(attribute='path') |
+        difference([homeassistant_cli_venv_path,
+                    homeassistant_cli_provenance_path]) |
+        length == 0
+    fail_msg: >-
+      Existing Home Assistant CLI install tree contains foreign top-level
+      entries outside the exact role-owned schema.
+  when: homeassistant_cli_install_preexisting
+
 - name: Inspect Home Assistant CLI install-tree children
   ansible.builtin.stat:
     path: "{{ item }}"
@@ -110,7 +136,9 @@
     fail_msg: >-
       Refusing to mutate an existing Home Assistant CLI install tree without
       exact private root-owned role provenance.
-  when: homeassistant_cli_install_preexisting
+  when:
+    - homeassistant_cli_install_preexisting
+    - homeassistant_cli_install_child_states.results[1].stat.exists
 
 - name: Reject orphaned Home Assistant CLI install-tree artifacts
   ansible.builtin.assert:
@@ -185,15 +213,43 @@
   register: homeassistant_cli_existing_provenance
   changed_when: false
   check_mode: false
-  when: homeassistant_cli_install_preexisting
+  when:
+    - homeassistant_cli_install_preexisting
+    - homeassistant_cli_install_child_states.results[1].stat.exists
 
 - name: Require exact Home Assistant CLI install provenance
   ansible.builtin.assert:
     that:
       - >-
-        (homeassistant_cli_existing_provenance.content | b64decode) ==
-        homeassistant_cli_expected_provenance
+        (homeassistant_cli_existing_provenance.content | b64decode) in
+        [homeassistant_cli_in_progress_provenance,
+         homeassistant_cli_complete_provenance]
     fail_msg: >-
       Existing Home Assistant CLI install provenance is corrupt, foreign, or
       does not describe the configured role-owned tree.
+  when:
+    - homeassistant_cli_install_preexisting
+    - homeassistant_cli_install_child_states.results[1].stat.exists
+
+- name: Capture authenticated Home Assistant CLI install lifecycle state
+  ansible.builtin.set_fact:
+    homeassistant_cli_install_state: >-
+      {{ ('complete'
+          if (homeassistant_cli_existing_provenance.content | b64decode) ==
+             homeassistant_cli_complete_provenance
+          else 'in_progress')
+         if homeassistant_cli_install_child_states.results[1].stat.exists
+         else 'legacy' }}
   when: homeassistant_cli_install_preexisting
+
+- name: Require complete Home Assistant CLI install-tree artifacts
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_venv_preexisting
+      - homeassistant_cli_install_child_states.results[2].stat.exists
+    fail_msg: >-
+      Complete Home Assistant CLI provenance requires its managed virtualenv
+      and executable; the tree is partial or corrupt.
+  when:
+    - homeassistant_cli_install_preexisting
+    - homeassistant_cli_install_state in ['complete', 'legacy']
