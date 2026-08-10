@@ -140,7 +140,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_tui_runtime_manifest_file` | runtime `.hermes-managed-state.yml` file | Root-owned content fingerprint for the terminal UI adaptation. |
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
-| `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |
+| `hermes_agent_dashboard_basic_auth_state_file` | `/root/hermes-agent-dashboard-auth.yaml` | Root-only scrypt hash and session-secret state. |
 | `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file tracked by a sibling managed-state record. |
 | `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
 | `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |

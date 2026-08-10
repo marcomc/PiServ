@@ -244,16 +244,7 @@
     'Successfully installed' in homeassistant_cli_package_install.stdout
 
 - name: Publish Home Assistant CLI install provenance atomically
-  ansible.builtin.template:
-    src: install-provenance.j2
-    dest: "{{ homeassistant_cli_provenance_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-    unsafe_writes: false
-  become: true
-  vars:
-    homeassistant_cli_provenance_state: complete
+  ansible.builtin.include_tasks: publish-complete-provenance.yml
 
 - name: Authenticate and publish Home Assistant CLI wrapper
   ansible.builtin.include_tasks: wrapper.yml

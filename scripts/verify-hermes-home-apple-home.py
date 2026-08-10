@@ -409,6 +409,8 @@ def invoke_hermes(
         cleanup_complete, cleanup_failure = cleanup_transient_units(
             config, associated_units, timeout
         )
+        error.transient_cleanup_complete = cleanup_complete
+        error.transient_cleanup_failure = cleanup_failure
         if not cleanup_complete and cleanup_failure:
             error.add_note(f"transient cleanup failed: {cleanup_failure}")
         raise
@@ -667,9 +669,27 @@ def verify_entity(
         )
     except KeyboardInterrupt as error:
         primary_error = error
+        if getattr(error, "transient_cleanup_complete", None) is False:
+            restoration_allowed = False
+            timeout_cleanup_error = VerificationError(
+                getattr(
+                    error,
+                    "transient_cleanup_failure",
+                    "transient unit cleanup was not confirmed",
+                )
+            )
     # Capture unexpected failures so the restoration finally-path still runs.
     except Exception as error:  # noqa: BLE001
         primary_error = error
+        if getattr(error, "transient_cleanup_complete", None) is False:
+            restoration_allowed = False
+            timeout_cleanup_error = VerificationError(
+                getattr(
+                    error,
+                    "transient_cleanup_failure",
+                    "transient unit cleanup was not confirmed",
+                )
+            )
     finally:
         cleanup_error: BaseException | None = None
         if timeout_cleanup_error is not None:

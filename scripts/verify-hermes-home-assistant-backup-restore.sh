@@ -142,7 +142,7 @@ cleanup() {
       restore_prompt="Hermes backup-restore MCP emergency cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
       emergency_source="piserv-backup-restore-emergency-${timestamp}-$$"
       if ! run_protected_hermes \
-        "${restore_home}" "${emergency_source}" "${restored_config}" \
+        "${restore_home}" "${emergency_source}" "${restored_config}" "" \
         chat --query "${restore_prompt}" --quiet \
         --toolsets home-assistant-assist --max-turns 20 --source "${emergency_source}" \
         >"${work_dir}/emergency-restore.log" 2>&1; then
@@ -216,8 +216,10 @@ run_protected_hermes() {
   local hermes_home=$1
   local source_tag=$2
   local config_artifact=$3
+  local writable_path=$4
   local command_status
-  shift 3
+  local read_write_paths=${hermes_home}
+  shift 4
   local workspace="${hermes_home}/workspace"
   local codex_home="${hermes_home}/codex"
 
@@ -228,6 +230,15 @@ run_protected_hermes() {
   test "$(stat -c '%U:%G:%a' -- "${config_artifact}")" = \
     'root:hermes-agent:640'
   test -e "${hermes_home}/config.yaml"
+  if [[ -n "${writable_path}" ]]; then
+    test "${writable_path}" = "${backup_stage}"
+    test -d "${writable_path}"
+    test ! -L "${writable_path}"
+    test "$(realpath -e -- "${writable_path}")" = "${writable_path}"
+    test "$(stat -c '%U:%G:%a' -- "${writable_path}")" = \
+      'hermes-agent:hermes-agent:700'
+    read_write_paths+=" ${writable_path}"
+  fi
   if [[ ! -e "${workspace}/AGENTS.md" ]]; then
     install -o hermes-agent -g hermes-agent -m 0600 /dev/null \
       "${workspace}/AGENTS.md"
@@ -242,7 +253,7 @@ run_protected_hermes() {
     --property=PrivateTmp=yes \
     --property=ProtectSystem=strict \
     --property=ProtectHome=yes \
-    --property="ReadWritePaths=${hermes_home}" \
+    --property="ReadWritePaths=${read_write_paths}" \
     --property="BindReadOnlyPaths=${config_artifact}:${hermes_home}/config.yaml" \
     --property="EnvironmentFile=${token_env_file}" \
     --property="BindReadOnlyPaths=${managed_policy}:${workspace}/AGENTS.md" \
@@ -269,7 +280,7 @@ export_and_validate_audit() {
   local export_path="${work_dir}/${source_tag}.jsonl"
 
   run_protected_hermes \
-    "${hermes_home}" "${source_tag}" "${restored_config}" \
+    "${hermes_home}" "${source_tag}" "${restored_config}" "" \
     sessions export - --format jsonl --source "${source_tag}" \
     --newer-than 5m --redact >"${export_path}"
   timeout --signal=TERM --kill-after=10s "${operation_timeout_seconds}" \
@@ -321,7 +332,8 @@ setfacl --modify user:hermes-agent:--x "${work_dir}"
 install -d -o hermes-agent -g hermes-agent -m 0700 \
   "${backup_stage}" "${restore_home}" "${restore_home}/workspace"
 install -d -o root -g root -m 0700 "${evidence_dir}"
-run_protected_hermes "${source_home}" "backup" "${managed_config}" \
+run_protected_hermes \
+  "${source_home}" "backup" "${managed_config}" "${backup_stage}" \
   backup --output "${backup_stage}" >/dev/null
 staged_archive="$(find "${backup_stage}" -maxdepth 1 -type f -name 'hermes-backup-*.zip' -print -quit)"
 if [[ -z "${staged_archive}" ]]; then
@@ -357,7 +369,8 @@ if [[ "$(stat -c '%d:%i' -- "${imported_config}")" == \
   printf 'Protected restored configuration differs from the imported source.\n' >&2
   exit 67
 fi
-run_protected_hermes "${restore_home}" "mcp-test" "${restored_config}" \
+run_protected_hermes \
+  "${restore_home}" "mcp-test" "${restored_config}" "" \
   mcp test home-assistant-assist \
   >"${work_dir}/mcp-test.log" 2>&1
 
@@ -385,7 +398,7 @@ action_prompt="Hermes backup-restore MCP acceptance test ${timestamp}. Use only 
 action_source="piserv-backup-restore-action-${timestamp}-$$"
 restore_required=true
 run_protected_hermes \
-  "${restore_home}" "${action_source}" "${restored_config}" \
+  "${restore_home}" "${action_source}" "${restored_config}" "" \
   chat --query "${action_prompt}" --quiet \
   --toolsets home-assistant-assist --max-turns 20 --source "${action_source}" \
   >"${work_dir}/action.log" 2>&1
@@ -401,7 +414,7 @@ fi
 restore_prompt="Hermes backup-restore MCP cleanup ${timestamp}. Use only the home-assistant-assist MCP server. Restore only ${entity_id} to ${initial_state}, verify it, and touch nothing else."
 restore_source="piserv-backup-restore-cleanup-${timestamp}-$$"
 run_protected_hermes \
-  "${restore_home}" "${restore_source}" "${restored_config}" \
+  "${restore_home}" "${restore_source}" "${restored_config}" "" \
   chat --query "${restore_prompt}" --quiet \
   --toolsets home-assistant-assist --max-turns 20 --source "${restore_source}" \
   >"${work_dir}/restore.log" 2>&1

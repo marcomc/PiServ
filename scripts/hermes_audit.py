@@ -86,9 +86,9 @@ def validate_tool_calls(
             )
         audited_tools.append(called_name)
         if called_name in HERMES_MUTATION_TOOLS:
-            if entity_ids(called_arguments) != {entity_id}:
+            if called_arguments != {"name": entity_id}:
                 raise AuditError(
-                    f"Hermes addressed an entity outside the allowlist for {label}"
+                    f"Hermes mutation arguments were not exactly scoped for {label}"
                 )
             mutation_tools.append(called_name)
 

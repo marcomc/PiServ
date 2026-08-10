@@ -82,6 +82,29 @@
                 homeassistant_cli_runtime_probe_required ==
                 (not ansible_check_mode)
 
+        - name: Exercise final publication against predictively absent parent
+          ansible.builtin.include_tasks: ../tasks/publish-complete-provenance.yml
+          vars:
+            homeassistant_cli_install_provenance_template: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            homeassistant_cli_provenance_group: 0
+          when: ansible_check_mode
+
+        - name: Confirm fresh check mode skipped final provenance publication
+          ansible.builtin.stat:
+            path: "{{ homeassistant_cli_provenance_path }}"
+          register: homeassistant_cli_fresh_check_provenance
+          changed_when: false
+          check_mode: false
+          when: ansible_check_mode
+
+        - name: Require absent final provenance after fresh check mode
+          ansible.builtin.assert:
+            that:
+              - not homeassistant_cli_fresh_check_provenance.stat.exists
+          when: ansible_check_mode
+
         - name: Simulate interruption after initial authenticated publication
           check_mode: false
           block:
@@ -113,6 +136,43 @@
               - homeassistant_cli_install_preexisting
               - not homeassistant_cli_venv_preexisting
               - homeassistant_cli_install_state == 'in_progress'
+
+        - name: Exercise final publication after initial authenticated publication
+          ansible.builtin.include_tasks: ../tasks/publish-complete-provenance.yml
+          vars:
+            homeassistant_cli_install_provenance_template: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            homeassistant_cli_provenance_group: 0
+
+        - name: Read fresh-run final provenance result
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_provenance_path }}"
+          register: homeassistant_cli_fresh_provenance_result
+          changed_when: false
+          check_mode: false
+
+        - name: Require apply publication and fresh-check non-mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_fresh_provenance_result.content | b64decode) ==
+                (homeassistant_cli_in_progress_provenance
+                 if ansible_check_mode else
+                 homeassistant_cli_complete_provenance)
+
+        - name: Restore interrupted in-progress state after publication regression
+          ansible.builtin.template:
+            src: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            dest: "{{ homeassistant_cli_provenance_path }}"
+            owner: root
+            group: 0
+            mode: "0600"
+          vars:
+            homeassistant_cli_provenance_state: in_progress
+          check_mode: false
 
         - name: Simulate virtualenv creation before interruption
           ansible.builtin.file:
@@ -351,6 +411,28 @@
 
         - name: Authenticate converged tree with runtime artifacts
           ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Exercise converged final provenance publication
+          ansible.builtin.include_tasks: ../tasks/publish-complete-provenance.yml
+          vars:
+            homeassistant_cli_install_provenance_template: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            homeassistant_cli_provenance_group: 0
+
+        - name: Require converged final provenance content
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_provenance_path }}"
+          register: homeassistant_cli_converged_provenance_result
+          changed_when: false
+          check_mode: false
+
+        - name: Confirm converged publication remains complete
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_converged_provenance_result.content | b64decode) ==
+                homeassistant_cli_complete_provenance
 
         - name: Require converged mode to run concrete probes
           ansible.builtin.assert:

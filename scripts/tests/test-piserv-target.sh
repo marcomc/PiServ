@@ -42,3 +42,11 @@ assert_rejected ' 192.0.2.10'
 assert_rejected '192.0.2.10 '
 assert_rejected 192.0.2.10/24
 assert_rejected -oProxyCommand=fixture
+
+runbook="${repo_root}/docs/runbooks/hermes-home-apple-home.md"
+grep -Fq "source \"\${repo_root}/scripts/lib/piserv-target.sh\"" "${runbook}"
+grep -Fq "piserv_target=\"\$(piserv_ssh_target)\"" "${runbook}"
+if grep -Fq "admin@\${PISERV_IP:-PiServ.local}" "${runbook}"; then
+  printf 'Runbook must not reconstruct the PiServ SSH target directly.\n' >&2
+  exit 1
+fi

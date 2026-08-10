@@ -116,7 +116,7 @@ class HarnessValidationTests(unittest.TestCase):
                     "arguments": json.dumps(
                         {
                             "name": "mcp__home_assistant_assist__HassTurnOff",
-                            "arguments": {"name": self.entity_id, "domain": "light"},
+                            "arguments": {"name": self.entity_id},
                         }
                     ),
                 },
@@ -127,21 +127,39 @@ class HarnessValidationTests(unittest.TestCase):
         )
         self.assertEqual(audit["entity_ids"], [self.entity_id])
 
-    def test_hermes_audit_rejects_a_sibling_entity(self):
-        invocation = {
-            "audit_complete": True,
-            "tool_calls": [
-                {
-                    "name": "tool_call",
-                    "arguments": {
-                        "name": "mcp__home_assistant_assist__HassTurnOff",
-                        "arguments": {"name": "light.other_fixture", "domain": "light"},
-                    },
-                }
-            ],
-        }
-        with self.assertRaises(HARNESS.VerificationError):
-            HARNESS.validate_hermes_audit(invocation, self.entity_id, "test fixture")
+    def test_hermes_audit_rejects_non_exact_mutation_arguments(self):
+        invalid_arguments = (
+            {"name": "light.other_fixture"},
+            {"name": self.entity_id, "domain": "light"},
+            {"name": [self.entity_id]},
+            {"name": {"entity_id": self.entity_id}},
+            {"entity_id": self.entity_id},
+            {"area": "all"},
+            {"domain": "light"},
+            {"name": self.entity_id, "selector": {"area": "all"}},
+            {},
+        )
+
+        for arguments in invalid_arguments:
+            invocation = {
+                "audit_complete": True,
+                "tool_calls": [
+                    {
+                        "name": "tool_call",
+                        "arguments": {
+                            "name": "mcp__home_assistant_assist__HassTurnOff",
+                            "arguments": arguments,
+                        },
+                    }
+                ],
+            }
+            with (
+                self.subTest(arguments=arguments),
+                self.assertRaises(HARNESS.VerificationError),
+            ):
+                HARNESS.validate_hermes_audit(
+                    invocation, self.entity_id, "test fixture"
+                )
 
     def test_hermes_audit_rejects_wrong_mutation_direction(self):
         invocation = {
@@ -176,7 +194,7 @@ class HarnessValidationTests(unittest.TestCase):
                     "name": "tool_call",
                     "arguments": {
                         "name": "mcp__home_assistant_assist__HassTurnOn",
-                        "arguments": {"name": self.entity_id, "domain": "light"},
+                        "arguments": {"name": self.entity_id},
                     },
                 },
             ],
@@ -438,6 +456,9 @@ class HarnessValidationTests(unittest.TestCase):
             {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
         )()
         report = {"targets": [], "commands": []}
+        primary_error = KeyboardInterrupt()
+        primary_error.transient_cleanup_complete = True
+        primary_error.transient_cleanup_failure = None
         with (
             patch.object(
                 HARNESS,
@@ -452,9 +473,129 @@ class HarnessValidationTests(unittest.TestCase):
             patch.object(
                 HARNESS,
                 "invoke_hermes",
-                side_effect=[KeyboardInterrupt, ValueError("cleanup attempted")],
+                side_effect=[primary_error, ValueError("cleanup attempted")],
             ) as invoke_hermes,
             self.assertRaises(KeyboardInterrupt),
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        self.assertEqual(invoke_hermes.call_count, 2)
+
+    def test_failed_keyboard_interrupt_cleanup_prohibits_restoration(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        primary_error = KeyboardInterrupt()
+        primary_error.transient_cleanup_complete = False
+        primary_error.transient_cleanup_failure = "units remained active"
+        with (
+            patch.object(
+                HARNESS,
+                "homeclaw_state",
+                return_value={"reachable": True, "value": False},
+            ),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(
+                HARNESS, "invoke_hermes", side_effect=primary_error
+            ) as invoke_hermes,
+            self.assertRaises(KeyboardInterrupt) as raised,
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        self.assertEqual(invoke_hermes.call_count, 1)
+        self.assertEqual(
+            raised.exception.__notes__,
+            ["cleanup failed: units remained active"],
+        )
+
+    def test_failed_exception_cleanup_prohibits_restoration(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        primary_error = OSError("primary transport")
+        primary_error.transient_cleanup_complete = False
+        primary_error.transient_cleanup_failure = "units remained active"
+        with (
+            patch.object(
+                HARNESS,
+                "homeclaw_state",
+                return_value={"reachable": True, "value": False},
+            ),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(
+                HARNESS, "invoke_hermes", side_effect=primary_error
+            ) as invoke_hermes,
+            self.assertRaisesRegex(
+                HARNESS.VerificationError,
+                "primary: primary transport; cleanup: units remained active",
+            ),
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        self.assertEqual(invoke_hermes.call_count, 1)
+
+    def test_successful_exception_cleanup_allows_restoration(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        primary_error = OSError("primary transport")
+        primary_error.transient_cleanup_complete = True
+        primary_error.transient_cleanup_failure = None
+        with (
+            patch.object(
+                HARNESS,
+                "homeclaw_state",
+                return_value={"reachable": True, "value": False},
+            ),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(
+                HARNESS,
+                "invoke_hermes",
+                side_effect=[primary_error, ValueError("cleanup attempted")],
+            ) as invoke_hermes,
+            self.assertRaisesRegex(
+                HARNESS.VerificationError,
+                "primary: primary transport; cleanup: cleanup attempted",
+            ),
         ):
             HARNESS.verify_entity({}, entity, args, report)
 

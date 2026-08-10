@@ -51,6 +51,10 @@
         hermes_agent_dashboard_basic_auth_state_file is match('^/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
+        not hermes_agent_dashboard_basic_auth_state_file.startswith(
+        hermes_agent_home ~ '/')
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
         hermes_agent_dashboard_basic_auth_bootstrap_password_file is match('^/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or

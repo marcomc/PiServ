@@ -152,7 +152,10 @@ operator-supplied DHCP lease first if `PiServ.local` does not resolve.
 accessory='<homeclaw-accessory-from-report>'
 entity_id='<home-assistant-entity-id-from-report>'
 initial_state='<on-or-off-from-report>'
-piserv_target="admin@${PISERV_IP:-PiServ.local}"
+repo_root="$(git rev-parse --show-toplevel)"
+# shellcheck source=scripts/lib/piserv-target.sh
+source "${repo_root}/scripts/lib/piserv-target.sh"
+piserv_target="$(piserv_ssh_target)"
 
 homeclaw-cli get "${accessory}" --json | jq '{name, reachable, services}'
 ssh "${piserv_target}" \
@@ -170,6 +173,11 @@ homeclaw-cli get "${accessory}" --json | jq '{name, reachable, services}'
 ssh "${piserv_target}" \
   "sudo -u hermes-agent -H /usr/local/bin/hass-cli -o json state get '${entity_id}'"
 ```
+
+Without `PISERV_IP`, `piserv_ssh_target` uses `admin@PiServ.local`. When mDNS
+fails, set `PISERV_IP` to an operator-supplied IPv4 or IPv6 literal; IPv6 is
+bracketed for SSH. Empty values, hostnames, user-qualified targets, CIDR
+addresses, whitespace-padded values, and SSH-option-like input are rejected.
 
 Confirm both final readbacks match `initial_state`. Do not enable HomeClaw
 writes or create a persistent Mac to PiServ transport for this fallback.

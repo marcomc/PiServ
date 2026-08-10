@@ -45,6 +45,9 @@ assert_count 1 "restored_config=\"\${evidence_dir}/restored-config.yaml\""
 assert_count 1 'install -o root -g hermes-agent -m 0640'
 assert_count 2 "\"\${imported_config}\" \"\${restored_config}\""
 assert_count 1 "BindReadOnlyPaths=\${config_artifact}:\${hermes_home}/config.yaml"
+assert_count 1 "--property=\"ReadWritePaths=\${read_write_paths}\""
+assert_count 1 "test \"\${writable_path}\" = \"\${backup_stage}\""
+assert_count 1 "hermes-agent:hermes-agent:700"
 if grep --fixed-strings --quiet \
   "BindReadOnlyPaths=\${managed_config}:\${hermes_home}/config.yaml" "${script_path}"; then
   printf 'Restored commands must not substitute the live managed configuration.\n' >&2
@@ -81,6 +84,9 @@ grep --fixed-strings --quiet \
   "\"\${restore_home}\" \"\${restore_source}\" \"\${restored_config}\"" "${script_path}"
 grep --fixed-strings --quiet \
   "\"\${source_home}\" \"backup\" \"\${managed_config}\"" "${script_path}"
+grep --fixed-strings --quiet \
+  "\"\${source_home}\" \"backup\" \"\${managed_config}\" \"\${backup_stage}\"" \
+  "${script_path}"
 
 mkdir "${test_dir}/bin"
 touch "${test_dir}/config.json"

@@ -34,6 +34,30 @@
     }}
   register: hermes_agent_dashboard_bind_source_ancestor_stats
 
+- name: Probe Hermes dashboard bind source as configured runtime identity
+  ansible.builtin.command:
+    argv:
+      - /bin/test
+      - -r
+      - "{{ hermes_agent_dashboard_bind.source }}"
+  become: "{{ hermes_agent_dashboard_bind_probe_become | default(true) }}"
+  become_user: "{{ hermes_agent_user }}"
+  become_flags: -n
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  register: hermes_agent_dashboard_bind_source_read_probe
+  when:
+    - hermes_agent_dashboard_bind_source.stat.exists
+    - hermes_agent_dashboard_bind_source.stat.isreg
+    - not hermes_agent_dashboard_bind_source.stat.islnk
+    - >-
+      not (
+        ansible_check_mode and
+        hermes_agent_dashboard_bind.source_managed_in_run | default(false) and
+        not hermes_agent_dashboard_bind_source.stat.exists
+      )
+
 - name: Assert Hermes dashboard bind source is authenticated
   ansible.builtin.assert:
     that:
@@ -43,6 +67,7 @@
       - hermes_agent_dashboard_bind_source.stat.uid == 0
       - hermes_agent_dashboard_bind_source.stat.mode is match('^[0-7][0-7][0145][0145]$')
       - hermes_agent_dashboard_bind_source_realpath.rc == 0
+      - hermes_agent_dashboard_bind_source_read_probe.rc == 0
       - >-
         hermes_agent_dashboard_bind_source_realpath.stdout ==
         hermes_agent_dashboard_bind.source
@@ -70,7 +95,9 @@
     fail_msg: >-
       Hermes dashboard bind source {{ hermes_agent_dashboard_bind.source }} must
       be an existing canonical root-owned regular file, not group/world writable,
-      beneath canonical root-owned directories that are not group/world writable.
+      beneath canonical root-owned directories that are not group/world writable,
+      and readable with ancestor traversal as
+      {{ hermes_agent_user }}:{{ hermes_agent_group }}.
   when: >-
     not (
       ansible_check_mode and

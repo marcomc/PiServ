@@ -202,8 +202,8 @@
         not hermes_agent_dashboard_basic_auth_state.stat.exists or
         (hermes_agent_dashboard_basic_auth_state.stat.isreg and
         not hermes_agent_dashboard_basic_auth_state.stat.islnk and
-        hermes_agent_dashboard_basic_auth_state.stat.pw_name == hermes_agent_user and
-        hermes_agent_dashboard_basic_auth_state.stat.gr_name == hermes_agent_group and
+        hermes_agent_dashboard_basic_auth_state.stat.pw_name == 'root' and
+        hermes_agent_dashboard_basic_auth_state.stat.gr_name == 'root' and
         hermes_agent_dashboard_basic_auth_state.stat.mode == '0600')
     fail_msg: >-
       An existing dashboard authentication state file must already be a private,
@@ -231,7 +231,11 @@
       - >-
         not hermes_agent_dashboard_authentication_state_parent.stat.exists or
         (hermes_agent_dashboard_authentication_state_parent.stat.isdir and
-        not hermes_agent_dashboard_authentication_state_parent.stat.islnk)
+        not hermes_agent_dashboard_authentication_state_parent.stat.islnk and
+        hermes_agent_dashboard_authentication_state_parent.stat.pw_name == 'root' and
+        hermes_agent_dashboard_authentication_state_parent.stat.gr_name == 'root' and
+        hermes_agent_dashboard_authentication_state_parent.stat.mode is
+        match('^0[0-7][0145][0145]$'))
   no_log: true
   when:
     - hermes_agent_runtime_user_available
@@ -241,8 +245,8 @@
   ansible.builtin.file:
     path: "{{ hermes_agent_dashboard_basic_auth_state_file | dirname }}"
     state: directory
-    owner: "{{ hermes_agent_user }}"
-    group: "{{ hermes_agent_group }}"
+    owner: root
+    group: root
     mode: "0700"
   no_log: true
   when:
@@ -351,6 +355,18 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_dashboard_manage_basic_auth
 
+- name: Read authenticated Hermes dashboard bootstrap password
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+  register: hermes_agent_dashboard_existing_bootstrap_password
+  changed_when: false
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - hermes_agent_dashboard_bootstrap_password_file.stat.exists
+    - not hermes_agent_dashboard_rotate_basic_auth | bool
+
 - name: Require a safe Hermes dashboard bootstrap password parent
   ansible.builtin.assert:
     that:
@@ -381,10 +397,13 @@
       - -c
       - |
         import json
+        import os
         import secrets
         from plugins.dashboard_auth.basic import hash_password
 
-        password = secrets.token_urlsafe(32)
+        password = os.environ.get("HERMES_EXISTING_DASHBOARD_PASSWORD")
+        if not password:
+            password = secrets.token_urlsafe(32)
         print(json.dumps({
             "username": "{{ hermes_agent_dashboard_basic_auth_username }}",
             "password": password,
@@ -392,6 +411,15 @@
             "secret": secrets.token_urlsafe(32),
         }))
     chdir: "{{ hermes_agent_install_dir }}"
+  environment:
+    HERMES_EXISTING_DASHBOARD_PASSWORD: >-
+      {{
+        (hermes_agent_dashboard_existing_bootstrap_password.content |
+        default('') | b64decode) if
+        (not hermes_agent_dashboard_basic_auth_state.stat.exists and
+        hermes_agent_dashboard_existing_bootstrap_password is defined and
+        not hermes_agent_dashboard_rotate_basic_auth | bool) else ''
+      }}
   become: true
   become_user: "{{ hermes_agent_user }}"
   register: hermes_agent_dashboard_basic_auth_generated
@@ -472,8 +500,8 @@
         'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
       } | to_nice_yaml(indent=2) }}
     dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
-    owner: "{{ hermes_agent_user }}"
-    group: "{{ hermes_agent_group }}"
+    owner: root
+    group: root
     mode: "0600"
   no_log: true
   when:
@@ -511,14 +539,14 @@
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_dashboard_manage_basic_auth
-    - hermes_agent_dashboard_basic_auth_state_contents is defined
+    - hermes_agent_dashboard_basic_auth_state_contents.content is defined
 
 - name: Normalize private Hermes dashboard authentication state
   ansible.builtin.copy:
     content: "{{ hermes_agent_dashboard_basic_auth | to_nice_yaml(indent=2) }}"
     dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
-    owner: "{{ hermes_agent_user }}"
-    group: "{{ hermes_agent_group }}"
+    owner: root
+    group: root
     mode: "0600"
   no_log: true
   when:
@@ -567,6 +595,19 @@
   no_log: true
   when: hermes_agent_runtime_user_available
   notify: Restart Hermes Agent dashboard
+
+- name: Remove obsolete runtime-owned Hermes dashboard authentication state
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_legacy_basic_auth_state_file }}"
+    state: absent
+  no_log: true
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
+    - not ansible_check_mode
+    - >-
+      hermes_agent_dashboard_legacy_basic_auth_state_file !=
+      hermes_agent_dashboard_basic_auth_state_file
 
 - name: Inspect Hermes environment file
   ansible.builtin.stat:

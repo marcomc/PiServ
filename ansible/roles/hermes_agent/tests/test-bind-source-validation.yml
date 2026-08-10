@@ -4,15 +4,26 @@
   become: true
   gather_facts: false
   vars:
-    hermes_agent_bind_test_root: /root/hermes-agent-bind-source-test
-    hermes_agent_bind_test_root_group: root
+    hermes_agent_bind_test_root: /opt/hermes-agent-bind-source-test
+    hermes_agent_bind_test_controller_uid: "{{ lookup('pipe', 'id -u') }}"
     hermes_agent_bind_test_nonroot_user: nobody
+    hermes_agent_user: >-
+      {{
+        'nobody' if hermes_agent_bind_test_controller_uid == '0'
+        else lookup('env', 'USER')
+      }}
+    hermes_agent_bind_test_root_group: >-
+      {{ lookup('pipe', 'id -gn ' ~ hermes_agent_user) }}
+    hermes_agent_dashboard_bind_probe_become: >-
+      {{ hermes_agent_bind_test_controller_uid == '0' }}
+    hermes_agent_dashboard_bind_realpath_command: /bin/realpath
+    hermes_agent_group: "{{ hermes_agent_bind_test_root_group }}"
   tasks:
     - name: Reset Hermes bind-source fixtures
       ansible.builtin.file:
         path: "{{ hermes_agent_bind_test_root }}"
         state: absent
-      when: not ansible_check_mode
+      check_mode: false
 
     - name: Create Hermes bind-source fixture directories
       ansible.builtin.file:
@@ -21,10 +32,13 @@
         owner: root
         group: "{{ hermes_agent_bind_test_root_group }}"
         mode: "{{ item.mode }}"
+      check_mode: false
       loop:
         - path: "{{ hermes_agent_bind_test_root }}"
-          mode: "0700"
+          mode: "0710"
         - path: "{{ hermes_agent_bind_test_root }}/safe"
+          mode: "0710"
+        - path: "{{ hermes_agent_bind_test_root }}/non-traversable"
           mode: "0700"
         - path: "{{ hermes_agent_bind_test_root }}/writable-parent"
           mode: "0770"
@@ -38,8 +52,13 @@
         owner: "{{ item.owner }}"
         group: "{{ item.group }}"
         mode: "{{ item.mode }}"
+      check_mode: false
       loop:
         - path: "{{ hermes_agent_bind_test_root }}/safe/policy"
+          owner: root
+          group: "{{ hermes_agent_bind_test_root_group }}"
+          mode: "0640"
+        - path: "{{ hermes_agent_bind_test_root }}/root-only-source"
           owner: root
           group: "{{ hermes_agent_bind_test_root_group }}"
           mode: "0600"
@@ -55,6 +74,10 @@
           owner: root
           group: "{{ hermes_agent_bind_test_root_group }}"
           mode: "0600"
+        - path: "{{ hermes_agent_bind_test_root }}/non-traversable/policy"
+          owner: root
+          group: "{{ hermes_agent_bind_test_root_group }}"
+          mode: "0640"
 
     - name: Create Hermes bind-source symlink fixtures
       ansible.builtin.file:
@@ -66,6 +89,7 @@
           dest: "{{ hermes_agent_bind_test_root }}/source-link"
         - src: "{{ hermes_agent_bind_test_root }}/safe"
           dest: "{{ hermes_agent_bind_test_root }}/parent-link"
+      check_mode: false
 
     - name: Create Hermes bind-source special-file fixture
       ansible.builtin.command:
@@ -74,6 +98,7 @@
           - "{{ hermes_agent_bind_test_root }}/fifo-source"
       args:
         creates: "{{ hermes_agent_bind_test_root }}/fifo-source"
+      check_mode: false
 
     - name: Exercise Hermes bind-source authentication cases
       ansible.builtin.include_tasks: assert-bind-source-case.yml
@@ -83,6 +108,13 @@
           rejected: false
         - name: missing source
           path: "{{ hermes_agent_bind_test_root }}/missing"
+          rejected: "{{ not ansible_check_mode }}"
+          source_managed_in_run: true
+        - name: root-only source
+          path: "{{ hermes_agent_bind_test_root }}/root-only-source"
+          rejected: true
+        - name: non-traversable ancestor
+          path: "{{ hermes_agent_bind_test_root }}/non-traversable/policy"
           rejected: true
         - name: symlink source
           path: "{{ hermes_agent_bind_test_root }}/source-link"

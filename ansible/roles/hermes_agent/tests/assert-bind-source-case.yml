@@ -7,6 +7,8 @@
         hermes_agent_dashboard_bind:
           source: "{{ hermes_agent_bind_source_case.path }}"
           destination: /workspace/AGENTS.md
+          source_managed_in_run: >-
+            {{ hermes_agent_bind_source_case.source_managed_in_run | default(false) }}
 
     - name: Fail when an unsafe Hermes bind source is accepted
       ansible.builtin.fail:
@@ -15,5 +17,9 @@
   rescue:
     - name: Assert only unsafe Hermes bind-source fixtures fail
       ansible.builtin.assert:
-        that: hermes_agent_bind_source_case.rejected
+        that:
+          - hermes_agent_bind_source_case.rejected
+          - >-
+            ansible_failed_task.name ==
+            'Assert Hermes dashboard bind source is authenticated'
         fail_msg: "Safe bind-source case failed: {{ hermes_agent_bind_source_case.name }}"
