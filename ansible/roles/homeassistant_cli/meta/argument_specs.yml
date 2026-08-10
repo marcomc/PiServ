@@ -27,6 +27,7 @@ argument_specs:
       homeassistant_cli_package:
         type: str
         required: true
+        description: Exact PyPI pin in the form homeassistant-cli==VERSION.
       homeassistant_cli_server:
         type: str
         required: true

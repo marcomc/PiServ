@@ -1,26 +1,6 @@
 ---
-- name: Validate Home Assistant CLI inputs
-  ansible.builtin.assert:
-    that:
-      - homeassistant_cli_runtime_user | length > 0
-      - homeassistant_cli_runtime_group | length > 0
-      - >-
-        homeassistant_cli_install_dir is match(
-          '^/usr/local/lib/homeassistant-cli(-[A-Za-z0-9._-]+)?$'
-        )
-      - homeassistant_cli_venv_path == homeassistant_cli_install_dir + '/venv'
-      - >-
-        homeassistant_cli_provenance_path ==
-        homeassistant_cli_install_dir + '/.homeassistant-cli-managed'
-      - homeassistant_cli_binary_path == homeassistant_cli_venv_path + '/bin/hass-cli'
-      - homeassistant_cli_wrapper_path is match('^/usr/local/bin/[A-Za-z0-9._-]+$')
-      - homeassistant_cli_server is match('^https?://[^ ]+$')
-      - homeassistant_cli_token_env_file is match('^/\\S+$')
-      - homeassistant_cli_token_env_file | length > 0
-      - homeassistant_cli_token_env_var is match('^[A-Z_][A-Z0-9_]*$')
-    fail_msg: >-
-      Home Assistant CLI requires a runtime identity, server URL, token file,
-      and token variable name.
+- name: Validate Home Assistant CLI inputs before mutation
+  ansible.builtin.include_tasks: validate-inputs.yml
 
 - name: Read Home Assistant CLI runtime account
   ansible.builtin.getent:

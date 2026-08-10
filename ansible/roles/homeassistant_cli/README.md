@@ -64,7 +64,7 @@ that check mode has not created; a converged-host check validates live state.
 | `homeassistant_cli_runtime_user` | empty | Required user running the CLI. |
 | `homeassistant_cli_runtime_group` | empty | Required group owning the token file. |
 | `homeassistant_cli_install_dir` | `/usr/local/lib/homeassistant-cli` | Root-owned runtime parent. |
-| `homeassistant_cli_package` | `homeassistant-cli==1.0.0` | Pinned PyPI package. |
+| `homeassistant_cli_package` | `homeassistant-cli==1.0.0` | Exact PyPI package pin; URLs, paths, options, and version ranges are rejected. |
 | `homeassistant_cli_server` | empty | Home Assistant base URL. |
 | `homeassistant_cli_token_env_file` | empty | Required private token file. |
 | `homeassistant_cli_token_env_var` | `HASS_TOKEN` | Token variable sourced by the wrapper. |

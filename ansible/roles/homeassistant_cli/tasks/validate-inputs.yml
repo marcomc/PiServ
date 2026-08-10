@@ -1,0 +1,36 @@
+---
+- name: Require an exact Home Assistant CLI PyPI package pin
+  ansible.builtin.assert:
+    that:
+      - >-
+        homeassistant_cli_package is match(
+          '^homeassistant-cli==([0-9]+!)?[0-9]+(\.[0-9]+)*'
+          ~ '((a|b|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?'
+          ~ '(\+[A-Za-z0-9]+([._-][A-Za-z0-9]+)*)?$'
+        )
+    fail_msg: >-
+      homeassistant_cli_package must be an exact homeassistant-cli PyPI pin in
+      the form homeassistant-cli==VERSION.
+
+- name: Validate Home Assistant CLI runtime inputs
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_runtime_user | length > 0
+      - homeassistant_cli_runtime_group | length > 0
+      - >-
+        homeassistant_cli_install_dir is match(
+          '^/usr/local/lib/homeassistant-cli(-[A-Za-z0-9._-]+)?$'
+        )
+      - homeassistant_cli_venv_path == homeassistant_cli_install_dir + '/venv'
+      - >-
+        homeassistant_cli_provenance_path ==
+        homeassistant_cli_install_dir + '/.homeassistant-cli-managed'
+      - homeassistant_cli_binary_path == homeassistant_cli_venv_path + '/bin/hass-cli'
+      - homeassistant_cli_wrapper_path is match('^/usr/local/bin/[A-Za-z0-9._-]+$')
+      - homeassistant_cli_server is match('^https?://[^ ]+$')
+      - homeassistant_cli_token_env_file is match('^/\\S+$')
+      - homeassistant_cli_token_env_file | length > 0
+      - homeassistant_cli_token_env_var is match('^[A-Z_][A-Z0-9_]*$')
+    fail_msg: >-
+      Home Assistant CLI requires a runtime identity, server URL, token file,
+      and token variable name.

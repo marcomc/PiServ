@@ -25,6 +25,7 @@ DEFAULT_TIMEOUT = 30.0
 DEFAULT_POLL_INTERVAL = 2.0
 MAX_TIMEOUT = 300.0
 MAX_POLL_INTERVAL = 30.0
+MAX_TURNS = 100
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 AUDIT_HELPER_PATH = Path(__file__).with_name("hermes_audit.py")
 AUDIT_SPEC = importlib.util.spec_from_file_location("hermes_audit", AUDIT_HELPER_PATH)
@@ -629,8 +630,8 @@ def validate_args(args: argparse.Namespace) -> None:
             "poll interval must be finite, positive, no greater than "
             f"{MAX_POLL_INTERVAL:g} seconds, and no greater than timeout"
         )
-    if args.max_turns <= 0:
-        raise VerificationError("max turns must be positive")
+    if args.max_turns <= 0 or args.max_turns > MAX_TURNS:
+        raise VerificationError(f"max turns must be within [1, {MAX_TURNS}]")
 
 
 def verify_entity(
@@ -851,6 +852,8 @@ def main() -> int:
 
         status, result = homeclaw_json(["status"], args.timeout)
         report["commands"].append(result)
+        if not isinstance(status, dict):
+            raise VerificationError("HomeClaw status JSON must be an object")
         if not status.get("ready"):
             raise VerificationError("HomeClaw is not ready")
 

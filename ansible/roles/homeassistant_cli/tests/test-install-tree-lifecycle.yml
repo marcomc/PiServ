@@ -46,6 +46,18 @@
         mode: "0755"
       check_mode: false
 
+    - name: Reject unsafe package requirements before lifecycle mutation
+      ansible.builtin.include_tasks: reject-invalid-package.yml
+      loop:
+        - homeassistant-cli
+        - homeassistant-cli>=1.0.0
+        - https://example.invalid/homeassistant-cli.whl
+        - /tmp/homeassistant-cli.whl
+        - --extra-index-url=https://example.invalid/simple
+      loop_control:
+        loop_var: homeassistant_cli_test_invalid_package
+        label: "{{ homeassistant_cli_test_invalid_package }}"
+
     - name: Render in-progress install provenance fixture schema
       ansible.builtin.set_fact:
         homeassistant_cli_in_progress_provenance: >-

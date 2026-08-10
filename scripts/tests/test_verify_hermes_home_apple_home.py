@@ -72,6 +72,76 @@ class HarnessValidationTests(unittest.TestCase):
 
         report_dir.assert_not_called()
 
+    def test_excessive_max_turns_fails_before_report_creation(self):
+        args = Namespace(
+            timeout=1.0,
+            poll_interval=1.0,
+            max_turns=HARNESS.MAX_TURNS + 1,
+            report_dir=None,
+        )
+        with (
+            patch.object(HARNESS, "parse_args", return_value=args),
+            patch.object(HARNESS, "default_report_dir") as report_dir,
+            patch.object(HARNESS, "homeclaw_json") as homeclaw_json,
+            self.assertRaisesRegex(
+                HARNESS.VerificationError, "max turns must be within"
+            ),
+        ):
+            HARNESS.main()
+
+        report_dir.assert_not_called()
+        homeclaw_json.assert_not_called()
+
+    def test_non_object_homeclaw_status_is_reported(self):
+        config = {
+            "ssh_target": "admin@PiServ.local",
+            "home_assistant_api_url": "http://homeassistant.local:8123",
+            "entities": [
+                {
+                    "label": "fixture",
+                    "home_assistant_entity_id": self.entity_id,
+                    "homeclaw_accessory": "Fixture",
+                    "homeclaw_characteristic": "power",
+                    "risk": "non-critical",
+                }
+            ],
+        }
+        for status in ([], "ready", 1, True, None):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                config_path = Path(directory) / "config.json"
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                args = Namespace(
+                    timeout=1.0,
+                    poll_interval=1.0,
+                    max_turns=1,
+                    report_dir=Path(directory) / "report",
+                    config=config_path,
+                    dry_run=True,
+                )
+                reports = []
+                with (
+                    patch.object(HARNESS, "parse_args", return_value=args),
+                    patch.object(
+                        HARNESS,
+                        "homeclaw_json",
+                        return_value=(status, {"command": "fixture"}),
+                    ),
+                    patch.object(
+                        HARNESS,
+                        "write_reports",
+                        side_effect=lambda report, _path, reports=reports: reports.append(
+                            report.copy()
+                        ),
+                    ),
+                    patch("builtins.print"),
+                ):
+                    self.assertEqual(HARNESS.main(), 1)
+
+                self.assertEqual(
+                    reports[0]["failure"],
+                    "HomeClaw status JSON must be an object",
+                )
+
     def test_shared_audit_accepts_two_mutations_and_rejects_three(self):
         mutation = {
             "name": "tool_call",

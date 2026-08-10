@@ -1,0 +1,42 @@
+---
+- name: Reset invalid-package rejection result
+  ansible.builtin.set_fact:
+    homeassistant_cli_test_package_rejected: false
+    homeassistant_cli_test_package_failure_task: ""
+
+- name: Exercise invalid package requirement
+  block:
+    - name: Validate Home Assistant CLI inputs for invalid-package fixture
+      ansible.builtin.include_tasks: ../tasks/validate-inputs.yml
+      vars:
+        homeassistant_cli_package: "{{ homeassistant_cli_test_invalid_package }}"
+  rescue:
+    - name: Record invalid package rejection
+      ansible.builtin.set_fact:
+        homeassistant_cli_test_package_rejected: true
+        homeassistant_cli_test_package_failure_task: >-
+          {{ ansible_failed_task.name }}
+
+- name: Inspect lifecycle paths after invalid package rejection
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ homeassistant_cli_install_dir }}"
+    - "{{ homeassistant_cli_provenance_path }}"
+    - "{{ homeassistant_cli_wrapper_path }}"
+  register: homeassistant_cli_test_package_rejection_paths
+  changed_when: false
+  check_mode: false
+
+- name: Require invalid package rejection before lifecycle mutation
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_test_package_rejected
+      - >-
+        homeassistant_cli_test_package_failure_task ==
+        'Require an exact Home Assistant CLI PyPI package pin'
+      - >-
+        homeassistant_cli_test_package_rejection_paths.results |
+        map(attribute='stat.exists') | select('equalto', true) | list |
+        length == 0
