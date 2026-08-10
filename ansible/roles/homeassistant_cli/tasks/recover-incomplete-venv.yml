@@ -1,0 +1,40 @@
+---
+- name: Verify Home Assistant CLI virtualenv pip readiness
+  ansible.builtin.command:
+    argv:
+      - "{{ homeassistant_cli_venv_path }}/bin/python"
+      - -m
+      - pip
+      - --version
+  register: homeassistant_cli_venv_pip_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: homeassistant_cli_venv_preexisting
+
+- name: Capture Home Assistant CLI virtualenv pip readiness
+  ansible.builtin.set_fact:
+    homeassistant_cli_venv_pip_ready: >-
+      {{
+        not homeassistant_cli_venv_preexisting or
+        homeassistant_cli_venv_pip_probe.rc == 0
+      }}
+
+- name: Require pip readiness for a complete Home Assistant CLI install
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_venv_pip_ready
+    fail_msg: >-
+      Complete Home Assistant CLI provenance requires a pip-ready managed
+      virtualenv; repair the corrupt tree explicitly before retrying.
+  when: (homeassistant_cli_install_state | default('unmanaged')) == 'complete'
+
+- name: Rebuild incomplete authenticated Home Assistant CLI virtualenv
+  ansible.builtin.file:
+    path: "{{ homeassistant_cli_venv_path }}"
+    state: absent
+  become: true
+  when:
+    - (homeassistant_cli_install_state | default('unmanaged')) == 'in_progress'
+    - not homeassistant_cli_venv_pip_ready
+    - not ansible_check_mode

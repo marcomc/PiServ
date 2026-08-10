@@ -252,19 +252,23 @@ def validate_hermes_audit(
     invocation: dict[str, Any], entity_id: str, label: str,
     expected_state: str | None = None,
 ) -> dict[str, Any]:
-    if not invocation.get("audit_complete"):
-        raise VerificationError(f"Hermes task audit was not captured for {label}")
     try:
-        if "audit_records" in invocation:
-            return HERMES_AUDIT.validate_session_export(
-                invocation["audit_records"], invocation.get("source", ""), entity_id,
-                label, expected_state,
+        if not invocation.get("audit_complete"):
+            raise VerificationError(f"Hermes task audit was not captured for {label}")
+        try:
+            if "audit_records" in invocation:
+                return HERMES_AUDIT.validate_session_export(
+                    invocation["audit_records"], invocation.get("source", ""),
+                    entity_id, label, expected_state,
+                )
+            return HERMES_AUDIT.validate_tool_calls(
+                invocation.get("tool_calls", []), entity_id, label, expected_state
             )
-        return HERMES_AUDIT.validate_tool_calls(
-            invocation.get("tool_calls", []), entity_id, label, expected_state
-        )
-    except HERMES_AUDIT.AuditError as error:
-        raise VerificationError(str(error)) from error
+        except HERMES_AUDIT.AuditError as error:
+            raise VerificationError(str(error)) from error
+    finally:
+        invocation.pop("tool_calls", None)
+        invocation.pop("audit_records", None)
 
 
 def normalize_bool(value: Any) -> bool:
@@ -711,8 +715,6 @@ def verify_entity(
             f"{entity['label']} restoration",
             "on" if before_power else "off",
         )
-        target["hermes_restore"].pop("tool_calls", None)
-        target["hermes_restore"].pop("audit_records", None)
         target["restored"] = poll(
             lambda remaining: expected_restore(
                 config, entity, original_power, report, remaining
@@ -746,8 +748,6 @@ def verify_entity(
             entity["label"],
             "on" if desired_power else "off",
         )
-        target["hermes_action"].pop("tool_calls", None)
-        target["hermes_action"].pop("audit_records", None)
 
         def expected_state(remaining: float) -> dict[str, Any] | None:
             attempt_deadline = time.monotonic() + remaining

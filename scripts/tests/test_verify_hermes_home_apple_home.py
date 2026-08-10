@@ -660,6 +660,56 @@ class HarnessValidationTests(unittest.TestCase):
         with self.assertRaises(HARNESS.VerificationError):
             HARNESS.validate_hermes_audit(invocation, self.entity_id, "fixture")
 
+    def test_session_audit_records_are_scrubbed_from_report_state(self):
+        source = "acceptance-source"
+        private_value = "private-session-value"
+        valid_call = {
+            "function": {
+                "name": "tool_call",
+                "arguments": {
+                    "name": "mcp__home_assistant_assist__HassTurnOn",
+                    "arguments": {"name": self.entity_id},
+                },
+            }
+        }
+
+        for rejected in (False, True):
+            with self.subTest(rejected=rejected):
+                records = [
+                    {
+                        "source": source,
+                        "private_field": private_value,
+                        "messages": [{"tool_calls": [valid_call]}],
+                    }
+                ]
+                if rejected:
+                    records.append({"source": "sibling-source", "messages": []})
+                invocation = {
+                    "audit_complete": True,
+                    "source": source,
+                    "audit_records": records,
+                }
+                target = {"hermes_action": invocation}
+
+                if rejected:
+                    with self.assertRaises(HARNESS.VerificationError):
+                        HARNESS.validate_hermes_audit(
+                            invocation, self.entity_id, "fixture", "on"
+                        )
+                else:
+                    target["hermes_action_audit"] = HARNESS.validate_hermes_audit(
+                        invocation, self.entity_id, "fixture", "on"
+                    )
+                    self.assertEqual(
+                        target["hermes_action_audit"]["entity_ids"], [self.entity_id]
+                    )
+
+                report_state = json.dumps({"targets": [target]}, sort_keys=True)
+                self.assertNotIn("audit_records", invocation)
+                self.assertNotIn("audit_records", report_state)
+                self.assertNotIn("private_field", report_state)
+                self.assertNotIn(private_value, report_state)
+
     def test_session_export_rejects_missing_function_record(self):
         source = "acceptance-source"
         valid_call = {

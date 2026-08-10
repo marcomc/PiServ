@@ -176,6 +176,9 @@
 - name: Migrate authenticated schema-v2 Home Assistant CLI provenance
   ansible.builtin.include_tasks: migrate-v2-provenance.yml
 
+- name: Recover incomplete authenticated Home Assistant CLI virtualenv
+  ansible.builtin.include_tasks: recover-incomplete-venv.yml
+
 - name: Create Home Assistant CLI virtualenv
   ansible.builtin.command:
     argv:

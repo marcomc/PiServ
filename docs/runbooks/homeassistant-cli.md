@@ -35,11 +35,15 @@ role defaults.
 Validate an operator-supplied fallback directly for both SSH and Ansible:
 
 ```bash
-: "${PISERV_IP:?Set PISERV_IP to the operator-supplied current DHCP lease}"
-ssh "admin@${PISERV_IP}" 'sudo -n true'
+repo_root="$(git rev-parse --show-toplevel)"
+# shellcheck source=scripts/lib/piserv-target.sh
+source "${repo_root}/scripts/lib/piserv-target.sh"
+piserv_ip="$(piserv_ip_literal)"
+piserv_target="$(piserv_ssh_target_from_ip "${piserv_ip}")"
+ssh "${piserv_target}" 'sudo -n true'
 ansible-playbook -i ansible/inventory.ini \
   ansible/playbooks/homeassistant-cli.yml \
-  -e "ansible_host=${PISERV_IP}"
+  -e "ansible_host=${piserv_ip}"
 ```
 
 ## Install and validate

@@ -175,13 +175,22 @@
           check_mode: false
 
         - name: Simulate virtualenv creation before interruption
-          ansible.builtin.file:
-            path: "{{ homeassistant_cli_venv_path }}/bin"
-            state: directory
-            owner: root
-            group: 0
-            mode: "0755"
           check_mode: false
+          block:
+            - name: Create interrupted virtualenv executable directory
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}/bin"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Leave an incomplete virtualenv Python executable
+              ansible.builtin.copy:
+                content: "#!/bin/sh\nexit 1\n"
+                dest: "{{ homeassistant_cli_venv_path }}/bin/python"
+                owner: root
+                group: 0
+                mode: "0755"
 
         - name: Accept retry after interrupted virtualenv creation
           ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
@@ -192,6 +201,44 @@
               - homeassistant_cli_install_preexisting
               - homeassistant_cli_venv_preexisting
               - homeassistant_cli_install_state == 'in_progress'
+
+        - name: Exercise interrupted virtualenv recovery
+          ansible.builtin.include_tasks: ../tasks/recover-incomplete-venv.yml
+
+        - name: Inspect interrupted virtualenv recovery result
+          ansible.builtin.stat:
+            path: "{{ homeassistant_cli_venv_path }}"
+          register: homeassistant_cli_interrupted_venv_result
+          changed_when: false
+          check_mode: false
+
+        - name: Require apply rebuild and check-mode non-mutation
+          ansible.builtin.assert:
+            that:
+              - not homeassistant_cli_venv_pip_ready
+              - >-
+                homeassistant_cli_interrupted_venv_result.stat.exists ==
+                ansible_check_mode
+
+        - name: Recreate virtualenv after interrupted-install recovery
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - -m
+              - venv
+              - "{{ homeassistant_cli_venv_path }}"
+          changed_when: true
+          when: not ansible_check_mode
+
+        - name: Verify rebuilt virtualenv pip readiness
+          ansible.builtin.command:
+            argv:
+              - "{{ homeassistant_cli_venv_path }}/bin/python"
+              - -m
+              - pip
+              - --version
+          changed_when: false
+          when: not ansible_check_mode
 
         - name: Simulate successful retry completion
           check_mode: false

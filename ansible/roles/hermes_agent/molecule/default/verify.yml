@@ -147,9 +147,9 @@
 
     - name: Reject an unknown newly enabled Hermes CLI toolset
       block:
-        - name: Validate installation with unknown enabled toolset
+        - name: Validate tool catalog with unknown enabled toolset
           ansible.builtin.include_tasks: >-
-            {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-install.yml
+            {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-tool-catalog.yml
 
         - name: Fail if unknown enabled toolset was accepted
           ansible.builtin.fail:
@@ -158,7 +158,9 @@
         - name: Assert exact enabled-toolset validation rejected the fixture
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Assert configured Hermes CLI toolsets'
+              - >-
+                ansible_failed_task.name ==
+                'Require the complete configured Hermes CLI tool catalog'
       always:
         - name: Disable unknown Hermes toolset fixture
           ansible.builtin.file:
@@ -285,6 +287,48 @@
         hermes_agent_dashboard_bind_read_only_paths:
           - source: /etc/hermes-managed-policy
             destination: /var/lib/hermes-agent/workspace/AGENTS.md
+
+    - name: Reject dashboard bind destinations that shadow managed config
+      block:
+        - name: Validate dashboard bind destination over managed config
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent
+
+        - name: Fail if managed config shadow was accepted
+          ansible.builtin.fail:
+            msg: Dashboard bind destinations must not shadow managed config.
+      rescue:
+        - name: Assert protected runtime-consumer validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject dashboard binds that shadow protected runtime-consumer paths'
+
+    - name: Reject dashboard bind destinations beneath managed config
+      block:
+        - name: Validate dashboard bind destination beneath managed config
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/config.yaml/shadow
+
+        - name: Fail if managed config descendant was accepted
+          ansible.builtin.fail:
+            msg: Dashboard bind destinations beneath managed config must fail.
+      rescue:
+        - name: Assert protected descendant validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject dashboard binds that shadow protected runtime-consumer paths'
 
     - name: Reject unsafe dashboard bind-read-only source paths
       block:

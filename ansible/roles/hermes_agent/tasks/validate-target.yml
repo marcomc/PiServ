@@ -192,6 +192,39 @@
     loop_var: hermes_agent_dashboard_bind
     label: "{{ hermes_agent_dashboard_bind.source }}"
 
+- name: Define protected Hermes dashboard runtime-consumer paths
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_protected_consumer_paths: >-
+      {{
+        [
+          hermes_agent_managed_config_path,
+          hermes_agent_home ~ '/config.yaml',
+          hermes_agent_home ~ '/.env',
+          hermes_agent_binary_path,
+          hermes_agent_codex_binary_path,
+          hermes_agent_dashboard_basic_auth_state_file
+        ] +
+        ([hermes_agent_home_assistant_mcp_token_env_file]
+         if hermes_agent_manage_home_assistant_mcp else []) +
+        ([hermes_agent_dashboard_tui_runtime_dir]
+         if hermes_agent_manage_dashboard_chat else [])
+      }}
+
+- name: Reject dashboard binds that shadow protected runtime-consumer paths
+  ansible.builtin.assert:
+    that:
+      - item.1 != item.0.destination
+      - not item.1.startswith(item.0.destination ~ '/')
+      - not item.0.destination.startswith(item.1 ~ '/')
+    fail_msg: >-
+      Dashboard bind destination {{ item.0.destination }} must not equal,
+      contain, or be contained by protected runtime-consumer path {{ item.1 }}.
+  loop: >-
+    {{ hermes_agent_dashboard_bind_read_only_paths |
+    product(hermes_agent_dashboard_protected_consumer_paths) | list }}
+  loop_control:
+    label: "{{ item.0.destination }} versus {{ item.1 }}"
+
 - name: Resolve Hermes dashboard authentication output paths
   ansible.builtin.command:
     argv:
