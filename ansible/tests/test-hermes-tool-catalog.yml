@@ -1,0 +1,45 @@
+---
+- name: Test complete Hermes tool catalog validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_agent_enabled_toolsets:
+      - memory
+      - terminal
+    hermes_agent_disabled_toolsets:
+      - browser
+      - file
+    valid_catalog: |
+      Built-in toolsets (cli):
+        yes enabled  memory  Memory
+        yes enabled  terminal  Terminal
+        no disabled  browser  Browser
+        no disabled  file  Files
+  tasks:
+    - name: Accept the exact configured Hermes tool catalog
+      ansible.builtin.include_tasks: ../roles/hermes_agent/tasks/validate-tool-catalog-result.yml
+      vars:
+        hermes_agent_tool_catalog_output:
+          stdout: "{{ valid_catalog }}"
+
+    - name: Reject incomplete or ambiguous Hermes tool catalogs
+      ansible.builtin.include_tasks: reject-hermes-tool-catalog.yml
+      loop:
+        - name: unknown-enabled
+          stdout: "{{ valid_catalog }}  yes enabled  vision  Vision\n"
+        - name: unknown-disabled
+          stdout: "{{ valid_catalog }}  no disabled  vision  Vision\n"
+        - name: missing-configured
+          stdout: |-
+            Built-in toolsets (cli):
+              yes enabled  memory  Memory
+              no disabled  browser  Browser
+              no disabled  file  Files
+        - name: duplicate
+          stdout: "{{ valid_catalog }}  yes enabled  memory  Memory again\n"
+        - name: malformed-status
+          stdout: "{{ valid_catalog }}  maybe active  vision  Vision\n"
+      loop_control:
+        loop_var: fixture
+        label: "{{ fixture.name }}"

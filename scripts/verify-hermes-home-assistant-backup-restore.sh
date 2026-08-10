@@ -48,6 +48,38 @@ ssh_options=(
 )
 helper_staged=false
 unit_launch_attempted=false
+foreground_ssh_pid=""
+foreground_ssh_term_grace_attempts=20
+
+terminate_foreground_ssh() {
+  local attempt
+  local pid=${foreground_ssh_pid}
+
+  if [[ -z "${pid}" ]]; then
+    return 0
+  fi
+
+  kill -TERM "${pid}" 2>/dev/null || true
+  for (( attempt = 0; attempt < foreground_ssh_term_grace_attempts; attempt++ )); do
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -KILL "${pid}" 2>/dev/null || true
+  fi
+  wait "${pid}" 2>/dev/null || true
+  foreground_ssh_pid=""
+}
+
+interrupt_remote_launch() {
+  local signal_status=$1
+
+  trap - INT TERM
+  terminate_foreground_ssh
+  cleanup_remote_launch "${signal_status}"
+}
 
 cleanup_remote_launch() {
   local primary_status=${1:-$?}
@@ -70,8 +102,8 @@ cleanup_remote_launch() {
   exit "${primary_status}"
 }
 trap cleanup_remote_launch EXIT
-trap 'cleanup_remote_launch 130' INT
-trap 'cleanup_remote_launch 143' TERM
+trap 'interrupt_remote_launch 130' INT
+trap 'interrupt_remote_launch 143' TERM
 
 # The validated local helper path is intentionally expanded here.
 # shellcheck disable=SC2029
@@ -85,7 +117,7 @@ unit_launch_attempted=true
 # The validated local unit, API, entity, and helper values are expanded here.
 # shellcheck disable=SC2029
 ssh "${ssh_options[@]}" "${target}" \
-  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=${outer_runtime_seconds}s --property=TimeoutStopSec=${outer_stop_seconds}s --setenv='PROOF_RUN_ID=${proof_run_id}' --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' --setenv='HERMES_AUDIT_HELPER=${audit_helper_remote}' /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=${outer_runtime_seconds}s --property=TimeoutStopSec=${outer_stop_seconds}s --setenv='PROOF_RUN_ID=${proof_run_id}' --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' --setenv='HERMES_AUDIT_HELPER=${audit_helper_remote}' /bin/bash -s" <<'REMOTE' &
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent
@@ -441,3 +473,10 @@ restore_required=false
 printf 'HERMES_HOME_ASSISTANT_BACKUP_RESTORE_OK entity=%s tools=discovered\n' \
   "${entity_id}"
 REMOTE
+foreground_ssh_pid=$!
+launch_status=0
+wait "${foreground_ssh_pid}" || launch_status=$?
+foreground_ssh_pid=""
+if (( launch_status != 0 )); then
+  exit "${launch_status}"
+fi

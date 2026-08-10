@@ -25,9 +25,6 @@
   import_playbook: ha-mqtt-agent.yml
 - name: Install Hermes Agent
   import_playbook: hermes-agent.yml
-- name: Install Home Assistant CLI
-  import_playbook: homeassistant-cli.yml
-  when: piserv_hermes_agent_manage_home_assistant_mcp | default(false) | bool
 - name: Deploy Jackett Search
   import_playbook: jackett.yml
 - name: Install RaiPlaySound daily sync

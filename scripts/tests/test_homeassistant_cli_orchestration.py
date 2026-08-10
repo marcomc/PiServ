@@ -8,9 +8,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLAYBOOKS = REPO_ROOT / "ansible" / "playbooks"
-MANAGE_EXPRESSION = (
-    "piserv_hermes_agent_manage_home_assistant_mcp | default(false) | bool"
-)
 
 
 def load_yaml(path: Path) -> list[dict]:
@@ -22,15 +19,24 @@ def load_yaml(path: Path) -> list[dict]:
 class HomeAssistantCliOrchestrationTests(unittest.TestCase):
     """Verify disabled and enabled orchestration contracts."""
 
-    def test_full_install_gates_cli_import_when_mcp_is_disabled(self) -> None:
+    def test_full_install_does_not_repeat_cli_after_hermes(self) -> None:
         entries = load_yaml(PLAYBOOKS / "piserv-install.yml")
-        cli_import = next(
-            entry
-            for entry in entries
-            if entry.get("import_playbook") == "homeassistant-cli.yml"
-        )
+        imports = [entry.get("import_playbook") for entry in entries]
+        self.assertNotIn("homeassistant-cli.yml", imports)
 
-        self.assertEqual(cli_import.get("when"), MANAGE_EXPRESSION)
+    def test_standalone_hermes_installs_cli_before_main_role(self) -> None:
+        (play,) = load_yaml(PLAYBOOKS / "hermes-agent.yml")
+        task_names = [task["name"] for task in play["pre_tasks"]]
+        cli_index = task_names.index(
+            "Install Home Assistant CLI for the Hermes terminal"
+        )
+        self.assertLess(
+            task_names.index(
+                "Establish the Hermes runtime identity before project CLI setup"
+            ),
+            cli_index,
+        )
+        self.assertEqual(play["roles"][0]["role"], "hermes_agent")
 
     def run_standalone(self, enabled: bool) -> subprocess.CompletedProcess[str]:
         return subprocess.run(

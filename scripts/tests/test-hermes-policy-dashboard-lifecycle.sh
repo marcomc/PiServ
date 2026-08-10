@@ -21,9 +21,22 @@ dashboard_handler="$({
 grep --fixed-strings --quiet \
   'notify: Restart Hermes Agent dashboard' <<<"${policy_task}"
 grep --fixed-strings --quiet \
+  'not ansible_check_mode or' <<<"${policy_task}"
+grep --fixed-strings --quiet \
+  'piserv_hermes_policy_directory_postcreate.stat.exists' <<<"${policy_task}"
+grep --fixed-strings --quiet \
   '    - hermes_agent_manage_dashboard' <<<"${dashboard_handler}"
 grep --fixed-strings --quiet \
   '    - not ansible_check_mode' <<<"${dashboard_handler}"
+
+catalog_line="$(grep -n 'import_tasks: validate-tool-catalog.yml' "${repo_root}/ansible/roles/hermes_agent/tasks/configure.yml" | cut -d: -f1)"
+startup_line="$(grep -n 'state: started' "${repo_root}/ansible/roles/hermes_agent/tasks/configure.yml" | head -1 | cut -d: -f1)"
+test "${catalog_line}" -lt "${startup_line}"
+if grep --fixed-strings --quiet \
+  'Read enabled Hermes CLI toolsets' \
+  "${repo_root}/ansible/roles/hermes_agent/tasks/validate-install.yml"; then
+  exit 1
+fi
 
 ansible-playbook \
   --inventory localhost, \

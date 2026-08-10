@@ -6,6 +6,10 @@
   vars:
     piserv_hermes_agent_lan_ipv4_cidr: >-
       {{ ansible_facts.default_ipv4.network ~ '/' ~ ansible_facts.default_ipv4.prefix }}
+    piserv_hermes_agent_enabled_toolsets:
+      - memory
+      - skills
+      - terminal
   vars_files:
     -
       - ../vars/hermes-agent.yml
@@ -71,6 +75,55 @@
         group: root
         mode: "0644"
       notify: Restart Hermes Agent dashboard
+      when:
+        - >-
+          not ansible_check_mode or
+          (piserv_hermes_policy_directory_postcreate.stat.exists |
+          default(false))
+
+    - name: Determine whether Hermes requires project CLI orchestration
+      ansible.builtin.set_fact:
+        piserv_hermes_homeassistant_cli_required: >-
+          {{
+            piserv_hermes_agent_manage_home_assistant_mcp | bool and
+            'terminal' in piserv_hermes_agent_enabled_toolsets
+          }}
+
+    - name: Preflight the Hermes runtime identity before project CLI setup
+      ansible.builtin.include_role:
+        name: hermes_agent
+        tasks_from: runtime-user.yml
+      vars:
+        hermes_agent_runtime_user_phase: preflight
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: external-data
+      when: piserv_hermes_homeassistant_cli_required
+
+    - name: Establish the Hermes runtime identity before project CLI setup
+      ansible.builtin.include_role:
+        name: hermes_agent
+        tasks_from: runtime-user.yml
+      vars:
+        hermes_agent_runtime_user_phase: mutate
+        hermes_agent_manage_backup: true
+        hermes_agent_backup_group: external-data
+      when: piserv_hermes_homeassistant_cli_required
+
+    - name: Install Home Assistant CLI for the Hermes terminal
+      ansible.builtin.include_role:
+        name: homeassistant_cli
+      vars:
+        homeassistant_cli_runtime_user: hermes-agent
+        homeassistant_cli_runtime_group: hermes-agent
+        homeassistant_cli_server: >-
+          {{ piserv_hermes_agent_home_assistant_mcp_url
+          | regex_replace('/api/mcp/?$', '') }}
+        homeassistant_cli_token_env_file: >-
+          /var/lib/hermes-agent/home-assistant-mcp.env
+        homeassistant_cli_token_env_var: HASS_MCP_TOKEN
+      when:
+        - piserv_hermes_homeassistant_cli_required
+        - hermes_agent_runtime_user_available | default(false)
   roles:
     - role: hermes_agent
       vars:
@@ -115,10 +168,8 @@
           {{ piserv_hermes_agent_manage_home_assistant_mcp }}
         hermes_agent_home_assistant_mcp_url: >-
           {{ piserv_hermes_agent_home_assistant_mcp_url }}
-        hermes_agent_enabled_toolsets:
-          - memory
-          - skills
-          - terminal
+        hermes_agent_enabled_toolsets: >-
+          {{ piserv_hermes_agent_enabled_toolsets }}
         hermes_agent_disabled_toolsets:
           - bfl
           - browser

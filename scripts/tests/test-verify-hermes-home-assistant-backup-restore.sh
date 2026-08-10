@@ -32,8 +32,8 @@ assert_count 1 'outer_stop_seconds=300'
 assert_count 1 "--property=RuntimeMaxSec=\${outer_runtime_seconds}s"
 assert_count 1 "--property=TimeoutStopSec=\${outer_stop_seconds}s"
 assert_count 1 'trap cleanup_remote_launch EXIT'
-assert_count 1 "trap 'cleanup_remote_launch 130' INT"
-assert_count 1 "trap 'cleanup_remote_launch 143' TERM"
+assert_count 1 "trap 'interrupt_remote_launch 130' INT"
+assert_count 1 "trap 'interrupt_remote_launch 143' TERM"
 assert_count 1 "proof_run_id=\"\$(date -u +%Y%m%d%H%M%S)-\$\$\""
 assert_count 2 '[[ ! "'"\${proof_run_id}"'" =~ ^[0-9]{14}-[0-9]+$ ]]'
 assert_count 1 "--setenv='PROOF_RUN_ID=\${proof_run_id}'"
@@ -178,6 +178,66 @@ if (( signal_status != 143 )); then
   printf 'Expected signal cleanup status 143, got %s.\n' "${signal_status}" >&2
   exit 1
 fi
+
+cat >"${test_dir}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+command_text=${*: -1}
+if [[ "${command_text}" == *'systemd-run'* ]]; then
+  printf '%s\n' "$$" >"${SSH_TEST_PID:?}"
+  trap 'printf "%s\n" launch-term >>"${SSH_TEST_EVENTS:?}"' TERM
+  printf '%s\n' launch-start >>"${SSH_TEST_EVENTS}"
+  while true; do
+    sleep 1
+  done
+fi
+if [[ "${command_text}" != *'systemctl stop'* ]]; then
+  exit 0
+fi
+launch_pid=$(<"${SSH_TEST_PID:?}")
+if kill -0 "${launch_pid}" 2>/dev/null; then
+  printf '%s\n' cleanup-before-reap >>"${SSH_TEST_EVENTS:?}"
+else
+  printf '%s\n' cleanup-after-reap >>"${SSH_TEST_EVENTS:?}"
+fi
+exit 72
+EOF
+chmod +x "${test_dir}/bin/ssh"
+: >"${test_dir}/forced-kill-events"
+PATH="${test_dir}/bin:${PATH}" \
+  SSH_TEST_PID="${test_dir}/forced-kill-pid" \
+  SSH_TEST_EVENTS="${test_dir}/forced-kill-events" \
+  PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
+  >/dev/null 2>"${test_dir}/forced-kill-stderr" &
+forced_kill_harness_pid=$!
+for _ in {1..50}; do
+  if [[ -s "${test_dir}/forced-kill-pid" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+kill -TERM "${forced_kill_harness_pid}"
+set +e
+wait "${forced_kill_harness_pid}"
+forced_kill_status=$?
+set -e
+if (( forced_kill_status != 143 )); then
+  printf 'Expected forced-kill signal status 143, got %s.\n' \
+    "${forced_kill_status}" >&2
+  exit 1
+fi
+forced_kill_events="$(paste -s -d ' ' "${test_dir}/forced-kill-events")"
+expected_forced_kill_events='launch-start launch-term cleanup-after-reap'
+if [[ "${forced_kill_events}" != "${expected_forced_kill_events}" ]]; then
+  printf 'Unexpected forced-kill event order: %s\n' \
+    "${forced_kill_events}" >&2
+  exit 1
+fi
+if kill -0 "$(<"${test_dir}/forced-kill-pid")" 2>/dev/null; then
+  printf 'Foreground SSH process was not reaped.\n' >&2
+  exit 1
+fi
+grep --fixed-strings --quiet 'Launch cleanup failed for unit' \
+  "${test_dir}/forced-kill-stderr"
 
 cat >"${test_dir}/bin/ssh" <<'EOF'
 #!/usr/bin/env bash

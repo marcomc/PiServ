@@ -54,54 +54,6 @@
       not ansible_check_mode or
       (hermes_agent_managed_config_state.stat.exists | default(false))
 
-- name: Read enabled Hermes CLI toolsets
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemd-run
-      - --quiet
-      - --wait
-      - --pipe
-      - --service-type=exec
-      - "--uid={{ hermes_agent_user }}"
-      - "--gid={{ hermes_agent_group }}"
-      - --property=ProtectSystem=strict
-      - "--property=ReadWritePaths={{ hermes_agent_home }}"
-      - >-
-        --property=BindReadOnlyPaths={{ hermes_agent_managed_config_path
-        }}:{{ hermes_agent_home }}/config.yaml
-      - "--setenv=HOME={{ hermes_agent_home }}"
-      - "--setenv=HERMES_HOME={{ hermes_agent_home }}"
-      - --
-      - "{{ hermes_agent_binary_path }}"
-      - tools
-      - list
-      - --platform
-      - cli
-  become: true
-  register: hermes_agent_toolsets_output
-  changed_when: false
-  check_mode: false
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_checkout.stat.exists
-    - hermes_agent_managed_config_state.stat.exists
-
-- name: Assert configured Hermes CLI toolsets
-  ansible.builtin.assert:
-    that:
-      - >-
-        hermes_agent_toolsets_output.stdout |
-        regex_findall('(?m)^\\s*\\S+\\s+enabled\\s+([A-Za-z0-9_-]+)\\s*$') |
-        unique | sort == hermes_agent_enabled_toolsets | unique | sort
-    fail_msg: >-
-      The complete enabled Hermes CLI toolset set must exactly match
-      hermes_agent_enabled_toolsets. Live output:
-      {{ hermes_agent_toolsets_output.stdout | to_json }}
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_checkout.stat.exists
-    - hermes_agent_managed_config_state.stat.exists
-
 - name: Read Codex CLI version
   ansible.builtin.command:
     argv:
