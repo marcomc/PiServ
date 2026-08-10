@@ -101,6 +101,52 @@ class HarnessValidationTests(unittest.TestCase):
             ):
                 HARNESS.ssh_target(config)
 
+    def test_configured_ssh_target_accepts_supported_forms(self):
+        valid_targets = (
+            "PiServ.local",
+            "admin@host-name.example",
+            "admin@192.0.2.10",
+            "operator@[2001:db8::10]",
+            "user_name@host.example.",
+        )
+
+        for target in valid_targets:
+            with self.subTest(target=target), patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(HARNESS.ssh_target({"ssh_target": target}), target)
+
+    def test_configured_ssh_target_rejects_ambiguous_or_option_shaped_forms(self):
+        invalid_targets = (
+            "",
+            " PiServ.local",
+            "PiServ.local ",
+            "PiServ local",
+            "-oProxyCommand=fixture",
+            "admin@-oProxyCommand=fixture",
+            "@PiServ.local",
+            "bad user@PiServ.local",
+            "admin@@PiServ.local",
+            "admin@PiServ.local:22",
+            "admin@192.0.2.10/24",
+            "admin@999.999.999.999",
+            "admin@2001:db8::10",
+            "admin@[fe80::1%eth0]",
+            "admin@[192.0.2.10]",
+            "admin@[2001:db8::10]:22",
+            "admin@host_name.example",
+            "admin@.example",
+            "admin@example..com",
+            "admin@-host.example",
+            "admin@host-.example",
+        )
+
+        for target in invalid_targets:
+            with (
+                self.subTest(target=target),
+                patch.dict(os.environ, {}, clear=True),
+                self.assertRaises(HARNESS.VerificationError),
+            ):
+                HARNESS.ssh_target({"ssh_target": target})
+
     def test_hermes_audit_accepts_only_the_named_entity(self):
         invocation = {
             "audit_complete": True,
@@ -344,7 +390,119 @@ class HarnessValidationTests(unittest.TestCase):
         self.assertEqual(stop_command, HARNESS.shlex.join(["sudo", "systemctl", "stop", *units]))
         for unit in units:
             self.assertIn(HARNESS.shlex.quote(unit), wait_command)
+        self.assertIn("systemctl show --property=ActiveState --value", wait_command)
+        self.assertIn("inactive|failed", wait_command)
+        self.assertIn("SECONDS >= deadline", wait_command)
         self.assertTrue(result["transient_cleanup_complete"])
+
+    def test_cleanup_rejects_nonterminal_explicit_active_state(self):
+        stopped = {"exit_code": 0, "stdout": "", "stderr": ""}
+        still_active = {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "fixture.service=deactivating",
+        }
+        with patch.object(
+            HARNESS, "run_command", side_effect=[stopped, still_active]
+        ):
+            complete, failure = HARNESS.cleanup_transient_units(
+                {"ssh_target": "admin@PiServ.local"}, ["fixture.service"], 2
+            )
+
+        self.assertFalse(complete)
+        self.assertIn("inactive/failed ActiveState", failure)
+        self.assertIn("fixture.service=deactivating", failure)
+
+    def test_cleanup_propagates_stop_failure_after_terminal_state(self):
+        stop_failed = {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "stop transport failed",
+            "timed_out": False,
+        }
+        terminal = {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+        }
+        with patch.object(
+            HARNESS, "run_command", side_effect=[stop_failed, terminal]
+        ):
+            complete, failure = HARNESS.cleanup_transient_units(
+                {"ssh_target": "admin@PiServ.local"}, ["fixture.service"], 2
+            )
+
+        self.assertFalse(complete)
+        self.assertIn("transient unit stop failed", failure)
+        self.assertIn("stop transport failed", failure)
+
+    def test_nonzero_ssh_result_cleans_associated_units(self):
+        failed = {
+            "exit_code": 255,
+            "stdout": "",
+            "stderr": "connection lost",
+            "timed_out": False,
+        }
+        with (
+            patch.object(HARNESS, "run_command", return_value=failed),
+            patch.object(
+                HARNESS, "cleanup_transient_units", return_value=(True, None)
+            ) as cleanup,
+        ):
+            result = HARNESS.invoke_hermes(
+                {"ssh_target": "admin@PiServ.local"}, "test", 10, 1
+            )
+
+        self.assertEqual(result["exit_code"], 255)
+        self.assertTrue(result["transient_cleanup_complete"])
+        self.assertEqual(cleanup.call_count, 1)
+        self.assertEqual(cleanup.call_args.args[1], result["associated_units"])
+
+    def test_invalid_wrapper_output_cleans_before_raising(self):
+        incomplete = {
+            "exit_code": 0,
+            "stdout": "not-json",
+            "stderr": "",
+            "timed_out": False,
+        }
+        with (
+            patch.object(HARNESS, "run_command", return_value=incomplete),
+            patch.object(
+                HARNESS,
+                "cleanup_transient_units",
+                return_value=(False, "unit remained activating"),
+            ) as cleanup,
+            self.assertRaises(HARNESS.VerificationError) as raised,
+        ):
+            HARNESS.invoke_hermes(
+                {"ssh_target": "admin@PiServ.local"}, "test", 10, 1
+            )
+
+        self.assertEqual(cleanup.call_count, 1)
+        self.assertFalse(raised.exception.transient_cleanup_complete)
+        self.assertEqual(
+            raised.exception.transient_cleanup_failure,
+            "unit remained activating",
+        )
+
+    def test_valid_wrapper_completion_does_not_force_cleanup(self):
+        complete = {
+            "exit_code": 0,
+            "stdout": '{"exit_code":3,"stdout":"","stderr":"failed"}',
+            "stderr": "",
+            "timed_out": False,
+        }
+        with (
+            patch.object(HARNESS, "run_command", return_value=complete),
+            patch.object(HARNESS, "cleanup_transient_units") as cleanup,
+        ):
+            result = HARNESS.invoke_hermes(
+                {"ssh_target": "admin@PiServ.local"}, "test", 10, 1
+            )
+
+        self.assertEqual(result["exit_code"], 3)
+        cleanup.assert_not_called()
 
     def test_restoration_is_gated_on_failed_timeout_cleanup(self):
         entity = {

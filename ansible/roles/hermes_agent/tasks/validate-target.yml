@@ -55,6 +55,16 @@
         hermes_agent_home ~ '/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_legacy_basic_auth_state_file ==
+        hermes_agent_home ~ '/dashboard-basic-auth.yaml'
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
+        hermes_agent_dashboard_legacy_basic_auth_state_file not in
+        [hermes_agent_dashboard_basic_auth_state_file,
+        hermes_agent_dashboard_basic_auth_bootstrap_password_file,
+        hermes_agent_managed_config_path]
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
         hermes_agent_dashboard_basic_auth_bootstrap_password_file is match('^/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or

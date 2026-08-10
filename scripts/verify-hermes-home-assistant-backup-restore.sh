@@ -31,7 +31,12 @@ if [[ "${risk}" != non-critical ]]; then
 fi
 
 target="$(piserv_ssh_target)"
-unit_name="hermes-home-assistant-restore-proof-$(date -u +%Y%m%d%H%M%S)-$$"
+proof_run_id="$(date -u +%Y%m%d%H%M%S)-$$"
+if [[ ! "${proof_run_id}" =~ ^[0-9]{14}-[0-9]+$ ]]; then
+  printf 'Generated proof-run identifier is invalid: %s\n' "${proof_run_id}" >&2
+  exit 64
+fi
+unit_name="hermes-home-assistant-restore-proof-${proof_run_id}"
 audit_helper_remote="/run/${unit_name}-audit.py"
 outer_runtime_seconds=1200
 outer_stop_seconds=300
@@ -53,7 +58,7 @@ cleanup_remote_launch() {
     # The validated local unit and helper names are intentionally expanded here.
     # shellcheck disable=SC2029
     if ! ssh "${ssh_options[@]}" "${target}" \
-      "sudo timeout --kill-after=5s 30s /bin/bash -c 'systemctl stop \"${unit_name}.service\" 2>/dev/null || true; systemctl reset-failed \"${unit_name}.service\" 2>/dev/null || true; rm -f -- \"${audit_helper_remote}\"'"; then
+      "sudo timeout --kill-after=5s 30s /bin/bash -c 'cleanup_status=0; systemctl stop \"${unit_name}.service\" || cleanup_status=72; state=; for _attempt in {1..20}; do state=\$(systemctl show \"${unit_name}.service\" --property=ActiveState --value) || { cleanup_status=73; break; }; case \${state} in inactive|failed) break ;; esac; sleep 1; done; case \${state} in inactive|failed) ;; *) cleanup_status=73 ;; esac; systemctl reset-failed \"${unit_name}.service\" || { test \${cleanup_status} -ne 0 || cleanup_status=74; }; rm -f -- \"${audit_helper_remote}\" || { test \${cleanup_status} -ne 0 || cleanup_status=75; }; exit \${cleanup_status}'"; then
       cleanup_status=71
       printf 'Launch cleanup failed for unit %s and helper %s.\n' \
         "${unit_name}" "${audit_helper_remote}" >&2
@@ -80,7 +85,7 @@ unit_launch_attempted=true
 # The validated local unit, API, entity, and helper values are expanded here.
 # shellcheck disable=SC2029
 ssh "${ssh_options[@]}" "${target}" \
-  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=${outer_runtime_seconds}s --property=TimeoutStopSec=${outer_stop_seconds}s --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' --setenv='HERMES_AUDIT_HELPER=${audit_helper_remote}' /bin/bash -s" <<'REMOTE'
+  "sudo systemd-run --unit='${unit_name}' --wait --pipe --service-type=exec --property=RuntimeMaxSec=${outer_runtime_seconds}s --property=TimeoutStopSec=${outer_stop_seconds}s --setenv='PROOF_RUN_ID=${proof_run_id}' --setenv='HOME_ASSISTANT_API_URL=${api_url}' --setenv='HOME_ASSISTANT_ENTITY=${entity_id}' --setenv='HERMES_AUDIT_HELPER=${audit_helper_remote}' /bin/bash -s" <<'REMOTE'
 set -euo pipefail
 
 source_home=/var/lib/hermes-agent
@@ -91,6 +96,11 @@ managed_config=/usr/local/lib/hermes-agent/.hermes-config.yaml
 audit_helper="${HERMES_AUDIT_HELPER:?HERMES_AUDIT_HELPER is required}"
 api_url="${HOME_ASSISTANT_API_URL:?HOME_ASSISTANT_API_URL is required}"
 entity_id="${HOME_ASSISTANT_ENTITY:?HOME_ASSISTANT_ENTITY is required}"
+proof_run_id="${PROOF_RUN_ID:?PROOF_RUN_ID is required}"
+if [[ ! "${proof_run_id}" =~ ^[0-9]{14}-[0-9]+$ ]]; then
+  printf 'Proof-run identifier has an invalid format: %s\n' "${proof_run_id}" >&2
+  exit 64
+fi
 timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
 work_dir="$(mktemp -d /run/hermes-home-assistant-restore.XXXXXX)"
 backup_stage="${work_dir}/backup-stage"
@@ -244,7 +254,7 @@ run_protected_hermes() {
       "${workspace}/AGENTS.md"
   fi
   ((inner_unit_sequence += 1))
-  active_inner_unit="hermes-restore-proof-${source_tag}-${inner_unit_sequence}"
+  active_inner_unit="hermes-restore-proof-${proof_run_id}-${inner_unit_sequence}"
   if systemd-run --quiet --wait --pipe --collect --service-type=exec \
     --unit="${active_inner_unit}" \
     --uid=hermes-agent \

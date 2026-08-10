@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import ipaddress
 import json
+import math
 import os
 import re
 import shlex
@@ -107,8 +108,63 @@ def require_string(mapping: dict[str, Any], key: str, context: str) -> str:
     return value
 
 
+def parse_ssh_target(target: str) -> tuple[str | None, str]:
+    """Parse a strict OpenSSH destination without accepting CLI syntax."""
+    if not target or target != target.strip() or any(
+        character.isspace() for character in target
+    ):
+        raise VerificationError("ssh_target must be a single SSH target")
+    if target.startswith("-") or target.count("@") > 1:
+        raise VerificationError("ssh_target must use [user@]host syntax")
+
+    user, separator, host = target.rpartition("@")
+    if not separator:
+        user, host = None, target
+    elif not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", user):
+        raise VerificationError("ssh_target has an invalid user")
+
+    if host.startswith("["):
+        if not host.endswith("]") or host.count("[") != 1 or host.count("]") != 1:
+            raise VerificationError("ssh_target has an invalid bracketed IPv6 host")
+        literal = host[1:-1]
+        if "%" in literal:
+            raise VerificationError("ssh_target IPv6 scope identifiers are not allowed")
+        try:
+            address = ipaddress.ip_address(literal)
+        except ValueError as error:
+            raise VerificationError(
+                "ssh_target brackets may contain only an IPv6 address"
+            ) from error
+        if address.version != 6:
+            raise VerificationError(
+                "ssh_target brackets may contain only an IPv6 address"
+            )
+        return user, host
+
+    if any(character in host for character in ":/[]"):
+        raise VerificationError(
+            "ssh_target must not contain a port, CIDR, or unbracketed IPv6 address"
+        )
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if re.fullmatch(r"[0-9.]+", host):
+            raise VerificationError("ssh_target has an invalid IPv4 address")
+        if len(host) > 253 or not re.fullmatch(
+            r"(?=.{1,253}\.?$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
+            r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.?",
+            host,
+        ):
+            raise VerificationError("ssh_target has an invalid hostname")
+    else:
+        if address.version != 4:
+            raise VerificationError("ssh_target IPv6 addresses must be bracketed")
+    return user, host
+
+
 def ssh_target(config: dict[str, Any]) -> str:
     configured_target = require_string(config, "ssh_target", "configuration")
+    configured_user, _ = parse_ssh_target(configured_target)
     if "PISERV_IP" not in os.environ:
         return configured_target
     override = os.environ["PISERV_IP"]
@@ -117,14 +173,12 @@ def ssh_target(config: dict[str, Any]) -> str:
     except ValueError:
         raise VerificationError("PISERV_IP must be a single current DHCP lease")
     formatted_host = f"[{override}]" if address.version == 6 else override
-    user = configured_target.rsplit("@", 1)[0] if "@" in configured_target else "admin"
+    user = configured_user or "admin"
     return f"{user}@{formatted_host}"
 
 
 def validate_config(config: dict[str, Any]) -> None:
-    ssh_target = require_string(config, "ssh_target", "configuration")
-    if any(character.isspace() for character in ssh_target):
-        raise VerificationError("ssh_target must be a single SSH target")
+    parse_ssh_target(require_string(config, "ssh_target", "configuration"))
     require_string(config, "home_assistant_api_url", "configuration")
     entities = config.get("entities")
     if not isinstance(entities, list) or not entities:
@@ -415,16 +469,23 @@ def invoke_hermes(
             error.add_note(f"transient cleanup failed: {cleanup_failure}")
         raise
     result["associated_units"] = associated_units
-    if result.get("timed_out"):
+    if result["exit_code"] != 0:
         cleanup_complete, cleanup_failure = cleanup_transient_units(
             config, associated_units, timeout
         )
         result["transient_cleanup_complete"] = cleanup_complete
         if cleanup_failure:
             result["transient_cleanup_failure"] = cleanup_failure
-    if result["exit_code"] != 0:
         return result
-    payload = checked_json(result, "Hermes invocation audit wrapper")
+    try:
+        payload = checked_json(result, "Hermes invocation audit wrapper")
+    except VerificationError as error:
+        cleanup_complete, cleanup_failure = cleanup_transient_units(
+            config, associated_units, timeout
+        )
+        error.transient_cleanup_complete = cleanup_complete
+        error.transient_cleanup_failure = cleanup_failure
+        raise
     payload["stdout"] = redact(payload.get("stdout", ""))
     payload["stderr"] = redact(payload.get("stderr", ""))
     return compact_result(payload)
@@ -433,7 +494,7 @@ def invoke_hermes(
 def cleanup_transient_units(
     config: dict[str, Any], units: list[str], timeout: float
 ) -> tuple[bool, str | None]:
-    """Stop timed-out acceptance units and prove that all are inactive."""
+    """Stop acceptance units and poll their explicit state to a terminal state."""
     cleanup_timeout = max(1.0, min(timeout, 15.0))
     target = ssh_target(config)
     stop_command = shlex.join(["sudo", "systemctl", "stop", *units])
@@ -441,19 +502,40 @@ def cleanup_transient_units(
         ["ssh", *SSH_OPTIONS, target, stop_command], cleanup_timeout
     )
     unit_arguments = " ".join(shlex.quote(unit) for unit in units)
-    checks = (
-        f"status=0; for unit in {unit_arguments}; do "
-        'if sudo systemctl is-active --quiet "$unit"; then status=1; fi; '
-        'done; exit "$status"'
+    deadline_seconds = math.ceil(cleanup_timeout)
+    checks = "\n".join(
+        [
+            "set -u",
+            f"deadline=$((SECONDS + {deadline_seconds}))",
+            "while :; do",
+            "  pending=''",
+            f"  for unit in {unit_arguments}; do",
+            '    state="$(sudo systemctl show --property=ActiveState --value "$unit")"',
+            '    case "$state" in inactive|failed) ;; *) pending="${pending}${pending:+,}${unit}=${state}" ;; esac',
+            "  done",
+            '  test -z "$pending" && exit 0',
+            '  if (( SECONDS >= deadline )); then printf "%s\\n" "$pending" >&2; exit 1; fi',
+            "  sleep 0.2",
+            "done",
+        ]
     )
     wait_result = run_command(
-        ["ssh", *SSH_OPTIONS, target, checks], cleanup_timeout
+        ["ssh", *SSH_OPTIONS, target, checks], cleanup_timeout + 1.0
     )
     if wait_result["exit_code"] != 0:
-        details = "timed-out transient units remained active"
+        states = redact(wait_result["stderr"]).strip()
+        details = "transient units did not reach inactive/failed ActiveState"
+        if states:
+            details = f"{details}: {states}"
         if stop_result["exit_code"] != 0:
             stop_error = redact(stop_result["stderr"]).strip()
             details = f"{details}; transient unit stop failed: {stop_error}"
+        return False, details
+    if stop_result["exit_code"] != 0:
+        stop_error = redact(stop_result["stderr"]).strip()
+        details = "transient unit stop failed"
+        if stop_error:
+            details = f"{details}: {stop_error}"
         return False, details
     return True, None
 

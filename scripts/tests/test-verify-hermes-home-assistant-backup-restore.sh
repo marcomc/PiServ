@@ -34,7 +34,14 @@ assert_count 1 "--property=TimeoutStopSec=\${outer_stop_seconds}s"
 assert_count 1 'trap cleanup_remote_launch EXIT'
 assert_count 1 "trap 'cleanup_remote_launch 130' INT"
 assert_count 1 "trap 'cleanup_remote_launch 143' TERM"
-assert_count 1 "systemctl stop \\\"\${unit_name}.service\\\""
+assert_count 1 "proof_run_id=\"\$(date -u +%Y%m%d%H%M%S)-\$\$\""
+assert_count 2 '[[ ! "'"\${proof_run_id}"'" =~ ^[0-9]{14}-[0-9]+$ ]]'
+assert_count 1 "--setenv='PROOF_RUN_ID=\${proof_run_id}'"
+assert_count 1 'active_inner_unit="hermes-restore-proof-'"\${proof_run_id}"'-'"\${inner_unit_sequence}"'"'
+assert_count 1 "systemctl stop \\\"\${unit_name}.service\\\" || cleanup_status=72"
+assert_count 1 "systemctl show \\\"\${unit_name}.service\\\" --property=ActiveState --value"
+assert_count 1 "case \\\${state} in inactive|failed) break"
+assert_count 1 "case \\\${state} in inactive|failed) ;;"
 assert_count 1 "rm -f -- \\\"\${audit_helper_remote}\\\""
 assert_count 1 '--property=RuntimeMaxSec=1min'
 assert_count 1 "--unit=\"\${active_inner_unit}\""
@@ -138,6 +145,7 @@ assert_log_count() {
 
 assert_log_count 1 'systemd-run --unit='
 assert_log_count 1 'systemctl stop "hermes-home-assistant-restore-proof-'
+assert_log_count 1 'systemctl show "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'systemctl reset-failed "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'rm -f -- "/run/hermes-home-assistant-restore-proof-'
 
@@ -170,6 +178,43 @@ if (( signal_status != 143 )); then
   printf 'Expected signal cleanup status 143, got %s.\n' "${signal_status}" >&2
   exit 1
 fi
+
+cat >"${test_dir}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+command_text=${*: -1}
+if [[ "${command_text}" == *'systemctl stop'* ]]; then
+  exit "${CLEANUP_TEST_STATUS:?}"
+fi
+if [[ "${command_text}" == *'systemd-run'* ]]; then
+  exit "${LAUNCH_TEST_STATUS:?}"
+fi
+EOF
+chmod +x "${test_dir}/bin/ssh"
+
+set +e
+PATH="${test_dir}/bin:${PATH}" CLEANUP_TEST_STATUS=72 LAUNCH_TEST_STATUS=0 \
+  PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
+  >/dev/null 2>"${test_dir}/cleanup-failure-stderr"
+cleanup_failure_status=$?
+PATH="${test_dir}/bin:${PATH}" CLEANUP_TEST_STATUS=72 LAUNCH_TEST_STATUS=75 \
+  PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
+  >/dev/null 2>"${test_dir}/primary-failure-stderr"
+primary_failure_status=$?
+set -e
+if (( cleanup_failure_status != 71 )); then
+  printf 'Expected outer cleanup failure status 71, got %s.\n' \
+    "${cleanup_failure_status}" >&2
+  exit 1
+fi
+if (( primary_failure_status != 75 )); then
+  printf 'Expected primary status 75 to survive cleanup failure, got %s.\n' \
+    "${primary_failure_status}" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet 'Launch cleanup failed for unit' \
+  "${test_dir}/cleanup-failure-stderr"
+grep --fixed-strings --quiet 'Launch cleanup failed for unit' \
+  "${test_dir}/primary-failure-stderr"
 
 cat >"${test_dir}/malformed-audit.jsonl" <<'EOF'
 {"source":"fixture","messages":[{"tool_calls":[{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__HassTurnOn","arguments":{"name":"light.test"}}}},{"function":null}]}]}

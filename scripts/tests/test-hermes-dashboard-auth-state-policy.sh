@@ -31,7 +31,15 @@ grep --fixed-strings --quiet \
   'Remove obsolete runtime-owned Hermes dashboard authentication state' \
   "${configure_path}"
 grep --fixed-strings --quiet \
+  'Authenticate obsolete Hermes dashboard authentication state' \
+  "${configure_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_legacy_basic_auth_state.stat.nlink == 1' \
+  "${configure_path}"
+grep --fixed-strings --quiet \
   'not hermes_agent_dashboard_basic_auth_state_file.startswith(' "${validate_path}"
+grep --fixed-strings --quiet \
+  "hermes_agent_home ~ '/dashboard-basic-auth.yaml'" "${validate_path}"
 
 state_task="$({
   sed -n \
