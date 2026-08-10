@@ -30,8 +30,13 @@ role-provenance marker. A staged directory containing exact private
 `in_progress` provenance is atomically published before the role first mutates
 the install tree. Interrupted first installs can therefore resume after initial
 publication or virtualenv creation. Successful package installation atomically
-promotes the marker to the exact `complete` schema. Foreign entries, unknown
-schemas, and partial trees claiming completion are rejected.
+promotes the marker to the exact stable `complete` schema. The stable identity
+authenticates the managed paths and lifecycle state independently of the
+requested package pin, so a converged tree can upgrade normally. Exact legacy
+schema-v2 markers are accepted once, migrated to stable `in_progress`
+provenance before package mutation, and promoted after installation. Foreign
+entries, malformed or unknown schemas, and partial trees claiming completion
+are rejected.
 
 The role performs one bounded legacy adoption for a markerless tree only when
 the install directory and virtualenv are canonical root-owned `0755`

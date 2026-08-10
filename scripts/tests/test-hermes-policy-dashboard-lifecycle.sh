@@ -5,6 +5,7 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 playbook_path="${repo_root}/ansible/playbooks/hermes-agent.yml"
 handler_path="${repo_root}/ansible/roles/hermes_agent/handlers/main.yml"
+parent_chain_test_path="${repo_root}/ansible/tests/test-hermes-policy-parent-chain.yml"
 
 policy_task="$({
   sed -n \
@@ -23,3 +24,8 @@ grep --fixed-strings --quiet \
   '    - hermes_agent_manage_dashboard' <<<"${dashboard_handler}"
 grep --fixed-strings --quiet \
   '    - not ansible_check_mode' <<<"${dashboard_handler}"
+
+ansible-playbook \
+  --inventory localhost, \
+  --connection local \
+  "${parent_chain_test_path}"

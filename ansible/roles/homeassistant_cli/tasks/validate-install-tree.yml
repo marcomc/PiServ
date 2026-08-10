@@ -217,13 +217,33 @@
     - homeassistant_cli_install_preexisting
     - homeassistant_cli_install_child_states.results[1].stat.exists
 
+- name: Classify bounded Home Assistant CLI provenance compatibility
+  ansible.builtin.set_fact:
+    homeassistant_cli_existing_provenance_text: >-
+      {{ homeassistant_cli_existing_provenance.content | b64decode }}
+    homeassistant_cli_existing_provenance_v2: >-
+      {{
+        (homeassistant_cli_existing_provenance.content | b64decode) is regex(
+          '^managed_by=homeassistant_cli\n'
+          ~ 'schema_version=2\n'
+          ~ 'state=(in_progress|complete)\n'
+          ~ 'install_dir=' ~ (homeassistant_cli_install_dir | regex_escape)
+          ~ '\nvenv_path=' ~ (homeassistant_cli_venv_path | regex_escape)
+          ~ '\npackage=[^\r\n]+\n$'
+        )
+      }}
+  when:
+    - homeassistant_cli_install_preexisting
+    - homeassistant_cli_install_child_states.results[1].stat.exists
+
 - name: Require exact Home Assistant CLI install provenance
   ansible.builtin.assert:
     that:
       - >-
-        (homeassistant_cli_existing_provenance.content | b64decode) in
+        homeassistant_cli_existing_provenance_text in
         [homeassistant_cli_in_progress_provenance,
-         homeassistant_cli_complete_provenance]
+         homeassistant_cli_complete_provenance] or
+        homeassistant_cli_existing_provenance_v2
     fail_msg: >-
       Existing Home Assistant CLI install provenance is corrupt, foreign, or
       does not describe the configured role-owned tree.
@@ -235,11 +255,16 @@
   ansible.builtin.set_fact:
     homeassistant_cli_install_state: >-
       {{ ('complete'
-          if (homeassistant_cli_existing_provenance.content | b64decode) ==
-             homeassistant_cli_complete_provenance
+          if homeassistant_cli_existing_provenance_text is regex(
+               '(?m)^state=complete$')
           else 'in_progress')
          if homeassistant_cli_install_child_states.results[1].stat.exists
          else 'legacy' }}
+    homeassistant_cli_provenance_migration_required: >-
+      {{
+        homeassistant_cli_install_child_states.results[1].stat.exists and
+        homeassistant_cli_existing_provenance_v2 | default(false)
+      }}
   when: homeassistant_cli_install_preexisting
 
 - name: Require complete Home Assistant CLI install-tree artifacts

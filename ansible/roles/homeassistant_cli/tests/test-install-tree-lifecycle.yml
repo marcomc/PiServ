@@ -255,6 +255,59 @@
                 map(attribute='stat.checksum') | list
           when: not ansible_check_mode
 
+        - name: Publish authenticated schema-v2 old-pin provenance fixture
+          ansible.builtin.copy:
+            content: |
+              managed_by=homeassistant_cli
+              schema_version=2
+              state=complete
+              install_dir={{ homeassistant_cli_install_dir }}
+              venv_path={{ homeassistant_cli_venv_path }}
+              package=homeassistant-cli==0.9.0
+            dest: "{{ homeassistant_cli_provenance_path }}"
+            owner: root
+            group: 0
+            mode: "0600"
+          check_mode: false
+
+        - name: Authenticate schema-v2 old-pin upgrade source
+          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
+
+        - name: Require bounded schema-v2 upgrade eligibility
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_install_state == 'complete'
+              - homeassistant_cli_provenance_migration_required
+
+        - name: Exercise production schema-v2 provenance migration
+          ansible.builtin.include_tasks: ../tasks/migrate-v2-provenance.yml
+          vars:
+            homeassistant_cli_install_provenance_template: >-
+              {{ homeassistant_cli_test_role_path
+                 }}/templates/install-provenance.j2
+            homeassistant_cli_provenance_group: 0
+
+        - name: Read schema-v2 migration result
+          ansible.builtin.slurp:
+            src: "{{ homeassistant_cli_provenance_path }}"
+          register: homeassistant_cli_v2_migration_result
+          changed_when: false
+          check_mode: false
+
+        - name: Require normal migration and check-mode non-mutation
+          ansible.builtin.assert:
+            that:
+              - >-
+                (homeassistant_cli_v2_migration_result.content | b64decode) ==
+                (homeassistant_cli_in_progress_provenance
+                 if not ansible_check_mode else
+                 'managed_by=homeassistant_cli\n'
+                 ~ 'schema_version=2\n'
+                 ~ 'state=complete\n'
+                 ~ 'install_dir=' ~ homeassistant_cli_install_dir ~ '\n'
+                 ~ 'venv_path=' ~ homeassistant_cli_venv_path ~ '\n'
+                 ~ 'package=homeassistant-cli==0.9.0\n')
+
         - name: Create malformed incomplete markerless legacy tree
           check_mode: false
           block:
