@@ -38,14 +38,9 @@ provenance before package mutation, and promoted after installation. Foreign
 entries, malformed or unknown schemas, and partial trees claiming completion
 are rejected.
 
-The role performs one bounded legacy adoption for a markerless tree only when
-the install directory and virtualenv are canonical root-owned `0755`
-directories, every virtualenv entry is root-owned, the expected `hass-cli`
-executable is a root-owned `0755` regular file, and no foreign top-level entry
-exists. It publishes exact private `in_progress` provenance before package or
-virtualenv mutation inside the authenticated install tree. Incomplete, aliased,
-non-root-owned, or extended markerless trees fail closed and require explicit
-operator migration.
+Markerless preexisting install trees are rejected before any interpreter or
+package execution, even when their paths and metadata look compatible. They
+require explicit operator removal or a separately authenticated migration.
 
 The runtime user receives only the executable wrapper and its existing private
 token file.

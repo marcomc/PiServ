@@ -217,6 +217,15 @@
     - homeassistant_cli_install_preexisting
     - homeassistant_cli_install_child_states.results[1].stat.exists
 
+- name: Require authenticated provenance for every preexisting install tree
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_install_child_states.results[1].stat.exists
+    fail_msg: >-
+      Refusing to adopt or execute a markerless Home Assistant CLI install
+      tree. Remove it explicitly or migrate it with authenticated provenance.
+  when: homeassistant_cli_install_preexisting
+
 - name: Classify bounded Home Assistant CLI provenance compatibility
   ansible.builtin.set_fact:
     homeassistant_cli_existing_provenance_text: >-
@@ -259,7 +268,7 @@
                '(?m)^state=complete$')
           else 'in_progress')
          if homeassistant_cli_install_child_states.results[1].stat.exists
-         else 'legacy' }}
+         else 'unmanaged' }}
     homeassistant_cli_provenance_migration_required: >-
       {{
         homeassistant_cli_install_child_states.results[1].stat.exists and
@@ -277,4 +286,4 @@
       and executable; the tree is partial or corrupt.
   when:
     - homeassistant_cli_install_preexisting
-    - homeassistant_cli_install_state in ['complete', 'legacy']
+    - homeassistant_cli_install_state == 'complete'

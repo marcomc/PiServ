@@ -173,9 +173,6 @@
       ansible.builtin.fail:
         msg: Failed to publish the authenticated Home Assistant CLI install tree.
 
-- name: Adopt authenticated legacy Home Assistant CLI installation
-  ansible.builtin.include_tasks: adopt-legacy-install.yml
-
 - name: Migrate authenticated schema-v2 Home Assistant CLI provenance
   ansible.builtin.include_tasks: migrate-v2-provenance.yml
 

@@ -395,9 +395,17 @@ def invoke_hermes(
     remote_command = shlex.join(
         ["sudo", "bash", "-c", remote_script]
     )
-    result = run_command(
-        ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
-    )
+    try:
+        result = run_command(
+            ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
+        )
+    except (Exception, KeyboardInterrupt) as error:
+        cleanup_complete, cleanup_failure = cleanup_transient_units(
+            config, associated_units, timeout
+        )
+        if not cleanup_complete and cleanup_failure:
+            error.add_note(f"transient cleanup failed: {cleanup_failure}")
+        raise
     result["associated_units"] = associated_units
     if result.get("timed_out"):
         cleanup_complete, cleanup_failure = cleanup_transient_units(
@@ -591,7 +599,7 @@ def verify_entity(
             f"test entity restoration for {entity['label']}",
         )
 
-    primary_error: Exception | None = None
+    primary_error: BaseException | None = None
     restoration_allowed = True
     timeout_cleanup_error: Exception | None = None
     try:
@@ -639,23 +647,31 @@ def verify_entity(
             args.poll_interval,
             f"Home Assistant and Apple Home to converge for {entity['label']}",
         )
-    except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
+    except KeyboardInterrupt as error:
         primary_error = error
-
-    cleanup_error: Exception | None = None
-    if timeout_cleanup_error is not None:
-        cleanup_error = timeout_cleanup_error
-    elif restoration_allowed:
-        try:
-            restore()
-        except (OSError, ValueError, VerificationError, json.JSONDecodeError) as error:
-            cleanup_error = error
+    # Capture unexpected failures so the restoration finally-path still runs.
+    except Exception as error:  # noqa: BLE001
+        primary_error = error
+    finally:
+        cleanup_error: BaseException | None = None
+        if timeout_cleanup_error is not None:
+            cleanup_error = timeout_cleanup_error
+        elif restoration_allowed:
+            try:
+                restore()
+            # Cleanup must never replace the active primary exception.
+            except BaseException as error:  # noqa: BLE001
+                cleanup_error = error
 
     if primary_error is not None:
         target["primary_failure"] = str(primary_error)
     if cleanup_error is not None:
         target["cleanup_failure"] = str(cleanup_error)
     if primary_error is not None or cleanup_error is not None:
+        if primary_error is not None and not isinstance(primary_error, Exception):
+            if cleanup_error is not None:
+                primary_error.add_note(f"cleanup failed: {cleanup_error}")
+            raise primary_error
         failures = []
         if primary_error is not None:
             failures.append(f"primary: {primary_error}")

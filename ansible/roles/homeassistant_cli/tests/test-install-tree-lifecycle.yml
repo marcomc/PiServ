@@ -192,68 +192,11 @@
                 - "{{ homeassistant_cli_venv_path }}/bin/python"
                 - "{{ homeassistant_cli_binary_path }}"
 
-        - name: Authenticate exact canonical markerless legacy install tree
-          ansible.builtin.include_tasks: ../tasks/validate-install-tree.yml
-
-        - name: Require exact legacy adoption eligibility
-          ansible.builtin.assert:
-            that:
-              - homeassistant_cli_install_preexisting
-              - homeassistant_cli_venv_preexisting
-              - homeassistant_cli_install_state == 'legacy'
-              - not homeassistant_cli_install_child_states.results[1].stat.exists
-
-        - name: Snapshot legacy payload before provenance adoption
-          ansible.builtin.stat:
-            path: "{{ item }}"
-            checksum_algorithm: sha256
-          loop:
-            - "{{ homeassistant_cli_venv_path }}/bin/python"
-            - "{{ homeassistant_cli_binary_path }}"
-          register: homeassistant_cli_legacy_payload_before_adoption
-          changed_when: false
-          check_mode: false
-
-        - name: Exercise production legacy provenance adoption
-          ansible.builtin.include_tasks: ../tasks/adopt-legacy-install.yml
+        - name: Reject exact canonical markerless legacy install tree
+          ansible.builtin.include_tasks: assert-install-tree-rejected.yml
           vars:
-            homeassistant_cli_install_provenance_template: >-
-              {{ homeassistant_cli_test_role_path
-                 }}/templates/install-provenance.j2
-            homeassistant_cli_provenance_group: 0
-
-        - name: Read adopted legacy install provenance
-          ansible.builtin.slurp:
-            src: "{{ homeassistant_cli_provenance_path }}"
-          register: homeassistant_cli_adopted_legacy_provenance
-          changed_when: false
-          check_mode: false
-          when: not ansible_check_mode
-
-        - name: Snapshot legacy payload after provenance adoption
-          ansible.builtin.stat:
-            path: "{{ item }}"
-            checksum_algorithm: sha256
-          loop:
-            - "{{ homeassistant_cli_venv_path }}/bin/python"
-            - "{{ homeassistant_cli_binary_path }}"
-          register: homeassistant_cli_legacy_payload_after_adoption
-          changed_when: false
-          check_mode: false
-          when: not ansible_check_mode
-
-        - name: Require in-progress publication before package mutation
-          ansible.builtin.assert:
-            that:
-              - >-
-                (homeassistant_cli_adopted_legacy_provenance.content |
-                 b64decode) == homeassistant_cli_in_progress_provenance
-              - >-
-                homeassistant_cli_legacy_payload_after_adoption.results |
-                map(attribute='stat.checksum') | list ==
-                homeassistant_cli_legacy_payload_before_adoption.results |
-                map(attribute='stat.checksum') | list
-          when: not ansible_check_mode
+            homeassistant_cli_test_expected_failure: >-
+              Require authenticated provenance for every preexisting install tree
 
         - name: Publish authenticated schema-v2 old-pin provenance fixture
           ansible.builtin.copy:
@@ -327,7 +270,7 @@
           ansible.builtin.include_tasks: assert-install-tree-rejected.yml
           vars:
             homeassistant_cli_test_expected_failure: >-
-              Require complete Home Assistant CLI install-tree artifacts
+              Require authenticated provenance for every preexisting install tree
 
         - name: Add foreign entry to otherwise exact markerless legacy tree
           check_mode: false

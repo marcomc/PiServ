@@ -295,6 +295,83 @@ class HarnessValidationTests(unittest.TestCase):
         with self.assertRaises(HARNESS.VerificationError):
             HARNESS.validate_hermes_audit(invocation, self.entity_id, "fixture")
 
+    def test_session_export_rejects_missing_function_record(self):
+        source = "acceptance-source"
+        valid_call = {
+            "function": {
+                "name": "tool_call",
+                "arguments": {
+                    "name": "mcp__home_assistant_assist__HassTurnOn",
+                    "arguments": {"name": self.entity_id},
+                },
+            }
+        }
+        invocation = {
+            "audit_complete": True,
+            "source": source,
+            "audit_records": [
+                {
+                    "source": source,
+                    "messages": [{"tool_calls": [valid_call, {}]}],
+                }
+            ],
+        }
+
+        with self.assertRaises(HARNESS.VerificationError):
+            HARNESS.validate_hermes_audit(invocation, self.entity_id, "fixture")
+
+    def test_interrupted_invocation_stops_exact_transient_units(self):
+        config = {"ssh_target": "admin@PiServ.local"}
+        with (
+            patch.object(HARNESS, "run_command", side_effect=KeyboardInterrupt),
+            patch.object(
+                HARNESS,
+                "cleanup_transient_units",
+                return_value=(True, None),
+            ) as cleanup,
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            HARNESS.invoke_hermes(config, "fixture", 1.0, 1)
+
+        units = cleanup.call_args.args[1]
+        self.assertEqual(len(units), 2)
+        self.assertTrue(all(unit.startswith("piserv-hermes-") for unit in units))
+
+    def test_keyboard_interrupt_still_attempts_restoration(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        with (
+            patch.object(
+                HARNESS,
+                "homeclaw_state",
+                return_value={"reachable": True, "value": False},
+            ),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(
+                HARNESS,
+                "invoke_hermes",
+                side_effect=[KeyboardInterrupt, ValueError("cleanup attempted")],
+            ) as invoke_hermes,
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        self.assertEqual(invoke_hermes.call_count, 2)
+
     def test_default_report_directories_are_unique(self):
         with (
             tempfile.TemporaryDirectory() as temporary_root,

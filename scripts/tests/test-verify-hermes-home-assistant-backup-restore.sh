@@ -113,3 +113,14 @@ assert_log_count 1 'systemd-run --unit='
 assert_log_count 1 'systemctl stop "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'systemctl reset-failed "hermes-home-assistant-restore-proof-'
 assert_log_count 1 'rm -f -- "/run/hermes-home-assistant-restore-proof-'
+
+cat >"${test_dir}/malformed-audit.jsonl" <<'EOF'
+{"source":"fixture","messages":[{"tool_calls":[{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__HassTurnOn","arguments":{"name":"light.test"}}}},{"function":null}]}]}
+EOF
+if python3 "${repo_root}/scripts/hermes_audit.py" \
+  --export "${test_dir}/malformed-audit.jsonl" \
+  --source fixture --entity light.test --label fixture \
+  >/dev/null 2>&1; then
+  printf 'Expected a null tool-call function record to fail closed.\n' >&2
+  exit 1
+fi

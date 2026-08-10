@@ -120,9 +120,11 @@ def validate_session_export(
                 raise AuditError(f"Hermes task audit has invalid calls for {label}")
             for call in calls:
                 call = _object(call, f"Hermes task audit call for {label}")
-                function = call.get("function")
-                if function is not None:
-                    tool_calls.append(function)
+                function = _object(
+                    call.get("function"),
+                    f"Hermes task audit function for {label}",
+                )
+                tool_calls.append(function)
 
     summary = validate_tool_calls(tool_calls, entity_id, label)
     summary["source"] = source
