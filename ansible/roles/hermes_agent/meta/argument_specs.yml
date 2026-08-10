@@ -25,6 +25,9 @@ argument_specs:
         type: path
         default: /usr/local/lib/hermes-agent
         description: Root-owned Hermes source and runtime directory.
+      hermes_agent_managed_config_path:
+        type: path
+        description: Root-owned authoritative Hermes runtime configuration.
       hermes_agent_venv_state_file:
         type: path
         description: Root-private provenance record for the installed virtual environment.
@@ -195,6 +198,10 @@ argument_specs:
           destination:
             type: path
             required: true
+          source_managed_in_run:
+            type: bool
+            default: false
+            description: Source is published earlier in the same play.
         description: Root-controlled paths bind-mounted read-only for the dashboard.
       hermes_agent_manage_dashboard:
         type: bool

@@ -546,7 +546,17 @@
   no_log: true
   when: hermes_agent_dashboard_rotate_basic_auth | bool
 
-- name: Install locked-down Hermes configuration
+- name: Install root-controlled authoritative Hermes configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ hermes_agent_managed_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: hermes_agent_runtime_user_available
+  notify: Restart Hermes Agent dashboard
+
+- name: Install Hermes runtime configuration mount point
   ansible.builtin.template:
     src: config.yaml.j2
     dest: "{{ hermes_agent_home }}/config.yaml"

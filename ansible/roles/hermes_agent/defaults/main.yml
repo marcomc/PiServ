@@ -3,6 +3,8 @@ hermes_agent_user: hermes-agent
 hermes_agent_group: hermes-agent
 hermes_agent_home: /var/lib/hermes-agent
 hermes_agent_install_dir: /usr/local/lib/hermes-agent
+hermes_agent_managed_config_path: >-
+  {{ hermes_agent_install_dir }}/.hermes-config.yaml
 hermes_agent_venv_state_file: >-
   {{ hermes_agent_install_dir }}/.hermes-venv-managed.yml
 hermes_agent_expected_repo_origin: https://github.com/NousResearch/hermes-agent.git

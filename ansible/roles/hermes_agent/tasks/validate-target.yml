@@ -68,6 +68,9 @@
       - hermes_agent_inference_provenance_label is not search('[\r\n]')
       - hermes_agent_binary_path == '/usr/local/bin/hermes'
       - >-
+        hermes_agent_managed_config_path ==
+        hermes_agent_install_dir ~ '/.hermes-config.yaml'
+      - >-
         hermes_agent_venv_state_file ==
         hermes_agent_install_dir ~ '/.hermes-venv-managed.yml'
       - >-
@@ -167,6 +170,13 @@
       the openai-codex provider, memory/skills-only access, an explicit backup
       group when backups are enabled, and a valid Assist MCP endpoint with a
       private token file when Home Assistant access is enabled.
+
+- name: Authenticate Hermes dashboard read-only bind sources
+  ansible.builtin.include_tasks: validate-dashboard-bind-source.yml
+  loop: "{{ hermes_agent_dashboard_bind_read_only_paths }}"
+  loop_control:
+    loop_var: hermes_agent_dashboard_bind
+    label: "{{ hermes_agent_dashboard_bind.source }}"
 
 - name: Resolve Hermes dashboard authentication output paths
   ansible.builtin.command:

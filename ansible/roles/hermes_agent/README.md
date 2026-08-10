@@ -95,6 +95,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_group` | `hermes-agent` | Runtime group. |
 | `hermes_agent_home` | `/var/lib/hermes-agent` | Private persistent state. |
 | `hermes_agent_install_dir` | `/usr/local/lib/hermes-agent` | Root-owned Hermes checkout. |
+| `hermes_agent_managed_config_path` | install-tree artifact | Root-owned configuration bound read-only over runtime `config.yaml`. |
 | `hermes_agent_venv_state_file` | `{{ hermes_agent_install_dir }}/.hermes-venv-managed.yml` | Root-private revision and digest record for the installed virtual environment. |
 | `hermes_agent_expected_repo_origin` | canonical upstream URL | Required origin for an existing checkout. |
 | `hermes_agent_binary_path` | `/usr/local/bin/hermes` | Fixed Hermes CLI path installed upstream. |
@@ -131,6 +132,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
 | `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Role-marked dashboard systemd unit target. |
 | `hermes_agent_dashboard_service_managed_state_file` | systemd unit directory marker | Root-only name and checksum record used to retire a renamed dashboard unit safely. |
+| `hermes_agent_dashboard_bind_read_only_paths` | `[]` | Source/destination mappings published read-only to the dashboard. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
@@ -189,6 +191,13 @@ Until then, include the local role by its role directory name:
 
 The full variable contract, including types, is in
 [meta/argument_specs.yml](meta/argument_specs.yml).
+
+Bind sources are authenticated before service publication. Each source must be
+an existing canonical, root-owned regular file without group or world write
+permission. Every ancestor through `/` must likewise be canonical, root-owned,
+and not group or world writable. Missing paths, symlinks, directories, other
+file types, non-root ownership, and writable sources or ancestors fail closed
+in both normal and check mode.
 
 ## Example Playbook
 

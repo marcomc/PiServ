@@ -19,6 +19,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths={{ hermes_agent_home }} {{ hermes_agent_backup_dir }}
+BindReadOnlyPaths={{ hermes_agent_managed_config_path }}:{{ hermes_agent_home }}/config.yaml
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

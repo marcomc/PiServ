@@ -1,0 +1,19 @@
+---
+- name: Validate Hermes bind-source fixture
+  block:
+    - name: Run Hermes bind-source validation
+      ansible.builtin.include_tasks: ../tasks/validate-dashboard-bind-source.yml
+      vars:
+        hermes_agent_dashboard_bind:
+          source: "{{ hermes_agent_bind_source_case.path }}"
+          destination: /workspace/AGENTS.md
+
+    - name: Fail when an unsafe Hermes bind source is accepted
+      ansible.builtin.fail:
+        msg: "Unsafe bind-source case was accepted: {{ hermes_agent_bind_source_case.name }}"
+      when: hermes_agent_bind_source_case.rejected
+  rescue:
+    - name: Assert only unsafe Hermes bind-source fixtures fail
+      ansible.builtin.assert:
+        that: hermes_agent_bind_source_case.rejected
+        fail_msg: "Safe bind-source case failed: {{ hermes_agent_bind_source_case.name }}"

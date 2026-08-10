@@ -29,6 +29,7 @@ if AUDIT_SPEC is None or AUDIT_SPEC.loader is None:
 HERMES_AUDIT = importlib.util.module_from_spec(AUDIT_SPEC)
 AUDIT_SPEC.loader.exec_module(HERMES_AUDIT)
 MANAGED_POLICY_PATH = "/etc/hermes-agent/policies/smart-home-AGENTS.md"
+MANAGED_CONFIG_PATH = "/usr/local/lib/hermes-agent/.hermes-config.yaml"
 
 
 class VerificationError(RuntimeError):
@@ -314,6 +315,7 @@ def invoke_hermes(
             "--property=ProtectSystem=strict",
             "--property=ProtectHome=yes",
             f"--property=ReadWritePaths={hermes_home}",
+            f"--property=BindReadOnlyPaths={MANAGED_CONFIG_PATH}:{hermes_home}/config.yaml",
             f"--property=EnvironmentFile={token_file}",
             f"--property=BindReadOnlyPaths={MANAGED_POLICY_PATH}:{workspace}/AGENTS.md",
             "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
@@ -342,6 +344,7 @@ def invoke_hermes(
             "--property=ProtectSystem=strict",
             "--property=ProtectHome=yes",
             f"--property=ReadWritePaths={hermes_home}",
+            f"--property=BindReadOnlyPaths={MANAGED_CONFIG_PATH}:{hermes_home}/config.yaml",
             f"--property=EnvironmentFile={token_file}",
             f"--property=BindReadOnlyPaths={MANAGED_POLICY_PATH}:{workspace}/AGENTS.md",
             f"--working-directory={workspace}",
