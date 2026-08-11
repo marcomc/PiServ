@@ -96,6 +96,71 @@ grep --fixed-strings --quiet \
   "\"\${source_home}\" \"backup\" \"\${managed_config}\" \"\${backup_stage}\"" \
   "${script_path}"
 
+endpoint_function="${test_dir}/authenticate-restored-mcp-endpoint.sh"
+sed -n '/^authenticate_restored_mcp_endpoint() {$/,/^}$/p' \
+  "${script_path}" >"${endpoint_function}"
+cat >>"${endpoint_function}" <<'EOF'
+api_url=http://homeassistant.local:8123/api
+restored_config=${ENDPOINT_TEST_CONFIG:?}
+restore_home=/restore
+work_dir=${ENDPOINT_TEST_WORK_DIR:?}
+run_protected_hermes() {
+  printf '%s\n' "$*" >>"${ENDPOINT_TEST_LAUNCH_LOG:?}"
+  return "${ENDPOINT_TEST_AUTH_STATUS:-0}"
+}
+authenticate_restored_mcp_endpoint
+EOF
+
+cat >"${test_dir}/mismatched-restored-config.yaml" <<'EOF'
+mcp_servers:
+  home-assistant-assist:
+    url: "http://other-home-assistant.local:8123/api/mcp"
+EOF
+: >"${test_dir}/endpoint-launch.log"
+if ENDPOINT_TEST_CONFIG="${test_dir}/mismatched-restored-config.yaml" \
+  ENDPOINT_TEST_WORK_DIR="${test_dir}" \
+  ENDPOINT_TEST_LAUNCH_LOG="${test_dir}/endpoint-launch.log" \
+  bash -euo pipefail "${endpoint_function}" >"${test_dir}/endpoint-mismatch-stdout" \
+  2>"${test_dir}/endpoint-mismatch-stderr"; then
+  printf 'Expected restored MCP endpoint mismatch to fail closed.\n' >&2
+  exit 1
+fi
+if [[ -s "${test_dir}/endpoint-launch.log" ]]; then
+  printf 'Endpoint mismatch launched Hermes before identity authentication.\n' >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  'restored Home Assistant MCP endpoint identity mismatch' \
+  "${test_dir}/endpoint-mismatch-stderr"
+
+cat >"${test_dir}/matching-restored-config.yaml" <<'EOF'
+mcp_servers:
+  home-assistant-assist:
+    url: "http://homeassistant.local:8123/api/mcp"
+EOF
+: >"${test_dir}/endpoint-launch.log"
+if ENDPOINT_TEST_CONFIG="${test_dir}/matching-restored-config.yaml" \
+  ENDPOINT_TEST_WORK_DIR="${test_dir}" \
+  ENDPOINT_TEST_LAUNCH_LOG="${test_dir}/endpoint-launch.log" \
+  ENDPOINT_TEST_AUTH_STATUS=69 \
+  bash -euo pipefail "${endpoint_function}" >"${test_dir}/endpoint-auth-stdout" \
+  2>"${test_dir}/endpoint-auth-stderr"; then
+  printf 'Expected restored MCP authentication failure to fail closed.\n' >&2
+  exit 1
+fi
+assert_endpoint_launch_count="$(wc -l <"${test_dir}/endpoint-launch.log" | tr -d ' ')"
+if [[ "${assert_endpoint_launch_count}" != 1 ]]; then
+  printf 'Expected one read-only MCP authentication launch, found %s.\n' \
+    "${assert_endpoint_launch_count}" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet 'mcp test home-assistant-assist' \
+  "${test_dir}/endpoint-launch.log"
+if grep --fixed-strings --quiet ' chat ' "${test_dir}/endpoint-launch.log"; then
+  printf 'Authentication failure launched a Hermes mutation.\n' >&2
+  exit 1
+fi
+
 mkdir "${test_dir}/bin"
 touch "${test_dir}/config.json"
 

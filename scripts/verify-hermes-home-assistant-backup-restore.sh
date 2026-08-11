@@ -330,6 +330,62 @@ export_and_validate_audit() {
     --expected-state "${expected_state}"
 }
 
+authenticate_restored_mcp_endpoint() {
+  local expected_url
+
+  expected_url="$(python3 - "${api_url}" <<'PY'
+import sys
+import urllib.parse
+
+parsed = urllib.parse.urlsplit(sys.argv[1].rstrip("/"))
+if (
+    parsed.scheme not in {"http", "https"}
+    or not parsed.netloc
+    or parsed.username is not None
+    or parsed.password is not None
+    or parsed.query
+    or parsed.fragment
+    or parsed.path != "/api"
+):
+    raise SystemExit("invalid Home Assistant API endpoint")
+print(urllib.parse.urlunsplit(
+    (parsed.scheme.lower(), parsed.netloc.lower(), "/api/mcp", "", "")
+))
+PY
+)"
+  python3 - "${restored_config}" "${expected_url}" <<'PY'
+import pathlib
+import re
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+in_servers = False
+in_target = False
+urls = []
+for line in lines:
+    if line == "mcp_servers:":
+        in_servers = True
+        in_target = False
+        continue
+    if in_servers and line and not line.startswith(" "):
+        break
+    if in_servers and re.fullmatch(r"  home-assistant-assist:", line):
+        in_target = True
+        continue
+    if in_target and re.match(r"  [^ ]", line):
+        break
+    match = re.fullmatch(r'''    url: ["']([^"']+)["']''', line)
+    if in_target and match:
+        urls.append(match.group(1))
+if urls != [sys.argv[2]]:
+    raise SystemExit("restored Home Assistant MCP endpoint identity mismatch")
+PY
+  run_protected_hermes \
+    "${restore_home}" "mcp-test" "${restored_config}" "" \
+    mcp test home-assistant-assist \
+    >"${work_dir}/mcp-test.log" 2>&1
+}
+
 load_hass_mcp_token() {
   local line
   local assignment_count=0
@@ -410,10 +466,7 @@ if [[ "$(stat -c '%d:%i' -- "${imported_config}")" == \
   printf 'Protected restored configuration differs from the imported source.\n' >&2
   exit 67
 fi
-run_protected_hermes \
-  "${restore_home}" "mcp-test" "${restored_config}" "" \
-  mcp test home-assistant-assist \
-  >"${work_dir}/mcp-test.log" 2>&1
+authenticate_restored_mcp_endpoint
 
 if ! grep --fixed-strings --quiet 'Tools discovered:' "${work_dir}/mcp-test.log"; then
   printf 'Restored Hermes home did not discover Home Assistant MCP tools.\n' >&2
