@@ -16,16 +16,9 @@
       - context_engine
       - cronjob
       - delegation
-      - discord
-      - discord_admin
-      - feishu_doc
-      - feishu_drive
       - file
       - homeassistant
       - image_gen
-      - kanban
-      - project
-      - search
       - session_search
       - spotify
       - stt
@@ -50,16 +43,9 @@
         no disabled  context_engine  Context engine
         no disabled  cronjob  Cronjob
         no disabled  delegation  Delegation
-        no disabled  discord  Discord
-        no disabled  discord_admin  Discord admin
-        no disabled  feishu_doc  Feishu document
-        no disabled  feishu_drive  Feishu drive
         no disabled  file  Files
         no disabled  homeassistant  Home Assistant
         no disabled  image_gen  Image generation
-        no disabled  kanban  Kanban
-        no disabled  project  Project
-        no disabled  search  Search
         no disabled  session_search  Session search
         no disabled  spotify  Spotify
         no disabled  stt  Speech to text
@@ -72,12 +58,15 @@
         no disabled  web  Web
         no disabled  x_search  X search
         no disabled  yuanbao  Yuanbao
+    mcp_catalog: |
+      MCP servers:
+        home-assistant-assist  all tools enabled
   tasks:
     - name: Accept the exact configured Hermes tool catalog
       ansible.builtin.include_tasks: ../roles/hermes_agent/tasks/validate-tool-catalog-result.yml
       vars:
         hermes_agent_tool_catalog_output:
-          stdout: "{{ valid_catalog }}"
+          stdout: "{{ valid_catalog ~ mcp_catalog }}"
 
     - name: Reject incomplete or ambiguous Hermes tool catalogs
       ansible.builtin.include_tasks: reject-hermes-tool-catalog.yml

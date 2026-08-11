@@ -488,6 +488,19 @@ Expected results after login:
 Complete the first inference test in the dashboard. Do not enable additional
 tools as part of the login test.
 
+### 0.5.0 deployment validation
+
+On 2026-08-11, `ansible-playbook ansible/playbooks/hermes-agent.yml` converged
+on PiServ with `changed=0`, `failed=0`. The live catalog included the new `bfl`
+toolset and an appended MCP-server section; the deployment explicitly disabled
+`bfl`, removed toolsets absent from the pinned Hermes catalog, and kept exact
+built-in catalog validation.
+
+Direct checks confirmed the dashboard and backup timer active and enabled, the
+policy and authoritative configuration mounted read-only, anonymous dashboard
+access redirected to login, UFW limited port `9119` to the trusted LAN, and
+`hass-cli info` authenticated as `hermes-agent`. No follow-up action remains.
+
 ## Backup and Restore
 
 Run an on-demand full backup:

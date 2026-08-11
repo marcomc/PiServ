@@ -1,9 +1,15 @@
 ---
-- name: Parse every Hermes CLI tool catalog row
+- name: Isolate the built-in Hermes CLI tool catalog
+  ansible.builtin.set_fact:
+    hermes_agent_builtin_tool_catalog: >-
+      {{ hermes_agent_tool_catalog_output.stdout |
+         regex_replace('(?ms)^\s*MCP servers:.*$', '') }}
+
+- name: Parse every built-in Hermes CLI tool catalog row
   ansible.builtin.set_fact:
     hermes_agent_tool_catalog_rows: >-
       {{
-        hermes_agent_tool_catalog_output.stdout |
+        hermes_agent_builtin_tool_catalog |
         regex_findall(
           '(?m)^\s*\S+\s+(enabled|disabled)\s+([A-Za-z0-9_-]+)\s+.*$'
         )
@@ -28,7 +34,7 @@
         (hermes_agent_enabled_toolsets + hermes_agent_disabled_toolsets) |
         unique | sort
       - >-
-        hermes_agent_tool_catalog_output.stdout.split('\n') |
+        hermes_agent_builtin_tool_catalog.split('\n') |
         map('trim') | reject('equalto', '') |
         reject('match', '^Built-in toolsets \(cli\):$') | list | length ==
         hermes_agent_tool_catalog_rows | length

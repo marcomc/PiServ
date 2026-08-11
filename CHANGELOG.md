@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-08-11
 
 ### Hermes Home Assistant and Apple Home
 
@@ -30,6 +30,11 @@
 - Enabled Hermes to use the dedicated `hass-cli` wrapper as its primary
   Home Assistant control path while retaining the Assist MCP for secondary
   discovery and verification.
+- Reconciled the fail-closed Hermes tool catalog with the deployed upstream
+  catalog, explicitly denying the new `bfl` toolset and removing toolsets no
+  longer exposed by the pinned Hermes revision. Catalog validation now scopes
+  exact checks to built-in tools when Hermes also reports configured MCP
+  servers.
 
 ## [0.4.0] - 2026-08-08
 
