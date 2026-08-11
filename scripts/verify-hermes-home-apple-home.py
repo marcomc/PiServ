@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -142,11 +143,11 @@ def parse_ssh_target(target: str) -> tuple[str | None, str]:
             raise VerificationError(
                 "ssh_target brackets may contain only an IPv6 address"
             )
-        return user, host
+        return user, literal
 
-    if any(character in host for character in ":/[]"):
+    if any(character in host for character in "/[]"):
         raise VerificationError(
-            "ssh_target must not contain a port, CIDR, or unbracketed IPv6 address"
+            "ssh_target must not contain a port or CIDR"
         )
     try:
         address = ipaddress.ip_address(host)
@@ -159,25 +160,23 @@ def parse_ssh_target(target: str) -> tuple[str | None, str]:
             host,
         ):
             raise VerificationError("ssh_target has an invalid hostname")
-    else:
-        if address.version != 4:
-            raise VerificationError("ssh_target IPv6 addresses must be bracketed")
     return user, host
 
 
 def ssh_target(config: dict[str, Any]) -> str:
     configured_target = require_string(config, "ssh_target", "configuration")
-    configured_user, _ = parse_ssh_target(configured_target)
+    configured_user, configured_host = parse_ssh_target(configured_target)
     if "PISERV_IP" not in os.environ:
-        return configured_target
+        if configured_user:
+            return f"{configured_user}@{configured_host}"
+        return configured_host
     override = os.environ["PISERV_IP"]
     try:
-        address = ipaddress.ip_address(override)
+        ipaddress.ip_address(override)
     except ValueError:
         raise VerificationError("PISERV_IP must be a single current DHCP lease")
-    formatted_host = f"[{override}]" if address.version == 6 else override
     user = configured_user or "admin"
-    return f"{user}@{formatted_host}"
+    return f"{user}@{override}"
 
 
 def validate_config(config: dict[str, Any]) -> None:
@@ -366,6 +365,118 @@ def remote_home_assistant_state(
             f"Home Assistant state response entity_id does not match {entity_id!r}"
         )
     return payload, compact_result(result)
+
+
+def expected_home_assistant_mcp_url(config: dict[str, Any]) -> str:
+    api_url = require_string(
+        config, "home_assistant_api_url", "configuration"
+    ).rstrip("/")
+    parsed = urllib.parse.urlsplit(api_url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path != "/api"
+    ):
+        raise VerificationError(
+            "home_assistant_api_url must be an HTTP(S) endpoint ending in /api"
+        )
+    return urllib.parse.urlunsplit(
+        (parsed.scheme.lower(), parsed.netloc.lower(), "/api/mcp", "", "")
+    )
+
+
+def verify_managed_mcp_endpoint(config: dict[str, Any], timeout: float) -> dict[str, Any]:
+    """Authenticate Hermes MCP and match it to the direct API endpoint."""
+    expected_url = expected_home_assistant_mcp_url(config)
+    hermes_home = config.get("hermes_home", "/var/lib/hermes-agent")
+    hermes_binary = config.get("hermes_binary", "/usr/local/bin/hermes")
+    token_file = config.get(
+        "home_assistant_token_env_file",
+        "/var/lib/hermes-agent/home-assistant-mcp.env",
+    )
+    parser = """\
+import pathlib
+import re
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+in_servers = False
+in_target = False
+urls = []
+for line in lines:
+    if line == "mcp_servers:":
+        in_servers = True
+        in_target = False
+        continue
+    if in_servers and line and not line.startswith(" "):
+        break
+    if in_servers and re.fullmatch(r"  home-assistant-assist:", line):
+        in_target = True
+        continue
+    if in_target and re.match(r"  [^ ]", line):
+        break
+    match = re.fullmatch(r'    url: ["\\\']([^"\\\']+)["\\\']', line)
+    if in_target and match:
+        urls.append(match.group(1))
+if urls != [sys.argv[2]]:
+    raise SystemExit("managed Home Assistant MCP endpoint identity mismatch")
+"""
+    probe_script = "\n".join(
+        [
+            "set -eu",
+            shlex.join(
+                ["/usr/bin/python3", "-c", parser, MANAGED_CONFIG_PATH, expected_url]
+            ),
+            (
+                shlex.join(
+                    [
+                        "env",
+                        f"HERMES_HOME={hermes_home}",
+                        hermes_binary,
+                        "mcp",
+                        "test",
+                        "home-assistant-assist",
+                    ]
+                )
+                + " >/dev/null 2>&1"
+            ),
+        ]
+    )
+    remote_command = shlex.join(
+        [
+            "sudo",
+            "systemd-run",
+            "--quiet",
+            "--wait",
+            "--pipe",
+            "--collect",
+            "--service-type=exec",
+            "--uid=hermes-agent",
+            f"--setenv=HOME={hermes_home}",
+            "--property=NoNewPrivileges=yes",
+            "--property=PrivateTmp=yes",
+            "--property=ProtectSystem=strict",
+            "--property=ProtectHome=yes",
+            f"--property=BindReadOnlyPaths={MANAGED_CONFIG_PATH}:{hermes_home}/config.yaml",
+            f"--property=EnvironmentFile={token_file}",
+            "--",
+            "sh",
+            "-c",
+            probe_script,
+        ]
+    )
+    result = run_command(
+        ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command], timeout
+    )
+    if result["exit_code"] != 0:
+        raise VerificationError(
+            "managed Hermes MCP endpoint identity or authentication preflight failed"
+        )
+    return compact_result(result)
 
 
 def invoke_hermes(
@@ -895,8 +1006,12 @@ def main() -> int:
         report["commands"].append(result)
         if not isinstance(status, dict):
             raise VerificationError("HomeClaw status JSON must be an object")
-        if not status.get("ready"):
+        if status.get("ready") is not True:
             raise VerificationError("HomeClaw is not ready")
+
+        report["commands"].append(
+            verify_managed_mcp_endpoint(config, args.timeout)
+        )
 
         scenes, result = homeclaw_json(["scenes"], args.timeout)
         report["commands"].append(result)

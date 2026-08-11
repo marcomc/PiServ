@@ -27,8 +27,9 @@ piserv_ssh_target_from_ip() {
   local piserv_host=$1
   local piserv_user=${PISERV_USER:-admin}
 
-  if [[ "${piserv_host}" == *:* ]]; then
-    piserv_host="[${piserv_host}]"
+  if [[ ! "${piserv_user}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]]; then
+    printf 'PISERV_USER must be a valid SSH user name\n' >&2
+    return 64
   fi
   printf '%s@%s\n' "${piserv_user}" "${piserv_host}"
 }
@@ -37,7 +38,6 @@ piserv_ssh_target_from_ip() {
 # is unavailable.
 piserv_ssh_target() {
   local piserv_host=PiServ.local
-  local piserv_user=${PISERV_USER:-admin}
 
   if [[ -n "${PISERV_IP+x}" ]]; then
     if ! piserv_host="$(piserv_ip_literal)"; then
@@ -49,5 +49,5 @@ piserv_ssh_target() {
     piserv_host=PiServ.local
   fi
 
-  printf '%s@%s\n' "${piserv_user}" "${piserv_host}"
+  piserv_ssh_target_from_ip "${piserv_host}"
 }

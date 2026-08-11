@@ -142,6 +142,55 @@ class HarnessValidationTests(unittest.TestCase):
                     "HomeClaw status JSON must be an object",
                 )
 
+    def test_homeclaw_readiness_requires_exact_boolean_true(self):
+        config = {
+            "ssh_target": "admin@PiServ.local",
+            "home_assistant_api_url": "http://homeassistant.local:8123/api",
+            "entities": [
+                {
+                    "label": "fixture",
+                    "home_assistant_entity_id": self.entity_id,
+                    "homeclaw_accessory": "Fixture",
+                    "homeclaw_characteristic": "power",
+                    "risk": "non-critical",
+                }
+            ],
+        }
+        for ready in (1, "true", [], {}, None, False):
+            with self.subTest(ready=ready), tempfile.TemporaryDirectory() as directory:
+                config_path = Path(directory) / "config.json"
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                args = Namespace(
+                    timeout=1.0,
+                    poll_interval=1.0,
+                    max_turns=1,
+                    report_dir=Path(directory) / "report",
+                    config=config_path,
+                    dry_run=True,
+                )
+                reports = []
+                with (
+                    patch.object(HARNESS, "parse_args", return_value=args),
+                    patch.object(
+                        HARNESS,
+                        "homeclaw_json",
+                        return_value=({"ready": ready}, {"command": "fixture"}),
+                    ),
+                    patch.object(HARNESS, "verify_managed_mcp_endpoint") as probe,
+                    patch.object(
+                        HARNESS,
+                        "write_reports",
+                        side_effect=lambda report, _path, reports=reports: reports.append(
+                            report.copy()
+                        ),
+                    ),
+                    patch("builtins.print"),
+                ):
+                    self.assertEqual(HARNESS.main(), 1)
+
+                self.assertEqual(reports[0]["failure"], "HomeClaw is not ready")
+                probe.assert_not_called()
+
     def test_non_object_homeclaw_get_payload_is_reported(self):
         for payload in ([], "ready", 1, True, None):
             with self.subTest(payload=payload):
@@ -369,10 +418,10 @@ class HarnessValidationTests(unittest.TestCase):
         with patch.dict(os.environ, {"PISERV_IP": "192.0.2.10"}):
             self.assertEqual(HARNESS.ssh_target(config), "admin@192.0.2.10")
 
-    def test_piserv_ipv6_override_is_bracketed_for_ssh(self):
+    def test_piserv_ipv6_override_is_bare_for_ssh(self):
         config = {"ssh_target": "operator@PiServ.local"}
         with patch.dict(os.environ, {"PISERV_IP": "2001:db8::10"}):
-            self.assertEqual(HARNESS.ssh_target(config), "operator@[2001:db8::10]")
+            self.assertEqual(HARNESS.ssh_target(config), "operator@2001:db8::10")
 
     def test_piserv_ip_rejects_non_literal_targets(self):
         config = {"ssh_target": "admin@PiServ.local"}
@@ -399,13 +448,15 @@ class HarnessValidationTests(unittest.TestCase):
             "PiServ.local",
             "admin@host-name.example",
             "admin@192.0.2.10",
+            "operator@2001:db8::10",
             "operator@[2001:db8::10]",
             "user_name@host.example.",
         )
 
         for target in valid_targets:
             with self.subTest(target=target), patch.dict(os.environ, {}, clear=True):
-                self.assertEqual(HARNESS.ssh_target({"ssh_target": target}), target)
+                expected = target.replace("@[2001:db8::10]", "@2001:db8::10")
+                self.assertEqual(HARNESS.ssh_target({"ssh_target": target}), expected)
 
     def test_configured_ssh_target_rejects_ambiguous_or_option_shaped_forms(self):
         invalid_targets = (
@@ -421,7 +472,6 @@ class HarnessValidationTests(unittest.TestCase):
             "admin@PiServ.local:22",
             "admin@192.0.2.10/24",
             "admin@999.999.999.999",
-            "admin@2001:db8::10",
             "admin@[fe80::1%eth0]",
             "admin@[192.0.2.10]",
             "admin@[2001:db8::10]:22",
@@ -705,6 +755,51 @@ class HarnessValidationTests(unittest.TestCase):
         self.assertIn("--property=EnvironmentFile=", remote_command)
         self.assertNotIn("set -a", remote_command)
         self.assertNotIn(". /var/lib/hermes-agent/home-assistant-mcp.env", remote_command)
+
+    def test_managed_mcp_endpoint_is_authenticated_and_compared_before_use(self):
+        result = {"exit_code": 0, "stdout": "", "stderr": "", "timed_out": False}
+        config = {
+            "ssh_target": "admin@PiServ.local",
+            "home_assistant_api_url": "HTTPS://HomeAssistant.Local:8123/api/",
+            "home_assistant_token_env_file": "/run/credentials/hermes/token.env",
+            "hermes_home": "/srv/hermes",
+            "hermes_binary": "/opt/hermes/bin/hermes",
+        }
+        with patch.object(HARNESS, "run_command", return_value=result) as run_command:
+            HARNESS.verify_managed_mcp_endpoint(config, 10)
+
+        remote_command = run_command.call_args.args[0][-1]
+        self.assertIn("https://homeassistant.local:8123/api/mcp", remote_command)
+        self.assertIn(HARNESS.MANAGED_CONFIG_PATH, remote_command)
+        self.assertIn("/opt/hermes/bin/hermes mcp test home-assistant-assist", remote_command)
+        self.assertIn("--property=EnvironmentFile=/run/credentials/hermes/token.env", remote_command)
+        self.assertIn(">/dev/null 2>&1", remote_command)
+        self.assertNotIn("HASS_MCP_TOKEN=", remote_command)
+
+    def test_managed_mcp_endpoint_mismatch_fails_without_exposing_remote_output(self):
+        result = {
+            "exit_code": 1,
+            "stdout": "url: https://wrong.example/api/mcp",
+            "stderr": "Authorization: Bearer super-secret",
+            "timed_out": False,
+        }
+        with (
+            patch.object(HARNESS, "run_command", return_value=result),
+            self.assertRaisesRegex(
+                HARNESS.VerificationError,
+                "endpoint identity or authentication preflight failed",
+            ) as raised,
+        ):
+            HARNESS.verify_managed_mcp_endpoint(
+                {
+                    "ssh_target": "admin@PiServ.local",
+                    "home_assistant_api_url": "http://homeassistant.local:8123/api",
+                },
+                10,
+            )
+
+        self.assertNotIn("wrong.example", str(raised.exception))
+        self.assertNotIn("super-secret", str(raised.exception))
 
     def test_home_assistant_state_rejects_untrusted_response_identity(self):
         invalid_entity_ids = (

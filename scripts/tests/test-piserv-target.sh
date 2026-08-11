@@ -32,8 +32,24 @@ assert_rejected() {
   fi
 }
 
+assert_user_rejected() {
+  local user=$1
+  local status
+
+  set +e
+  PISERV_IP=192.0.2.10 PISERV_USER="${user}" piserv_ssh_target >/dev/null 2>&1
+  status=$?
+  set -e
+  if [[ "${status}" -eq 0 ]]; then
+    printf 'Expected PISERV_USER to be rejected: %q\n' "${user}" >&2
+    return 1
+  fi
+}
+
 assert_target 192.0.2.10 operator@192.0.2.10
-assert_target 2001:db8::10 'operator@[2001:db8::10]'
+assert_target 2001:db8::10 operator@2001:db8::10
+target="$(unset PISERV_IP; PISERV_USER=operator piserv_ssh_target)"
+[[ "${target}" == operator@PiServ.local ]]
 
 literal="$(PISERV_IP=192.0.2.10 piserv_ip_literal)"
 [[ "${literal}" == 192.0.2.10 ]]
@@ -42,7 +58,7 @@ literal="$(PISERV_IP=2001:db8::10 piserv_ip_literal)"
 target="$(PISERV_USER=operator piserv_ssh_target_from_ip 192.0.2.10)"
 [[ "${target}" == operator@192.0.2.10 ]]
 target="$(PISERV_USER=operator piserv_ssh_target_from_ip 2001:db8::10)"
-[[ "${target}" == 'operator@[2001:db8::10]' ]]
+[[ "${target}" == operator@2001:db8::10 ]]
 
 assert_rejected ''
 assert_rejected piserv.example.com
@@ -51,6 +67,8 @@ assert_rejected ' 192.0.2.10'
 assert_rejected '192.0.2.10 '
 assert_rejected 192.0.2.10/24
 assert_rejected -oProxyCommand=fixture
+assert_user_rejected -oProxyCommand=fixture
+assert_user_rejected 'bad user'
 
 runbook="${repo_root}/docs/runbooks/hermes-home-apple-home.md"
 grep -Fq "source \"\${repo_root}/scripts/lib/piserv-target.sh\"" "${runbook}"
