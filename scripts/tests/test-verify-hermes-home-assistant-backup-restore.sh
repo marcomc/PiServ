@@ -37,6 +37,7 @@ assert_count 1 "trap 'interrupt_remote_launch 143' TERM"
 assert_count 1 "proof_run_id=\"\$(date -u +%Y%m%d%H%M%S)-\$\$\""
 assert_count 2 '[[ ! "'"\${proof_run_id}"'" =~ ^[0-9]{14}-[0-9]+$ ]]'
 assert_count 1 "--setenv='PROOF_RUN_ID=\${proof_run_id}'"
+assert_count 1 'helper_stage_attempted=true'
 assert_count 1 'active_inner_unit="hermes-restore-proof-'"\${proof_run_id}"'-'"\${inner_unit_sequence}"'"'
 assert_count 1 "systemctl stop \\\"\${unit_name}.service\\\" || cleanup_status=72"
 assert_count 1 "systemctl show \\\"\${unit_name}.service\\\" --property=ActiveState --value"
@@ -113,6 +114,41 @@ case $2 in
 esac
 EOF
 
+assert_log_count() {
+  local expected=$1
+  local pattern=$2
+  local actual
+
+  actual="$(grep --fixed-strings --count -- "${pattern}" "${test_dir}/ssh.log" || true)"
+  if [[ "${actual}" != "${expected}" ]]; then
+    printf 'Expected %s SSH log occurrences of %s, found %s.\n' \
+      "${expected}" "${pattern}" "${actual}" >&2
+    return 1
+  fi
+}
+
+cat >"${test_dir}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+command_text=${*: -1}
+printf '%s\n' "${command_text}" >>"${SSH_TEST_LOG:?}"
+if [[ "${command_text}" == *'install -o root'* ]]; then
+  exit 255
+fi
+EOF
+chmod +x "${test_dir}/bin/jq" "${test_dir}/bin/ssh"
+
+if PATH="${test_dir}/bin:${PATH}" SSH_TEST_LOG="${test_dir}/ssh.log" \
+  PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
+  >"${test_dir}/stage-transport-stdout" \
+  2>"${test_dir}/stage-transport-stderr"; then
+  printf 'Expected an ambiguous helper staging transport failure.\n' >&2
+  exit 1
+fi
+
+assert_log_count 1 'install -o root -g root -m 0600'
+assert_log_count 0 'systemd-run --unit='
+assert_log_count 1 'rm -f -- "/run/hermes-home-assistant-restore-proof-'
+
 cat >"${test_dir}/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
 command_text=${*: -1}
@@ -121,7 +157,8 @@ if [[ "${command_text}" == *'systemd-run'* ]]; then
   exit 75
 fi
 EOF
-chmod +x "${test_dir}/bin/jq" "${test_dir}/bin/ssh"
+chmod +x "${test_dir}/bin/ssh"
+: >"${test_dir}/ssh.log"
 
 if PATH="${test_dir}/bin:${PATH}" SSH_TEST_LOG="${test_dir}/ssh.log" \
   PISERV_IP=192.0.2.10 "${script_path}" "${test_dir}/config.json" \
@@ -129,19 +166,6 @@ if PATH="${test_dir}/bin:${PATH}" SSH_TEST_LOG="${test_dir}/ssh.log" \
   printf 'Expected an interrupted SSH launch to fail.\n' >&2
   exit 1
 fi
-
-assert_log_count() {
-  local expected=$1
-  local pattern=$2
-  local actual
-
-  actual="$(grep --fixed-strings --count -- "${pattern}" "${test_dir}/ssh.log")"
-  if [[ "${actual}" != "${expected}" ]]; then
-    printf 'Expected %s SSH log occurrences of %s, found %s.\n' \
-      "${expected}" "${pattern}" "${actual}" >&2
-    return 1
-  fi
-}
 
 assert_log_count 1 'systemd-run --unit='
 assert_log_count 1 'systemctl stop "hermes-home-assistant-restore-proof-'
@@ -286,3 +310,22 @@ if python3 "${repo_root}/scripts/hermes_audit.py" \
   printf 'Expected a null tool-call function record to fail closed.\n' >&2
   exit 1
 fi
+
+cat >"${test_dir}/missing-final-readback-audit.jsonl" <<'EOF'
+{"source":"fixture","messages":[{"tool_calls":[{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__GetLiveContext","arguments":{}}}},{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__HassTurnOn","arguments":{"name":"light.test"}}}}]}]}
+EOF
+if python3 "${repo_root}/scripts/hermes_audit.py" \
+  --export "${test_dir}/missing-final-readback-audit.jsonl" \
+  --source fixture --entity light.test --label fixture --expected-state on \
+  >/dev/null 2>&1; then
+  printf 'Expected a readback only before the final mutation to fail closed.\n' >&2
+  exit 1
+fi
+
+cat >"${test_dir}/final-readback-audit.jsonl" <<'EOF'
+{"source":"fixture","messages":[{"tool_calls":[{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__HassTurnOn","arguments":{"name":"light.test"}}}},{"function":{"name":"tool_call","arguments":{"name":"mcp__home_assistant_assist__GetLiveContext","arguments":{}}}}]}]}
+EOF
+python3 "${repo_root}/scripts/hermes_audit.py" \
+  --export "${test_dir}/final-readback-audit.jsonl" \
+  --source fixture --entity light.test --label fixture --expected-state on \
+  >/dev/null

@@ -55,6 +55,8 @@ def validate_tool_calls(
     """Validate audited tool calls against the shared smart-home allowlist."""
     audited_tools: list[str] = []
     mutation_tools: list[str] = []
+    final_mutation_index: int | None = None
+    live_context_indexes: list[int] = []
     for call_value in tool_calls:
         call = _object(call_value, f"Hermes task audit record for {label}")
         function_name = call.get("name")
@@ -85,18 +87,29 @@ def validate_tool_calls(
                 f"Hermes used a non-allowlisted tool for {label}: {called_name!r}"
             )
         audited_tools.append(called_name)
+        call_index = len(audited_tools) - 1
+        if called_name == "mcp__home_assistant_assist__GetLiveContext":
+            live_context_indexes.append(call_index)
         if called_name in HERMES_MUTATION_TOOLS:
             if called_arguments != {"name": entity_id}:
                 raise AuditError(
                     f"Hermes mutation arguments were not exactly scoped for {label}"
                 )
             mutation_tools.append(called_name)
+            final_mutation_index = call_index
 
     if not mutation_tools:
         raise AuditError(f"Hermes task audit recorded no mutation for {label}")
     if len(mutation_tools) > 2:
         raise AuditError(
             f"Hermes task audit recorded more than two mutations for {label}"
+        )
+    if final_mutation_index is not None and not any(
+        index > final_mutation_index for index in live_context_indexes
+    ):
+        raise AuditError(
+            f"Hermes task audit recorded no live-context readback after the final "
+            f"mutation for {label}"
         )
     expected_tool = {
         "on": "mcp__home_assistant_assist__HassTurnOn",

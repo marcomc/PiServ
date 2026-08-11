@@ -10,6 +10,12 @@
     _homeassistant_cli_realpath_executable: >-
       {{ lookup('ansible.builtin.pipe',
                 'command -v grealpath || command -v realpath') }}
+    _homeassistant_cli_chown_executable: >-
+      {{ lookup('ansible.builtin.pipe', 'command -v chown') }}
+    _homeassistant_cli_system_python_target: >-
+      {{ lookup('ansible.builtin.pipe',
+                "/usr/bin/python3 -c 'import os, sys; "
+                ~ "print(os.path.realpath(sys.executable))'") }}
     homeassistant_cli_test_fixture_root: >-
       {{ lookup('ansible.builtin.pipe',
                 '(grealpath --canonicalize-missing /var/tmp 2>/dev/null || '
@@ -286,6 +292,156 @@
             state: absent
           check_mode: false
           when: not ansible_check_mode
+
+        - name: Accept authenticated standard virtualenv symlinks
+          ansible.builtin.include_tasks: >-
+            ../tasks/authenticate-venv-runtime.yml
+          when: not ansible_check_mode
+
+        - name: Create unsafe virtualenv symlink fixtures
+          check_mode: false
+          block:
+            - name: Create hostile-symlink fixture directory
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}/lib"
+                state: directory
+                owner: root
+                group: 0
+                mode: "0755"
+            - name: Create escaping symlink target
+              ansible.builtin.copy:
+                content: "foreign runtime\n"
+                dest: "{{ homeassistant_cli_test_parent.path }}/foreign-runtime"
+                owner: root
+                group: 0
+                mode: "0644"
+            - name: Create escaping virtualenv symlink
+              ansible.builtin.file:
+                src: "{{ homeassistant_cli_test_parent.path }}/foreign-runtime"
+                dest: "{{ homeassistant_cli_venv_path }}/lib/escaping-link"
+                state: link
+
+        - name: Initialize unsafe-symlink rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_unsafe_symlink_rejected: false
+            homeassistant_cli_test_unsafe_symlink_failure_task: ""
+
+        - name: Reject escaping virtualenv symlink target
+          block:
+            - name: Attempt unsafe symlink runtime authentication
+              ansible.builtin.include_tasks: >-
+                ../tasks/authenticate-venv-runtime.yml
+          rescue:
+            - name: Record unsafe-symlink rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_unsafe_symlink_rejected: true
+                homeassistant_cli_test_unsafe_symlink_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Require intended unsafe-symlink rejection
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_unsafe_symlink_rejected
+              - >-
+                homeassistant_cli_test_unsafe_symlink_failure_task ==
+                'Authenticate Home Assistant CLI virtualenv symlink targets'
+
+        - name: Replace escaping symlink with non-root-owned symlink
+          ansible.builtin.file:
+            src: "{{ homeassistant_cli_venv_path }}/bin/python"
+            dest: "{{ homeassistant_cli_venv_path }}/lib/escaping-link"
+            state: link
+            force: true
+          check_mode: false
+
+        - name: Apply foreign ownership without following symlink fixture
+          ansible.builtin.command:
+            argv:
+              - "{{ _homeassistant_cli_chown_executable }}"
+              - -h
+              - "1:1"
+              - "{{ homeassistant_cli_venv_path }}/lib/escaping-link"
+          changed_when: true
+          check_mode: false
+
+        - name: Initialize unsafe-symlink ownership rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_symlink_owner_rejected: false
+            homeassistant_cli_test_symlink_owner_failure_task: ""
+
+        - name: Reject non-root-owned virtualenv symlink
+          block:
+            - name: Attempt foreign-owned symlink runtime authentication
+              ansible.builtin.include_tasks: >-
+                ../tasks/authenticate-venv-runtime.yml
+          rescue:
+            - name: Record symlink ownership rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_symlink_owner_rejected: true
+                homeassistant_cli_test_symlink_owner_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Require intended symlink ownership rejection
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_symlink_owner_rejected
+              - >-
+                homeassistant_cli_test_symlink_owner_failure_task ==
+                'Authenticate Home Assistant CLI virtualenv symlink ownership'
+
+        - name: Create writable in-tree symlink target fixture
+          check_mode: false
+          block:
+            - name: Remove foreign-owned symlink fixture
+              ansible.builtin.file:
+                path: "{{ homeassistant_cli_venv_path }}/lib/escaping-link"
+                state: absent
+            - name: Create writable virtualenv target
+              ansible.builtin.copy:
+                content: "writable runtime\n"
+                dest: "{{ homeassistant_cli_venv_path }}/lib/writable-target"
+                owner: root
+                group: 0
+                mode: "0664"
+            - name: Create symlink to writable virtualenv target
+              ansible.builtin.file:
+                src: "{{ homeassistant_cli_venv_path }}/lib/writable-target"
+                dest: "{{ homeassistant_cli_venv_path }}/lib/writable-link"
+                state: link
+
+        - name: Initialize writable-target rejection evidence
+          ansible.builtin.set_fact:
+            homeassistant_cli_test_writable_target_rejected: false
+            homeassistant_cli_test_writable_target_failure_task: ""
+
+        - name: Reject writable virtualenv symlink target
+          block:
+            - name: Attempt writable-target runtime authentication
+              ansible.builtin.include_tasks: >-
+                ../tasks/authenticate-venv-runtime.yml
+          rescue:
+            - name: Record writable-target rejection evidence
+              ansible.builtin.set_fact:
+                homeassistant_cli_test_writable_target_rejected: true
+                homeassistant_cli_test_writable_target_failure_task: >-
+                  {{ ansible_failed_task.name }}
+
+        - name: Require intended writable-target rejection
+          ansible.builtin.assert:
+            that:
+              - homeassistant_cli_test_writable_target_rejected
+              - >-
+                homeassistant_cli_test_writable_target_failure_task ==
+                'Reject writable Home Assistant CLI virtualenv entries'
+
+        - name: Remove unsafe virtualenv symlink fixtures
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ homeassistant_cli_venv_path }}/lib/writable-link"
+            - "{{ homeassistant_cli_venv_path }}/lib/writable-target"
+          check_mode: false
 
         - name: Verify rebuilt virtualenv pip readiness
           ansible.builtin.command:

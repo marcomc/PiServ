@@ -166,7 +166,7 @@ class HarnessValidationTests(unittest.TestCase):
             with self.subTest(services=services):
                 with self.assertRaises(HARNESS.VerificationError) as raised:
                     HARNESS.validate_homeclaw_get_payload(
-                        {"services": services}, "Fixture"
+                        {"name": "Fixture", "services": services}, "Fixture"
                     )
 
                 self.assertEqual(
@@ -179,7 +179,7 @@ class HarnessValidationTests(unittest.TestCase):
             with self.subTest(service=service):
                 with self.assertRaises(HARNESS.VerificationError) as raised:
                     HARNESS.validate_homeclaw_get_payload(
-                        {"services": [service]}, "Fixture"
+                        {"name": "Fixture", "services": [service]}, "Fixture"
                     )
 
                 self.assertEqual(
@@ -190,7 +190,10 @@ class HarnessValidationTests(unittest.TestCase):
     def test_non_list_homeclaw_characteristics_are_reported(self):
         for characteristics in ({}, "power", 1, True, None):
             with self.subTest(characteristics=characteristics):
-                payload = {"services": [{"characteristics": characteristics}]}
+                payload = {
+                    "name": "Fixture",
+                    "services": [{"characteristics": characteristics}],
+                }
                 with self.assertRaises(HARNESS.VerificationError) as raised:
                     HARNESS.validate_homeclaw_get_payload(payload, "Fixture")
 
@@ -203,7 +206,10 @@ class HarnessValidationTests(unittest.TestCase):
     def test_non_object_homeclaw_characteristic_is_reported(self):
         for characteristic in ([], "power", 1, True, None):
             with self.subTest(characteristic=characteristic):
-                payload = {"services": [{"characteristics": [characteristic]}]}
+                payload = {
+                    "name": "Fixture",
+                    "services": [{"characteristics": [characteristic]}],
+                }
                 with self.assertRaises(HARNESS.VerificationError) as raised:
                     HARNESS.validate_homeclaw_get_payload(payload, "Fixture")
 
@@ -236,13 +242,20 @@ class HarnessValidationTests(unittest.TestCase):
 
     def test_absent_homeclaw_nested_lists_keep_empty_defaults(self):
         self.assertEqual(
-            HARNESS.validate_homeclaw_get_payload({}, "Fixture"),
-            {},
+            HARNESS.validate_homeclaw_get_payload({"name": "Fixture"}, "Fixture"),
+            {"name": "Fixture"},
         )
         self.assertEqual(
-            HARNESS.validate_homeclaw_get_payload({"services": [{}]}, "Fixture"),
-            {"services": [{}]},
+            HARNESS.validate_homeclaw_get_payload(
+                {"name": "Fixture", "services": [{}]}, "Fixture"
+            ),
+            {"name": "Fixture", "services": [{}]},
         )
+
+    def test_homeclaw_get_payload_requires_exact_accessory_name(self):
+        for name in (None, "", "Other Fixture", 1, True):
+            with self.subTest(name=name), self.assertRaises(HARNESS.VerificationError):
+                HARNESS.validate_homeclaw_get_payload({"name": name}, "Fixture")
 
     def test_shared_audit_accepts_two_mutations_and_rejects_three(self):
         mutation = {
@@ -252,14 +265,21 @@ class HarnessValidationTests(unittest.TestCase):
                 "arguments": {"name": self.entity_id},
             },
         }
+        readback = {
+            "name": "tool_call",
+            "arguments": {
+                "name": "mcp__home_assistant_assist__GetLiveContext",
+                "arguments": {},
+            },
+        }
 
         summary = HARNESS.HERMES_AUDIT.validate_tool_calls(
-            [mutation, mutation], self.entity_id, "test fixture", "on"
+            [mutation, mutation, readback], self.entity_id, "test fixture", "on"
         )
-        self.assertEqual(len(summary["tool_names"]), 2)
+        self.assertEqual(len(summary["tool_names"]), 3)
         with self.assertRaises(HARNESS.HERMES_AUDIT.AuditError):
             HARNESS.HERMES_AUDIT.validate_tool_calls(
-                [mutation, mutation, mutation],
+                [mutation, mutation, mutation, readback],
                 self.entity_id,
                 "test fixture",
                 "on",
@@ -439,6 +459,13 @@ class HarnessValidationTests(unittest.TestCase):
                         }
                     ),
                 },
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                },
             ],
         }
         audit = HARNESS.validate_hermes_audit(
@@ -490,7 +517,14 @@ class HarnessValidationTests(unittest.TestCase):
                         "name": "mcp__home_assistant_assist__HassTurnOn",
                         "arguments": {"name": self.entity_id},
                     },
-                }
+                },
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                },
             ],
         }
         with self.assertRaises(HARNESS.VerificationError):
@@ -516,6 +550,13 @@ class HarnessValidationTests(unittest.TestCase):
                         "arguments": {"name": self.entity_id},
                     },
                 },
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                },
             ],
         }
 
@@ -528,8 +569,37 @@ class HarnessValidationTests(unittest.TestCase):
             [
                 "mcp__home_assistant_assist__GetLiveContext",
                 "mcp__home_assistant_assist__HassTurnOn",
+                "mcp__home_assistant_assist__GetLiveContext",
             ],
         )
+
+    def test_hermes_audit_rejects_readback_only_before_final_mutation(self):
+        invocation = {
+            "audit_complete": True,
+            "tool_calls": [
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__GetLiveContext",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "name": "tool_call",
+                    "arguments": {
+                        "name": "mcp__home_assistant_assist__HassTurnOn",
+                        "arguments": {"name": self.entity_id},
+                    },
+                },
+            ],
+        }
+
+        with self.assertRaisesRegex(
+            HARNESS.VerificationError, "readback after the final mutation"
+        ):
+            HARNESS.validate_hermes_audit(
+                invocation, self.entity_id, "test fixture", "on"
+            )
 
     def test_hermes_audit_rejects_unknown_tool(self):
         invocation = {
@@ -861,6 +931,7 @@ class HarnessValidationTests(unittest.TestCase):
         )()
         report = {"targets": [], "commands": []}
         initial = {
+            "name": "Test Fixture",
             "reachable": True,
             "services": [
                 {"characteristics": [{"name": "On", "value": False}]}
@@ -868,9 +939,12 @@ class HarnessValidationTests(unittest.TestCase):
         }
         homeclaw_payloads = [
             (initial, {"command": "initial"}),
-            ({"services": {}}, {"command": "convergence"}),
+            ({"name": "Test Fixture", "services": {}}, {"command": "convergence"}),
             (
-                {"services": [{"characteristics": {}}]},
+                {
+                    "name": "Test Fixture",
+                    "services": [{"characteristics": {}}],
+                },
                 {"command": "restoration"},
             ),
         ]
@@ -940,6 +1014,15 @@ class HarnessValidationTests(unittest.TestCase):
                 },
             }
         }
+        readback_call = {
+            "function": {
+                "name": "tool_call",
+                "arguments": {
+                    "name": "mcp__home_assistant_assist__GetLiveContext",
+                    "arguments": {},
+                },
+            }
+        }
 
         for rejected in (False, True):
             with self.subTest(rejected=rejected):
@@ -947,7 +1030,7 @@ class HarnessValidationTests(unittest.TestCase):
                     {
                         "source": source,
                         "private_field": private_value,
-                        "messages": [{"tool_calls": [valid_call]}],
+                        "messages": [{"tool_calls": [valid_call, readback_call]}],
                     }
                 ]
                 if rejected:

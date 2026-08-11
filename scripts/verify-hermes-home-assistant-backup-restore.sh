@@ -46,7 +46,7 @@ ssh_options=(
   -o ServerAliveInterval=5
   -o ServerAliveCountMax=2
 )
-helper_staged=false
+helper_stage_attempted=false
 unit_launch_attempted=false
 foreground_ssh_pid=""
 foreground_ssh_term_grace_attempts=20
@@ -86,7 +86,7 @@ cleanup_remote_launch() {
   local cleanup_status=0
 
   trap - EXIT INT TERM
-  if [[ "${unit_launch_attempted}" == true || "${helper_staged}" == true ]]; then
+  if [[ "${unit_launch_attempted}" == true || "${helper_stage_attempted}" == true ]]; then
     # The validated local unit and helper names are intentionally expanded here.
     # shellcheck disable=SC2029
     if ! ssh "${ssh_options[@]}" "${target}" \
@@ -105,13 +105,12 @@ trap cleanup_remote_launch EXIT
 trap 'interrupt_remote_launch 130' INT
 trap 'interrupt_remote_launch 143' TERM
 
+helper_stage_attempted=true
 # The validated local helper path is intentionally expanded here.
 # shellcheck disable=SC2029
 ssh "${ssh_options[@]}" "${target}" \
   "sudo install -o root -g root -m 0600 /dev/stdin '${audit_helper_remote}'" \
   <"${script_dir}/hermes_audit.py"
-helper_staged=true
-
 printf 'Starting isolated MCP backup-restore proof unit: %s\n' "${unit_name}"
 unit_launch_attempted=true
 # The validated local unit, API, entity, and helper values are expanded here.

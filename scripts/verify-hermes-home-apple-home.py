@@ -232,6 +232,11 @@ def validate_homeclaw_get_payload(payload: Any, accessory: str) -> dict[str, Any
     context = f"homeclaw-cli get {accessory!r} JSON"
     if not isinstance(payload, dict):
         raise VerificationError(f"{context} must be an object")
+    response_accessory = require_string(payload, "name", context)
+    if response_accessory != accessory:
+        raise VerificationError(
+            f"{context}.name does not match requested accessory {accessory!r}"
+        )
     services = require_object_list(payload.get("services", []), f"{context}.services")
     for index, service in enumerate(services):
         require_object_list(
