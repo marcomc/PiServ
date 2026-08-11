@@ -108,30 +108,23 @@
     framework maintenance item is the transitive `undici` dependency audit.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Pin the next Hermes upstream release that upgrades transitive `undici` to
-      `6.28.0` or newer, then repeat the production dependency audit.
+    - Reopen this task only when a new Hermes upstream release is selected,
+      that release carries `undici >= 6.28.0`, or a new security finding
+      requires earlier action. Then pin the release and repeat the production
+      dependency audit before enabling it.
 
-- [ ] **Complete Hermes smart-home control through Home Assistant and Apple Home**
+- [ ] **Add allowlisted advanced climate controls to Hermes Home Assistant MCP**
   - Priority: **High**
-  - Assessment: Hermes already reaches Home Assistant through the official MCP
-    server and Assist exposure policy. The next release should stabilize this
-    path and use Home Assistant's HomeKit Bridge as the preferred route to
-    Apple Home and Siri.
+  - Assessment: Hermes reaches Home Assistant through the official MCP and the
+    Assist exposure policy. The 0.5.0 acceptance harness passed a reversible
+    Hermes-to-Home Assistant-to-Apple Home cycle, backup/import proof, and
+    manual Siri verification. The stock MCP exposes climate temperature only;
+    HVAC mode, fan mode, and swing mode need a scoped extension.
   - Proposal: [Hermes Agent framework research](docs/tracks/hermes-agent-framework-research.md)
   - Actions:
-    - Revalidate Hermes-to-Home Assistant MCP authentication, tool discovery,
-      state reads, and reversible writes after service restart and backup
-      restore.
-    - Define and review the Home Assistant Assist exposure policy for read-only
-      entities, lights, scenes, and other approved operations; exclude locks,
-      security devices, and configuration changes by default.
-    - Configure and validate Home Assistant's HomeKit Bridge for the selected
-      entities, then verify Apple Home and Siri reflect the resulting states.
-    - Add post-write state verification, failure handling, and audit evidence to
-      the Hermes runbook before enabling unattended actions.
-    - Decide whether direct Apple Home control through HomeClaw is still needed;
-      if so, select either the restricted SSH transport or the authenticated
-      Tailnet Supergateway transport and complete its validation track.
+    - Design an MCP extension limited to approved `climate` entities and the
+      supported HVAC, fan, and swing values.
+    - Preserve confirmation and audit policy for every write.
 
 - [ ] **Connect Hermes to Omar Shahine's HomeClaw MCP through SSH**
   - Proposal: [HomeClaw MCP over SSH](docs/tracks/homeclaw-mcp-over-ssh.md)

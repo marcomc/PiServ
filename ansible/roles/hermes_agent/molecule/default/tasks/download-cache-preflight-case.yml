@@ -24,3 +24,5 @@
               'Require a private Hermes Agent download cache managed marker',
               'Require recognized Hermes Agent download cache managed marker'
             ]
+          - >-
+            'has no attribute' not in (ansible_failed_result.msg | default(''))

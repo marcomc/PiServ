@@ -1,0 +1,37 @@
+---
+- name: Parse every Hermes CLI tool catalog row
+  ansible.builtin.set_fact:
+    hermes_agent_tool_catalog_rows: >-
+      {{
+        hermes_agent_tool_catalog_output.stdout |
+        regex_findall(
+          '(?m)^\s*\S+\s+(enabled|disabled)\s+([A-Za-z0-9_-]+)\s+.*$'
+        )
+      }}
+
+- name: Require the complete configured Hermes CLI tool catalog
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_agent_tool_catalog_rows | map(attribute=1) | list | length ==
+        hermes_agent_tool_catalog_rows | map(attribute=1) | unique | list | length
+      - >-
+        hermes_agent_tool_catalog_rows |
+        selectattr(0, 'equalto', 'enabled') | map(attribute=1) | list | sort ==
+        hermes_agent_enabled_toolsets | unique | sort
+      - >-
+        hermes_agent_tool_catalog_rows |
+        selectattr(0, 'equalto', 'disabled') | map(attribute=1) | list | sort ==
+        hermes_agent_disabled_toolsets | unique | sort
+      - >-
+        hermes_agent_tool_catalog_rows | map(attribute=1) | list | sort ==
+        (hermes_agent_enabled_toolsets + hermes_agent_disabled_toolsets) |
+        unique | sort
+      - >-
+        hermes_agent_tool_catalog_output.stdout.split('\n') |
+        map('trim') | reject('equalto', '') |
+        reject('match', '^Built-in toolsets \(cli\):$') | list | length ==
+        hermes_agent_tool_catalog_rows | length
+    fail_msg: >-
+      The complete Hermes CLI catalog must exactly equal the disjoint configured
+      enabled and disabled toolsets before dashboard startup.

@@ -54,12 +54,24 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Before rendering a configurable timeout, retry, interval, or escalation value
   into shell or service configuration, assert its explicit range and every
   required relationship to related values; cover invalid values and ordering.
+- When validating required managed files with `ansible.builtin.stat`, assert
+  that the result exists before reading nested metadata; cover an otherwise
+  compatible fixture with the required marker absent.
 - Name every top-level `import_playbook` entry in orchestration playbooks so
   Ansible Lint validates the full entry point.
 - When a PiServ playbook overrides a generic role's package or plugin set,
   declare expected runtime registrations explicitly and guard live probes in
   check mode when the service is absent; validate both fresh and converged
   check-mode paths.
+- When a restricted Hermes deployment uses a deny-list, inspect the complete
+  live tool catalog after upstream updates and assert every non-approved
+  toolset is disabled; new upstream toolsets can otherwise become active by
+  default.
+- Hermes acceptance tests must prove exact intended entity state, dependency
+  reachability, configured target forwarding, and source-scoped tool calls;
+  command success or broad tool activity is insufficient. Keep restored-
+  workspace and Molecule fixture contracts aligned with role defaults and
+  deny-lists, and cover sibling-entity and unreachable-dependency negatives.
 - Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
   persistent device paths, and other host-specific identities from ignored
   local variables or a secure external source; use tracked placeholders only.
@@ -144,6 +156,11 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   memory controller and effective systemd limits are enforcing containment.
   Keep an independently effective `LimitAS` cap when cgroup memory controls
   are unavailable.
+- For configurable privileged lifecycle artifacts, inventory every root,
+  output, staging, persistent, backup, recovery, cleanup, and runtime-consumer
+  path before mutation. Authenticate parent containment and inode identity,
+  publish atomically, and prove the eventual service identity has the required
+  access before enabling scheduled consumption.
 
 ## pCloud / FUSE Rules
 

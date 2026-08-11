@@ -1,0 +1,167 @@
+---
+- name: Find writable Home Assistant CLI virtualenv entries
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/find
+      - "{{ homeassistant_cli_venv_path }}"
+      - -xdev
+      - "("
+      - -type
+      - f
+      - -o
+      - -type
+      - d
+      - ")"
+      - -a
+      - "("
+      - -perm
+      - "-020"
+      - -o
+      - -perm
+      - "-002"
+      - ")"
+      - -print
+      - -quit
+  register: homeassistant_cli_writable_venv_paths
+  changed_when: false
+  check_mode: false
+
+- name: Reject writable Home Assistant CLI virtualenv entries
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_writable_venv_paths.stdout | trim == ''
+    fail_msg: >-
+      Refusing root Python execution from a Home Assistant CLI virtualenv
+      containing group- or other-writable files or directories.
+
+- name: Find Home Assistant CLI virtualenv symlinks
+  ansible.builtin.find:
+    paths:
+      - "{{ homeassistant_cli_venv_path }}"
+    file_type: link
+    recurse: true
+    hidden: true
+  register: homeassistant_cli_venv_symlinks
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate Home Assistant CLI virtualenv symlink ownership
+  ansible.builtin.assert:
+    that:
+      - item.uid == 0
+      - item.gid == 0
+    fail_msg: >-
+      Refusing root Python execution from a Home Assistant CLI virtualenv
+      containing a symlink not owned by root: {{ item.path }}
+  loop: "{{ homeassistant_cli_venv_symlinks.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Resolve Home Assistant CLI virtualenv symlink targets
+  ansible.builtin.command:
+    argv:
+      - >-
+        {{ _homeassistant_cli_realpath_executable |
+           default('/usr/bin/realpath') }}
+      - --canonicalize-existing
+      - --
+      - "{{ item.path }}"
+  loop: "{{ homeassistant_cli_venv_symlinks.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: homeassistant_cli_venv_symlink_targets
+  changed_when: false
+  check_mode: false
+
+- name: Inspect Home Assistant CLI virtualenv symlink targets
+  ansible.builtin.stat:
+    path: "{{ item.stdout | trim }}"
+    follow: false
+  loop: "{{ homeassistant_cli_venv_symlink_targets.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  register: homeassistant_cli_venv_symlink_target_stats
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate Home Assistant CLI virtualenv symlink targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.item.stdout | trim).startswith(homeassistant_cli_venv_path ~ '/') or
+        (
+          (item.item.item.path | dirname) ==
+          (homeassistant_cli_venv_path ~ '/bin') and
+          (item.item.item.path | basename) is match(
+            '^python(3([.][0-9]+)?)?$'
+          ) and
+          (
+            (
+              _homeassistant_cli_system_python_target is defined and
+              (item.item.stdout | trim) ==
+              _homeassistant_cli_system_python_target
+            ) or
+            (
+              _homeassistant_cli_system_python_target is not defined and
+              (item.item.stdout | trim) is match(
+                '^/usr/bin/python3([.][0-9]+)?$'
+              )
+            )
+          )
+        )
+      - item.stat.exists
+      - item.stat.isreg or item.stat.isdir
+      - not item.stat.islnk
+      - item.stat.uid == 0
+      - item.stat.gid == 0
+      - item.stat.mode[2] not in ['2', '3', '6', '7']
+      - item.stat.mode[3] not in ['2', '3', '6', '7']
+    fail_msg: >-
+      Refusing root Python execution from an unsafe Home Assistant CLI
+      virtualenv symlink target: {{ item.item.item.path }} ->
+      {{ item.item.stdout | trim }}
+  loop: "{{ homeassistant_cli_venv_symlink_target_stats.results }}"
+  loop_control:
+    label: "{{ item.item.item.path }}"
+
+- name: Reauthenticate Home Assistant CLI virtualenv interpreter
+  ansible.builtin.stat:
+    path: "{{ homeassistant_cli_venv_path }}/bin/python"
+    follow: true
+  register: homeassistant_cli_venv_python
+  changed_when: false
+  check_mode: false
+
+- name: Find imported Home Assistant CLI pip package tree
+  ansible.builtin.find:
+    paths:
+      - "{{ homeassistant_cli_venv_path }}/lib"
+    patterns: pip
+    file_type: directory
+    recurse: true
+  register: homeassistant_cli_pip_trees
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Capture authenticated Home Assistant CLI pip runtime state
+  ansible.builtin.set_fact:
+    homeassistant_cli_venv_runtime_authenticated: >-
+      {{
+        homeassistant_cli_venv_python.stat.exists and
+        homeassistant_cli_venv_python.stat.isreg and
+        not homeassistant_cli_venv_python.stat.islnk and
+        homeassistant_cli_venv_python.stat.uid == 0 and
+        homeassistant_cli_venv_python.stat.gid == 0 and
+        homeassistant_cli_venv_python.stat.mode == '0755' and
+        homeassistant_cli_pip_trees.matched == 1
+      }}
+
+- name: Require authenticated Home Assistant CLI pip runtime
+  ansible.builtin.assert:
+    that:
+      - homeassistant_cli_venv_runtime_authenticated
+    fail_msg: >-
+      Home Assistant CLI root Python execution requires one private root-owned
+      interpreter and exactly one imported pip package tree.
+  when: homeassistant_cli_venv_runtime_required | default(true)

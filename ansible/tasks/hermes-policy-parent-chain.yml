@@ -1,0 +1,195 @@
+---
+- name: Inspect the complete Hermes policy parent chain before mutation
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: "{{ piserv_hermes_policy_system_root }}"
+      required: true
+      uid: "{{ piserv_hermes_policy_system_root_uid }}"
+      gid: "{{ piserv_hermes_policy_system_root_gid }}"
+      mode: "0755"
+    - path: "{{ piserv_hermes_policy_service_root }}"
+      required: false
+      uid: "{{ piserv_hermes_policy_managed_uid }}"
+      gid: "{{ piserv_hermes_policy_managed_gid }}"
+      mode: "0755"
+    - path: "{{ piserv_hermes_policy_directory }}"
+      required: false
+      uid: "{{ piserv_hermes_policy_managed_uid }}"
+      gid: "{{ piserv_hermes_policy_managed_gid }}"
+      mode: "0755"
+  register: piserv_hermes_policy_parent_preflight
+  check_mode: false
+
+- name: Authenticate every existing Hermes policy parent before mutation
+  ansible.builtin.assert:
+    that:
+      - not item.item.required or item.stat.exists
+      - not item.stat.exists or not item.stat.islnk
+      - not item.stat.exists or item.stat.isdir
+      - not item.stat.exists or item.stat.uid == (item.item.uid | int)
+      - not item.stat.exists or item.stat.gid == (item.item.gid | int)
+      - not item.stat.exists or item.stat.mode == item.item.mode
+    fail_msg: >-
+      Refusing to publish the Hermes policy because {{ item.item.path }} is
+      absent when required or is not a canonical {{ item.item.uid }}:{{ item.item.gid }}
+      directory with mode {{ item.item.mode }}.
+  loop: "{{ piserv_hermes_policy_parent_preflight.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+- name: Canonicalize every existing Hermes policy parent before mutation
+  ansible.builtin.command:
+    argv:
+      - "{{ piserv_hermes_policy_realpath_executable }}"
+      - "{{ item.item.path }}"
+  loop: "{{ piserv_hermes_policy_parent_preflight.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: item.stat.exists
+  register: piserv_hermes_policy_parent_canonical_preflight
+  changed_when: false
+  check_mode: false
+
+- name: Require exact canonical Hermes policy parent paths before mutation
+  ansible.builtin.assert:
+    that:
+      - item.stdout == item.item.item.path
+    fail_msg: >-
+      Refusing to publish the Hermes policy because {{ item.item.item.path }}
+      canonicalizes to {{ item.stdout }}.
+  loop: "{{ piserv_hermes_policy_parent_canonical_preflight.results }}"
+  loop_control:
+    label: "{{ item.item.item.path }}"
+  when: not item.skipped | default(false)
+
+- name: Create an absent root-controlled Hermes service directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_policy_service_root }}"
+    state: directory
+    owner: "{{ piserv_hermes_policy_managed_uid }}"
+    group: "{{ piserv_hermes_policy_managed_gid }}"
+    mode: "0755"
+  when: not piserv_hermes_policy_parent_preflight.results[1].stat.exists
+
+- name: Reinspect the Hermes service directory after possible creation
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_policy_service_root }}"
+    follow: false
+  register: piserv_hermes_policy_service_root_postcreate
+  check_mode: false
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[1].stat.exists or
+      not ansible_check_mode
+
+- name: Reauthenticate the Hermes service directory after possible creation
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_policy_service_root_postcreate.stat.exists
+      - not piserv_hermes_policy_service_root_postcreate.stat.islnk
+      - piserv_hermes_policy_service_root_postcreate.stat.isdir
+      - >-
+        piserv_hermes_policy_service_root_postcreate.stat.uid
+        == (piserv_hermes_policy_managed_uid | int)
+      - >-
+        piserv_hermes_policy_service_root_postcreate.stat.gid
+        == (piserv_hermes_policy_managed_gid | int)
+      - piserv_hermes_policy_service_root_postcreate.stat.mode == '0755'
+    fail_msg: >-
+      Refusing to publish the Hermes policy because the service directory did
+      not converge to the authenticated root-controlled state.
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[1].stat.exists or
+      not ansible_check_mode
+
+- name: Canonicalize the Hermes service directory after possible creation
+  ansible.builtin.command:
+    argv:
+      - "{{ piserv_hermes_policy_realpath_executable }}"
+      - "{{ piserv_hermes_policy_service_root }}"
+  register: piserv_hermes_policy_service_root_canonical
+  changed_when: false
+  check_mode: false
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[1].stat.exists or
+      not ansible_check_mode
+
+- name: Require the exact canonical Hermes service directory after creation
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_policy_service_root_canonical.stdout
+        == piserv_hermes_policy_service_root
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[1].stat.exists or
+      not ansible_check_mode
+
+- name: Create an absent root-controlled Hermes policy directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_policy_directory }}"
+    state: directory
+    owner: "{{ piserv_hermes_policy_managed_uid }}"
+    group: "{{ piserv_hermes_policy_managed_gid }}"
+    mode: "0755"
+  when: not piserv_hermes_policy_parent_preflight.results[2].stat.exists
+
+- name: Reinspect the Hermes policy directory after possible creation
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_policy_directory }}"
+    follow: false
+  register: piserv_hermes_policy_directory_postcreate
+  check_mode: false
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[2].stat.exists or
+      not ansible_check_mode
+
+- name: Reauthenticate the Hermes policy directory before publication
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_policy_directory_postcreate.stat.exists
+      - not piserv_hermes_policy_directory_postcreate.stat.islnk
+      - piserv_hermes_policy_directory_postcreate.stat.isdir
+      - >-
+        piserv_hermes_policy_directory_postcreate.stat.uid
+        == (piserv_hermes_policy_managed_uid | int)
+      - >-
+        piserv_hermes_policy_directory_postcreate.stat.gid
+        == (piserv_hermes_policy_managed_gid | int)
+      - piserv_hermes_policy_directory_postcreate.stat.mode == '0755'
+    fail_msg: >-
+      Refusing to publish the Hermes policy because the policy directory did
+      not converge to the authenticated root-controlled state.
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[2].stat.exists or
+      not ansible_check_mode
+
+- name: Canonicalize the Hermes policy directory before publication
+  ansible.builtin.command:
+    argv:
+      - "{{ piserv_hermes_policy_realpath_executable }}"
+      - "{{ piserv_hermes_policy_directory }}"
+  register: piserv_hermes_policy_directory_canonical
+  changed_when: false
+  check_mode: false
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[2].stat.exists or
+      not ansible_check_mode
+
+- name: Require the exact canonical Hermes policy directory before publication
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_policy_directory_canonical.stdout
+        == piserv_hermes_policy_directory
+  when:
+    - >-
+      piserv_hermes_policy_parent_preflight.results[2].stat.exists or
+      not ansible_check_mode

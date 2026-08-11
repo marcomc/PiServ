@@ -75,6 +75,7 @@ inventory, documentation, and retained Git history.
 | `AGENTS.md` | Project-specific agent rules and server context |
 | `README.md` | Operator entry point |
 | `TODO.md` | Current setup backlog |
+| `ROADMAP.md` | Release milestones and scope |
 | `CHANGELOG.md` | Project change history |
 | `LICENSE` | Private-use license notice |
 | `docs/` | Runbooks, decisions, and supporting documentation |

@@ -8,6 +8,38 @@
       - hermes_agent_dashboard_tui_runtime_dir is match('^/')
       - hermes_agent_dashboard_tui_runtime_revision_file is match('^/')
       - hermes_agent_dashboard_tui_runtime_manifest_file is match('^/')
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        map(attribute='source') | unique | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        map(attribute='destination') | unique | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        selectattr('source', 'match', '^/[^:\\s]+$') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        selectattr('destination', 'match', '^/[^:\\s]+$') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('destination', 'search', '(^|/)\\.\\.?(/|$)') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('destination', 'search', '//|/$') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('source', 'equalto', '/') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
+      - >-
+        (hermes_agent_dashboard_bind_read_only_paths |
+        rejectattr('destination', 'equalto', '/') | list | length) ==
+        (hermes_agent_dashboard_bind_read_only_paths | length)
       - hermes_agent_dashboard_tui_runtime_dir not in ['/', '/tmp', '/var', '/usr', '/usr/local', '/etc', '/run', '/home', '/opt']
       - >-
         hermes_agent_dashboard_tui_runtime_revision_file ==
@@ -27,6 +59,10 @@
         hermes_agent_dashboard_basic_auth_state_file is match('^/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
+        not hermes_agent_dashboard_basic_auth_state_file.startswith(
+        hermes_agent_home ~ '/')
+      - >-
+        not hermes_agent_dashboard_manage_basic_auth or
         hermes_agent_dashboard_basic_auth_bootstrap_password_file is match('^/')
       - >-
         not hermes_agent_dashboard_manage_basic_auth or
@@ -44,6 +80,9 @@
       - hermes_agent_inference_provenance_label is not search('[\r\n]')
       - hermes_agent_binary_path == '/usr/local/bin/hermes'
       - >-
+        hermes_agent_managed_config_path ==
+        hermes_agent_install_dir ~ '/.hermes-config.yaml'
+      - >-
         hermes_agent_venv_state_file ==
         hermes_agent_install_dir ~ '/.hermes-venv-managed.yml'
       - >-
@@ -51,8 +90,10 @@
         match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
       - hermes_agent_codex_archive_binary_name != 'codex'
       - hermes_agent_provider == "openai-codex"
-      - hermes_agent_enabled_toolsets | difference(["memory", "skills"]) | length == 0
-      - "'terminal' in hermes_agent_disabled_toolsets"
+      - >-
+        hermes_agent_enabled_toolsets | difference(["memory", "skills", "terminal"]) | length == 0
+      - >-
+        hermes_agent_enabled_toolsets | intersect(hermes_agent_disabled_toolsets) | length == 0
       - "'file' in hermes_agent_disabled_toolsets"
       - "'browser' in hermes_agent_disabled_toolsets"
       - "'code_execution' in hermes_agent_disabled_toolsets"
@@ -141,6 +182,46 @@
       the openai-codex provider, memory/skills-only access, an explicit backup
       group when backups are enabled, and a valid Assist MCP endpoint with a
       private token file when Home Assistant access is enabled.
+
+- name: Authenticate Hermes dashboard read-only bind sources
+  ansible.builtin.include_tasks: validate-dashboard-bind-source.yml
+  loop: "{{ hermes_agent_dashboard_bind_read_only_paths }}"
+  loop_control:
+    loop_var: hermes_agent_dashboard_bind
+    label: "{{ hermes_agent_dashboard_bind.source }}"
+
+- name: Define protected Hermes dashboard runtime-consumer paths
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_protected_consumer_paths: >-
+      {{
+        [
+          hermes_agent_managed_config_path,
+          hermes_agent_home ~ '/config.yaml',
+          hermes_agent_home ~ '/.env',
+          hermes_agent_binary_path,
+          hermes_agent_codex_binary_path,
+          hermes_agent_dashboard_basic_auth_state_file
+        ] +
+        ([hermes_agent_home_assistant_mcp_token_env_file]
+         if hermes_agent_manage_home_assistant_mcp else []) +
+        ([hermes_agent_dashboard_tui_runtime_dir]
+         if hermes_agent_manage_dashboard_chat else [])
+      }}
+
+- name: Reject dashboard binds that shadow protected runtime-consumer paths
+  ansible.builtin.assert:
+    that:
+      - item.1 != item.0.destination
+      - not item.1.startswith(item.0.destination ~ '/')
+      - not item.0.destination.startswith(item.1 ~ '/')
+    fail_msg: >-
+      Dashboard bind destination {{ item.0.destination }} must not equal,
+      contain, or be contained by protected runtime-consumer path {{ item.1 }}.
+  loop: >-
+    {{ hermes_agent_dashboard_bind_read_only_paths |
+    product(hermes_agent_dashboard_protected_consumer_paths) | list }}
+  loop_control:
+    label: "{{ item.0.destination }} versus {{ item.1 }}"
 
 - name: Resolve Hermes dashboard authentication output paths
   ansible.builtin.command:

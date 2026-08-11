@@ -1,0 +1,19 @@
+---
+- name: Reject invalid Hermes tool catalog | {{ fixture.name }}
+  block:
+    - name: Validate invalid Hermes tool catalog | {{ fixture.name }}
+      ansible.builtin.include_tasks: ../roles/hermes_agent/tasks/validate-tool-catalog-result.yml
+      vars:
+        hermes_agent_tool_catalog_output:
+          stdout: "{{ fixture.stdout }}"
+
+    - name: Fail after unexpected Hermes tool catalog acceptance | {{ fixture.name }}
+      ansible.builtin.fail:
+        msg: The invalid {{ fixture.name }} catalog unexpectedly passed.
+  rescue:
+    - name: Require the intended Hermes tool catalog rejection | {{ fixture.name }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            'Require the complete configured Hermes CLI tool catalog'

@@ -3,3 +3,6 @@ vendor/freenove/
 ansible/vars/external-storage.yml
 ansible/vars/hermes-agent.yml
 ansible/vars/wifi-watchdog.yml
+scripts/hermes-home-apple-home.local.json
+artifacts/hermes-home-apple-home/
+scripts/__pycache__/

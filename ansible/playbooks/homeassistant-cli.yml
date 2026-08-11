@@ -1,0 +1,23 @@
+---
+- name: Install and validate Home Assistant CLI
+  hosts: piserv
+  gather_facts: true
+  become: true
+  vars_files:
+    -
+      - ../vars/hermes-agent.yml
+      - ../vars/hermes-agent.yml.example
+  roles:
+    - role: homeassistant_cli
+      when: piserv_hermes_agent_manage_home_assistant_mcp | bool
+      vars:
+        # PiServ binds the generic CLI role to Hermes' private runtime identity
+        # and its pre-provisioned Home Assistant token.
+        homeassistant_cli_runtime_user: hermes-agent
+        homeassistant_cli_runtime_group: hermes-agent
+        homeassistant_cli_server: >-
+          {{ piserv_hermes_agent_home_assistant_mcp_url
+          | regex_replace('/api/mcp/?$', '') }}
+        homeassistant_cli_token_env_file: >-
+          /var/lib/hermes-agent/home-assistant-mcp.env
+        homeassistant_cli_token_env_var: HASS_MCP_TOKEN

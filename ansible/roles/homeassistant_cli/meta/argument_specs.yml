@@ -1,0 +1,39 @@
+---
+argument_specs:
+  main:
+    short_description: Install and validate Home Assistant CLI access.
+    options:
+      homeassistant_cli_runtime_user:
+        type: str
+        required: true
+      homeassistant_cli_runtime_group:
+        type: str
+        required: true
+      homeassistant_cli_install_dir:
+        type: path
+        required: true
+      homeassistant_cli_venv_path:
+        type: path
+        required: true
+      homeassistant_cli_provenance_path:
+        type: path
+        required: true
+      homeassistant_cli_binary_path:
+        type: path
+        required: true
+      homeassistant_cli_wrapper_path:
+        type: path
+        required: true
+      homeassistant_cli_package:
+        type: str
+        required: true
+        description: Exact PyPI pin in the form homeassistant-cli==VERSION.
+      homeassistant_cli_server:
+        type: str
+        required: true
+      homeassistant_cli_token_env_file:
+        type: path
+        required: true
+      homeassistant_cli_token_env_var:
+        type: str
+        required: true

@@ -57,6 +57,15 @@ shellcheck --enable=all -s sh "${tmpdir}/msmtp-system.sh"
 ansible localhost, \
   -c local \
   -m ansible.builtin.template \
+  -a "src=ansible/roles/homeassistant_cli/templates/hass-cli.j2 dest=${tmpdir}/hass-cli" \
+  -e '{"homeassistant_cli_token_env_file":"/var/lib/example/home-assistant.env","homeassistant_cli_token_env_var":"HASS_TOKEN","homeassistant_cli_server":"https://home.example.invalid","homeassistant_cli_binary_path":"/usr/local/lib/homeassistant-cli/venv/bin/hass-cli"}' \
+  >/dev/null
+
+shellcheck --enable=all -s sh "${tmpdir}/hass-cli"
+
+ansible localhost, \
+  -c local \
+  -m ansible.builtin.template \
   -a "src=ansible/roles/hermes_agent/templates/benchmark-hermes-local-model.sh.j2 dest=${tmpdir}/benchmark-hermes-local-model.sh" \
   -e @ansible/roles/hermes_agent/defaults/main.yml \
   >/dev/null

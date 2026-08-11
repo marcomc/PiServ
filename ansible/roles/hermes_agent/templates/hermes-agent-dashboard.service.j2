@@ -29,6 +29,10 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths={{ hermes_agent_home }}
+BindReadOnlyPaths={{ hermes_agent_managed_config_path }}:{{ hermes_agent_home }}/config.yaml
+{% for binding in hermes_agent_dashboard_bind_read_only_paths %}
+BindReadOnlyPaths={{ binding.source }}:{{ binding.destination }}
+{% endfor %}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

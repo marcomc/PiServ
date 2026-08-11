@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.5.0] - Unreleased
+
+### Hermes Home Assistant and Apple Home
+
+- Activated the PiServ Hermes smart-home policy with protected mode,
+  activity-scoped autonomy, and confirmation for critical physical actions.
+- Validated an isolated Hermes backup/import MCP proof and a reversible
+  Home Assistant-to-Apple Home acceptance cycle with the policy active.
+- Confirmed manual Siri control and read-only observation of an Apple Home-only
+  accessory; documented that advanced climate controls require a future
+  allowlisted MCP extension.
+
+- Added a Mac-side acceptance harness that drives Hermes through its SSH CLI,
+  verifies Home Assistant and Apple Home convergence through HomeClaw, restores
+  reversible test entities, and writes local text and JSON reports.
+- Added a local allowlist example, release runbook, and accepted decision for
+  activity-scoped Hermes autonomy, critical-action confirmation, and HomeClaw's
+  read-only observer role.
+- Validated a live reversible light operation: Hermes changed the Home Assistant
+  entity, HomeClaw observed the corresponding Apple Home state, and Hermes
+  restored the original state through the same MCP path.
+- Repeated the same acceptance test after restarting the Hermes dashboard;
+  Home Assistant and HomeClaw again confirmed both the requested state and the
+  restored state.
+- Added and validated `homeassistant-cli` on PiServ, using the existing private
+  Hermes Home Assistant token and the remote REST API for full entity/service
+  control. The Home Assistant Assist MCP remains available as a secondary path.
+- Enabled Hermes to use the dedicated `hass-cli` wrapper as its primary
+  Home Assistant control path while retaining the Assist MCP for secondary
+  discovery and verification.
+
 ## [0.4.0] - 2026-08-08
 
 ### Reliability

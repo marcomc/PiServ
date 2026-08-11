@@ -1,0 +1,14 @@
+---
+- name: Publish complete Home Assistant CLI install provenance
+  ansible.builtin.template:
+    src: "{{ homeassistant_cli_install_provenance_template | default('install-provenance.j2') }}"
+    dest: "{{ homeassistant_cli_provenance_path }}"
+    owner: root
+    group: "{{ homeassistant_cli_provenance_group | default('root') }}"
+    mode: "0600"
+    unsafe_writes: false
+  become: true
+  vars:
+    homeassistant_cli_provenance_state: complete
+  when:
+    - not ansible_check_mode or homeassistant_cli_install_preexisting

@@ -1,0 +1,13 @@
+---
+- name: Reauthenticate Home Assistant CLI wrapper for publication
+  ansible.builtin.include_tasks: authenticate-wrapper.yml
+
+- name: Publish Home Assistant CLI wrapper atomically
+  ansible.builtin.template:
+    src: hass-cli.j2
+    dest: "{{ homeassistant_cli_wrapper_path }}"
+    owner: root
+    group: 0
+    mode: "0755"
+    unsafe_writes: false
+  become: true

@@ -1,0 +1,13 @@
+---
+homeassistant_cli_runtime_user: ""
+homeassistant_cli_runtime_group: ""
+homeassistant_cli_install_dir: /usr/local/lib/homeassistant-cli
+homeassistant_cli_venv_path: "{{ homeassistant_cli_install_dir }}/venv"
+homeassistant_cli_provenance_path: >-
+  {{ homeassistant_cli_install_dir }}/.homeassistant-cli-managed
+homeassistant_cli_binary_path: "{{ homeassistant_cli_venv_path }}/bin/hass-cli"
+homeassistant_cli_wrapper_path: /usr/local/bin/hass-cli
+homeassistant_cli_package: homeassistant-cli==1.0.0
+homeassistant_cli_server: ""
+homeassistant_cli_token_env_file: ""
+homeassistant_cli_token_env_var: HASS_TOKEN

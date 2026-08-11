@@ -3,6 +3,8 @@ hermes_agent_user: hermes-agent
 hermes_agent_group: hermes-agent
 hermes_agent_home: /var/lib/hermes-agent
 hermes_agent_install_dir: /usr/local/lib/hermes-agent
+hermes_agent_managed_config_path: >-
+  {{ hermes_agent_install_dir }}/.hermes-config.yaml
 hermes_agent_venv_state_file: >-
   {{ hermes_agent_install_dir }}/.hermes-venv-managed.yml
 hermes_agent_expected_repo_origin: https://github.com/NousResearch/hermes-agent.git
@@ -52,6 +54,7 @@ hermes_agent_enabled_toolsets:
   - memory
   - skills
 hermes_agent_disabled_toolsets:
+  - bfl
   - browser
   - clarify
   - code_execution
@@ -86,6 +89,7 @@ hermes_agent_dashboard_port: 9119
 hermes_agent_dashboard_service_name: hermes-agent-dashboard.service
 hermes_agent_dashboard_service_managed_state_file: >-
   /etc/systemd/system/.hermes-agent-dashboard-managed.yml
+hermes_agent_dashboard_bind_read_only_paths: []
 hermes_agent_manage_dashboard: true
 hermes_agent_manage_dashboard_chat: false
 hermes_agent_dashboard_tui_runtime_dir: /usr/local/lib/hermes-agent-runtime/tui
@@ -96,7 +100,7 @@ hermes_agent_dashboard_tui_runtime_manifest_file: >-
 hermes_agent_dashboard_manage_basic_auth: false
 hermes_agent_dashboard_basic_auth_username: ""
 hermes_agent_dashboard_basic_auth_state_file: >-
-  {{ hermes_agent_home }}/dashboard-basic-auth.yaml
+  /root/hermes-agent-dashboard-auth.yaml
 hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
   /root/hermes-agent-dashboard-bootstrap-password
 hermes_agent_dashboard_basic_auth_session_ttl_seconds: 43200

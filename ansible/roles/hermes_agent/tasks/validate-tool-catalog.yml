@@ -1,0 +1,47 @@
+---
+- name: Inspect authoritative Hermes configuration before tool catalog validation
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_managed_config_path }}"
+    follow: false
+  register: hermes_agent_tool_catalog_config
+  changed_when: false
+  check_mode: false
+
+- name: Read complete enabled Hermes CLI tool catalog
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemd-run
+      - --quiet
+      - --wait
+      - --pipe
+      - --service-type=exec
+      - "--uid={{ hermes_agent_user }}"
+      - "--gid={{ hermes_agent_group }}"
+      - --property=ProtectSystem=strict
+      - "--property=ReadWritePaths={{ hermes_agent_home }}"
+      - >-
+        --property=BindReadOnlyPaths={{ hermes_agent_managed_config_path
+        }}:{{ hermes_agent_home }}/config.yaml
+      - "--setenv=HOME={{ hermes_agent_home }}"
+      - "--setenv=HERMES_HOME={{ hermes_agent_home }}"
+      - --
+      - "{{ hermes_agent_binary_path }}"
+      - tools
+      - list
+      - --platform
+      - cli
+  become: true
+  register: hermes_agent_tool_catalog_output
+  changed_when: false
+  check_mode: false
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+    - hermes_agent_tool_catalog_config.stat.exists
+
+- name: Parse the complete Hermes CLI tool catalog
+  ansible.builtin.include_tasks: validate-tool-catalog-result.yml
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_checkout.stat.exists
+    - hermes_agent_tool_catalog_config.stat.exists

@@ -1,0 +1,24 @@
+---
+- name: Validate Hermes dashboard bind-destination fixture
+  block:
+    - name: Run authoritative Hermes target validation
+      ansible.builtin.include_tasks: ../tasks/validate-target.yml
+      vars:
+        hermes_agent_dashboard_bind_read_only_paths:
+          - source: /hermes-bind-destination-missing-source
+            destination: "{{ hermes_agent_bind_destination_case.path }}"
+
+    - name: Fail if Hermes target validation unexpectedly completed
+      ansible.builtin.fail:
+        msg: Authoritative target validation must reach the test sentinel.
+  rescue:
+    - name: Assert exact Hermes bind-destination validation outcome
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name ==
+            hermes_agent_bind_destination_case.expected_failure
+        fail_msg: >-
+          Bind-destination case {{ hermes_agent_bind_destination_case.name }}
+          failed at {{ ansible_failed_task.name }} instead of
+          {{ hermes_agent_bind_destination_case.expected_failure }}.

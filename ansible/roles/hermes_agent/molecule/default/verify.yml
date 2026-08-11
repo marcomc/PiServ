@@ -7,6 +7,17 @@
     # production role default remains ARM64-only.
     hermes_agent_supported_architectures:
       - "{{ ansible_facts['architecture'] }}"
+    hermes_agent_molecule_role_fixture_vars: &role_fixture_vars
+      hermes_agent_repo_version: >-
+        {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+      hermes_agent_installer_url: >-
+        file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+      hermes_agent_installer_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+      hermes_agent_codex_archive_url: >-
+        file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+      hermes_agent_codex_archive_checksum: >-
+        sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
   tasks:
     - name: Pin expected fixture origin across dynamic role inclusions
       ansible.builtin.set_fact:
@@ -35,6 +46,126 @@
         url: http://127.0.0.1:9119/
         status_code: 200
         return_content: false
+
+    - name: Read dashboard bind-read-only policy from unit source
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -F
+          - BindReadOnlyPaths=/etc/hermes-managed-policy:/var/lib/hermes-agent/workspace/AGENTS.md
+          - /etc/systemd/system/hermes-agent-dashboard.service
+      changed_when: false
+
+    - name: Read effective dashboard bind-read-only policy
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - hermes-agent-dashboard.service
+          - --property=BindReadOnlyPaths
+          - --value
+      register: hermes_agent_molecule_effective_bind_read_only_paths
+      changed_when: false
+
+    - name: Read dashboard service process identifier
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - hermes-agent-dashboard.service
+          - --property=MainPID
+          - --value
+      register: hermes_agent_molecule_dashboard_main_pid
+      changed_when: false
+
+    - name: Read managed policy through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - cat
+          - /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_read
+      changed_when: false
+
+    - name: Reject managed policy writes through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - sh
+          - -c
+          - printf mutation > /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_write
+      changed_when: false
+      failed_when: hermes_agent_molecule_managed_policy_write.rc == 0
+
+    - name: Reject managed policy unlink through the dashboard service identity
+      ansible.builtin.command:
+        argv:
+          - nsenter
+          - --target={{ hermes_agent_molecule_dashboard_main_pid.stdout }}
+          - --mount
+          - --
+          - runuser
+          - --user=hermes-agent
+          - --
+          - rm
+          - /var/lib/hermes-agent/workspace/AGENTS.md
+      register: hermes_agent_molecule_managed_policy_unlink
+      changed_when: false
+      failed_when: hermes_agent_molecule_managed_policy_unlink.rc == 0
+
+    - name: Assert managed policy bind-read-only contract
+      ansible.builtin.assert:
+        that:
+          - >-
+            '/etc/hermes-managed-policy:/var/lib/hermes-agent/workspace/AGENTS.md' in
+            hermes_agent_molecule_effective_bind_read_only_paths.stdout
+          - hermes_agent_molecule_dashboard_main_pid.stdout | int > 1
+          - hermes_agent_molecule_managed_policy_read.stdout == 'managed smart-home policy fixture'
+          - hermes_agent_molecule_managed_policy_write.rc != 0
+          - hermes_agent_molecule_managed_policy_unlink.rc != 0
+
+    - name: Enable unknown Hermes toolset fixture
+      ansible.builtin.file:
+        path: /tmp/hermes-enable-unknown-toolset
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Reject an unknown newly enabled Hermes CLI toolset
+      block:
+        - name: Validate tool catalog with unknown enabled toolset
+          ansible.builtin.include_tasks: >-
+            {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-tool-catalog.yml
+
+        - name: Fail if unknown enabled toolset was accepted
+          ansible.builtin.fail:
+            msg: Unknown newly enabled toolsets must fail validation.
+      rescue:
+        - name: Assert exact enabled-toolset validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require the complete configured Hermes CLI tool catalog'
+      always:
+        - name: Disable unknown Hermes toolset fixture
+          ansible.builtin.file:
+            path: /tmp/hermes-enable-unknown-toolset
+            state: absent
 
     - name: Run scheduled backup service
       ansible.builtin.command:
@@ -148,6 +279,132 @@
     - name: Load role defaults for local-model capacity fixture
       ansible.builtin.include_vars:
         file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+
+    - name: Accept current dashboard bind-read-only paths
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+      vars:
+        hermes_agent_dashboard_bind_read_only_paths:
+          - source: /etc/hermes-managed-policy
+            destination: /var/lib/hermes-agent/workspace/AGENTS.md
+
+    - name: Reject dashboard bind destinations that shadow managed config
+      block:
+        - name: Validate dashboard bind destination over managed config
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent
+
+        - name: Fail if managed config shadow was accepted
+          ansible.builtin.fail:
+            msg: Dashboard bind destinations must not shadow managed config.
+      rescue:
+        - name: Assert protected runtime-consumer validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject dashboard binds that shadow protected runtime-consumer paths'
+
+    - name: Reject dashboard bind destinations beneath managed config
+      block:
+        - name: Validate dashboard bind destination beneath managed config
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/config.yaml/shadow
+
+        - name: Fail if managed config descendant was accepted
+          ansible.builtin.fail:
+            msg: Dashboard bind destinations beneath managed config must fail.
+      rescue:
+        - name: Assert protected descendant validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Reject dashboard binds that shadow protected runtime-consumer paths'
+
+    - name: Reject unsafe dashboard bind-read-only source paths
+      block:
+        - name: Validate unsafe dashboard bind-read-only source paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMJbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMLbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "{{ 'L2V0Yy9oZXJtZXMMbWFuYWdlZC1wb2xpY3k=' | b64decode }}"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "/etc/hermes\rmanaged-policy"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: "/etc/hermes\nmanaged-policy"
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+              - source: /etc/hermes:managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS.md
+
+        - name: Fail if unsafe dashboard bind-read-only source paths were accepted
+          ansible.builtin.fail:
+            msg: Unsafe dashboard bind-read-only source paths must fail validation.
+      rescue:
+        - name: Assert exact source-path validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
+
+    - name: Reject unsafe dashboard bind-read-only destination paths
+      block:
+        - name: Validate unsafe dashboard bind-read-only destination paths
+          ansible.builtin.include_tasks:
+            file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/validate-target.yml"
+          vars:
+            hermes_agent_dashboard_bind_read_only_paths:
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes agent/workspace/AGENTS.md
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMJLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMLLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: >-
+                  {{
+                    'L3Zhci9saWIvaGVybWVzLWFnZW50L3dvcmtzcGFjZS9BR0VOVFMMLm1k' |
+                    b64decode
+                  }}
+              - source: /etc/hermes-managed-policy
+                destination: "/var/lib/hermes-agent/workspace/AGENTS\r.md"
+              - source: /etc/hermes-managed-policy
+                destination: "/var/lib/hermes-agent/workspace/AGENTS\n.md"
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/workspace/AGENTS:md
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/workspace/../config.yaml
+
+        - name: Fail if unsafe dashboard bind-read-only destination paths were accepted
+          ansible.builtin.fail:
+            msg: Unsafe dashboard bind-read-only destination paths must fail validation.
+      rescue:
+        - name: Assert exact destination-path validation rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert supported Hermes Agent target platform'
 
     - name: Create foreign regular Codex link target fixture
       ansible.builtin.copy:
@@ -1415,7 +1672,7 @@
 
     - name: Inspect established dashboard authentication commit point
       ansible.builtin.stat:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         checksum_algorithm: sha256
       register: hermes_agent_molecule_established_bootstrap_auth_state
 
@@ -1461,7 +1718,7 @@
 
     - name: Inspect dashboard authentication commit point after partial-state refusal
       ansible.builtin.stat:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         checksum_algorithm: sha256
       register: hermes_agent_molecule_partial_bootstrap_auth_state
 
@@ -1490,7 +1747,7 @@
     - name: Create foreign dashboard authentication state fixture
       ansible.builtin.copy:
         content: foreign dashboard authentication state
-        dest: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        dest: /root/hermes-agent-dashboard-auth.yaml
         owner: root
         group: root
         mode: "0644"
@@ -1515,7 +1772,7 @@
 
     - name: Read foreign dashboard authentication state after rejection
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_foreign_dashboard_auth_state
 
     - name: Assert foreign dashboard authentication state is untouched
@@ -1527,7 +1784,7 @@
 
     - name: Remove foreign dashboard authentication state fixture
       ansible.builtin.file:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         state: absent
 
     - name: Initialize managed dashboard bootstrap password target
@@ -1565,7 +1822,7 @@
         src: "{{ item }}"
       loop:
         - /root/hermes-foreign-bootstrap-target
-        - /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        - /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_recovered_bootstrap_credentials
       no_log: true
 
@@ -1761,6 +2018,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-uid-zero-fixture
             hermes_agent_group: hermes-uid-zero-fixture
             hermes_agent_home: /var/lib/hermes-uid-zero-fixture
@@ -1787,6 +2045,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-gid-zero-fixture
             hermes_agent_group: hermes-gid-zero-fixture
             hermes_agent_home: /var/lib/hermes-gid-zero-fixture
@@ -1833,6 +2092,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-foreign-checkout-fixture
             hermes_agent_group: hermes-foreign-checkout-fixture
             hermes_agent_home: /var/lib/hermes-foreign-checkout-fixture
@@ -1881,6 +2141,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-incompatible-fixture
             hermes_agent_group: hermes-incompatible-fixture
             hermes_agent_home: /var/lib/hermes-incompatible-fixture
@@ -1901,13 +2162,13 @@
                 ansible_failed_task.name ==
                 'Require compatible existing Hermes Agent identity and roots'
 
-    - name: Create foreign Hermes persistent home fixture
-      ansible.builtin.file:
-        path: /var/lib/hermes-foreign-home-fixture
-        state: directory
+    - name: Create foreign Hermes persistent home file fixture
+      ansible.builtin.copy:
+        content: foreign persistent home canary
+        dest: /var/lib/hermes-foreign-home-fixture
         owner: root
         group: root
-        mode: "0755"
+        mode: "0600"
 
     - name: Reject foreign existing Hermes persistent home
       block:
@@ -1915,6 +2176,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-foreign-home-fixture
             hermes_agent_group: hermes-foreign-home-fixture
             hermes_agent_home: /var/lib/hermes-foreign-home-fixture
@@ -1955,6 +2217,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-symlink-parent-fixture
             hermes_agent_group: hermes-symlink-parent-fixture
             hermes_agent_home: /var/lib/hermes-symlink-parent/home
@@ -2256,6 +2519,7 @@
           ansible.builtin.include_role:
             name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
           vars:
+            <<: *role_fixture_vars
             hermes_agent_user: hermes-local-storage-fixture
             hermes_agent_group: hermes-local-storage-fixture
             hermes_agent_home: /var/lib/hermes-local-storage-fixture
@@ -3646,7 +3910,7 @@
 
     - name: Read dashboard authentication state before username change
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_auth_before_username_change
 
     - name: Converge changed dashboard authentication username
@@ -3677,7 +3941,7 @@
 
     - name: Read dashboard authentication state after username change
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_auth_after_username_change
 
     - name: Assert username converges without rotating dashboard secrets

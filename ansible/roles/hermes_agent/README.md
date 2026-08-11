@@ -95,6 +95,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_group` | `hermes-agent` | Runtime group. |
 | `hermes_agent_home` | `/var/lib/hermes-agent` | Private persistent state. |
 | `hermes_agent_install_dir` | `/usr/local/lib/hermes-agent` | Root-owned Hermes checkout. |
+| `hermes_agent_managed_config_path` | install-tree artifact | Regular non-symlink configuration published as `root:{{ hermes_agent_group }}` mode `0640` and bound read-only over runtime `config.yaml`. |
 | `hermes_agent_venv_state_file` | `{{ hermes_agent_install_dir }}/.hermes-venv-managed.yml` | Root-private revision and digest record for the installed virtual environment. |
 | `hermes_agent_expected_repo_origin` | canonical upstream URL | Required origin for an existing checkout. |
 | `hermes_agent_binary_path` | `/usr/local/bin/hermes` | Fixed Hermes CLI path installed upstream. |
@@ -131,6 +132,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_port` | `9119` | Dashboard port. |
 | `hermes_agent_dashboard_service_name` | `hermes-agent-dashboard.service` | Role-marked dashboard systemd unit target. |
 | `hermes_agent_dashboard_service_managed_state_file` | systemd unit directory marker | Root-only name and checksum record used to retire a renamed dashboard unit safely. |
+| `hermes_agent_dashboard_bind_read_only_paths` | `[]` | Source/destination mappings published read-only to the dashboard. |
 | `hermes_agent_manage_dashboard` | `true` | Build and run the dashboard. |
 | `hermes_agent_manage_dashboard_chat` | `false` | Build and enable the dashboard terminal chat bundle. |
 | `hermes_agent_dashboard_tui_runtime_dir` | `/usr/local/lib/hermes-agent-runtime/tui` | Root-owned prebuilt terminal UI bundle. |
@@ -138,7 +140,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_tui_runtime_manifest_file` | runtime `.hermes-managed-state.yml` file | Root-owned content fingerprint for the terminal UI adaptation. |
 | `hermes_agent_dashboard_manage_basic_auth` | `false` | Enable native password authentication. Required for `0.0.0.0`. |
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
-| `hermes_agent_dashboard_basic_auth_state_file` | private state path | scrypt hash and session-secret file. |
+| `hermes_agent_dashboard_basic_auth_state_file` | `/root/hermes-agent-dashboard-auth.yaml` | Root-only scrypt hash and session-secret state. |
 | `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file tracked by a sibling managed-state record. |
 | `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
 | `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
@@ -189,6 +191,13 @@ Until then, include the local role by its role directory name:
 
 The full variable contract, including types, is in
 [meta/argument_specs.yml](meta/argument_specs.yml).
+
+Bind sources are authenticated before service publication. Each source must be
+an existing canonical, root-owned regular file without group or world write
+permission. Every ancestor through `/` must likewise be canonical, root-owned,
+and not group or world writable. Missing paths, symlinks, directories, other
+file types, non-root ownership, and writable sources or ancestors fail closed
+in both normal and check mode.
 
 ## Example Playbook
 

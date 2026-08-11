@@ -70,9 +70,11 @@ The runtime and authenticated provider flow were validated live on 2026-07-31:
   Hermes returned a minimal `openai-codex` response in 10 seconds; direct Codex
   CLI returned an equivalent read-only response in 22 seconds without an API
   key.
-- The Hermes CLI policy exposes only memory and skills. Both write paths
-  require review; terminal, file, browser, code execution, and Home Assistant
-  are explicitly disabled.
+- The original Hermes CLI policy exposed only memory and skills. For the
+  accepted `0.5.0` PiServ smart-home scope, terminal is additionally enabled
+  under a managed activity policy that directs Home Assistant work to the
+  root-owned `hass-cli` wrapper. File, browser, code execution, and the built-in
+  Home Assistant toolset remain disabled; the Assist MCP is secondary.
 - The browser dashboard initially passed loopback and SSH-tunnel checks, then
   passed native-password authentication through its source-scoped LAN UFW rule
   and the existing Tailnet ingress policy. Its post-convergence idle process

@@ -27,37 +27,32 @@
     - hermes_agent_runtime_user_available
     - hermes_agent_checkout.stat.exists
 
-- name: Read enabled Hermes CLI toolsets
-  ansible.builtin.command:
-    argv:
-      - "{{ hermes_agent_binary_path }}"
-      - tools
-      - list
-      - --platform
-      - cli
-  environment:
-    HOME: "{{ hermes_agent_home }}"
-    HERMES_HOME: "{{ hermes_agent_home }}"
-  become: true
-  become_user: "{{ hermes_agent_user }}"
-  register: hermes_agent_toolsets_output
+- name: Inspect authoritative Hermes configuration before live probes
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_managed_config_path }}"
+    follow: false
+  register: hermes_agent_managed_config_state
   changed_when: false
   check_mode: false
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_checkout.stat.exists
 
-- name: Assert locked-down Hermes CLI toolsets
+- name: Assert authoritative Hermes configuration metadata
   ansible.builtin.assert:
     that:
-      - "'✓ enabled  memory' in hermes_agent_toolsets_output.stdout"
-      - "'✓ enabled  skills' in hermes_agent_toolsets_output.stdout"
-      - "'✗ disabled  terminal' in hermes_agent_toolsets_output.stdout"
-      - "'✗ disabled  file' in hermes_agent_toolsets_output.stdout"
-      - "'✗ disabled  homeassistant' in hermes_agent_toolsets_output.stdout"
+      - hermes_agent_managed_config_state.stat.exists
+      - hermes_agent_managed_config_state.stat.isreg
+      - not hermes_agent_managed_config_state.stat.islnk
+      - hermes_agent_managed_config_state.stat.pw_name == 'root'
+      - hermes_agent_managed_config_state.stat.gr_name == hermes_agent_group
+      - hermes_agent_managed_config_state.stat.mode == '0640'
+    fail_msg: >-
+      The authoritative Hermes configuration must be a regular non-symlink
+      owned by root:{{ hermes_agent_group }} with mode 0640.
   when:
     - hermes_agent_runtime_user_available
     - hermes_agent_checkout.stat.exists
+    - >-
+      not ansible_check_mode or
+      (hermes_agent_managed_config_state.stat.exists | default(false))
 
 - name: Read Codex CLI version
   ansible.builtin.command:
