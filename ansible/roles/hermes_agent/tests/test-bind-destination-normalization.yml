@@ -1,0 +1,32 @@
+---
+- name: Test Hermes dashboard bind-destination normalization
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_facts:
+      architecture: aarch64
+      os_family: Debian
+  tasks:
+    - name: Load Hermes Agent role defaults
+      ansible.builtin.include_vars:
+        file: ../defaults/main.yml
+
+    - name: Exercise Hermes bind-destination normalization cases
+      ansible.builtin.include_tasks: assert-bind-destination-case.yml
+      loop:
+        - name: canonical destination
+          path: /var/lib/hermes-agent/workspace/AGENTS.md
+          expected_failure: Assert Hermes dashboard bind source is authenticated
+        - name: dot-segment destination
+          path: /var/lib/hermes-agent/workspace/../config.yaml
+          expected_failure: Assert supported Hermes Agent target platform
+        - name: duplicate-separator destination
+          path: /var/lib/hermes-agent//workspace/AGENTS.md
+          expected_failure: Assert supported Hermes Agent target platform
+        - name: trailing-separator destination
+          path: /var/lib/hermes-agent/workspace/
+          expected_failure: Assert supported Hermes Agent target platform
+      loop_control:
+        loop_var: hermes_agent_bind_destination_case
+        label: "{{ hermes_agent_bind_destination_case.name }}"

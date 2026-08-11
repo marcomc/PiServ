@@ -101,8 +101,6 @@ hermes_agent_dashboard_manage_basic_auth: false
 hermes_agent_dashboard_basic_auth_username: ""
 hermes_agent_dashboard_basic_auth_state_file: >-
   /root/hermes-agent-dashboard-auth.yaml
-hermes_agent_dashboard_legacy_basic_auth_state_file: >-
-  {{ hermes_agent_home }}/dashboard-basic-auth.yaml
 hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
   /root/hermes-agent-dashboard-bootstrap-password
 hermes_agent_dashboard_basic_auth_session_ttl_seconds: 43200

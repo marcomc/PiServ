@@ -481,9 +481,9 @@ Expected results after login:
 - Dashboard service is active; anonymous HTTP requests redirect to login, and
   a valid password login returns `200`.
 - Hermes and Codex report authenticated ChatGPT sessions.
-- Only `memory` and `skills` are enabled.
-- `terminal`, `file`, `browser`, `code_execution`, and `homeassistant` remain
-  disabled.
+- Only `memory`, `skills`, and `terminal` are enabled.
+- `file`, `browser`, `code_execution`, `homeassistant`, and all other bundled
+  toolsets remain disabled.
 
 Complete the first inference test in the dashboard. Do not enable additional
 tools as part of the login test.

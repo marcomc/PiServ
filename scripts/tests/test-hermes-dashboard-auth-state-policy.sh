@@ -11,8 +11,10 @@ credential_ancestor_path="${role_root}/tasks/validate-dashboard-credential-ances
 
 grep --fixed-strings --quiet \
   '/root/hermes-agent-dashboard-auth.yaml' "${defaults_path}"
-grep --fixed-strings --quiet \
-  '{{ hermes_agent_home }}/dashboard-basic-auth.yaml' "${defaults_path}"
+if grep --fixed-strings --quiet \
+  '{{ hermes_agent_home }}/dashboard-basic-auth.yaml' "${defaults_path}"; then
+  exit 1
+fi
 grep --fixed-strings --quiet \
   "hermes_agent_dashboard_basic_auth_state.stat.pw_name == 'root'" \
   "${configure_path}"
@@ -28,19 +30,27 @@ grep --fixed-strings --quiet \
   "${configure_path}"
 grep --fixed-strings --quiet \
   '"secret": secrets.token_urlsafe(32)' "${configure_path}"
-grep --fixed-strings --quiet \
+if grep --fixed-strings --quiet \
   'Remove obsolete runtime-owned Hermes dashboard authentication state' \
-  "${configure_path}"
-grep --fixed-strings --quiet \
+  "${configure_path}"; then
+  exit 1
+fi
+if grep --fixed-strings --quiet \
   'Authenticate obsolete Hermes dashboard authentication state' \
-  "${configure_path}"
-grep --fixed-strings --quiet \
+  "${configure_path}"; then
+  exit 1
+fi
+if grep --fixed-strings --quiet \
   'hermes_agent_dashboard_legacy_basic_auth_state.stat.nlink == 1' \
-  "${configure_path}"
+  "${configure_path}"; then
+  exit 1
+fi
 grep --fixed-strings --quiet \
   'not hermes_agent_dashboard_basic_auth_state_file.startswith(' "${validate_path}"
-grep --fixed-strings --quiet \
-  "hermes_agent_home ~ '/dashboard-basic-auth.yaml'" "${validate_path}"
+if grep --fixed-strings --quiet \
+  "hermes_agent_home ~ '/dashboard-basic-auth.yaml'" "${validate_path}"; then
+  exit 1
+fi
 
 credential_ancestor_policy="$({
   sed -n \

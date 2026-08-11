@@ -351,6 +351,15 @@ def remote_home_assistant_state(
     command = ["ssh", *SSH_OPTIONS, ssh_target(config), remote_command]
     result = run_command(command, timeout)
     payload = checked_json(result, f"Home Assistant state for {entity_id}")
+    if not isinstance(payload, dict):
+        raise VerificationError(
+            f"Home Assistant state for {entity_id} must return an object"
+        )
+    response_entity_id = payload.get("entity_id")
+    if not isinstance(response_entity_id, str) or response_entity_id != entity_id:
+        raise VerificationError(
+            f"Home Assistant state response entity_id does not match {entity_id!r}"
+        )
     return payload, compact_result(result)
 
 

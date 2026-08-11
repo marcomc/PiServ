@@ -615,7 +615,11 @@ class HarnessValidationTests(unittest.TestCase):
         self.assertRegex(remote_command, r"--unit=piserv-hermes-export-[0-9a-f]{16}")
 
     def test_home_assistant_state_injects_token_only_through_systemd(self):
-        result = {"exit_code": 0, "stdout": '{"state":"off"}', "stderr": ""}
+        result = {
+            "exit_code": 0,
+            "stdout": json.dumps({"entity_id": self.entity_id, "state": "off"}),
+            "stderr": "",
+        }
         with patch.object(HARNESS, "run_command", return_value=result) as run_command:
             HARNESS.remote_home_assistant_state(
                 {
@@ -631,6 +635,40 @@ class HarnessValidationTests(unittest.TestCase):
         self.assertIn("--property=EnvironmentFile=", remote_command)
         self.assertNotIn("set -a", remote_command)
         self.assertNotIn(". /var/lib/hermes-agent/home-assistant-mcp.env", remote_command)
+
+    def test_home_assistant_state_rejects_untrusted_response_identity(self):
+        invalid_entity_ids = (
+            "light.sibling_fixture",
+            None,
+            1,
+        )
+        for response_entity_id in invalid_entity_ids:
+            with self.subTest(response_entity_id=response_entity_id):
+                payload = {"state": "off"}
+                if response_entity_id is not None:
+                    payload["entity_id"] = response_entity_id
+                result = {
+                    "exit_code": 0,
+                    "stdout": json.dumps(payload),
+                    "stderr": "",
+                }
+                with (
+                    patch.object(HARNESS, "run_command", return_value=result),
+                    self.assertRaisesRegex(
+                        HARNESS.VerificationError,
+                        "response entity_id does not match",
+                    ),
+                ):
+                    HARNESS.remote_home_assistant_state(
+                        {
+                            "ssh_target": "admin@PiServ.local",
+                            "home_assistant_api_url": (
+                                "http://homeassistant.local:8123/api"
+                            ),
+                        },
+                        self.entity_id,
+                        10,
+                    )
 
     def test_timeout_stops_and_waits_for_exact_associated_units(self):
         timed_out = {

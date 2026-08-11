@@ -138,7 +138,11 @@ If `hermes chat --query` cannot run a stable non-interactive request, use the
 authenticated dashboard as the fallback driver:
 
 ```sh
-ssh -N -L 9119:127.0.0.1:9119 admin@PiServ.local
+repo_root="$(git rev-parse --show-toplevel)"
+# shellcheck source=scripts/lib/piserv-target.sh
+source "${repo_root}/scripts/lib/piserv-target.sh"
+piserv_target="$(piserv_ssh_target)"
+ssh -N -L 9119:127.0.0.1:9119 "${piserv_target}"
 ```
 
 Open `http://127.0.0.1:9119` with Computer Use, send the exact prompt recorded

@@ -629,52 +629,6 @@
   when: hermes_agent_runtime_user_available
   notify: Restart Hermes Agent dashboard
 
-- name: Inspect obsolete runtime-owned Hermes dashboard authentication state
-  ansible.builtin.stat:
-    path: "{{ hermes_agent_dashboard_legacy_basic_auth_state_file }}"
-    follow: false
-  register: hermes_agent_dashboard_legacy_basic_auth_state
-  changed_when: false
-  check_mode: false
-  no_log: true
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_dashboard_manage_basic_auth
-
-- name: Authenticate obsolete Hermes dashboard authentication state
-  ansible.builtin.assert:
-    that:
-      - >-
-        not hermes_agent_dashboard_legacy_basic_auth_state.stat.exists or
-        (hermes_agent_dashboard_legacy_basic_auth_state.stat.isreg and
-        not hermes_agent_dashboard_legacy_basic_auth_state.stat.islnk and
-        hermes_agent_dashboard_legacy_basic_auth_state.stat.pw_name ==
-        hermes_agent_user and
-        hermes_agent_dashboard_legacy_basic_auth_state.stat.gr_name ==
-        hermes_agent_group and
-        hermes_agent_dashboard_legacy_basic_auth_state.stat.mode == '0600' and
-        hermes_agent_dashboard_legacy_basic_auth_state.stat.nlink == 1)
-    fail_msg: >-
-      The obsolete dashboard authentication state must be absent or the exact
-      private runtime-owned regular file before removal.
-  no_log: true
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_dashboard_manage_basic_auth
-
-- name: Remove obsolete runtime-owned Hermes dashboard authentication state
-  ansible.builtin.file:
-    path: "{{ hermes_agent_dashboard_legacy_basic_auth_state_file }}"
-    state: absent
-  no_log: true
-  when:
-    - hermes_agent_runtime_user_available
-    - hermes_agent_dashboard_manage_basic_auth
-    - not ansible_check_mode
-    - >-
-      hermes_agent_dashboard_legacy_basic_auth_state_file !=
-      hermes_agent_dashboard_basic_auth_state_file
-
 - name: Inspect Hermes environment file
   ansible.builtin.stat:
     path: "{{ hermes_agent_home }}/.env"

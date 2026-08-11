@@ -394,6 +394,8 @@
                 destination: "/var/lib/hermes-agent/workspace/AGENTS\n.md"
               - source: /etc/hermes-managed-policy
                 destination: /var/lib/hermes-agent/workspace/AGENTS:md
+              - source: /etc/hermes-managed-policy
+                destination: /var/lib/hermes-agent/workspace/../config.yaml
 
         - name: Fail if unsafe dashboard bind-read-only destination paths were accepted
           ansible.builtin.fail:
@@ -1670,7 +1672,7 @@
 
     - name: Inspect established dashboard authentication commit point
       ansible.builtin.stat:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         checksum_algorithm: sha256
       register: hermes_agent_molecule_established_bootstrap_auth_state
 
@@ -1716,7 +1718,7 @@
 
     - name: Inspect dashboard authentication commit point after partial-state refusal
       ansible.builtin.stat:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         checksum_algorithm: sha256
       register: hermes_agent_molecule_partial_bootstrap_auth_state
 
@@ -1745,7 +1747,7 @@
     - name: Create foreign dashboard authentication state fixture
       ansible.builtin.copy:
         content: foreign dashboard authentication state
-        dest: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        dest: /root/hermes-agent-dashboard-auth.yaml
         owner: root
         group: root
         mode: "0644"
@@ -1770,7 +1772,7 @@
 
     - name: Read foreign dashboard authentication state after rejection
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_foreign_dashboard_auth_state
 
     - name: Assert foreign dashboard authentication state is untouched
@@ -1782,7 +1784,7 @@
 
     - name: Remove foreign dashboard authentication state fixture
       ansible.builtin.file:
-        path: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        path: /root/hermes-agent-dashboard-auth.yaml
         state: absent
 
     - name: Initialize managed dashboard bootstrap password target
@@ -1820,7 +1822,7 @@
         src: "{{ item }}"
       loop:
         - /root/hermes-foreign-bootstrap-target
-        - /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        - /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_recovered_bootstrap_credentials
       no_log: true
 
@@ -3908,7 +3910,7 @@
 
     - name: Read dashboard authentication state before username change
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_auth_before_username_change
 
     - name: Converge changed dashboard authentication username
@@ -3939,7 +3941,7 @@
 
     - name: Read dashboard authentication state after username change
       ansible.builtin.slurp:
-        src: /var/lib/hermes-agent/dashboard-basic-auth.yaml
+        src: /root/hermes-agent-dashboard-auth.yaml
       register: hermes_agent_molecule_auth_after_username_change
 
     - name: Assert username converges without rotating dashboard secrets
