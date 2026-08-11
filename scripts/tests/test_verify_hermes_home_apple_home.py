@@ -142,6 +142,108 @@ class HarnessValidationTests(unittest.TestCase):
                     "HomeClaw status JSON must be an object",
                 )
 
+    def test_non_object_homeclaw_get_payload_is_reported(self):
+        for payload in ([], "ready", 1, True, None):
+            with self.subTest(payload=payload):
+                result = {
+                    "exit_code": 0,
+                    "stdout": json.dumps(payload),
+                    "stderr": "",
+                }
+                with (
+                    patch.object(HARNESS, "run_command", return_value=result),
+                    self.assertRaises(HARNESS.VerificationError) as raised,
+                ):
+                    HARNESS.homeclaw_state("Fixture", "power", 1.0)
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli get 'Fixture' JSON must be an object",
+                )
+
+    def test_non_list_homeclaw_services_are_reported(self):
+        for services in ({}, "service", 1, True, None):
+            with self.subTest(services=services):
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_get_payload(
+                        {"services": services}, "Fixture"
+                    )
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli get 'Fixture' JSON.services must be a list",
+                )
+
+    def test_non_object_homeclaw_service_is_reported(self):
+        for service in ([], "service", 1, True, None):
+            with self.subTest(service=service):
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_get_payload(
+                        {"services": [service]}, "Fixture"
+                    )
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli get 'Fixture' JSON.services[0] must be an object",
+                )
+
+    def test_non_list_homeclaw_characteristics_are_reported(self):
+        for characteristics in ({}, "power", 1, True, None):
+            with self.subTest(characteristics=characteristics):
+                payload = {"services": [{"characteristics": characteristics}]}
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_get_payload(payload, "Fixture")
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli get 'Fixture' JSON.services[0].characteristics "
+                    "must be a list",
+                )
+
+    def test_non_object_homeclaw_characteristic_is_reported(self):
+        for characteristic in ([], "power", 1, True, None):
+            with self.subTest(characteristic=characteristic):
+                payload = {"services": [{"characteristics": [characteristic]}]}
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_get_payload(payload, "Fixture")
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli get 'Fixture' JSON.services[0].characteristics[0] "
+                    "must be an object",
+                )
+
+    def test_non_list_homeclaw_scenes_are_reported(self):
+        for scenes in ({}, "scene", 1, True, None):
+            with self.subTest(scenes=scenes):
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_scenes_payload(scenes)
+
+                self.assertEqual(
+                    str(raised.exception), "homeclaw-cli scenes JSON must be a list"
+                )
+
+    def test_non_object_homeclaw_scene_is_reported(self):
+        for scene in ([], "Evening", 1, True, None):
+            with self.subTest(scene=scene):
+                with self.assertRaises(HARNESS.VerificationError) as raised:
+                    HARNESS.validate_homeclaw_scenes_payload([scene])
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "homeclaw-cli scenes JSON[0] must be an object",
+                )
+
+    def test_absent_homeclaw_nested_lists_keep_empty_defaults(self):
+        self.assertEqual(
+            HARNESS.validate_homeclaw_get_payload({}, "Fixture"),
+            {},
+        )
+        self.assertEqual(
+            HARNESS.validate_homeclaw_get_payload({"services": [{}]}, "Fixture"),
+            {"services": [{}]},
+        )
+
     def test_shared_audit_accepts_two_mutations_and_rejects_three(self):
         mutation = {
             "name": "tool_call",
@@ -706,6 +808,64 @@ class HarnessValidationTests(unittest.TestCase):
         target = report["targets"][0]
         self.assertIn("Hermes action failed", target["primary_failure"])
         self.assertEqual(target["cleanup_failure"], "units remained active")
+
+    def test_malformed_homeclaw_convergence_and_restoration_are_attributed(self):
+        entity = {
+            "label": "test fixture",
+            "home_assistant_entity_id": self.entity_id,
+            "homeclaw_accessory": "Test Fixture",
+            "homeclaw_characteristic": "On",
+        }
+        args = type(
+            "Args",
+            (),
+            {"timeout": 1.0, "poll_interval": 0.1, "max_turns": 1, "dry_run": False},
+        )()
+        report = {"targets": [], "commands": []}
+        initial = {
+            "reachable": True,
+            "services": [
+                {"characteristics": [{"name": "On", "value": False}]}
+            ],
+        }
+        homeclaw_payloads = [
+            (initial, {"command": "initial"}),
+            ({"services": {}}, {"command": "convergence"}),
+            (
+                {"services": [{"characteristics": {}}]},
+                {"command": "restoration"},
+            ),
+        ]
+
+        with (
+            patch.object(HARNESS, "homeclaw_json", side_effect=homeclaw_payloads),
+            patch.object(
+                HARNESS,
+                "remote_home_assistant_state",
+                return_value=({"state": "off"}, {"exit_code": 0}),
+            ),
+            patch.object(HARNESS, "invoke_hermes", return_value={"exit_code": 0}),
+            patch.object(HARNESS, "validate_hermes_audit", return_value={}),
+            patch.object(
+                HARNESS, "poll", side_effect=lambda callback, *_args: callback(1.0)
+            ),
+            self.assertRaises(HARNESS.VerificationError) as raised,
+        ):
+            HARNESS.verify_entity({}, entity, args, report)
+
+        convergence_failure = (
+            "homeclaw-cli get 'Test Fixture' JSON.services must be a list"
+        )
+        restoration_failure = (
+            "homeclaw-cli get 'Test Fixture' JSON.services[0].characteristics "
+            "must be a list"
+        )
+        self.assertEqual(
+            str(raised.exception),
+            f"primary: {convergence_failure}; cleanup: {restoration_failure}",
+        )
+        self.assertEqual(report["targets"][0]["primary_failure"], convergence_failure)
+        self.assertEqual(report["targets"][0]["cleanup_failure"], restoration_failure)
 
     def test_source_scoped_session_export_rejects_mixed_sources(self):
         source = "acceptance-source"

@@ -6,6 +6,7 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 role_root="${repo_root}/ansible/roles/hermes_agent"
 configure_path="${role_root}/tasks/configure.yml"
 validate_path="${role_root}/tasks/validate-install.yml"
+catalog_validate_path="${role_root}/tasks/validate-tool-catalog.yml"
 dashboard_template="${role_root}/templates/hermes-agent-dashboard.service.j2"
 backup_template="${role_root}/templates/hermes-agent-backup.service.j2"
 apple_harness="${repo_root}/scripts/verify-hermes-home-apple-home.py"
@@ -51,14 +52,14 @@ for consumer in \
     'BindReadOnlyPaths={{ hermes_agent_managed_config_path }}:{{ hermes_agent_home }}/config.yaml' \
     "${consumer}"
 done
-grep --fixed-strings --quiet '"--uid={{ hermes_agent_user }}"' "${validate_path}"
-grep --fixed-strings --quiet '"--gid={{ hermes_agent_group }}"' "${validate_path}"
+grep --fixed-strings --quiet '"--uid={{ hermes_agent_user }}"' "${catalog_validate_path}"
+grep --fixed-strings --quiet '"--gid={{ hermes_agent_group }}"' "${catalog_validate_path}"
 grep --fixed-strings --quiet -- \
   '--property=BindReadOnlyPaths={{ hermes_agent_managed_config_path' \
-  "${validate_path}"
+  "${catalog_validate_path}"
 grep --fixed-strings --quiet \
   '}}:{{ hermes_agent_home }}/config.yaml' \
-  "${validate_path}"
+  "${catalog_validate_path}"
 
 grep --fixed-strings --quiet \
   'MANAGED_CONFIG_PATH = "/usr/local/lib/hermes-agent/.hermes-config.yaml"' \

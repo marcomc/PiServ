@@ -219,8 +219,35 @@ def homeclaw_json(subcommand: list[str], timeout: float) -> tuple[Any, dict[str,
     return payload, compact_result(result)
 
 
+def require_object_list(value: Any, context: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise VerificationError(f"{context} must be a list")
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise VerificationError(f"{context}[{index}] must be an object")
+    return value
+
+
+def validate_homeclaw_get_payload(payload: Any, accessory: str) -> dict[str, Any]:
+    context = f"homeclaw-cli get {accessory!r} JSON"
+    if not isinstance(payload, dict):
+        raise VerificationError(f"{context} must be an object")
+    services = require_object_list(payload.get("services", []), f"{context}.services")
+    for index, service in enumerate(services):
+        require_object_list(
+            service.get("characteristics", []),
+            f"{context}.services[{index}].characteristics",
+        )
+    return payload
+
+
+def validate_homeclaw_scenes_payload(payload: Any) -> list[dict[str, Any]]:
+    return require_object_list(payload, "homeclaw-cli scenes JSON")
+
+
 def homeclaw_state(accessory: str, characteristic: str, timeout: float) -> dict[str, Any]:
     payload, _ = homeclaw_json(["get", accessory], timeout)
+    payload = validate_homeclaw_get_payload(payload, accessory)
     for service in payload.get("services", []):
         for item in service.get("characteristics", []):
             if item.get("name") == characteristic:
@@ -859,6 +886,7 @@ def main() -> int:
 
         scenes, result = homeclaw_json(["scenes"], args.timeout)
         report["commands"].append(result)
+        scenes = validate_homeclaw_scenes_payload(scenes)
         for scene in config.get("scenes", []):
             if not any(item.get("name") == scene for item in scenes):
                 raise VerificationError(f"configured HomeKit scene not found: {scene}")
