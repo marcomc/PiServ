@@ -67,6 +67,11 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
   live tool catalog after upstream updates and assert every non-approved
   toolset is disabled; new upstream toolsets can otherwise become active by
   default.
+- Hermes acceptance tests must prove exact intended entity state, dependency
+  reachability, configured target forwarding, and source-scoped tool calls;
+  command success or broad tool activity is insufficient. Keep restored-
+  workspace and Molecule fixture contracts aligned with role defaults and
+  deny-lists, and cover sibling-entity and unreachable-dependency negatives.
 - Keep reusable storage policy tracked, but source serials, filesystem UUIDs,
   persistent device paths, and other host-specific identities from ignored
   local variables or a secure external source; use tracked placeholders only.
