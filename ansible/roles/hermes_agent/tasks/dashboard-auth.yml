@@ -176,6 +176,20 @@
       not hermes_agent_dashboard_basic_auth_state.stat.exists or
       hermes_agent_dashboard_rotate_basic_auth | bool
   block:
+    - name: Require deferred publication to use the explicit rotation lifecycle
+      ansible.builtin.assert:
+        that:
+          - >-
+            not hermes_agent_dashboard_defer_bootstrap_password_publication | bool or
+            hermes_agent_dashboard_rotate_basic_auth | bool
+          - >-
+            not hermes_agent_dashboard_defer_bootstrap_password_publication | bool or
+            hermes_agent_dashboard_basic_auth_state.stat.exists
+        fail_msg: >-
+          Deferred bootstrap-password publication is valid only for an explicit
+          rotation of an existing managed credential deployment.
+      no_log: true
+
     - name: Generate Hermes dashboard authentication material
       ansible.builtin.command:
         argv:

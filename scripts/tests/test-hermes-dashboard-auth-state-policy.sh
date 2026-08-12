@@ -40,6 +40,13 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   'hermes_agent_dashboard_defer_bootstrap_password_publication' "${defaults_path}"
 grep --fixed-strings --quiet \
+  'Require deferred publication to use the explicit rotation lifecycle' \
+  "${dashboard_auth_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_rotate_basic_auth | bool' "${dashboard_auth_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_basic_auth_state.stat.exists' "${dashboard_auth_path}"
+grep --fixed-strings --quiet \
   'hermes_agent_dashboard_basic_auth_rotation_intent_file' "${defaults_path}"
 if grep --fixed-strings --quiet \
   'Remove obsolete runtime-owned Hermes dashboard authentication state' \

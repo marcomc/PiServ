@@ -1670,6 +1670,74 @@
           - hermes_agent_molecule_marker_only_bootstrap_password.stat.isreg
           - hermes_agent_molecule_marker_only_bootstrap_password.stat.mode == '0600'
 
+    - name: Remove deferred dashboard bootstrap publication fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-deferred-bootstrap-auth.yaml
+        - /root/hermes-deferred-bootstrap-password
+        - /root/hermes-deferred-bootstrap-password.managed.yml
+        - /root/hermes-deferred-bootstrap-rotation-intent.yaml
+
+    - name: Reject deferred dashboard bootstrap publication without managed state
+      block:
+        - name: Apply role with an unestablished deferred dashboard bootstrap publication
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: >-
+              /root/hermes-deferred-bootstrap-auth.yaml
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-deferred-bootstrap-password
+            hermes_agent_dashboard_basic_auth_rotation_intent_file: >-
+              /root/hermes-deferred-bootstrap-rotation-intent.yaml
+            hermes_agent_dashboard_defer_bootstrap_password_publication: true
+            hermes_agent_dashboard_rotate_basic_auth: false
+
+        - name: Fail if unestablished deferred dashboard bootstrap publication was accepted
+          ansible.builtin.fail:
+            msg: Deferred bootstrap publication without managed state must fail.
+      rescue:
+        - name: Assert unestablished deferred dashboard bootstrap publication failed closed
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require deferred publication to use the explicit rotation lifecycle'
+
+    - name: Inspect deferred dashboard bootstrap publication outputs after rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /root/hermes-deferred-bootstrap-auth.yaml
+        - /root/hermes-deferred-bootstrap-password
+        - /root/hermes-deferred-bootstrap-password.managed.yml
+        - /root/hermes-deferred-bootstrap-rotation-intent.yaml
+      register: hermes_agent_molecule_deferred_bootstrap_publication_outputs
+
+    - name: Assert deferred dashboard bootstrap publication left no credentials
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_deferred_bootstrap_publication_outputs.results |
+            map(attribute='stat.exists') | select | list | length == 0
+
     - name: Inspect established dashboard authentication commit point
       ansible.builtin.stat:
         path: /root/hermes-agent-dashboard-auth.yaml
