@@ -1866,6 +1866,64 @@
         checksum_algorithm: sha256
       register: hermes_agent_molecule_initialized_bootstrap_target
 
+    - name: Inspect initialized dashboard authentication state
+      ansible.builtin.stat:
+        path: /root/hermes-agent-dashboard-auth.yaml
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_initialized_auth_state
+
+    - name: Journal a pending dashboard credential rotation fixture
+      ansible.builtin.copy:
+        dest: /root/hermes-agent-dashboard-rotation-intent.yaml
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          schema_version: 1
+          phase: activated
+
+    - name: Reject normal convergence while dashboard rotation is pending
+      block:
+        - name: Apply role while dashboard credential rotation is pending
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if normal convergence accepted a pending rotation
+          ansible.builtin.fail:
+            msg: Normal convergence must reject a pending credential rotation.
+      rescue:
+        - name: Assert pending dashboard rotation failed closed
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require the dedicated playbook to reconcile pending credential rotation'
+
+    - name: Inspect dashboard credential artifacts after pending rotation rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-agent-dashboard-auth.yaml
+      register: hermes_agent_molecule_pending_rotation_credentials
+
+    - name: Assert pending rotation rejection preserved dashboard credentials
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_pending_rotation_credentials.results[0].stat.checksum ==
+            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum
+          - >-
+            hermes_agent_molecule_pending_rotation_credentials.results[1].stat.checksum ==
+            hermes_agent_molecule_initialized_auth_state.stat.checksum
+
+    - name: Remove pending dashboard credential rotation fixture
+      ansible.builtin.file:
+        path: /root/hermes-agent-dashboard-rotation-intent.yaml
+        state: absent
+
     - name: Delete managed dashboard bootstrap password while preserving state
       ansible.builtin.file:
         path: /root/hermes-foreign-bootstrap-target

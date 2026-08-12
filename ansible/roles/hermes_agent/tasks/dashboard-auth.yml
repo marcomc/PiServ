@@ -33,6 +33,24 @@
     hermes_agent_dashboard_credential_path: >-
       {{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}
 
+- name: Inspect pending Hermes dashboard credential rotation
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+    follow: false
+  register: hermes_agent_dashboard_pending_rotation_intent
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Require the dedicated playbook to reconcile pending credential rotation
+  ansible.builtin.assert:
+    that:
+      - not hermes_agent_dashboard_pending_rotation_intent.stat.exists
+    fail_msg: >-
+      A pending Hermes dashboard credential rotation must be reconciled with the
+      dedicated rotation playbook before normal credential convergence can run.
+  no_log: true
+
 - name: Inspect Hermes dashboard bootstrap password file
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
