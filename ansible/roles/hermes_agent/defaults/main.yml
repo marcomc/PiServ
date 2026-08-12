@@ -19,8 +19,7 @@ hermes_agent_installer_checksum: >-
   sha256:c118ff31618dc70339049ce71061b8f1351a1c70d9c2a236ed50d8a2550c550d
 # Accept only this immediately preceding, root-owned installer during the
 # one-way upgrade to the current checksum-pinned revision.
-hermes_agent_previous_installer_checksums:
-  - sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
+hermes_agent_previous_installer_checksums: []
 hermes_agent_uv_python_install_dir: /usr/local/share/uv/python
 hermes_agent_uv_python_bin_dir: /usr/local/share/uv/bin
 hermes_agent_supported_architectures:

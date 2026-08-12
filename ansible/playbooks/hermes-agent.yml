@@ -128,6 +128,8 @@
     - role: hermes_agent
       vars:
         hermes_agent_model: gpt-5.6-luna
+        hermes_agent_previous_installer_checksums:
+          - sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
         hermes_agent_fallback_providers:
           # Spark has a separate ChatGPT Pro preview allowance but accepts text only.
           - provider: openai-codex
