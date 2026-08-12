@@ -1,0 +1,77 @@
+- name: Require the running Hermes dashboard service
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - is-active
+      - --quiet
+      - "{{ hermes_agent_dashboard_service_name }}"
+  changed_when: false
+  check_mode: false
+
+- name: Read the running Hermes dashboard service identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - show
+      - --property=User
+      - --value
+      - "{{ hermes_agent_dashboard_service_name }}"
+  register: hermes_agent_dashboard_rotation_service_user
+  changed_when: false
+  check_mode: false
+
+- name: Validate the Hermes dashboard target and credential paths
+  ansible.builtin.import_tasks: validate-target.yml
+
+- name: Inspect required Hermes dashboard rotation artifacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_install_dir }}/venv/bin/python"
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    - "{{ hermes_agent_managed_config_path }}"
+    - "{{ hermes_agent_home }}/config.yaml"
+  register: hermes_agent_dashboard_rotation_artifacts
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Require a complete managed Hermes dashboard credential deployment
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_artifacts.results[0].stat.isreg
+      - hermes_agent_dashboard_rotation_artifacts.results[0].stat.executable
+      - hermes_agent_dashboard_rotation_service_user.stdout == hermes_agent_user
+      - hermes_agent_dashboard_rotation_artifacts.results[1].stat.isreg
+      - not hermes_agent_dashboard_rotation_artifacts.results[1].stat.islnk
+      - hermes_agent_dashboard_rotation_artifacts.results[1].stat.pw_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[1].stat.gr_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[1].stat.mode == '0600'
+      - hermes_agent_dashboard_rotation_artifacts.results[2].stat.isreg
+      - not hermes_agent_dashboard_rotation_artifacts.results[2].stat.islnk
+      - hermes_agent_dashboard_rotation_artifacts.results[2].stat.pw_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[2].stat.gr_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[2].stat.mode == '0600'
+      - hermes_agent_dashboard_rotation_artifacts.results[3].stat.isreg
+      - not hermes_agent_dashboard_rotation_artifacts.results[3].stat.islnk
+      - hermes_agent_dashboard_rotation_artifacts.results[3].stat.pw_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[3].stat.gr_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[3].stat.mode == '0600'
+      - hermes_agent_dashboard_rotation_artifacts.results[4].stat.isreg
+      - not hermes_agent_dashboard_rotation_artifacts.results[4].stat.islnk
+      - hermes_agent_dashboard_rotation_artifacts.results[4].stat.pw_name == 'root'
+      - hermes_agent_dashboard_rotation_artifacts.results[4].stat.gr_name == hermes_agent_group
+      - hermes_agent_dashboard_rotation_artifacts.results[4].stat.mode == '0640'
+      - hermes_agent_dashboard_rotation_artifacts.results[5].stat.isreg
+      - not hermes_agent_dashboard_rotation_artifacts.results[5].stat.islnk
+      - hermes_agent_dashboard_rotation_artifacts.results[5].stat.pw_name == hermes_agent_user
+      - hermes_agent_dashboard_rotation_artifacts.results[5].stat.gr_name == hermes_agent_group
+      - hermes_agent_dashboard_rotation_artifacts.results[5].stat.mode == '0600'
+    fail_msg: >-
+      Rotation requires an existing, complete, private Hermes dashboard
+      deployment; run normal role convergence to repair or provision it
+      before rotating credentials.
+  no_log: true

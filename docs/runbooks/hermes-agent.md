@@ -431,9 +431,29 @@ TLS reverse-proxy deployment is approved.
 
 The username is a deployment variable, while the password is generated on the
 Pi. Hermes stores only an scrypt hash and session-signing secret in its private
-state. To replace the password, set
-`hermes_agent_dashboard_rotate_basic_auth: true` for one playbook run, retrieve
-the new proposal, then return it to `false`.
+state. Rotate it with the dedicated playbook; this avoids a full Hermes
+convergence:
+
+```sh
+ansible-playbook -i ansible/inventory.ini \
+  ansible/playbooks/hermes-dashboard-credential-rotation.yml \
+  --tags rotate-dashboard-credentials \
+  -e piserv_hermes_agent_rotate_dashboard_basic_auth=true
+```
+
+Do not add the confirmation variable to inventory or local vars. The playbook
+leaves the root-only proposal file in place and never prints it. Retrieve it
+privately, verify a new authenticated dashboard session, then remove it:
+
+```sh
+ssh admin@PiServ.local \
+  'sudo cat /root/hermes-agent-dashboard-bootstrap-password'
+ssh admin@PiServ.local \
+  'sudo rm /root/hermes-agent-dashboard-bootstrap-password'
+```
+
+Do not use `--diff` or high-verbosity output for credential rotation, and do
+not place passwords in variables, extra vars, logs, or chat.
 
 Keep SSH tunneling available as the recovery path:
 

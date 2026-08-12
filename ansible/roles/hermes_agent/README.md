@@ -234,8 +234,9 @@ Treat it as a password-manager entry and remove the file after recording it:
 sudo rm /root/hermes-agent-dashboard-bootstrap-password
 ```
 
-To rotate, set `hermes_agent_dashboard_rotate_basic_auth: true` for one
-convergence, retrieve the replacement, then return the variable to `false`.
+PiServ operators should use its dedicated, confirmation-gated rotation
+playbook rather than setting `hermes_agent_dashboard_rotate_basic_auth` in
+inventory. The role variable remains an internal one-shot convergence control.
 
 ## Provider Login
 
