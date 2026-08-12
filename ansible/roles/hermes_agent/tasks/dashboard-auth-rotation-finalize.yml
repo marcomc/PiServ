@@ -1,0 +1,67 @@
+---
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
+
+- name: Read active Hermes dashboard credential rotation intent
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+  register: hermes_agent_dashboard_rotation_active_intent_contents
+  changed_when: false
+  no_log: true
+
+- name: Load active Hermes dashboard credential rotation intent
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_active_intent: >-
+      {{ hermes_agent_dashboard_rotation_active_intent_contents.content | b64decode | from_yaml }}
+  no_log: true
+
+- name: Require an active Hermes dashboard credential rotation intent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_active_intent.schema_version | int == 1
+      - hermes_agent_dashboard_rotation_active_intent.phase == 'activated'
+      - hermes_agent_dashboard_rotation_active_intent.new_password | length > 0
+      - hermes_agent_dashboard_rotation_active_intent.new_state.password_hash | length > 0
+      - hermes_agent_dashboard_rotation_active_intent.new_state.secret | length > 0
+    fail_msg: Hermes dashboard credential rotation intent is invalid.
+  no_log: true
+
+- name: Publish root-only rotated Hermes dashboard password
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_rotation_active_intent.new_password }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Inspect published Hermes dashboard password
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    checksum_algorithm: sha256
+  register: hermes_agent_dashboard_rotation_published_password
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Record published Hermes dashboard password state
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'path': hermes_agent_dashboard_basic_auth_bootstrap_password_file,
+        'sha256': hermes_agent_dashboard_rotation_published_password.stat.checksum
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Remove completed Hermes dashboard credential rotation intent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+    state: absent
+  no_log: true

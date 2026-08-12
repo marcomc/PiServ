@@ -1,0 +1,20 @@
+- name: Install root-controlled authoritative Hermes configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ hermes_agent_managed_config_path }}"
+    owner: root
+    group: "{{ hermes_agent_group }}"
+    mode: "0640"
+  no_log: true
+  when: hermes_agent_runtime_user_available
+  notify: Restart Hermes Agent dashboard
+- name: Install Hermes runtime configuration mount point
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ hermes_agent_home }}/config.yaml"
+    owner: "{{ hermes_agent_user }}"
+    group: "{{ hermes_agent_group }}"
+    mode: "0600"
+  no_log: true
+  when: hermes_agent_runtime_user_available
+  notify: Restart Hermes Agent dashboard

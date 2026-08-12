@@ -1,0 +1,58 @@
+---
+- name: Read prepared Hermes dashboard credential rotation intent
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+  register: hermes_agent_dashboard_rotation_verification_intent_contents
+  changed_when: false
+  no_log: true
+
+- name: Load prepared Hermes dashboard credential rotation intent
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_verification_intent: >-
+      {{ hermes_agent_dashboard_rotation_verification_intent_contents.content |
+      b64decode | from_yaml }}
+  no_log: true
+
+- name: Prove the restarted dashboard accepts the rotated credential
+  ansible.builtin.uri:
+    url: >-
+      http://127.0.0.1:{{ hermes_agent_dashboard_port }}/auth/password-login
+    method: POST
+    body_format: json
+    body:
+      provider: basic
+      username: >-
+        {{ hermes_agent_dashboard_rotation_verification_intent.new_state.username }}
+      password: >-
+        {{ hermes_agent_dashboard_rotation_verification_intent.new_password }}
+    status_code: 200
+    return_content: false
+  register: hermes_agent_dashboard_rotation_login_probe
+  until: hermes_agent_dashboard_rotation_login_probe.status == 200
+  retries: 10
+  delay: 2
+  check_mode: false
+  no_log: true
+
+- name: Prove the rotated dashboard session is usable
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ hermes_agent_dashboard_port }}/api/auth/me"
+    method: GET
+    headers:
+      Cookie: "{{ hermes_agent_dashboard_rotation_login_probe.cookies_string }}"
+    status_code: 200
+    return_content: true
+  register: hermes_agent_dashboard_rotation_session_probe
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Require the rotated Hermes dashboard identity
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_session_probe.json.provider == 'basic'
+      - >-
+        hermes_agent_dashboard_rotation_session_probe.json.user_id ==
+        hermes_agent_dashboard_rotation_verification_intent.new_state.username
+    fail_msg: Hermes dashboard did not authenticate the rotated credential.
+  no_log: true

@@ -41,7 +41,7 @@ argument_specs:
         description: Fixed Hermes CLI path created by the upstream installer.
       hermes_agent_repo_version:
         type: str
-        default: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
+        default: 222465d84709379b65173b0283a6eea87516acfa
         description: Full upstream Hermes Git commit to install.
       hermes_agent_version:
         type: str
@@ -57,6 +57,11 @@ argument_specs:
       hermes_agent_installer_checksum:
         type: str
         description: SHA-256 checksum for the Hermes installer.
+      hermes_agent_previous_installer_checksums:
+        type: list
+        elements: str
+        default: []
+        description: Previous SHA-256 installer checksums allowed only for a root-owned installer migration.
       hermes_agent_uv_python_install_dir:
         type: path
         default: /usr/local/share/uv/python
@@ -235,6 +240,9 @@ argument_specs:
       hermes_agent_dashboard_basic_auth_bootstrap_password_file:
         type: path
         description: Root-only initial dashboard password retrieval file.
+      hermes_agent_dashboard_basic_auth_rotation_intent_file:
+        type: path
+        description: Root-only recovery journal for an in-progress credential rotation.
       hermes_agent_dashboard_basic_auth_session_ttl_seconds:
         type: int
         default: 43200
@@ -242,7 +250,11 @@ argument_specs:
       hermes_agent_dashboard_rotate_basic_auth:
         type: bool
         default: false
-        description: Generate a replacement dashboard password and session secret once.
+        description: Internal dedicated-playbook control to generate replacement credentials once.
+      hermes_agent_dashboard_defer_bootstrap_password_publication:
+        type: bool
+        default: false
+        description: Keep the current bootstrap password until a rotation restart succeeds.
       hermes_agent_codex_version:
         type: str
         default: "0.145.0"

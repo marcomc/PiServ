@@ -1,0 +1,78 @@
+---
+- name: Inspect the current private Hermes dashboard credential artifacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_rotation_previous_artifact_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Read the current private Hermes dashboard credential artifacts
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop:
+    "{{ hermes_agent_dashboard_rotation_previous_artifact_state.results }}"
+  register: hermes_agent_dashboard_rotation_previous_artifacts
+  changed_when: false
+  no_log: true
+  when: item.stat.exists
+
+- name: Load the previous Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_previous_auth_state: >-
+      {{ hermes_agent_dashboard_rotation_previous_artifacts.results[0].content |
+      b64decode | from_yaml }}
+  no_log: true
+
+- name: Require a recoverable previous Hermes dashboard authentication state
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_previous_auth_state is mapping
+      - hermes_agent_dashboard_rotation_previous_auth_state.username is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.username | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.password_hash is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.password_hash | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.secret is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.secret | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds is integer
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds >= 60
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds <= 86400
+    fail_msg: >-
+      Existing Hermes dashboard authentication state is not recoverable;
+      repair it through normal convergence before rotating credentials.
+  no_log: true
+
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
+
+- name: Write a prepared private Hermes dashboard credential rotation intent
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'schema_version': 1,
+        'phase': 'prepared',
+        'old_state': hermes_agent_dashboard_rotation_previous_artifacts.results[0].content,
+        'old_bootstrap_password_present': hermes_agent_dashboard_rotation_previous_artifact_state.results[1].stat.exists,
+        'old_bootstrap_password': hermes_agent_dashboard_rotation_previous_artifacts.results[1].content | default(''),
+        'old_bootstrap_marker': hermes_agent_dashboard_rotation_previous_artifacts.results[2].content,
+        'new_password': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password,
+        'new_state': {
+          'username': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).username,
+          'password_hash': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password_hash,
+          'secret': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).secret,
+          'session_ttl_seconds': hermes_agent_dashboard_basic_auth_session_ttl_seconds
+        }
+      } | to_nice_yaml(indent=2) }}
+    dest: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true

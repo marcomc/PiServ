@@ -13,6 +13,7 @@
 - [Deploy](#deploy)
 - [Complete ChatGPT Login](#complete-chatgpt-login)
 - [Open the Dashboard](#open-the-dashboard)
+- [Use Hermes Desktop with PiServ](#use-hermes-desktop-with-piserv)
 - [Validate](#validate)
 - [Backup and Restore](#backup-and-restore)
 - [Recovery](#recovery)
@@ -29,7 +30,7 @@ Live state observed on 2026-07-31:
 
 | Item | State |
 | --- | --- |
-| Hermes | `0.20.0`, upstream release `v2026.8.3` commit `3c27eb6234bf91b8ceee9e9071591b31e9b148cb` |
+| Hermes | `0.20.0`, upstream revision `222465d84709379b65173b0283a6eea87516acfa` (Desktop backend contract 6) |
 | Runtime identity | `hermes-agent`, system account with no login shell |
 | Persistent data | `/var/lib/hermes-agent`, mode `0700` |
 | Codex CLI | `0.145.0`, official ARM64 archive with SHA-256 verification |
@@ -431,9 +432,32 @@ TLS reverse-proxy deployment is approved.
 
 The username is a deployment variable, while the password is generated on the
 Pi. Hermes stores only an scrypt hash and session-signing secret in its private
-state. To replace the password, set
-`hermes_agent_dashboard_rotate_basic_auth: true` for one playbook run, retrieve
-the new proposal, then return it to `false`.
+state. Rotate it with the dedicated playbook; this avoids a full Hermes
+convergence:
+
+```sh
+ansible-playbook -i ansible/inventory.ini \
+  ansible/playbooks/hermes-dashboard-credential-rotation.yml \
+  --tags rotate-dashboard-credentials \
+  -e piserv_hermes_agent_rotate_dashboard_basic_auth=true
+```
+
+Do not add the confirmation variable to inventory or local vars. The playbook
+leaves the root-only proposal file in place and never prints it. It journals an
+in-progress rotation root-only, keeps the existing proposal until the new
+dashboard has restarted, and recovers a previous interrupted rotation before
+allowing another one. Retrieve the proposal privately, verify a new
+authenticated dashboard session, then remove it:
+
+```sh
+ssh admin@PiServ.local \
+  'sudo cat /root/hermes-agent-dashboard-bootstrap-password'
+ssh admin@PiServ.local \
+  'sudo rm /root/hermes-agent-dashboard-bootstrap-password'
+```
+
+Do not use `--diff` or high-verbosity output for credential rotation, and do
+not place passwords in variables, extra vars, logs, or chat.
 
 Keep SSH tunneling available as the recovery path:
 
@@ -454,6 +478,43 @@ The managed deployment builds the terminal UI under
 `/usr/local/lib/hermes-agent-runtime/tui` and exposes it through
 `HERMES_TUI_DIR`. A healthy chat launch must not emit `Installing TUI
 dependencies` or `npm install failed`.
+
+## Use Hermes Desktop with PiServ
+
+Hermes Desktop supports two distinct remote modes. Choose one deliberately;
+they are not interchangeable.
+
+| Mode | Agent and state | Where terminal commands run | Provider configuration | Use it when |
+| --- | --- | --- | --- | --- |
+| SSH | Desktop on the Mac | PiServ through SSH | Mac | You want a Mac-resident agent to execute terminal commands on PiServ. |
+| Remote URL | PiServ | PiServ | PiServ | You want the Desktop UI to use PiServ's sessions, memory, skills, provider login, and policy. |
+
+For the PiServ deployment, use **Remote URL**. SSH mode does not attach Desktop
+to PiServ's Hermes backend; it starts a local backend and requires a local
+inference provider. It is therefore expected to fail with `No inference
+provider configured` when the Mac has not been configured separately.
+
+In Hermes Desktop, open the top-right **Open settings** button, choose
+**Gateway**, select **Remote URL**, then provide one of these URLs:
+
+```text
+http://<piserv-tailnet-name>:9119
+http://<piserv-lan-ip>:9119
+```
+
+Prefer the Tailnet address away from the trusted LAN. Enter the existing Hermes
+dashboard username and password only in the Desktop sign-in form; do not place
+them in Desktop environment variables, Ansible variables, or shell commands.
+Save and reconnect. The backend and Desktop must expose the same Desktop
+backend contract; the managed PiServ lock currently requires contract 6.
+
+If Remote URL is unavailable or reports an outdated backend, check the lock
+and deployed contract before changing any client configuration:
+
+```sh
+ssh "admin@${PISERV_IP:-PiServ.local}" \
+  "sudo rg '^DESKTOP_BACKEND_CONTRACT = ' /usr/local/lib/hermes-agent/tui_gateway/server.py"
+```
 
 ## Validate
 

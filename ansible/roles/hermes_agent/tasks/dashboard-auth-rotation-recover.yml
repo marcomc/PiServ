@@ -1,0 +1,170 @@
+---
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
+
+- name: Authenticate Hermes dashboard credential recovery destinations
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: "{{ item }}"
+  loop:
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Inspect Hermes dashboard credential rotation intent
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+    follow: false
+  register: hermes_agent_dashboard_rotation_intent_file
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Initialize Hermes dashboard credential recovery state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_recovered: false
+  no_log: true
+
+- name: Require a private regular Hermes dashboard credential rotation intent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_intent_file.stat.isreg
+      - not hermes_agent_dashboard_rotation_intent_file.stat.islnk
+      - hermes_agent_dashboard_rotation_intent_file.stat.pw_name == 'root'
+      - hermes_agent_dashboard_rotation_intent_file.stat.gr_name == 'root'
+      - hermes_agent_dashboard_rotation_intent_file.stat.mode == '0600'
+    fail_msg: Hermes dashboard credential rotation intent must be root-owned 0600.
+  no_log: true
+  when: hermes_agent_dashboard_rotation_intent_file.stat.exists
+
+- name: Read Hermes dashboard credential rotation intent
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+  register: hermes_agent_dashboard_rotation_recovery_contents
+  changed_when: false
+  no_log: true
+  when: hermes_agent_dashboard_rotation_intent_file.stat.exists
+
+- name: Load Hermes dashboard credential rotation intent
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_recovery_intent: >-
+      {{ hermes_agent_dashboard_rotation_recovery_contents.content | b64decode | from_yaml }}
+  no_log: true
+  when: hermes_agent_dashboard_rotation_intent_file.stat.exists
+
+- name: Require a recoverable Hermes dashboard credential rotation intent
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_recovery_intent.schema_version | int == 1
+      - hermes_agent_dashboard_rotation_recovery_intent.phase in ['prepared', 'activated']
+      - hermes_agent_dashboard_rotation_recovery_intent.new_password | length > 0
+      - hermes_agent_dashboard_rotation_recovery_intent.new_state.password_hash | length > 0
+      - hermes_agent_dashboard_rotation_recovery_intent.new_state.secret | length > 0
+    fail_msg: Hermes dashboard credential rotation intent is malformed; repair it privately.
+  no_log: true
+  when: hermes_agent_dashboard_rotation_intent_file.stat.exists
+
+- name: Restore the previous Hermes dashboard authentication state
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_rotation_recovery_intent.old_state | b64decode }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Restore the previous root-only Hermes dashboard password
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_password | b64decode }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+    - hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_password_present | bool
+
+- name: Restore absence of the consumed Hermes dashboard password proposal
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    state: absent
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+    - not hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_password_present | bool
+
+- name: Restore the previous Hermes dashboard password marker
+  ansible.builtin.copy:
+    content: "{{ hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_marker | b64decode }}"
+    dest: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Load restored Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_basic_auth: >-
+      {{ hermes_agent_dashboard_rotation_recovery_intent.old_state | b64decode | from_yaml }}
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Render restored Hermes dashboard authentication configuration
+  ansible.builtin.include_tasks: dashboard-auth-render.yml
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+    - hermes_agent_runtime_user_available
+
+- name: Apply restored Hermes dashboard authentication configuration
+  ansible.builtin.meta: flush_handlers
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Remove recovered prepared Hermes dashboard credential rotation intent
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
+    state: absent
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Record recovered prepared Hermes dashboard credential rotation
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_recovered: true
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+
+- name: Finish an active Hermes dashboard credential rotation after interruption
+  ansible.builtin.include_tasks: dashboard-auth-rotation-finalize.yml
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'activated'
+
+- name: Record finalized active Hermes dashboard credential rotation
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_recovered: true
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'activated'

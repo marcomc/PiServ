@@ -4,7 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 role_root="${repo_root}/ansible/roles/hermes_agent"
-configure_path="${role_root}/tasks/configure.yml"
+render_path="${role_root}/tasks/dashboard-auth-render.yml"
 validate_path="${role_root}/tasks/validate-install.yml"
 catalog_validate_path="${role_root}/tasks/validate-tool-catalog.yml"
 dashboard_template="${role_root}/templates/hermes-agent-dashboard.service.j2"
@@ -16,7 +16,7 @@ managed_bind_literal="BindReadOnlyPaths=\${config_artifact}:\${hermes_home}/conf
 managed_task="$({
   sed -n \
     '/^- name: Install root-controlled authoritative Hermes configuration$/,/^- name: Install Hermes runtime configuration mount point$/p' \
-    "${configure_path}"
+    "${render_path}"
 } | sed '$d')"
 
 grep --fixed-strings --quiet \
@@ -29,7 +29,7 @@ grep --fixed-strings --quiet '  no_log: true' <<<"${managed_task}"
 runtime_task="$({
   sed -n \
     '/^- name: Install Hermes runtime configuration mount point$/,/^- name: Inspect Hermes environment file$/p' \
-    "${configure_path}"
+    "${render_path}"
 } | sed '$d')"
 grep --fixed-strings --quiet '    mode: "0600"' <<<"${runtime_task}"
 grep --fixed-strings --quiet '  no_log: true' <<<"${runtime_task}"

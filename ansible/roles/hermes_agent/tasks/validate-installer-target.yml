@@ -13,14 +13,19 @@
     that:
       - hermes_agent_installer_checksum is match('^sha256:[a-fA-F0-9]{64}$')
       - >-
+        hermes_agent_previous_installer_checksums | select('match',
+        '^sha256:[a-fA-F0-9]{64}$') | list | length ==
+        hermes_agent_previous_installer_checksums | length
+      - >-
         not hermes_agent_installer_target_state.stat.exists or
         (hermes_agent_installer_target_state.stat.isreg | default(false) and
         not hermes_agent_installer_target_state.stat.islnk | default(true) and
         hermes_agent_installer_target_state.stat.pw_name | default('') == 'root' and
         hermes_agent_installer_target_state.stat.gr_name | default('') == 'root' and
         hermes_agent_installer_target_state.stat.mode | default('') == '0755' and
-        hermes_agent_installer_target_state.stat.checksum | default('') ==
-        (hermes_agent_installer_checksum | regex_replace('^sha256:', '') | lower))
+        hermes_agent_installer_target_state.stat.checksum | default('') in
+        (([hermes_agent_installer_checksum] + hermes_agent_previous_installer_checksums)
+        | map('regex_replace', '^sha256:', '') | map('lower') | list))
     fail_msg: >-
       An existing Hermes installer destination must be the root-owned,
-      checksum-pinned installer previously accepted by this role.
+      checksum-pinned installer currently or previously accepted by this role.

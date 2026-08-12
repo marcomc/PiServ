@@ -1670,6 +1670,74 @@
           - hermes_agent_molecule_marker_only_bootstrap_password.stat.isreg
           - hermes_agent_molecule_marker_only_bootstrap_password.stat.mode == '0600'
 
+    - name: Remove deferred dashboard bootstrap publication fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/hermes-deferred-bootstrap-auth.yaml
+        - /root/hermes-deferred-bootstrap-password
+        - /root/hermes-deferred-bootstrap-password.managed.yml
+        - /root/hermes-deferred-bootstrap-rotation-intent.yaml
+
+    - name: Reject deferred dashboard bootstrap publication without managed state
+      block:
+        - name: Apply role with an unestablished deferred dashboard bootstrap publication
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars:
+            hermes_agent_repo_version: >-
+              {{ hermes_agent_molecule_fixture_revision.content | b64decode | trim }}
+            hermes_agent_installer_url: >-
+              file:///usr/local/src/hermes-agent-fixture/hermes-agent-installer
+            hermes_agent_installer_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[0].stat.checksum }}
+            hermes_agent_codex_archive_url: >-
+              file:///usr/local/src/hermes-agent-fixture/codex.tar.gz
+            hermes_agent_codex_archive_checksum: >-
+              sha256:{{ hermes_agent_molecule_fixture_artifacts.results[1].stat.checksum }}
+            hermes_agent_manage_backup: false
+            hermes_agent_manage_dashboard: false
+            hermes_agent_manage_dashboard_chat: true
+            hermes_agent_dashboard_manage_basic_auth: true
+            hermes_agent_dashboard_basic_auth_username: fixture-admin
+            hermes_agent_dashboard_basic_auth_state_file: >-
+              /root/hermes-deferred-bootstrap-auth.yaml
+            hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
+              /root/hermes-deferred-bootstrap-password
+            hermes_agent_dashboard_basic_auth_rotation_intent_file: >-
+              /root/hermes-deferred-bootstrap-rotation-intent.yaml
+            hermes_agent_dashboard_defer_bootstrap_password_publication: true
+            hermes_agent_dashboard_rotate_basic_auth: false
+
+        - name: Fail if unestablished deferred dashboard bootstrap publication was accepted
+          ansible.builtin.fail:
+            msg: Deferred bootstrap publication without managed state must fail.
+      rescue:
+        - name: Assert unestablished deferred dashboard bootstrap publication failed closed
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require deferred publication to use the explicit rotation lifecycle'
+
+    - name: Inspect deferred dashboard bootstrap publication outputs after rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /root/hermes-deferred-bootstrap-auth.yaml
+        - /root/hermes-deferred-bootstrap-password
+        - /root/hermes-deferred-bootstrap-password.managed.yml
+        - /root/hermes-deferred-bootstrap-rotation-intent.yaml
+      register: hermes_agent_molecule_deferred_bootstrap_publication_outputs
+
+    - name: Assert deferred dashboard bootstrap publication left no credentials
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_deferred_bootstrap_publication_outputs.results |
+            map(attribute='stat.exists') | select | list | length == 0
+
     - name: Inspect established dashboard authentication commit point
       ansible.builtin.stat:
         path: /root/hermes-agent-dashboard-auth.yaml
@@ -1798,6 +1866,64 @@
         checksum_algorithm: sha256
       register: hermes_agent_molecule_initialized_bootstrap_target
 
+    - name: Inspect initialized dashboard authentication state
+      ansible.builtin.stat:
+        path: /root/hermes-agent-dashboard-auth.yaml
+        checksum_algorithm: sha256
+      register: hermes_agent_molecule_initialized_auth_state
+
+    - name: Journal a pending dashboard credential rotation fixture
+      ansible.builtin.copy:
+        dest: /root/hermes-agent-dashboard-rotation-intent.yaml
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          schema_version: 1
+          phase: activated
+
+    - name: Reject normal convergence while dashboard rotation is pending
+      block:
+        - name: Apply role while dashboard credential rotation is pending
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          vars: *dashboard_auth_fixture_vars
+
+        - name: Fail if normal convergence accepted a pending rotation
+          ansible.builtin.fail:
+            msg: Normal convergence must reject a pending credential rotation.
+      rescue:
+        - name: Assert pending dashboard rotation failed closed
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require the dedicated playbook to reconcile pending credential rotation'
+
+    - name: Inspect dashboard credential artifacts after pending rotation rejection
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - /root/hermes-foreign-bootstrap-target
+        - /root/hermes-agent-dashboard-auth.yaml
+      register: hermes_agent_molecule_pending_rotation_credentials
+
+    - name: Assert pending rotation rejection preserved dashboard credentials
+      ansible.builtin.assert:
+        that:
+          - >-
+            hermes_agent_molecule_pending_rotation_credentials.results[0].stat.checksum ==
+            hermes_agent_molecule_initialized_bootstrap_target.stat.checksum
+          - >-
+            hermes_agent_molecule_pending_rotation_credentials.results[1].stat.checksum ==
+            hermes_agent_molecule_initialized_auth_state.stat.checksum
+
+    - name: Remove pending dashboard credential rotation fixture
+      ansible.builtin.file:
+        path: /root/hermes-agent-dashboard-rotation-intent.yaml
+        state: absent
+
     - name: Delete managed dashboard bootstrap password while preserving state
       ansible.builtin.file:
         path: /root/hermes-foreign-bootstrap-target
@@ -1881,6 +2007,94 @@
             (hermes_agent_molecule_rotated_bootstrap_marker.content |
             b64decode | from_yaml).sha256 ==
             hermes_agent_molecule_rotated_bootstrap_artifacts.results[0].stat.checksum
+
+    - name: Install dashboard credential verification fixture server
+      ansible.builtin.copy:
+        dest: /usr/local/libexec/hermes-dashboard-auth-probe-fixture.py
+        owner: root
+        group: root
+        mode: "0700"
+        content: |
+          import http.server
+          import json
+
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def log_message(self, *_args):
+                  pass
+
+              def do_POST(self):
+                  length = int(self.headers.get("Content-Length", "0"))
+                  body = json.loads(self.rfile.read(length))
+                  if self.path != "/auth/password-login" or body != {
+                      "provider": "basic",
+                      "username": "fixture-admin",
+                      "password": "fixture-new-password",
+                  }:
+                      self.send_response(401)
+                      self.end_headers()
+                      return
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Set-Cookie", "session=fixture; HttpOnly")
+                  self.end_headers()
+                  self.wfile.write(b'{"ok": true}')
+
+              def do_GET(self):
+                  if (self.path != "/api/auth/me" or
+                          self.headers.get("Cookie") != "session=fixture"):
+                      self.send_response(401)
+                      self.end_headers()
+                      return
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.end_headers()
+                  self.wfile.write(
+                      b'{"provider": "basic", "user_id": "fixture-admin"}'
+                  )
+
+          server = http.server.HTTPServer(("127.0.0.1", 19119), Handler)
+          server.handle_request()
+          server.handle_request()
+
+    - name: Start dashboard credential verification fixture server
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - /usr/local/libexec/hermes-dashboard-auth-probe-fixture.py
+      async: 60
+      poll: 0
+      register: hermes_agent_molecule_dashboard_probe_server
+      changed_when: true
+
+    - name: Write prepared dashboard credential verification fixture intent
+      ansible.builtin.copy:
+        dest: /root/hermes-dashboard-auth-probe-intent.yml
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          schema_version: 1
+          phase: prepared
+          new_password: fixture-new-password
+          new_state:
+            username: fixture-admin
+
+    - name: Verify dashboard credential through the live fixture endpoints
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        tasks_from: dashboard-auth-rotation-verify.yml
+      vars:
+        hermes_agent_dashboard_port: 19119
+        hermes_agent_dashboard_basic_auth_rotation_intent_file: >-
+          /root/hermes-dashboard-auth-probe-intent.yml
+
+    - name: Wait for dashboard credential verification fixture server
+      ansible.builtin.async_status:
+        jid: "{{ hermes_agent_molecule_dashboard_probe_server.ansible_job_id }}"
+      register: hermes_agent_molecule_dashboard_probe_server_result
+      until: hermes_agent_molecule_dashboard_probe_server_result.finished
+      retries: 10
+      delay: 1
 
     - name: Reset dashboard authentication fixture controls
       ansible.builtin.set_fact:
