@@ -150,7 +150,11 @@ grep --fixed-strings --quiet '    group: root' <<<"${state_task}"
 grep --fixed-strings --quiet '    mode: "0600"' <<<"${state_task}"
 
 grep --fixed-strings --quiet \
-  'ansible.builtin.import_tasks: dashboard-auth.yml' "${configure_path}"
+  'ansible.builtin.include_tasks: dashboard-auth.yml' "${configure_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_runtime_user_available' "${configure_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_manage_basic_auth' "${configure_path}"
 grep --fixed-strings --quiet \
   'piserv_hermes_agent_rotate_dashboard_basic_auth: false' \
   "${rotation_playbook_path}"

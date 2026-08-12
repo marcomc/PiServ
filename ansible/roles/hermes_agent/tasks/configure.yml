@@ -185,10 +185,14 @@
     - hermes_agent_manage_inference_provenance
 
 - name: Reconcile Hermes dashboard authentication state
-  ansible.builtin.import_tasks: dashboard-auth.yml
+  ansible.builtin.include_tasks: dashboard-auth.yml
+  when:
+    - hermes_agent_runtime_user_available
+    - hermes_agent_dashboard_manage_basic_auth
 
 - name: Render Hermes dashboard authentication configuration
-  ansible.builtin.import_tasks: dashboard-auth-render.yml
+  ansible.builtin.include_tasks: dashboard-auth-render.yml
+  when: hermes_agent_runtime_user_available
 
 - name: Inspect Hermes environment file
   ansible.builtin.stat:
