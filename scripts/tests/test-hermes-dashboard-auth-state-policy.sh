@@ -47,6 +47,9 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   'hermes_agent_dashboard_basic_auth_state.stat.exists' "${dashboard_auth_path}"
 grep --fixed-strings --quiet \
+  'not hermes_agent_dashboard_bootstrap_password_file.stat.exists or' \
+  "${dashboard_auth_path}"
+grep --fixed-strings --quiet \
   'hermes_agent_dashboard_basic_auth_rotation_intent_file' "${defaults_path}"
 if grep --fixed-strings --quiet \
   'Remove obsolete runtime-owned Hermes dashboard authentication state' \
