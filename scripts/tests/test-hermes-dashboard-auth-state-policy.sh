@@ -8,6 +8,10 @@ defaults_path="${role_root}/defaults/main.yml"
 configure_path="${role_root}/tasks/configure.yml"
 dashboard_auth_path="${role_root}/tasks/dashboard-auth.yml"
 rotation_playbook_path="${repo_root}/ansible/playbooks/hermes-dashboard-credential-rotation.yml"
+rotation_intent_path="${role_root}/tasks/dashboard-auth-rotation-intent.yml"
+rotation_recovery_path="${role_root}/tasks/dashboard-auth-rotation-recover.yml"
+rotation_activate_path="${role_root}/tasks/dashboard-auth-rotation-activate.yml"
+rotation_finalize_path="${role_root}/tasks/dashboard-auth-rotation-finalize.yml"
 validate_path="${role_root}/tasks/validate-target.yml"
 credential_ancestor_path="${role_root}/tasks/validate-dashboard-credential-ancestors.yml"
 
@@ -32,6 +36,10 @@ grep --fixed-strings --quiet \
   "${dashboard_auth_path}"
 grep --fixed-strings --quiet \
   '"secret": secrets.token_urlsafe(32)' "${dashboard_auth_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_defer_bootstrap_password_publication' "${defaults_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_basic_auth_rotation_intent_file' "${defaults_path}"
 if grep --fixed-strings --quiet \
   'Remove obsolete runtime-owned Hermes dashboard authentication state' \
   "${dashboard_auth_path}"; then
@@ -102,7 +110,7 @@ test "${state_reauth_line}" -lt "${state_slurp_line}"
 
 bootstrap_reauthentication="$({
   sed -n \
-    '/^- name: Reauthenticate Hermes dashboard bootstrap password before reading$/,/^- name: Read authenticated Hermes dashboard bootstrap password$/p' \
+    '/^[[:space:]]*- name: Reauthenticate Hermes dashboard bootstrap password before reading$/,/^[[:space:]]*- name: Read authenticated Hermes dashboard bootstrap password$/p' \
     "${dashboard_auth_path}"
 } | sed '$d')"
 grep --fixed-strings --quiet \
@@ -142,7 +150,7 @@ test "${bootstrap_ancestor_reauth_line}" -lt "${bootstrap_password_slurp_line}"
 
 state_task="$({
   sed -n \
-    '/^- name: Commit private Hermes dashboard authentication state$/,/^- name: Read private Hermes dashboard authentication state$/p' \
+    '/^[[:space:]]*- name: Commit private Hermes dashboard authentication state$/,/^- name: Inspect Hermes dashboard authentication state before reading$/p' \
     "${dashboard_auth_path}"
 } | sed '$d')"
 grep --fixed-strings --quiet '    owner: root' <<<"${state_task}"
@@ -168,6 +176,10 @@ grep --fixed-strings --quiet \
   'hermes_agent_dashboard_rotate_basic_auth: true' \
   "${rotation_playbook_path}"
 grep --fixed-strings --quiet \
+  -e '      - ../vars/hermes-agent.yml' "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  -e '      - ../vars/hermes-agent.yml.example' "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
   'tasks_from: dashboard-auth.yml' "${rotation_playbook_path}"
 grep --fixed-strings --quiet \
   'tasks_from: dashboard-auth-render.yml' "${rotation_playbook_path}"
@@ -175,10 +187,49 @@ grep --fixed-strings --quiet \
   'tasks_from: dashboard-auth-rotation-preflight.yml' \
   "${rotation_playbook_path}"
 grep --fixed-strings --quiet \
+  'tasks_from: dashboard-auth-rotation-recover.yml' \
+  "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  'hermes_agent_dashboard_defer_bootstrap_password_publication: true' \
+  "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  'tasks_from: dashboard-auth-rotation-activate.yml' \
+  "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  'tasks_from: dashboard-auth-rotation-finalize.yml' \
+  "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  "'phase': 'prepared'" "${rotation_intent_path}"
+grep --fixed-strings --quiet \
+  'mode: "0600"' "${rotation_intent_path}"
+grep --fixed-strings --quiet \
+  "combine({'phase': 'activated'}" "${rotation_activate_path}"
+grep --fixed-strings --quiet \
+  "phase == 'prepared'" "${rotation_recovery_path}"
+grep --fixed-strings --quiet \
+  "phase == 'activated'" "${rotation_recovery_path}"
+grep --fixed-strings --quiet \
+  'Publish root-only rotated Hermes dashboard password' "${rotation_finalize_path}"
+grep --fixed-strings --quiet \
+  'Remove completed Hermes dashboard credential rotation intent' \
+  "${rotation_finalize_path}"
+intent_line="$(grep --line-number --fixed-strings \
+  'include_tasks: dashboard-auth-rotation-intent.yml' "${dashboard_auth_path}" | cut -d: -f1)"
+state_line="$(grep --line-number --fixed-strings \
+  'Commit private Hermes dashboard authentication state' "${dashboard_auth_path}" | cut -d: -f1)"
+if [[ -z "${intent_line}" || -z "${state_line}" || "${intent_line}" -ge "${state_line}" ]]; then
+  exit 1
+fi
+grep --fixed-strings --quiet \
   'ansible.builtin.import_tasks: validate-target.yml' \
   "${role_root}/tasks/dashboard-auth-rotation-preflight.yml"
 if grep --fixed-strings --quiet \
   'hermes_agent_dashboard_basic_auth_bootstrap_password_file:' \
   "${rotation_playbook_path}"; then
+  exit 1
+fi
+if sed -n \
+  '/^- name: Generate Hermes dashboard authentication material$/,/^- name: Store root-only proposed Hermes dashboard password$/p' \
+  "${dashboard_auth_path}" | grep --fixed-strings --quiet 'become_user:'; then
   exit 1
 fi

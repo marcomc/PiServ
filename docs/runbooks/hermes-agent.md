@@ -443,8 +443,11 @@ ansible-playbook -i ansible/inventory.ini \
 ```
 
 Do not add the confirmation variable to inventory or local vars. The playbook
-leaves the root-only proposal file in place and never prints it. Retrieve it
-privately, verify a new authenticated dashboard session, then remove it:
+leaves the root-only proposal file in place and never prints it. It journals an
+in-progress rotation root-only, keeps the existing proposal until the new
+dashboard has restarted, and recovers a previous interrupted rotation before
+allowing another one. Retrieve the proposal privately, verify a new
+authenticated dashboard session, then remove it:
 
 ```sh
 ssh admin@PiServ.local \

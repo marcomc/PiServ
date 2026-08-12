@@ -100,8 +100,11 @@ hermes_agent_dashboard_basic_auth_state_file: >-
   /root/hermes-agent-dashboard-auth.yaml
 hermes_agent_dashboard_basic_auth_bootstrap_password_file: >-
   /root/hermes-agent-dashboard-bootstrap-password
+hermes_agent_dashboard_basic_auth_rotation_intent_file: >-
+  /root/hermes-agent-dashboard-rotation-intent.yaml
 hermes_agent_dashboard_basic_auth_session_ttl_seconds: 43200
 hermes_agent_dashboard_rotate_basic_auth: false
+hermes_agent_dashboard_defer_bootstrap_password_publication: false
 hermes_agent_codex_version: "0.145.0"
 hermes_agent_download_cache_dir: /var/cache/hermes-agent
 hermes_agent_codex_archive_url: >-

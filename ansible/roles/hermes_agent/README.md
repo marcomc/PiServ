@@ -143,8 +143,10 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_dashboard_basic_auth_username` | empty | Dashboard username. |
 | `hermes_agent_dashboard_basic_auth_state_file` | `/root/hermes-agent-dashboard-auth.yaml` | Root-only scrypt hash and session-secret state. |
 | `hermes_agent_dashboard_basic_auth_bootstrap_password_file` | root-only path | One-time generated password file tracked by a sibling managed-state record. |
+| `hermes_agent_dashboard_basic_auth_rotation_intent_file` | `/root/hermes-agent-dashboard-rotation-intent.yaml` | Root-only recovery journal for a dedicated credential rotation. |
 | `hermes_agent_dashboard_basic_auth_session_ttl_seconds` | `43200` | Authenticated session lifetime (60-86400 seconds). |
-| `hermes_agent_dashboard_rotate_basic_auth` | `false` | Generate replacement credentials on this convergence. |
+| `hermes_agent_dashboard_rotate_basic_auth` | `false` | Internal one-shot control used only by the dedicated rotation playbook. |
+| `hermes_agent_dashboard_defer_bootstrap_password_publication` | `false` | Internal dedicated-rotation control; retains the current proposal until restart succeeds. |
 | `hermes_agent_codex_version` | `0.145.0` | Codex CLI release version. |
 | `hermes_agent_download_cache_dir` | `/var/cache/hermes-agent` | Canonical, root-owned, role-marked verified-download cache separated from runtime roots. |
 | `hermes_agent_codex_archive_url` | pinned upstream URL | ARM64 Codex archive URL. |

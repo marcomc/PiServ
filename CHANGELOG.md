@@ -6,6 +6,10 @@
 
 - Advanced the locked Hermes revision to Desktop backend contract 6 and
   documented the distinction between Desktop SSH and Remote URL modes.
+- Added a confirmation-gated, standalone dashboard credential-rotation
+  playbook that avoids a full Hermes convergence.
+- Allowed the immediately preceding, root-owned installer checksum only during
+  the pinned Hermes installer migration.
 
 ## [0.5.0] - 2026-08-11
 

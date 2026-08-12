@@ -207,11 +207,15 @@
             hermes_agent_dashboard_existing_bootstrap_password is defined and
             not hermes_agent_dashboard_rotate_basic_auth | bool) else ''
           }}
-      become: true
-      become_user: "{{ hermes_agent_user }}"
       register: hermes_agent_dashboard_basic_auth_generated
       changed_when: false
       no_log: true
+
+    - name: Journal prepared Hermes dashboard credential rotation
+      ansible.builtin.include_tasks: dashboard-auth-rotation-intent.yml
+      when:
+        - hermes_agent_dashboard_rotate_basic_auth | bool
+        - hermes_agent_dashboard_defer_bootstrap_password_publication | bool
 
     - name: Store root-only proposed Hermes dashboard password
       ansible.builtin.copy:
@@ -222,6 +226,7 @@
         group: root
         mode: "0600"
       no_log: true
+      when: not hermes_agent_dashboard_defer_bootstrap_password_publication | bool
 
     - name: Inspect stored Hermes dashboard bootstrap password
       ansible.builtin.stat:
@@ -231,6 +236,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      when: not hermes_agent_dashboard_defer_bootstrap_password_publication | bool
 
     - name: Record managed Hermes dashboard bootstrap password state
       ansible.builtin.copy:
@@ -244,6 +250,7 @@
         group: root
         mode: "0600"
       no_log: true
+      when: not hermes_agent_dashboard_defer_bootstrap_password_publication | bool
 
     - name: Commit private Hermes dashboard authentication state
       ansible.builtin.copy:
