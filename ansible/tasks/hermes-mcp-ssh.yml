@@ -1,0 +1,360 @@
+---
+- name: Validate Hermes MCP SSH access settings
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_mcp_ssh_user is match('^[a-z_][a-z0-9_-]*$')
+      - piserv_hermes_mcp_ssh_user not in ['root', hermes_agent_user]
+      - piserv_hermes_mcp_ssh_group is match('^[a-z_][a-z0-9_-]*$')
+      - piserv_hermes_mcp_ssh_group not in ['root', hermes_agent_group]
+      - piserv_hermes_mcp_ssh_home is match('^/var/lib/[a-z0-9_-]+$')
+      - >-
+        piserv_hermes_mcp_ssh_authorized_keys_path ==
+        piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'
+      - piserv_hermes_mcp_ssh_wrapper_path is match('^/usr/local/libexec/hermes-agent/[a-z0-9_-]+$')
+      - piserv_hermes_mcp_ssh_sudoers_path is match('^/etc/sudoers\.d/[a-z0-9_-]+$')
+      - piserv_hermes_mcp_ssh_source_user == 'admin'
+      - piserv_hermes_mcp_ssh_source_authorized_keys_path == '/home/admin/.ssh/authorized_keys'
+      - hermes_agent_user != 'root'
+      - hermes_agent_home is match('^/')
+      - hermes_agent_codex_home is match('^/')
+      - hermes_agent_binary_path is match('^/')
+    fail_msg: >-
+      Hermes MCP SSH access must use dedicated non-root identities and the
+      fixed, system-owned paths declared by the PiServ playbook.
+
+- name: Read Hermes runtime account before MCP SSH access setup
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_agent_user }}"
+    fail_key: false
+  check_mode: false
+
+- name: Require the configured Hermes runtime account
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)
+        is not none
+    fail_msg: >-
+      Deploy Hermes before configuring its restricted SSH MCP entry point.
+
+- name: Read existing Hermes MCP SSH account and group
+  ansible.builtin.getent:
+    database: "{{ item }}"
+    key: "{{ piserv_hermes_mcp_ssh_user if item == 'passwd' else piserv_hermes_mcp_ssh_group }}"
+    fail_key: false
+  loop:
+    - passwd
+    - group
+  check_mode: false
+
+- name: Require a safe existing Hermes MCP SSH account identity
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user) is none or
+        ((ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[4] == piserv_hermes_mcp_ssh_home and
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[5] == '/bin/sh')
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user) is none or
+        (ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group) is not none
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user) is none or
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[2] ==
+        (ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group)[1]
+    fail_msg: >-
+      An existing Hermes MCP SSH account must already use the dedicated home,
+      shell, and primary group. Refusing to adopt another account.
+
+- name: Inspect the Hermes MCP SSH home and key directory before mutation
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ piserv_hermes_mcp_ssh_home }}"
+    - "{{ piserv_hermes_mcp_ssh_home }}/.ssh"
+  register: piserv_hermes_mcp_ssh_account_path_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate existing Hermes MCP SSH account paths
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists or item.stat.isdir
+      - not item.stat.exists or not item.stat.islnk
+      - >-
+        not item.stat.exists or
+        (item.stat.pw_name == piserv_hermes_mcp_ssh_user and
+        item.stat.gr_name == piserv_hermes_mcp_ssh_group)
+    fail_msg: >-
+      Existing Hermes MCP SSH account paths must be dedicated, non-symlinked
+      directories owned by the dedicated account before they are managed.
+  loop: "{{ piserv_hermes_mcp_ssh_account_path_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Inspect the administrator authorized keys selected for automatic copy
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
+    follow: false
+  register: piserv_hermes_mcp_ssh_source_authorized_keys_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require a private regular administrator authorized keys source
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.exists
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.isreg
+      - not piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.islnk
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.pw_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.gr_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.mode == '0600'
+    fail_msg: >-
+      Automatic key copying requires a private, regular authorized_keys file
+      owned by the configured administrator. Refusing to read another path.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Read administrator authorized keys for automatic MCP SSH access
+  ansible.builtin.slurp:
+    src: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
+  register: piserv_hermes_mcp_ssh_source_authorized_keys
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Normalize administrator public keys for automatic MCP SSH access
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_source_public_key_lines: >-
+      {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+      split('\n') | map('trim') | reject('equalto', '') |
+      reject('match', '^#') | list }}
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Reject administrator keys that already declare a forced command
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode
+        is not search('(^|\\s)command=')
+    fail_msg: >-
+      Automatic key copying cannot safely compose an existing SSH forced
+      command with the Hermes MCP forced command. Use manual key management.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require plain administrator public keys for automatic MCP SSH access
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_mcp_ssh_source_public_key_lines | length > 0
+      - >-
+        piserv_hermes_mcp_ssh_source_public_key_lines |
+        select('match',
+        '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com|sk-ecdsa-sha2-nistp256@openssh\\.com)\\s+[^\\s]+(?:\\s+.*)?$') |
+        list | length == piserv_hermes_mcp_ssh_source_public_key_lines | length
+    fail_msg: >-
+      Automatic key copying requires at least one plain SSH public-key line.
+      Keys with SSH options, including source restrictions, must be installed
+      manually because their options cannot be safely composed.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Create Hermes MCP SSH system group
+  ansible.builtin.group:
+    name: "{{ piserv_hermes_mcp_ssh_group }}"
+    system: true
+    state: present
+
+- name: Create password-locked Hermes MCP SSH system user
+  ansible.builtin.user:
+    name: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    groups: []
+    append: false
+    home: "{{ piserv_hermes_mcp_ssh_home }}"
+    create_home: true
+    shell: /bin/sh
+    password_lock: true
+    system: true
+    state: present
+
+- name: Set dedicated Hermes MCP SSH home permissions
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}"
+    state: directory
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0750"
+
+- name: Create private Hermes MCP SSH directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}/.ssh"
+    state: directory
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0700"
+
+- name: Inspect existing Hermes MCP SSH authorized keys file
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    follow: false
+  register: piserv_hermes_mcp_ssh_authorized_keys_state
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe existing Hermes MCP SSH authorized keys file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.exists or
+        (piserv_hermes_mcp_ssh_authorized_keys_state.stat.isreg and
+        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.islnk and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.pw_name ==
+        piserv_hermes_mcp_ssh_user and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.gr_name ==
+        piserv_hermes_mcp_ssh_group and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.mode == '0600')
+    fail_msg: >-
+      An existing Hermes MCP SSH authorized_keys file must be a private regular
+      file owned by the dedicated account; it is never normalized or replaced.
+
+- name: Create an empty operator-managed Hermes MCP SSH authorized keys file
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0600"
+    force: false
+  when: not piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Publish restricted copies of administrator SSH public keys
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0600"
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Install SSH forced-command policy for the Hermes MCP account
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
+    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload SSH service
+
+- name: Inspect privileged Hermes MCP SSH publication parents
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: "{{ piserv_hermes_mcp_ssh_wrapper_path | dirname }}"
+      create_if_absent: true
+      mode: "0755"
+    - path: "{{ piserv_hermes_mcp_ssh_sudoers_path | dirname }}"
+      create_if_absent: false
+      mode: "0750"
+    - path: /etc/ssh/sshd_config.d
+      create_if_absent: false
+      mode: "0755"
+  register: piserv_hermes_mcp_ssh_publication_parent_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate privileged Hermes MCP SSH publication parents
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists or item.item.create_if_absent
+      - not item.stat.exists or item.stat.isdir
+      - not item.stat.exists or not item.stat.islnk
+      - not item.stat.exists or item.stat.pw_name == 'root'
+      - not item.stat.exists or item.stat.gr_name == 'root'
+      - not item.stat.exists or item.stat.mode == item.item.mode
+    fail_msg: >-
+      {{ item.item.path }} must be absent for managed creation or a canonical
+      root-owned directory with mode {{ item.item.mode }} before privileged
+      Hermes MCP SSH artifacts are published.
+  loop: "{{ piserv_hermes_mcp_ssh_publication_parent_state.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+- name: Create the dedicated Hermes MCP SSH wrapper directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_wrapper_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not piserv_hermes_mcp_ssh_publication_parent_state.results[0].stat.exists
+
+- name: Install root-owned Hermes MCP SSH wrapper
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_wrapper_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install restricted Hermes MCP SSH sudoers policy
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sudoers.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_sudoers_path }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Verify the dedicated Hermes MCP SSH account has only the wrapper privilege
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/sudo
+      - -n
+      - -l
+      - -U
+      - "{{ piserv_hermes_mcp_ssh_user }}"
+  register: piserv_hermes_mcp_ssh_sudo_policy
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Require the exact Hermes MCP SSH sudo privilege
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_mcp_ssh_sudo_policy.stdout is regex(
+          '(?m)^\s*\(root\) NOPASSWD: '
+          ~ (piserv_hermes_mcp_ssh_wrapper_path | regex_escape)
+          ~ ' ""$'
+        )
+      - >-
+        piserv_hermes_mcp_ssh_sudo_policy.stdout is not regex(
+          '(?m)^\s*\(ALL\s*: ALL\) ALL$|\(ALL\) NOPASSWD: ALL'
+        )
+      - >-
+        piserv_hermes_mcp_ssh_sudo_policy.stdout |
+        regex_findall('(?m)^\s*\([^)]*\)(?:\s+NOPASSWD:)?\s+.*$') |
+        length == 1
+    fail_msg: >-
+      The MCP SSH account must have exactly one no-argument sudo command and
+      no broad sudo privilege.
+  when: not ansible_check_mode

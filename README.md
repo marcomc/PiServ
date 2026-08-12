@@ -152,7 +152,7 @@ Active implementation tracks:
 | [pCloud `pcloudcc` podcast storage](docs/tracks/pcloudcc-podcast-storage.md) | Build, validate, and automate the pCloud mount for scheduled podcast output |
 | [External SSD storage](docs/runbooks/external-storage.md) | Operate the PiServ-owned ext4 volume for shared data and backups |
 | [Wi-Fi connectivity watchdog](docs/runbooks/wifi-connectivity-watchdog.md) | Recover Wi-Fi after access-point or mesh outages |
-| [Hermes Agent](docs/tracks/hermes-agent-framework-research.md) | Run the persistent agent with Codex and bounded capabilities |
+| [Hermes Agent](docs/tracks/hermes-agent-framework-research.md) | Run the persistent agent with bounded capabilities and optional [SSH-only Codex MCP delegation](docs/runbooks/hermes-mcp-ssh.md) |
 
 ## Automation
 

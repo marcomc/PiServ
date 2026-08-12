@@ -11,6 +11,18 @@
 - Allowed the immediately preceding, root-owned installer checksum only during
   the pinned Hermes installer migration.
 
+### Hermes MCP SSH Access
+
+- Added a password-locked `codex-hermes-mcp` SSH principal that runs
+  only the Hermes MCP stdio server as `hermes-agent` through a root-owned
+  wrapper and exact no-argument sudoers rule.
+- Added manual-key and automatic-copy modes. Automatic copy is enabled by
+  default and converts each current `admin` public key into a restricted
+  forced-command key; manual mode creates an empty private key file once and
+  preserves subsequent operator edits.
+- Documented Codex registration, validation, and revocation for SSH-only MCP
+  access without a LAN or Tailnet MCP listener.
+
 ## [0.5.0] - 2026-08-11
 
 ### Hermes Home Assistant and Apple Home

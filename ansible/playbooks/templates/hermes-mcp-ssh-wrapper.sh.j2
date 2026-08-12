@@ -1,0 +1,18 @@
+#!/bin/sh
+# Managed by Ansible. This entry point is callable only through the restricted
+# codex-hermes-mcp SSH principal's sudoers rule.
+set -eu
+
+# SSH starts this wrapper in the MCP account's private home. Hermes loads its
+# private environment relative to its working directory, so enter its owned
+# state root before switching identities.
+cd {{ hermes_agent_home | quote }}
+
+exec /usr/sbin/runuser -u {{ hermes_agent_user | quote }} -- \
+  /usr/bin/env -i \
+  HOME={{ hermes_agent_home | quote }} \
+  HERMES_HOME={{ hermes_agent_home | quote }} \
+  CODEX_HOME={{ hermes_agent_codex_home | quote }} \
+  PYTHONWARNINGS=ignore \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  {{ hermes_agent_binary_path | quote }} mcp serve

@@ -9,3 +9,25 @@ piserv_hermes_agent_home_assistant_mcp_url: ""
 piserv_hermes_agent_dashboard_host: 127.0.0.1
 piserv_hermes_agent_dashboard_manage_basic_auth: false
 piserv_hermes_agent_dashboard_basic_auth_username: ""
+
+# Enable a dedicated SSH account that can only start `hermes mcp serve` through
+# an sshd-enforced forced command. It is enabled by default and the account
+# never receives a password.
+piserv_hermes_mcp_ssh_manage: true
+piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+piserv_hermes_mcp_ssh_group: codex-hermes-mcp
+piserv_hermes_mcp_ssh_home: /var/lib/codex-hermes-mcp
+piserv_hermes_mcp_ssh_authorized_keys_path: >-
+  /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+piserv_hermes_mcp_ssh_wrapper_path: >-
+  /usr/local/libexec/hermes-agent/codex-mcp-ssh
+piserv_hermes_mcp_ssh_sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+
+# When false, the first managed run creates an empty authorized_keys file and
+# never changes it again; install operator-selected public keys manually. The
+# sshd policy still enforces the fixed MCP command. When true, every run copies
+# admin's plain, currently authorized public keys and restricts each one too.
+piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
+piserv_hermes_mcp_ssh_source_user: admin
+piserv_hermes_mcp_ssh_source_authorized_keys_path: >-
+  /home/admin/.ssh/authorized_keys

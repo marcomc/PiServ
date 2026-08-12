@@ -204,3 +204,13 @@
         hermes_agent_backup_timezone: Europe/Rome
         # Re-enable only after a guarded 64K proof on hardware with more RAM.
         hermes_agent_manage_local_models: false
+  post_tasks:
+    - name: Configure restricted SSH access to the Hermes MCP server
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh.yml
+      when: piserv_hermes_mcp_ssh_manage | bool
+
+  handlers:
+    - name: Reload SSH service
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: reloaded

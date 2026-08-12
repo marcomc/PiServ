@@ -1,0 +1,84 @@
+---
+- name: Verify Hermes MCP SSH template boundaries
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_agent_user: hermes-agent
+    hermes_agent_home: /var/lib/hermes-agent
+    hermes_agent_codex_home: /var/lib/hermes-agent/.codex
+    hermes_agent_binary_path: "/usr/local/bin/hermes;echo mcp-wrapper-injected"
+    piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
+    piserv_hermes_mcp_ssh_source_public_key_lines:
+      - >-
+        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1
+        test@example.invalid
+  tasks:
+    - name: Create a private temporary template test directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: hermes-mcp-ssh-test-
+      register: hermes_mcp_ssh_template_test_directory
+
+    - name: Render the Hermes MCP SSH templates
+      ansible.builtin.template:
+        src: "{{ item.source }}"
+        dest: "{{ hermes_mcp_ssh_template_test_directory.path }}/{{ item.destination }}"
+        mode: "0600"
+      loop:
+        - source: ../playbooks/templates/hermes-mcp-ssh-wrapper.sh.j2
+          destination: wrapper.sh
+        - source: ../playbooks/templates/hermes-mcp-ssh-authorized_keys.j2
+          destination: authorized_keys
+        - source: ../playbooks/templates/hermes-mcp-ssh-sshd.conf.j2
+          destination: sshd.conf
+
+    - name: Validate the rendered Hermes MCP SSH wrapper shell syntax
+      ansible.builtin.command:
+        argv:
+          - /bin/sh
+          - -n
+          - "{{ hermes_mcp_ssh_template_test_directory.path }}/wrapper.sh"
+      changed_when: false
+
+    - name: Read the rendered Hermes MCP SSH templates
+      ansible.builtin.slurp:
+        src: "{{ hermes_mcp_ssh_template_test_directory.path }}/{{ item }}"
+      loop:
+        - wrapper.sh
+        - authorized_keys
+        - sshd.conf
+      register: hermes_mcp_ssh_rendered_templates
+
+    - name: Require safe rendered Hermes MCP SSH template contracts
+      ansible.builtin.assert:
+        that:
+          - >-
+            "'/usr/local/bin/hermes;echo mcp-wrapper-injected' mcp serve"
+            in (hermes_mcp_ssh_rendered_templates.results[0].content | b64decode)
+          - >-
+            'cd /var/lib/hermes-agent'
+            in (hermes_mcp_ssh_rendered_templates.results[0].content | b64decode)
+          - >-
+            'PYTHONWARNINGS=ignore'
+            in (hermes_mcp_ssh_rendered_templates.results[0].content | b64decode)
+          - >-
+            'command="/usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-mcp-ssh",restrict'
+            in (hermes_mcp_ssh_rendered_templates.results[1].content | b64decode)
+          - >-
+            'Match User codex-hermes-mcp'
+            in (hermes_mcp_ssh_rendered_templates.results[2].content | b64decode)
+          - >-
+            'ForceCommand /usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-mcp-ssh'
+            in (hermes_mcp_ssh_rendered_templates.results[2].content | b64decode)
+          - >-
+            'DisableForwarding yes'
+            in (hermes_mcp_ssh_rendered_templates.results[2].content | b64decode)
+
+  post_tasks:
+    - name: Remove the temporary Hermes MCP SSH template test directory
+      ansible.builtin.file:
+        path: "{{ hermes_mcp_ssh_template_test_directory.path }}"
+        state: absent
+      when: hermes_mcp_ssh_template_test_directory is defined
