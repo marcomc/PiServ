@@ -228,8 +228,9 @@ if grep --fixed-strings --quiet \
   "${rotation_playbook_path}"; then
   exit 1
 fi
-if sed -n \
-  '/^- name: Generate Hermes dashboard authentication material$/,/^- name: Store root-only proposed Hermes dashboard password$/p' \
-  "${dashboard_auth_path}" | grep --fixed-strings --quiet 'become_user:'; then
+if ! sed -n \
+  '/^[[:space:]]*- name: Generate Hermes dashboard authentication material$/,/^[[:space:]]*- name: Store root-only proposed Hermes dashboard password$/p' \
+  "${dashboard_auth_path}" | grep --fixed-strings --quiet \
+  'become_user: "{{ hermes_agent_user }}"'; then
   exit 1
 fi

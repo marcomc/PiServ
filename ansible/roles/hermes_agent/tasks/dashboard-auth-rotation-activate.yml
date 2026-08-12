@@ -1,4 +1,10 @@
 ---
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
+
 - name: Read prepared Hermes dashboard credential rotation intent
   ansible.builtin.slurp:
     src: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"

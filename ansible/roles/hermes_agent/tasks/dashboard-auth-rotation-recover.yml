@@ -1,4 +1,21 @@
 ---
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
+
+- name: Authenticate Hermes dashboard credential recovery destinations
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: "{{ item }}"
+  loop:
+    - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Inspect Hermes dashboard credential rotation intent
   ansible.builtin.stat:
     path: "{{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}"
@@ -75,6 +92,17 @@
   when:
     - hermes_agent_dashboard_rotation_intent_file.stat.exists
     - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+    - hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_password_present | bool
+
+- name: Restore absence of the consumed Hermes dashboard password proposal
+  ansible.builtin.file:
+    path: "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
+    state: absent
+  no_log: true
+  when:
+    - hermes_agent_dashboard_rotation_intent_file.stat.exists
+    - hermes_agent_dashboard_rotation_recovery_intent.phase == 'prepared'
+    - not hermes_agent_dashboard_rotation_recovery_intent.old_bootstrap_password_present | bool
 
 - name: Restore the previous Hermes dashboard password marker
   ansible.builtin.copy:

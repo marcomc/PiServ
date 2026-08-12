@@ -174,7 +174,6 @@
     - not ansible_check_mode
     - >-
       not hermes_agent_dashboard_basic_auth_state.stat.exists or
-      not hermes_agent_dashboard_bootstrap_password_file.stat.exists or
       hermes_agent_dashboard_rotate_basic_auth | bool
   block:
     - name: Generate Hermes dashboard authentication material
@@ -210,6 +209,8 @@
       register: hermes_agent_dashboard_basic_auth_generated
       changed_when: false
       no_log: true
+      become: true
+      become_user: "{{ hermes_agent_user }}"
 
     - name: Journal prepared Hermes dashboard credential rotation
       ansible.builtin.include_tasks: dashboard-auth-rotation-intent.yml

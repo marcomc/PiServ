@@ -1,14 +1,32 @@
 ---
-- name: Read the current private Hermes dashboard credential artifacts
-  ansible.builtin.slurp:
-    src: "{{ item }}"
+- name: Inspect the current private Hermes dashboard credential artifacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
   loop:
     - "{{ hermes_agent_dashboard_basic_auth_state_file }}"
     - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}"
     - "{{ hermes_agent_dashboard_basic_auth_bootstrap_password_file }}.managed.yml"
+  register: hermes_agent_dashboard_rotation_previous_artifact_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Read the current private Hermes dashboard credential artifacts
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop:
+    "{{ hermes_agent_dashboard_rotation_previous_artifact_state.results }}"
   register: hermes_agent_dashboard_rotation_previous_artifacts
   changed_when: false
   no_log: true
+  when: item.stat.exists
+
+- name: Authenticate Hermes dashboard credential rotation intent destination
+  ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
+  vars:
+    hermes_agent_dashboard_credential_path: >-
+      {{ hermes_agent_dashboard_basic_auth_rotation_intent_file }}
 
 - name: Write a prepared private Hermes dashboard credential rotation intent
   ansible.builtin.copy:
@@ -17,7 +35,8 @@
         'schema_version': 1,
         'phase': 'prepared',
         'old_state': hermes_agent_dashboard_rotation_previous_artifacts.results[0].content,
-        'old_bootstrap_password': hermes_agent_dashboard_rotation_previous_artifacts.results[1].content,
+        'old_bootstrap_password_present': hermes_agent_dashboard_rotation_previous_artifact_state.results[1].stat.exists,
+        'old_bootstrap_password': hermes_agent_dashboard_rotation_previous_artifacts.results[1].content | default(''),
         'old_bootstrap_marker': hermes_agent_dashboard_rotation_previous_artifacts.results[2].content,
         'new_password': (hermes_agent_dashboard_basic_auth_generated.stdout | from_json).password,
         'new_state': {
