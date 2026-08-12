@@ -22,6 +22,31 @@
   no_log: true
   when: item.stat.exists
 
+- name: Load the previous Hermes dashboard authentication state
+  ansible.builtin.set_fact:
+    hermes_agent_dashboard_rotation_previous_auth_state: >-
+      {{ hermes_agent_dashboard_rotation_previous_artifacts.results[0].content |
+      b64decode | from_yaml }}
+  no_log: true
+
+- name: Require a recoverable previous Hermes dashboard authentication state
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_dashboard_rotation_previous_auth_state is mapping
+      - hermes_agent_dashboard_rotation_previous_auth_state.username is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.username | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.password_hash is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.password_hash | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.secret is string
+      - hermes_agent_dashboard_rotation_previous_auth_state.secret | length > 0
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds is integer
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds >= 60
+      - hermes_agent_dashboard_rotation_previous_auth_state.session_ttl_seconds <= 86400
+    fail_msg: >-
+      Existing Hermes dashboard authentication state is not recoverable;
+      repair it through normal convergence before rotating credentials.
+  no_log: true
+
 - name: Authenticate Hermes dashboard credential rotation intent destination
   ansible.builtin.include_tasks: validate-dashboard-credential-ancestors.yml
   vars:

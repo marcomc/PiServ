@@ -12,6 +12,7 @@ rotation_intent_path="${role_root}/tasks/dashboard-auth-rotation-intent.yml"
 rotation_recovery_path="${role_root}/tasks/dashboard-auth-rotation-recover.yml"
 rotation_activate_path="${role_root}/tasks/dashboard-auth-rotation-activate.yml"
 rotation_finalize_path="${role_root}/tasks/dashboard-auth-rotation-finalize.yml"
+rotation_verify_path="${role_root}/tasks/dashboard-auth-rotation-verify.yml"
 validate_path="${role_root}/tasks/validate-target.yml"
 credential_ancestor_path="${role_root}/tasks/validate-dashboard-credential-ancestors.yml"
 
@@ -198,6 +199,13 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   'tasks_from: dashboard-auth-rotation-finalize.yml' \
   "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  'tasks_from: dashboard-auth-rotation-verify.yml' \
+  "${rotation_playbook_path}"
+grep --fixed-strings --quiet \
+  '/auth/password-login' "${rotation_verify_path}"
+grep --fixed-strings --quiet \
+  '/api/auth/me' "${rotation_verify_path}"
 grep --fixed-strings --quiet \
   "'phase': 'prepared'" "${rotation_intent_path}"
 grep --fixed-strings --quiet \
