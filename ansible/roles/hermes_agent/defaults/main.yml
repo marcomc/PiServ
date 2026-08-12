@@ -9,14 +9,18 @@ hermes_agent_venv_state_file: >-
   {{ hermes_agent_install_dir }}/.hermes-venv-managed.yml
 hermes_agent_expected_repo_origin: https://github.com/NousResearch/hermes-agent.git
 hermes_agent_binary_path: /usr/local/bin/hermes
-hermes_agent_repo_version: 3c27eb6234bf91b8ceee9e9071591b31e9b148cb
+hermes_agent_repo_version: 222465d84709379b65173b0283a6eea87516acfa
 hermes_agent_version: "0.20.0"
 hermes_agent_installer_url: >-
   https://raw.githubusercontent.com/NousResearch/hermes-agent/{{
   hermes_agent_repo_version }}/scripts/install.sh
 hermes_agent_installer_path: /usr/local/libexec/hermes-agent-installer
 hermes_agent_installer_checksum: >-
-  sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
+  sha256:c118ff31618dc70339049ce71061b8f1351a1c70d9c2a236ed50d8a2550c550d
+# Accept only this immediately preceding, root-owned installer during the
+# one-way upgrade to the current checksum-pinned revision.
+hermes_agent_previous_installer_checksums:
+  - sha256:45f589461248c7a6ec3aecd7522a69dd49c5c8dbf4798ba1296af5c0c5e7ccd3
 hermes_agent_uv_python_install_dir: /usr/local/share/uv/python
 hermes_agent_uv_python_bin_dir: /usr/local/share/uv/bin
 hermes_agent_supported_architectures:

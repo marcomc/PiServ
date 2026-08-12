@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Hermes Desktop
+
+- Advanced the locked Hermes revision to Desktop backend contract 6 and
+  documented the distinction between Desktop SSH and Remote URL modes.
+
 ## [0.5.0] - 2026-08-11
 
 ### Hermes Home Assistant and Apple Home

@@ -106,6 +106,7 @@ Until then, include the local role by its role directory name:
 | `hermes_agent_uv_python_install_dir` | `/usr/local/share/uv/python` | uv Python runtime directory. |
 | `hermes_agent_uv_python_bin_dir` | `/usr/local/share/uv/bin` | uv binary directory. |
 | `hermes_agent_installer_checksum` | pinned SHA-256 | Installer integrity check. |
+| `hermes_agent_previous_installer_checksums` | `[]` | Exact prior installer checksums accepted during a root-owned installer migration. |
 | `hermes_agent_supported_architectures` | `aarch64`, `arm64` | CPU architectures permitted by the role. |
 | `hermes_agent_packages` | role list | Debian package prerequisites. |
 | `hermes_agent_model` | `gpt-5.5` | Hermes default model. |

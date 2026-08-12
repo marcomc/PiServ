@@ -57,6 +57,11 @@ argument_specs:
       hermes_agent_installer_checksum:
         type: str
         description: SHA-256 checksum for the Hermes installer.
+      hermes_agent_previous_installer_checksums:
+        type: list
+        elements: str
+        default: []
+        description: Previous SHA-256 installer checksums allowed only for a root-owned installer migration.
       hermes_agent_uv_python_install_dir:
         type: path
         default: /usr/local/share/uv/python
