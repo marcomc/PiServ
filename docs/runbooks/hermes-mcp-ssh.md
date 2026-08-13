@@ -818,16 +818,21 @@ elif path_exists_or_is_symlink "$home"; then
 fi
 
 # No new principal session can now authenticate. Refuse if an existing SSH
-# session remains. Inspect the root-owned sshd session process first: unlike
-# logind, it remains available when sshd is configured with UsePAM no. The
-# session process preserves the authenticated principal even after
-# ForceCommand invokes sudo and systemd-run changes child-process identities.
+# session remains. Inspect the root-owned sshd or OpenSSH 10 sshd-session
+# process first: unlike logind, it remains available when sshd is configured
+# with UsePAM no. The session process preserves the authenticated principal
+# even after ForceCommand invokes sudo and systemd-run changes child-process
+# identities.
 if "$account_present"; then
   command -v ps >/dev/null
   active_sshd_sessions=$(ps -eo pid=,user=,comm=,args= | \
     awk -v user="$user" '
-      $2 == "root" && $3 == "sshd" &&
-      (index($0, "sshd: " user " [priv]") || index($0, "sshd: " user "@")) {
+      $2 == "root" && ($3 == "sshd" || $3 == "sshd-session") &&
+      (index($0, "sshd: " user " [priv]") ||
+       index($0, "sshd: " user "@") ||
+       index($0, "sshd-session: " user " [priv]") ||
+       index($0, "sshd-session: " user "@") ||
+       index($0, "sshd-session: " user " at ")) {
         print
       }
     ')

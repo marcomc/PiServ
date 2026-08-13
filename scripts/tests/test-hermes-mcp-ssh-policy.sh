@@ -584,6 +584,8 @@ if (( source_reinspect_line >= source_reread_line || source_reread_line >= sourc
 fi
 require_text "hash('sha256') ==" "${task_file}"
 require_text 'piserv_hermes_mcp_ssh_source_authorized_keys_checksum' "${task_file}"
+require_text 'piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.checksum' \
+  "${task_file}"
 require_text 'piserv_hermes_mcp_ssh_source_public_key_lines_before_publication' \
   "${task_file}"
 require_text 'hermes-mcp-ssh-lifecycle-phase.yml' "${task_file}"
@@ -802,7 +804,11 @@ require_text "'sudo -n /bin/sh -seu'" "${runbook}"
 require_text 'systemctl reload ssh' "${runbook}"
 require_text 'UsePAM no' "${runbook}"
 require_text "active_sshd_sessions=\$(ps -eo pid=,user=,comm=,args= |" "${runbook}"
-require_text "index(\$0, \"sshd: \" user \" [priv]\") || index(\$0, \"sshd: \" user \"@\")" \
+require_text "\$3 == \"sshd\" || \$3 == \"sshd-session\"" "${runbook}"
+require_text "index(\$0, \"sshd-session: \" user \" [priv]\")" "${runbook}"
+require_text "index(\$0, \"sshd-session: \" user \"@\")" "${runbook}"
+require_text "index(\$0, \"sshd-session: \" user \" at \")" "${runbook}"
+require_text "index(\$0, \"sshd: \" user \" [priv]\")" \
   "${runbook}"
 require_text 'refusing teardown while %s has active SSH session processes' "${runbook}"
 require_text 'When PAM is enabled, retain logind as an independent, broader check.' "${runbook}"

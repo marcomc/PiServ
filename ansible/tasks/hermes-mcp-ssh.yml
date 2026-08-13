@@ -1159,6 +1159,8 @@
   ansible.builtin.stat:
     path: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
     follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
   register: piserv_hermes_mcp_ssh_source_authorized_keys_reread_state
   changed_when: false
   check_mode: false
@@ -1194,6 +1196,10 @@
       - >-
         piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.inode ==
         piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.inode
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+        hash('sha256') ==
+        piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.checksum
       - >-
         piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
         hash('sha256') ==
