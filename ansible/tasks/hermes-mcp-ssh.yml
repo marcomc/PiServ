@@ -678,7 +678,13 @@
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0600"
     force: false
-  when: not piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+  when:
+    - not piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+    - >-
+      not ansible_check_mode or
+      (piserv_hermes_mcp_ssh_account_path_state.results |
+      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
+      map(attribute='stat.exists') | first)
 
 - name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
@@ -688,7 +694,13 @@
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0600"
   no_log: true
-  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+  when:
+    - piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+    - >-
+      not ansible_check_mode or
+      (piserv_hermes_mcp_ssh_account_path_state.results |
+      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
+      map(attribute='stat.exists') | first)
 
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:

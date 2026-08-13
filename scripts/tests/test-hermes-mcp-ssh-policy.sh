@@ -258,6 +258,12 @@ require_text 'Managed by Ansible: automatic administrator key copy for Hermes MC
   "${keys_template}"
 require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
   "${task_file}"
+require_multiline_text '- name: Publish restricted copies of administrator SSH public keys
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \
+  "${task_file}"
+require_text "selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh')" \
+  "${task_file}"
 require_text '"schema": "piserv-hermes-mcp-ssh-state-v1"' "${state_template}"
 require_text '"phase": {{ piserv_hermes_mcp_ssh_lifecycle_phase | default('\''active'\'') | to_json }}' \
   "${state_template}"
@@ -319,6 +325,16 @@ require_text 'lifecycle identity is incomplete' "${runbook}"
 require_text 're.fullmatch(r"/etc/sudoers\.d/[a-z0-9_-]+", sudoers)' "${runbook}"
 require_text 'refusing to leave recovered home without its lifecycle account:' "${runbook}"
 require_text "test \"\$group_gid\" != 0" "${runbook}"
+require_text 'group_only_resume=false' "${runbook}"
+require_text 'A prior run can stop after userdel but before groupdel.' "${runbook}"
+require_text 'test -z ' "${runbook}"
+require_text 'cut -d: -f4)' "${runbook}"
+require_text 'A standalone group is permitted only for a resumed, already-drained teardown.' \
+  "${runbook}"
+require_text "if \"\$group_only_resume\"; then" "${runbook}"
+require_text "test \"\$teardown_resume\" = true" "${runbook}"
+require_text "elif \"\$group_only_resume\"; then" "${runbook}"
+require_text "groupdel \"\$group\"" "${runbook}"
 require_text 'unexpected lifecycle authorized_keys path' "${runbook}"
 require_text 'unexpected lifecycle wrapper path' "${runbook}"
 require_text 'unexpected lifecycle sudoers path' "${runbook}"

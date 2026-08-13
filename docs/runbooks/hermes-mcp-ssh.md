@@ -361,28 +361,31 @@ load_lifecycle_state
 
 account_present=false
 group_present=false
+group_only_resume=false
 if getent group "$group" >/dev/null; then
   group_present=true
+  group_record=$(getent group "$group")
+  test -n "$group_record"
+  group_gid=$(printf '%s\n' "$group_record" | cut -d: -f3)
+  test "$group_gid" != 0
+  test -z "$(printf '%s\n' "$group_record" | cut -d: -f4)"
 fi
 if getent passwd "$user" >/dev/null; then
   account_present=true
   passwd_record=$(getent passwd "$user")
-  group_record=$(getent group "$group")
-  test -n "$group_record"
+  test "$group_present" = true
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f6)" = "$home"
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f7)" = /bin/sh
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f3)" != 0
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f4)" = \
     "$(printf '%s\n' "$group_record" | cut -d: -f3)"
-  test -z "$(printf '%s\n' "$group_record" | cut -d: -f4)"
 fi
 if "$group_present" && ! "$account_present"; then
-  printf 'refusing to delete an unattested standalone group: %s\n' "$group" >&2
-  exit 1
+  # A prior run can stop after userdel but before groupdel. Accept this only
+  # after the exact authenticated temporary deny below proves it is a resume.
+  group_only_resume=true
 fi
 if "$group_present"; then
-  group_gid=$(printf '%s\n' "$group_record" | cut -d: -f3)
-  test "$group_gid" != 0
   primary_gid_users=$(getent passwd | awk -F: -v user="$user" -v gid="$group_gid" \
     '$1 != user && $4 == gid { print $1 }')
   if test -n "$primary_gid_users"; then
@@ -453,6 +456,13 @@ printf '%s\n' "$effective_deny" | grep -Fx 'disableforwarding yes'
 printf '%s\n' "$effective_deny" | grep -Fx 'permittty no'
 printf '%s\n' "$effective_deny" | grep -Fx 'x11forwarding no'
 
+# A standalone group is permitted only for a resumed, already-drained teardown.
+# The lifecycle record and exact deny policy above authenticate that interruption;
+# the earlier GID and membership checks still prove it is safe to delete.
+if "$group_only_resume"; then
+  test "$teardown_resume" = true
+fi
+
 if "$account_present"; then
   if path_exists_or_is_symlink "$home"; then
     require_directory "$home"
@@ -522,6 +532,8 @@ if "$account_present"; then
   if path_exists_or_is_symlink "$home"; then rmdir -- "$home"; fi
   userdel "$user"
   if "$group_present"; then groupdel "$group"; fi
+elif "$group_only_resume"; then
+  groupdel "$group"
 fi
 rm -f -- "$sudoers" "$wrapper" "$dropin"
 sshd -t
