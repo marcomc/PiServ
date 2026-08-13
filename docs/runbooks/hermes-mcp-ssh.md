@@ -437,6 +437,7 @@ fi
 expected_deny=$(mktemp)
 deny_tmp=
 teardown_resume=false
+teardown_drain_verified=false
 cleanup_teardown_files() {
   rm -f -- "$expected_deny" "${deny_tmp:-}"
 }
@@ -470,12 +471,13 @@ printf '%s\n' "$effective_deny" | grep -Fx 'forcecommand /usr/bin/false'
 printf '%s\n' "$effective_deny" | grep -Fx 'disableforwarding yes'
 printf '%s\n' "$effective_deny" | grep -Fx 'permittty no'
 printf '%s\n' "$effective_deny" | grep -Fx 'x11forwarding no'
+teardown_drain_verified=true
 
-# A standalone group is permitted only for a resumed, already-drained teardown.
-# The lifecycle record and exact deny policy above authenticate that interruption;
-# the earlier GID and membership checks still prove it is safe to delete.
+# A standalone group is permitted only after the exact deny policy has been
+# installed and proven effective. The lifecycle record and earlier GID and
+# membership checks still prove it is safe to delete.
 if "$group_only_resume"; then
-  test "$teardown_resume" = true
+  test "$teardown_drain_verified" = true
 fi
 
 # Debian's USERGROUPS_ENAB policy can remove the account's private group as part
@@ -504,15 +506,12 @@ if "$account_present"; then
     fi
     # Current provisioning creates the dedicated home explicitly and keeps it
     # empty. Older deployments can contain these bounded useradd skeleton paths;
-    # accept only regular, private files at those exact paths. Do not compare
-    # against mutable /etc/skel content. A verified drain permits a resumed
-    # teardown after an earlier run has already removed one of these files;
-    # unexpected files still make the bounded-home check fail closed.
+    # authenticate and remove any that remain, but accept a current clean home.
+    # Do not compare against mutable /etc/skel content. Unexpected files still
+    # make the bounded-home check fail closed.
     for skeleton_file in .bash_logout .bashrc .profile; do
       if path_exists_or_is_symlink "$home/$skeleton_file"; then
         require_regular "$home/$skeleton_file" "${user}:${group}:644"
-      else
-        test "$teardown_resume" = true
       fi
     done
     test "$(find "$home" -xdev -mindepth 1 \

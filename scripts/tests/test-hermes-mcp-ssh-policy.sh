@@ -370,10 +370,12 @@ require_text 'group_only_resume=false' "${runbook}"
 require_text 'A prior run can stop after userdel but before groupdel.' "${runbook}"
 require_text 'test -z ' "${runbook}"
 require_text 'cut -d: -f4)' "${runbook}"
-require_text 'A standalone group is permitted only for a resumed, already-drained teardown.' \
+require_text 'A standalone group is permitted only after the exact deny policy has been' \
   "${runbook}"
 require_text "if \"\$group_only_resume\"; then" "${runbook}"
-require_text "test \"\$teardown_resume\" = true" "${runbook}"
+require_text "teardown_drain_verified=false" "${runbook}"
+require_text "teardown_drain_verified=true" "${runbook}"
+require_text "test \"\$teardown_drain_verified\" = true" "${runbook}"
 require_text "elif \"\$group_only_resume\"; then" "${runbook}"
 require_text "Debian's USERGROUPS_ENAB policy can remove the account's private group" \
   "${runbook}"
@@ -396,19 +398,16 @@ require_text 'Older deployments can contain these bounded useradd skeleton paths
 require_text 'for skeleton_file in .bash_logout .bashrc .profile; do' "${runbook}"
 skeleton_home_file_ref="\$home/\$skeleton_file"
 skeleton_identity_ref="\${user}:\${group}:644"
-skeleton_resume_ref="\$teardown_resume"
 require_multiline_text "for skeleton_file in .bash_logout .bashrc .profile; do
       if path_exists_or_is_symlink \"${skeleton_home_file_ref}\"; then
         require_regular \"${skeleton_home_file_ref}\" \"${skeleton_identity_ref}\"
-      else
-        test \"${skeleton_resume_ref}\" = true
       fi
     done" "${runbook}"
 require_text 'Current provisioning creates the dedicated home explicitly and keeps it' \
   "${runbook}"
-require_multiline_text 'against mutable /etc/skel content. A verified drain permits a resumed' \
+require_multiline_text 'authenticate and remove any that remain, but accept a current clean home.' \
   "${runbook}"
-require_text 'unexpected files still make the bounded-home check fail closed.' \
+require_text 'make the bounded-home check fail closed.' \
   "${runbook}"
 require_text "require_regular \"\$home/\$skeleton_file\" \"\${user}:\${group}:644\"" "${runbook}"
 require_text "rm -f -- \"\$home/\$skeleton_file\"" "${runbook}"
