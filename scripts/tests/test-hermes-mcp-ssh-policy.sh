@@ -52,6 +52,8 @@ require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "$
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
+require_text '((ansible_facts.getent_passwd | default({}, true)).get(piserv_hermes_mcp_ssh_user, []) | default([], true))' "${task_file}"
+require_text '((ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) | default([], true))' "${task_file}"
 require_text 'Classify an absent Hermes MCP SSH account identity' "${task_file}"
 require_text 'Validate Hermes MCP SSH lifecycle provenance before adoption' "${task_file}"
 require_text 'hermes-mcp-ssh-provenance.yml' "${task_file}"
@@ -177,9 +179,17 @@ require_text 'Discover SSH configuration drop-ins before the Hermes MCP policy' 
   "${task_file}"
 require_text 'Define SSH configuration files before the Hermes MCP policy' \
   "${task_file}"
-require_text 'Read SSH configuration before the Hermes MCP policy' \
-  "${task_file}"
 require_text 'Reject symlinked SSH configuration drop-ins before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Inspect consumed SSH configuration leaves before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Authenticate consumed SSH configuration leaves before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Read authenticated SSH configuration before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Reinspect consumed SSH configuration leaves after reading policy' \
+  "${task_file}"
+require_text 'Require consumed SSH configuration leaves to retain their authenticated inode' \
   "${task_file}"
 require_text 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' \
   "${task_file}"
@@ -191,6 +201,15 @@ require_text "item.content | b64decode is not search('(?im)^\\\\s*Include\\\\s+'
   "${task_file}"
 require_text "'(?im)^\\\\s*Include\\\\s+(?!/etc/ssh/sshd_config\\\\.d/\\\\*\\\\.conf\\\\s*(?:#.*)?$)'" \
   "${task_file}"
+require_text "map(attribute='stat.inode') | first" "${task_file}"
+require_text "map(attribute='stat.dev') | first" "${task_file}"
+ssh_configuration_audit_tasks=$(sed -n \
+  '/^- name: Reject symlinked SSH configuration drop-ins before the Hermes MCP policy$/,/^- name: Install SSH forced-command policy before publishing MCP keys$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${ssh_configuration_audit_tasks}"; then
+  printf 'Hermes MCP SSH configuration-leaf audit must run during converged check mode.\n' >&2
+  exit 1
+fi
 require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
   "${task_file}"
 require_text 'Reload SSH service to activate forced-command policy before publishing MCP keys' \
@@ -295,14 +314,27 @@ require_text 'Managed by Ansible: automatic administrator key copy for Hermes MC
 require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
   "${task_file}"
 require_text 'create_home: false' "${task_file}"
-require_multiline_text '- name: Remove legacy Hermes MCP SSH account skeleton files
-  ansible.builtin.file:
+require_multiline_text '- name: Inspect legacy Hermes MCP SSH account skeleton files before removal
+  ansible.builtin.stat:
     path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
-    state: absent
+    follow: false
   loop:
     - .bash_logout
     - .bashrc
-    - .profile' "${task_file}"
+    - .profile
+  register: piserv_hermes_mcp_ssh_skeleton_file_state
+  changed_when: false
+  check_mode: false' "${task_file}"
+require_text 'Require safe legacy Hermes MCP SSH account skeleton files' "${task_file}"
+require_text "item.stat.mode == '0644'" "${task_file}"
+require_multiline_text '- name: Remove legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: absent
+  loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists' "${task_file}"
 require_multiline_text '- name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \

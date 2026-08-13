@@ -98,9 +98,9 @@
 - name: Normalize existing Hermes MCP SSH identity records
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_account_passwd_record: >-
-      {{ (ansible_facts.getent_passwd | default({}, true)).get(piserv_hermes_mcp_ssh_user, []) }}
+      {{ ((ansible_facts.getent_passwd | default({}, true)).get(piserv_hermes_mcp_ssh_user, []) | default([], true)) }}
     piserv_hermes_mcp_ssh_account_group_record: >-
-      {{ (ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) }}
+      {{ ((ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) | default([], true)) }}
 
 - name: Classify an absent Hermes MCP SSH account identity
   ansible.builtin.set_fact:
@@ -597,15 +597,76 @@
     list }}
   loop_control:
     label: "{{ item.path }}"
-  when: not ansible_check_mode
 
-- name: Read SSH configuration before the Hermes MCP policy
+- name: Inspect consumed SSH configuration leaves before the Hermes MCP policy
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_paths }}"
+  register: piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate consumed SSH configuration leaves before the Hermes MCP policy
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode is match('^0?[0-7][0145][0145]$')
+    fail_msg: >-
+      {{ item.item }} must be a root-owned, regular, non-symlinked SSH
+      configuration file that is not group- or world-writable before its
+      policy is consumed.
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Read authenticated SSH configuration before the Hermes MCP policy
   ansible.builtin.slurp:
     src: "{{ item }}"
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_paths }}"
   register: piserv_hermes_mcp_ssh_preceding_sshd_config
   changed_when: false
   check_mode: false
+
+- name: Reinspect consumed SSH configuration leaves after reading policy
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_paths }}"
+  register: piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_reinspection
+  changed_when: false
+  check_mode: false
+
+- name: Require consumed SSH configuration leaves to retain their authenticated inode
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode is match('^0?[0-7][0145][0145]$')
+      - >-
+        item.stat.dev ==
+        (piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_state.results |
+        selectattr('item', 'equalto', item.item) |
+        map(attribute='stat.dev') | first)
+      - >-
+        item.stat.inode ==
+        (piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_state.results |
+        selectattr('item', 'equalto', item.item) |
+        map(attribute='stat.inode') | first)
+    fail_msg: >-
+      {{ item.item }} changed after its SSH policy was read. Refusing to
+      publish MCP SSH access from a configuration whose authenticated inode
+      cannot be retained.
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_reinspection.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy
   ansible.builtin.assert:
@@ -629,7 +690,6 @@
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config.results }}"
   loop_control:
     label: "{{ item.item }}"
-  when: not ansible_check_mode
 
 - name: Install SSH forced-command policy before publishing MCP keys
   ansible.builtin.template:
@@ -709,14 +769,42 @@
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0750"
 
-- name: Remove legacy Hermes MCP SSH account skeleton files
-  ansible.builtin.file:
+- name: Inspect legacy Hermes MCP SSH account skeleton files before removal
+  ansible.builtin.stat:
     path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
-    state: absent
+    follow: false
   loop:
     - .bash_logout
     - .bashrc
     - .profile
+  register: piserv_hermes_mcp_ssh_skeleton_file_state
+  changed_when: false
+  check_mode: false
+
+- name: Require safe legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists or
+        (item.stat.isreg and not item.stat.islnk and
+        item.stat.pw_name == piserv_hermes_mcp_ssh_user and
+        item.stat.gr_name == piserv_hermes_mcp_ssh_group and
+        item.stat.mode == '0644')
+    fail_msg: >-
+      {{ item.item }} must be absent or a dedicated-account-owned regular
+      mode-0644 legacy skeleton file before it is removed.
+  loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Remove legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: absent
+  loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists
 
 - name: Create private Hermes MCP SSH directory
   ansible.builtin.file:
