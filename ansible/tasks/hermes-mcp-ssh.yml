@@ -201,13 +201,15 @@
     that:
       - not item.stat.exists or item.stat.isdir
       - not item.stat.exists or not item.stat.islnk
+      - not item.stat.exists or not item.stat.ismount
       - >-
         not item.stat.exists or
         (item.stat.pw_name == piserv_hermes_mcp_ssh_user and
         item.stat.gr_name == piserv_hermes_mcp_ssh_group)
     fail_msg: >-
-      Existing Hermes MCP SSH account paths must be dedicated, non-symlinked
-      directories owned by the dedicated account before they are managed.
+      Existing Hermes MCP SSH account paths must be dedicated, non-mounted,
+      non-symlinked directories owned by the dedicated account before they are
+      managed.
   loop: "{{ piserv_hermes_mcp_ssh_account_path_state.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -473,6 +475,71 @@
     label: "{{ item.item.item.path }}"
   when: not (item.skipped | default(false))
 
+- name: Inspect administrator authorized keys ancestors before automatic copy
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: /home
+      owner: root
+      group: root
+    - path: /home/admin
+      owner: "{{ piserv_hermes_mcp_ssh_source_user }}"
+      group: "{{ piserv_hermes_mcp_ssh_source_user }}"
+    - path: /home/admin/.ssh
+      owner: "{{ piserv_hermes_mcp_ssh_source_user }}"
+      group: "{{ piserv_hermes_mcp_ssh_source_user }}"
+  register: piserv_hermes_mcp_ssh_source_authorized_keys_parent_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require safe administrator authorized keys ancestors before automatic copy
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+      - not item.stat.islnk
+      - item.stat.pw_name == item.item.owner
+      - item.stat.gr_name == item.item.group
+      - item.stat.mode is match('^0[0-7][05][05]$')
+    fail_msg: >-
+      Automatic key copying requires private, non-symlinked administrator
+      authorized_keys ancestors.
+  loop: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_parent_state.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Canonicalize administrator authorized keys ancestors before automatic copy
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ item.item.path }}"
+  loop: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_parent_state.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  register: piserv_hermes_mcp_ssh_source_authorized_keys_parent_canonical_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require exact administrator authorized keys ancestors before automatic copy
+  ansible.builtin.assert:
+    that:
+      - item.stdout == item.item.item.path
+    fail_msg: >-
+      Automatic key copying refuses administrator authorized_keys ancestors
+      that canonicalize through another path.
+  loop: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_parent_canonical_state.results }}"
+  loop_control:
+    label: "{{ item.item.item.path }}"
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
 - name: Inspect the administrator authorized keys selected for automatic copy
   ansible.builtin.stat:
     path: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
@@ -607,12 +674,6 @@
     selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
     map(attribute='stat.exists') | first)
 
-- name: Provision Hermes MCP SSH lifecycle provenance before account mutation
-  ansible.builtin.include_tasks: hermes-mcp-ssh-publish-lifecycle.yml
-  vars:
-    piserv_hermes_mcp_ssh_lifecycle_template_source: >-
-      {{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2
-
 - name: Discover SSH configuration drop-ins before the Hermes MCP policy
   ansible.builtin.find:
     paths: /etc/ssh/sshd_config.d
@@ -685,12 +746,14 @@
   ansible.builtin.stat:
     path: "{{ item }}"
     follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_paths }}"
   register: piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_reinspection
   changed_when: false
   check_mode: false
 
-- name: Require consumed SSH configuration leaves to retain their authenticated inode
+- name: Require consumed SSH configuration leaves to retain their authenticated inode and content
   ansible.builtin.assert:
     that:
       - item.stat.exists
@@ -709,10 +772,15 @@
         (piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_state.results |
         selectattr('item', 'equalto', item.item) |
         map(attribute='stat.inode') | first)
+      - >-
+        item.stat.checksum ==
+        ((piserv_hermes_mcp_ssh_preceding_sshd_config.results |
+        selectattr('item', 'equalto', item.item) |
+        map(attribute='content') | first) | b64decode | hash('sha256'))
     fail_msg: >-
       {{ item.item }} changed after its SSH policy was read. Refusing to
-      publish MCP SSH access from a configuration whose authenticated inode
-      cannot be retained.
+      publish MCP SSH access from a configuration whose authenticated inode or
+      content cannot be retained.
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_leaf_reinspection.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -739,6 +807,12 @@
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+- name: Provision Hermes MCP SSH lifecycle provenance before account mutation
+  ansible.builtin.include_tasks: hermes-mcp-ssh-publish-lifecycle.yml
+  vars:
+    piserv_hermes_mcp_ssh_lifecycle_template_source: >-
+      {{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2
 
 - name: Install SSH forced-command policy before publishing MCP keys
   ansible.builtin.template:

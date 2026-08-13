@@ -115,6 +115,7 @@ require_multiline_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/
 require_text 'Define the Hermes MCP SSH lifecycle state path' "${task_file}"
 require_text 'Inspect existing privileged Hermes MCP SSH artifacts before mutation' \
   "${task_file}"
+require_text 'not item.stat.exists or not item.stat.ismount' "${task_file}"
 require_text 'Authenticate existing privileged Hermes MCP SSH artifacts' \
   "${task_file}"
 require_text 'Require lifecycle provenance before adopting Hermes MCP SSH state' \
@@ -218,7 +219,7 @@ require_text 'Read authenticated SSH configuration before the Hermes MCP policy'
   "${task_file}"
 require_text 'Reinspect consumed SSH configuration leaves after reading policy' \
   "${task_file}"
-require_text 'Require consumed SSH configuration leaves to retain their authenticated inode' \
+require_text 'Require consumed SSH configuration leaves to retain their authenticated inode and content' \
   "${task_file}"
 require_text 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' \
   "${task_file}"
@@ -232,6 +233,9 @@ require_text "'(?im)^\\\\s*Include\\\\s+(?!/etc/ssh/sshd_config\\\\.d/\\\\*\\\\.
   "${task_file}"
 require_text "map(attribute='stat.inode') | first" "${task_file}"
 require_text "map(attribute='stat.dev') | first" "${task_file}"
+require_text 'get_checksum: true' "${task_file}"
+require_text 'checksum_algorithm: sha256' "${task_file}"
+require_text "map(attribute='content') | first) | b64decode | hash('sha256')" "${task_file}"
 ssh_configuration_audit_tasks=$(sed -n \
   '/^- name: Reject symlinked SSH configuration drop-ins before the Hermes MCP policy$/,/^- name: Install SSH forced-command policy before publishing MCP keys$/p' \
   "${task_file}")
@@ -381,6 +385,9 @@ wrapper_ancestor_canonical_command_line=$(rg -n --fixed-strings 'Canonicalize ev
 wrapper_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' "${task_file}" | cut -d: -f1)
 authorized_keys_inspect_line=$(rg -n --fixed-strings 'Inspect existing Hermes MCP SSH authorized keys file before mutation' "${task_file}" | cut -d: -f1)
 authorized_keys_auth_line=$(rg -n --fixed-strings 'Require a safe existing Hermes MCP SSH authorized keys file' "${task_file}" | cut -d: -f1)
+admin_key_ancestor_inspect_line=$(rg -n --fixed-strings 'Inspect administrator authorized keys ancestors before automatic copy' "${task_file}" | cut -d: -f1)
+admin_key_ancestor_auth_line=$(rg -n --fixed-strings 'Require safe administrator authorized keys ancestors before automatic copy' "${task_file}" | cut -d: -f1)
+admin_key_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact administrator authorized keys ancestors before automatic copy' "${task_file}" | cut -d: -f1)
 authorized_keys_inspect_count=$(rg --fixed-strings --count 'Inspect existing Hermes MCP SSH authorized keys file' "${task_file}")
 authorized_keys_auth_count=$(rg --fixed-strings --count 'Require a safe existing Hermes MCP SSH authorized keys file' "${task_file}")
 libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexec parent directory' "${task_file}" | cut -d: -f1)
@@ -388,7 +395,13 @@ wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP 
 user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_context_discover_line=$(rg -n --fixed-strings 'Discover SSH configuration drop-ins before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_define_line=$(rg -n --fixed-strings 'Define SSH configuration files before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
 ssh_context_symlink_reject_line=$(rg -n --fixed-strings 'Reject symlinked SSH configuration drop-ins before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_inspect_line=$(rg -n --fixed-strings 'Inspect consumed SSH configuration leaves before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_authenticate_line=$(rg -n --fixed-strings 'Authenticate consumed SSH configuration leaves before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_read_line=$(rg -n --fixed-strings 'Read authenticated SSH configuration before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_reinspect_line=$(rg -n --fixed-strings 'Reinspect consumed SSH configuration leaves after reading policy' "${task_file}" | cut -d: -f1)
+ssh_context_inode_line=$(rg -n --fixed-strings 'Require consumed SSH configuration leaves to retain their authenticated inode' "${task_file}" | cut -d: -f1)
 ssh_context_reject_line=$(rg -n --fixed-strings 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
 ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
@@ -403,8 +416,8 @@ if (( authorized_keys_inspect_count != 1 || authorized_keys_auth_count != 1 )); 
   exit 1
 fi
 
-if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
-  printf 'Hermes MCP SSH publication order must reject earlier scoped policy and symlinked drop-ins before policy activation and credential publication.\n' >&2
+if (( ssh_context_discover_line >= ssh_context_define_line || ssh_context_define_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_inspect_line || ssh_context_inspect_line >= ssh_context_authenticate_line || ssh_context_authenticate_line >= ssh_context_read_line || ssh_context_read_line >= ssh_context_reinspect_line || ssh_context_reinspect_line >= ssh_context_inode_line || ssh_context_inode_line >= ssh_context_reject_line || ssh_context_reject_line >= provision_line || provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must authenticate earlier SSH policy before lifecycle state, policy activation, and credential publication.\n' >&2
   exit 1
 fi
 
@@ -422,6 +435,15 @@ if (( authorized_keys_inspect_line >= authorized_keys_auth_line || authorized_ke
   printf 'Existing Hermes MCP SSH authorized_keys must be authenticated before any managed-path mutation.\n' >&2
   exit 1
 fi
+
+if (( admin_key_ancestor_inspect_line >= admin_key_ancestor_auth_line || admin_key_ancestor_auth_line >= admin_key_ancestor_canonical_line || admin_key_ancestor_canonical_line >= libexec_directory_line )); then
+  printf 'Administrator authorized_keys ancestors must be authenticated and canonicalized before managed-path mutation.\n' >&2
+  exit 1
+fi
+require_multiline_text '- path: /home
+      owner: root
+      group: root' "${task_file}"
+require_text "item.stat.mode is match('^0[0-7][05][05]$')" "${task_file}"
 require_multiline_text '- path: /usr/local/libexec
       required: false
       mode: "0755"
