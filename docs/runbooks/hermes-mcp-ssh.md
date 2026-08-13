@@ -105,10 +105,13 @@ user = state.get("mcp_ssh_user")
 group = state.get("mcp_ssh_group")
 home = state.get("mcp_ssh_home")
 keys = state.get("authorized_keys_path")
+key_provenance = state.get("key_provenance")
 if state.get("phase") != "active":
     raise SystemExit("Hermes MCP SSH lifecycle is not active")
-if not all(isinstance(value, str) for value in (user, group, home, keys)):
+if not all(isinstance(value, str) for value in (user, group, home, keys, key_provenance)):
     raise SystemExit("lifecycle identity is incomplete")
+if key_provenance != "manual-operator-managed":
+    raise SystemExit("manual keys require manual-operator-managed lifecycle provenance")
 if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
     raise SystemExit("unexpected lifecycle user")
 if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
@@ -664,18 +667,38 @@ elif path_exists_or_is_symlink "$home"; then
 fi
 
 # No new principal session can now authenticate. Refuse if an existing SSH
-# session remains: logind records the original authenticated UID even after
+# session remains. Inspect the root-owned sshd session process first: unlike
+# logind, it remains available when sshd is configured with UsePAM no. The
+# session process preserves the authenticated principal even after
 # ForceCommand invokes sudo and systemd-run changes child-process identities.
 if "$account_present"; then
-  user_uid=$(id -u "$user")
-  command -v loginctl >/dev/null
-  active_sessions=$(loginctl list-sessions --no-legend | \
-    awk -v uid="$user_uid" '$2 == uid { print }')
-  if test -n "$active_sessions"; then
-    printf 'refusing teardown while %s has active SSH sessions\n' \
+  command -v ps >/dev/null
+  active_sshd_sessions=$(ps -eo pid=,user=,comm=,args= | \
+    awk -v user="$user" '
+      $2 == "root" && $3 == "sshd" &&
+      (index($0, "sshd: " user " [priv]") || index($0, "sshd: " user "@")) {
+        print
+      }
+    ')
+  if test -n "$active_sshd_sessions"; then
+    printf 'refusing teardown while %s has active SSH session processes\n' \
       "$user" >&2
-    test -z "$active_sessions" || printf '%s\n' "$active_sessions" >&2
+    printf '%s\n' "$active_sshd_sessions" >&2
     exit 1
+  fi
+
+  # When PAM is enabled, retain logind as an independent, broader check. Do
+  # not require it: UsePAM no installations do not create a logind session.
+  user_uid=$(id -u "$user")
+  if command -v loginctl >/dev/null; then
+    active_sessions=$(loginctl list-sessions --no-legend | \
+      awk -v uid="$user_uid" '$2 == uid { print }')
+    if test -n "$active_sessions"; then
+      printf 'refusing teardown while %s has active SSH sessions\n' \
+        "$user" >&2
+      printf '%s\n' "$active_sessions" >&2
+      exit 1
+    fi
   fi
 fi
 

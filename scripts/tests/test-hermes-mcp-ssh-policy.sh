@@ -381,6 +381,8 @@ require_text 'Defaults:{{ piserv_hermes_mcp_ssh_user }} !use_pty' \
   "${sudoers_template}"
 require_text 'ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'AuthorizedKeysFile {{ piserv_hermes_mcp_ssh_authorized_keys_path }}' \
+  "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'DisableForwarding yes' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'PermitTTY no' \
@@ -389,6 +391,8 @@ require_text 'X11Forwarding no' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'Match all' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_multiline_text "'authorizedkeysfile ' ~ piserv_hermes_mcp_ssh_authorized_keys_path
+        in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" "${task_file}"
 require_text 'Configure restricted SSH access to the Hermes MCP server' \
   "${playbook}"
 require_text 'Reload SSH service' "${playbook}"
@@ -444,6 +448,7 @@ require_multiline_text "remove_private_group_if_present() {
 }" "${runbook}"
 require_text '  remove_private_group_if_present' "${runbook}"
 require_text 'unexpected lifecycle authorized_keys path' "${runbook}"
+require_text 'manual keys require manual-operator-managed lifecycle provenance' "${runbook}"
 require_text 'unexpected lifecycle wrapper path' "${runbook}"
 require_text 'unexpected lifecycle sudoers path' "${runbook}"
 require_text 'if state.get("phase") not in {"provisioning", "active"}:' "${runbook}"
@@ -515,6 +520,12 @@ require_text 'PermitUserRC no' "${runbook}"
 require_text "grep -Fx 'permituserrc no'" "${runbook}"
 require_text "'sudo -n /bin/sh -seu'" "${runbook}"
 require_text 'systemctl reload ssh' "${runbook}"
+require_text 'UsePAM no' "${runbook}"
+require_text "active_sshd_sessions=\$(ps -eo pid=,user=,comm=,args= |" "${runbook}"
+require_text "index(\$0, \"sshd: \" user \" [priv]\") || index(\$0, \"sshd: \" user \"@\")" \
+  "${runbook}"
+require_text 'refusing teardown while %s has active SSH session processes' "${runbook}"
+require_text 'When PAM is enabled, retain logind as an independent, broader check.' "${runbook}"
 require_text "active_sessions=\$(loginctl list-sessions --no-legend |" "${runbook}"
 require_text "refusing teardown while %s has active SSH sessions" \
   "${runbook}"

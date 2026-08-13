@@ -754,6 +754,9 @@
   ansible.builtin.assert:
     that:
       - >-
+        'authorizedkeysfile ' ~ piserv_hermes_mcp_ssh_authorized_keys_path
+        in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
+      - >-
         'forcecommand /usr/bin/sudo -n ' ~ piserv_hermes_mcp_ssh_wrapper_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
       - "'disableforwarding yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
@@ -761,8 +764,9 @@
       - "'permituserrc no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
     fail_msg: >-
-      The active SSH daemon does not enforce the Hermes MCP forced-command
-      policy; refusing to publish the dedicated account or its keys.
+      The active SSH daemon does not select the managed authorized_keys file
+      and enforce the Hermes MCP forced-command policy; refusing to publish
+      the dedicated account or its keys.
   when: not ansible_check_mode
 
 - name: Create Hermes MCP SSH system group

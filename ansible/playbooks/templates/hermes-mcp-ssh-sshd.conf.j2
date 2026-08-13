@@ -1,6 +1,7 @@
 # Managed by Ansible. Restrict this principal even when its authorized_keys
 # file is manually managed.
 Match User {{ piserv_hermes_mcp_ssh_user }}
+    AuthorizedKeysFile {{ piserv_hermes_mcp_ssh_authorized_keys_path }}
     ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}
     DisableForwarding yes
     PermitTTY no
