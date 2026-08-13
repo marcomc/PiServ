@@ -258,6 +258,10 @@ require_text "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdou
   "${task_file}"
 require_text 'Inspect the Hermes MCP SSH user RC hook before mutation' "${task_file}"
 require_text 'Reject an existing Hermes MCP SSH user RC hook' "${task_file}"
+require_text 'Inspect existing Hermes MCP SSH authorized keys file before mutation' \
+  "${task_file}"
+require_text 'Require a safe existing Hermes MCP SSH authorized keys file' \
+  "${task_file}"
 require_text 'PermitUserRC no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'TrustedUserCAKeys none' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'PubkeyAuthentication yes' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
@@ -278,6 +282,34 @@ require_multiline_text '- name: Reload SSH service to activate forced-command po
   ansible.builtin.systemd_service:
     name: ssh
     state: reloaded' "${task_file}"
+require_multiline_text '- name: Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -T
+      - -C
+      - >-
+        user={{ piserv_hermes_mcp_ssh_user }},addr=127.0.0.1,host=localhost
+  register: piserv_hermes_mcp_ssh_effective_policy
+  changed_when: false
+  check_mode: false
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' "${task_file}"
+require_multiline_text '- name: Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys
+  ansible.builtin.assert:' "${task_file}"
+effective_policy_tasks=$(sed -n \
+  '/^- name: Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys$/,/^- name: Create Hermes MCP SSH system group$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${effective_policy_tasks}"; then
+  printf 'Effective Hermes MCP SSH policy verification must run during converged check mode.\n' >&2
+  exit 1
+fi
+effective_policy_when_count=$(rg --fixed-strings --count \
+  'when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${effective_policy_tasks}")
+if (( effective_policy_when_count != 2 )); then
+  printf 'Effective Hermes MCP SSH policy read and assertion must skip only fresh identity simulation.\n' >&2
+  exit 1
+fi
 require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
         (piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '\''0'\'')' "${task_file}"
@@ -301,6 +333,10 @@ wrapper_ancestor_auth_line=$(rg -n --fixed-strings 'Authenticate every Hermes MC
 wrapper_ancestor_realpath_line=$(rg -n --fixed-strings 'Authenticate the Hermes MCP SSH ancestor canonicalization executable' "${task_file}" | cut -d: -f1)
 wrapper_ancestor_canonical_command_line=$(rg -n --fixed-strings 'Canonicalize every existing Hermes MCP SSH wrapper ancestor before mutation' "${task_file}" | cut -d: -f1)
 wrapper_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' "${task_file}" | cut -d: -f1)
+authorized_keys_inspect_line=$(rg -n --fixed-strings 'Inspect existing Hermes MCP SSH authorized keys file before mutation' "${task_file}" | cut -d: -f1)
+authorized_keys_auth_line=$(rg -n --fixed-strings 'Require a safe existing Hermes MCP SSH authorized keys file' "${task_file}" | cut -d: -f1)
+authorized_keys_inspect_count=$(rg --fixed-strings --count 'Inspect existing Hermes MCP SSH authorized keys file' "${task_file}")
+authorized_keys_auth_count=$(rg --fixed-strings --count 'Require a safe existing Hermes MCP SSH authorized keys file' "${task_file}")
 libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexec parent directory' "${task_file}" | cut -d: -f1)
 wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP SSH wrapper directory' "${task_file}" | cut -d: -f1)
 user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
@@ -316,6 +352,11 @@ sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers 
 sudo_verify_line=$(rg -n --fixed-strings 'Require the exact Hermes MCP SSH sudo privilege' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
+if (( authorized_keys_inspect_count != 1 || authorized_keys_auth_count != 1 )); then
+  printf 'Hermes MCP SSH authorized_keys preflight must have one current inspection and authentication task.\n' >&2
+  exit 1
+fi
+
 if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
   printf 'Hermes MCP SSH publication order must reject earlier scoped policy and symlinked drop-ins before policy activation and credential publication.\n' >&2
   exit 1
@@ -328,6 +369,11 @@ fi
 
 if (( wrapper_ancestor_canonical_line >= user_create_line )); then
   printf 'Hermes MCP SSH home ancestors must be canonicalized before user create_home.\n' >&2
+  exit 1
+fi
+
+if (( authorized_keys_inspect_line >= authorized_keys_auth_line || authorized_keys_auth_line >= libexec_directory_line )); then
+  printf 'Existing Hermes MCP SSH authorized_keys must be authenticated before any managed-path mutation.\n' >&2
   exit 1
 fi
 require_multiline_text '- path: /usr/local/libexec

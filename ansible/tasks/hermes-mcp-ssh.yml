@@ -228,6 +228,30 @@
       {{ piserv_hermes_mcp_ssh_home }}/.ssh/rc must be absent before the
       restricted Hermes MCP SSH account is managed.
 
+- name: Inspect existing Hermes MCP SSH authorized keys file before mutation
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    follow: false
+  register: piserv_hermes_mcp_ssh_authorized_keys_state
+  changed_when: false
+  check_mode: false
+
+- name: Require a safe existing Hermes MCP SSH authorized keys file
+  ansible.builtin.assert:
+    that:
+      - >-
+        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.exists or
+        (piserv_hermes_mcp_ssh_authorized_keys_state.stat.isreg and
+        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.islnk and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.pw_name ==
+        piserv_hermes_mcp_ssh_user and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.gr_name ==
+        piserv_hermes_mcp_ssh_group and
+        piserv_hermes_mcp_ssh_authorized_keys_state.stat.mode == '0600')
+    fail_msg: >-
+      An existing Hermes MCP SSH authorized_keys file must be a private regular
+      file owned by the dedicated account; it is never normalized or replaced.
+
 - name: Define the Hermes MCP SSH lifecycle state path
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_state_path: >-
@@ -748,7 +772,7 @@
   register: piserv_hermes_mcp_ssh_effective_policy
   changed_when: false
   check_mode: false
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys
   ansible.builtin.assert:
@@ -773,7 +797,7 @@
       The active SSH daemon does not select the managed authorized_keys file
       and enforce the Hermes MCP forced-command policy; refusing to publish
       the dedicated account or its keys.
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Create Hermes MCP SSH system group
   ansible.builtin.group:
@@ -944,30 +968,6 @@
     owner: "{{ piserv_hermes_mcp_ssh_user }}"
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0700"
-
-- name: Inspect existing Hermes MCP SSH authorized keys file
-  ansible.builtin.stat:
-    path: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
-    follow: false
-  register: piserv_hermes_mcp_ssh_authorized_keys_state
-  changed_when: false
-  check_mode: false
-
-- name: Require a safe existing Hermes MCP SSH authorized keys file
-  ansible.builtin.assert:
-    that:
-      - >-
-        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.exists or
-        (piserv_hermes_mcp_ssh_authorized_keys_state.stat.isreg and
-        not piserv_hermes_mcp_ssh_authorized_keys_state.stat.islnk and
-        piserv_hermes_mcp_ssh_authorized_keys_state.stat.pw_name ==
-        piserv_hermes_mcp_ssh_user and
-        piserv_hermes_mcp_ssh_authorized_keys_state.stat.gr_name ==
-        piserv_hermes_mcp_ssh_group and
-        piserv_hermes_mcp_ssh_authorized_keys_state.stat.mode == '0600')
-    fail_msg: >-
-      An existing Hermes MCP SSH authorized_keys file must be a private regular
-      file owned by the dedicated account; it is never normalized or replaced.
 
 - name: Read the automatic Hermes MCP SSH authorized keys marker
   ansible.builtin.slurp:
