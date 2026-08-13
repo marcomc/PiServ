@@ -10,6 +10,7 @@ wrapper_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-
 sudoers_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sudoers.j2"
 keys_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-authorized_keys.j2"
 state_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-state.json.j2"
+lifecycle_publication_task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh-publish-lifecycle.yml"
 playbook="${repository_root}/ansible/playbooks/hermes-agent.yml"
 runbook="${repository_root}/docs/runbooks/hermes-mcp-ssh.md"
 variables_example="${repository_root}/ansible/vars/hermes-agent.yml.example"
@@ -97,41 +98,31 @@ require_text 'Require managed markers before replacing Hermes MCP SSH artifacts'
   "${task_file}"
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
-require_multiline_text '- name: Provision Hermes MCP SSH lifecycle provenance before account mutation
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-  when: >-
-    not ansible_check_mode or
-    (piserv_hermes_mcp_ssh_publication_parent_state.results |
-    selectattr('\''item.path'\'', '\''equalto'\'', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
-    map(attribute='\''stat.exists'\'') | first)' "${task_file}"
+require_text 'hermes-mcp-ssh-publish-lifecycle.yml' "${task_file}"
 require_text 'Mark Hermes MCP SSH lifecycle provenance active after credential publication' \
   "${task_file}"
 require_text 'Publish active Hermes MCP SSH lifecycle provenance' \
   "${task_file}"
-require_multiline_text '- name: Publish active Hermes MCP SSH lifecycle provenance
+require_multiline_text '- name: Publish Hermes MCP SSH lifecycle provenance
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
+    src: "{{ piserv_hermes_mcp_ssh_lifecycle_template_source }}"
     dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
     owner: root
     group: root
     mode: "0600"
+  register: piserv_hermes_mcp_ssh_lifecycle_publication
   when: >-
     not ansible_check_mode or
     (piserv_hermes_mcp_ssh_publication_parent_state.results |
     selectattr('\''item.path'\'', '\''equalto'\'', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
-    map(attribute='\''stat.exists'\'') | first)' "${task_file}"
+    map(attribute='\''stat.exists'\'') | first)' "${lifecycle_publication_task_file}"
 require_text 'Exercise provisioning lifecycle publication guard on a fresh host' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
-require_text 'hermes_mcp_ssh_fresh_provisioning_state_publication is skipped' \
+require_text 'piserv_hermes_mcp_ssh_lifecycle_publication is skipped' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Exercise active lifecycle publication guard on a fresh host' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
-require_text 'hermes_mcp_ssh_fresh_active_state_publication is skipped' \
+require_text 'ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-publish-lifecycle.yml' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Exercise the production provenance gate for a group-only resume' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
@@ -278,6 +269,20 @@ require_text "if (\$0 != \"\" && \$0 != \"none\") {" "${task_file}"
 require_text "values = values (values == \"\" ? \"\" : \" \") \$0" "${task_file}"
 require_text 'print "none"' "${task_file}"
 require_text 'set -f' "${task_file}"
+ssh_admission_audit_tasks=$(sed -n \
+  '/^- name: Require global SSH admission for the Hermes MCP SSH account before publishing keys$/,/^- name: Inspect legacy Hermes MCP SSH account skeleton files before removal$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${ssh_admission_audit_tasks}"; then
+  printf 'Hermes MCP SSH global-admission audit must run during converged check mode.\n' >&2
+  exit 1
+fi
+ssh_admission_when_count=$(rg --fixed-strings --count \
+  'when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${ssh_admission_audit_tasks}")
+if (( ssh_admission_when_count != 1 )); then
+  printf 'Hermes MCP SSH global-admission audit must skip only fresh identity simulation.\n' >&2
+  exit 1
+fi
 require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
   ansible.builtin.systemd_service:
     name: ssh
@@ -308,6 +313,20 @@ effective_policy_when_count=$(rg --fixed-strings --count \
   <<<"${effective_policy_tasks}")
 if (( effective_policy_when_count != 2 )); then
   printf 'Effective Hermes MCP SSH policy read and assertion must skip only fresh identity simulation.\n' >&2
+  exit 1
+fi
+sudo_policy_audit_tasks=$(sed -n \
+  '/^- name: Verify the dedicated Hermes MCP SSH account has only the wrapper privilege$/,/^- name: Reinspect administrator authorized keys immediately before automatic MCP SSH publication$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${sudo_policy_audit_tasks}"; then
+  printf 'Hermes MCP SSH sudo-policy audit must run during converged check mode.\n' >&2
+  exit 1
+fi
+sudo_policy_when_count=$(rg --fixed-strings --count \
+  'when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${sudo_policy_audit_tasks}")
+if (( sudo_policy_when_count != 2 )); then
+  printf 'Hermes MCP SSH sudo-policy read and assertion must skip only fresh identity simulation.\n' >&2
   exit 1
 fi
 require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
@@ -647,6 +666,8 @@ require_text 'test -f /etc/ssh/sshd_config && test ! -L /etc/ssh/sshd_config' "$
 require_text "test \"\$(stat -c '%U:%G' -- /etc/ssh/sshd_config)\" = root:root" "${runbook}"
 require_text '[0-7][0145][0145]' "${runbook}"
 require_text "' /etc/ssh/sshd_config)" "${runbook}"
+require_text 'lower !~ /^include[[:space:]]+\/etc\/ssh\/sshd_config\.d\/\*\.conf([[:space:]]+#.*)?$/' \
+  "${runbook}"
 require_text 'refusing SSH teardown with scoped Match directives or unproven Includes in the main configuration:' \
   "${runbook}"
 require_text 'refusing SSH teardown with preceding scoped Match directives or Includes:' "${runbook}"

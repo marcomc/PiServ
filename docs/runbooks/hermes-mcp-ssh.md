@@ -528,7 +528,7 @@ require_unscoped_preceding_match_context() {
         print FILENAME ":" line
       }
       if (lower ~ /^include[[:space:]]/ &&
-          lower !~ /^include[[:space:]]+\/etc\/ssh\/sshd_config\.d\/\*\.conf$/) {
+          lower !~ /^include[[:space:]]+\/etc\/ssh\/sshd_config\.d\/\*\.conf([[:space:]]+#.*)?$/) {
         print FILENAME ":" line
       }
     }

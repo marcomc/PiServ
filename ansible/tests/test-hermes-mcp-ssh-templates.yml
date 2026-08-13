@@ -229,6 +229,8 @@
       ansible.builtin.set_fact:
         hermes_mcp_ssh_fresh_wrapper_parent: >-
           {{ hermes_mcp_ssh_template_test_directory.path }}/missing-wrapper-parent
+        piserv_hermes_mcp_ssh_state_path: >-
+          {{ hermes_mcp_ssh_template_test_directory.path }}/missing-wrapper-parent/lifecycle-state.json
         piserv_hermes_mcp_ssh_publication_parent_state:
           results:
             - item:
@@ -242,50 +244,36 @@
                 exists: false
 
     - name: Exercise provisioning lifecycle publication guard on a fresh host
-      ansible.builtin.template:
-        src: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
-        dest: "{{ hermes_mcp_ssh_fresh_wrapper_parent }}/provisioning-state.json"
-        owner: root
-        group: root
-        mode: "0600"
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-publish-lifecycle.yml
       vars:
         piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
-      register: hermes_mcp_ssh_fresh_provisioning_state_publication
-      # The real task uses this condition.  In --check, a publication attempt
-      # against the intentionally absent parent would be reported as changed.
-      when: >-
-        ansible_check_mode and
-        (not ansible_check_mode or
-        (piserv_hermes_mcp_ssh_publication_parent_state.results |
-        selectattr('item.path', 'equalto', hermes_mcp_ssh_fresh_wrapper_parent) |
-        map(attribute='stat.exists') | first))
+        piserv_hermes_mcp_ssh_wrapper_path: >-
+          {{ hermes_mcp_ssh_fresh_wrapper_parent }}/codex-mcp-ssh
+        piserv_hermes_mcp_ssh_lifecycle_template_source: >-
+          {{ playbook_dir }}/../playbooks/templates/hermes-mcp-ssh-state.json.j2
+      when: ansible_check_mode
 
     - name: Require provisioning lifecycle publication to defer on a fresh check-mode host
       ansible.builtin.assert:
         that:
-          - hermes_mcp_ssh_fresh_provisioning_state_publication is skipped
+          - piserv_hermes_mcp_ssh_lifecycle_publication is skipped
+      when: ansible_check_mode
 
     - name: Exercise active lifecycle publication guard on a fresh host
-      ansible.builtin.template:
-        src: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
-        dest: "{{ hermes_mcp_ssh_fresh_wrapper_parent }}/active-state.json"
-        owner: root
-        group: root
-        mode: "0600"
-      register: hermes_mcp_ssh_fresh_active_state_publication
-      # The real task uses this condition.  In --check, a publication attempt
-      # against the intentionally absent parent would be reported as changed.
-      when: >-
-        ansible_check_mode and
-        (not ansible_check_mode or
-        (piserv_hermes_mcp_ssh_publication_parent_state.results |
-        selectattr('item.path', 'equalto', hermes_mcp_ssh_fresh_wrapper_parent) |
-        map(attribute='stat.exists') | first))
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-publish-lifecycle.yml
+      vars:
+        piserv_hermes_mcp_ssh_lifecycle_phase: active
+        piserv_hermes_mcp_ssh_wrapper_path: >-
+          {{ hermes_mcp_ssh_fresh_wrapper_parent }}/codex-mcp-ssh
+        piserv_hermes_mcp_ssh_lifecycle_template_source: >-
+          {{ playbook_dir }}/../playbooks/templates/hermes-mcp-ssh-state.json.j2
+      when: ansible_check_mode
 
     - name: Require active lifecycle publication to defer on a fresh check-mode host
       ansible.builtin.assert:
         that:
-          - hermes_mcp_ssh_fresh_active_state_publication is skipped
+          - piserv_hermes_mcp_ssh_lifecycle_publication is skipped
+      when: ansible_check_mode
 
     - name: Model an unprovenanced partial Hermes MCP SSH deployment
       ansible.builtin.set_fact:

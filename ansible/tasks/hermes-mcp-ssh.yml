@@ -599,17 +599,10 @@
     map(attribute='stat.exists') | first)
 
 - name: Provision Hermes MCP SSH lifecycle provenance before account mutation
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-  when: >-
-    not ansible_check_mode or
-    (piserv_hermes_mcp_ssh_publication_parent_state.results |
-    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
-    map(attribute='stat.exists') | first)
+  ansible.builtin.include_tasks: hermes-mcp-ssh-publish-lifecycle.yml
+  vars:
+    piserv_hermes_mcp_ssh_lifecycle_template_source: >-
+      {{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2
 
 - name: Discover SSH configuration drop-ins before the Hermes MCP policy
   ansible.builtin.find:
@@ -922,7 +915,7 @@
       - "{{ piserv_hermes_mcp_ssh_user }}"
   changed_when: false
   check_mode: false
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Inspect legacy Hermes MCP SSH account skeleton files before removal
   ansible.builtin.stat:
@@ -1041,7 +1034,7 @@
   register: piserv_hermes_mcp_ssh_sudo_policy
   changed_when: false
   check_mode: false
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Require the exact Hermes MCP SSH sudo privilege
   ansible.builtin.assert:
@@ -1063,7 +1056,7 @@
     fail_msg: >-
       The MCP SSH account must have exactly one no-argument sudo command and
       no broad sudo privilege.
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Reinspect administrator authorized keys immediately before automatic MCP SSH publication
   ansible.builtin.stat:
@@ -1185,14 +1178,7 @@
     piserv_hermes_mcp_ssh_lifecycle_phase: active
 
 - name: Publish active Hermes MCP SSH lifecycle provenance
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-  when: >-
-    not ansible_check_mode or
-    (piserv_hermes_mcp_ssh_publication_parent_state.results |
-    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
-    map(attribute='stat.exists') | first)
+  ansible.builtin.include_tasks: hermes-mcp-ssh-publish-lifecycle.yml
+  vars:
+    piserv_hermes_mcp_ssh_lifecycle_template_source: >-
+      {{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2

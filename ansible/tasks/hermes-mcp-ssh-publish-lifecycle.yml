@@ -1,0 +1,14 @@
+---
+- name: Publish Hermes MCP SSH lifecycle provenance
+  ansible.builtin.template:
+    src: "{{ piserv_hermes_mcp_ssh_lifecycle_template_source }}"
+    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  register: piserv_hermes_mcp_ssh_lifecycle_publication
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first)
