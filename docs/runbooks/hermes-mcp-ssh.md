@@ -395,7 +395,7 @@ lifecycle record remains:
 
 ```sh
 ssh "admin@${PISERV_IP:-PiServ.local}" \
-  'getent passwd codex-hermes-mcp; test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -L /var/lib/codex-hermes-mcp/.ssh/authorized_keys; test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -L /usr/local/libexec/hermes-agent/codex-mcp-ssh; test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -L /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf; test ! -e /etc/sudoers.d/codex-hermes-mcp && test ! -L /etc/sudoers.d/codex-hermes-mcp; test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json && test ! -L /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
+  '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mcp && test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -L /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -L /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -L /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -e /etc/sudoers.d/codex-hermes-mcp && test ! -L /etc/sudoers.d/codex-hermes-mcp && test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json && test ! -L /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
 ```
 
 The verification command must exit successfully and produce no account entry

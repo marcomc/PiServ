@@ -169,6 +169,8 @@ require_text 'Authenticate only existing managed artifacts.' "${runbook}"
 require_text "visudo -cf \"\$sudoers\"" "${runbook}"
 require_text 'sshd -t' "${runbook}"
 require_text "rmdir -- \"\$home/.ssh\" \"\$home\"" "${runbook}"
+require_text '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mcp' \
+  "${runbook}"
 teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
 teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | tail -n 1 | cut -d: -f1)
 teardown_state_line=$(rg -n --fixed-strings 'rm -f -- "$state"' "${runbook}" | cut -d: -f1)
