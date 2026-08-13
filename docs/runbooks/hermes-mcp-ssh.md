@@ -239,9 +239,10 @@ The normal convergence playbook deliberately does not delete an active remote
 access path. For a failed pre-lifecycle deployment or an intentional teardown,
 first remove the local Codex MCP entry. The following operation inventories and
 authenticates every candidate first. It fails closed on a symlink, unexpected
-owner/mode, unmanaged marker, lifecycle identity, non-empty home, or group
-member; it deletes nothing in those cases. Run it from a host with existing
-`admin` access:
+owner/mode, unmanaged marker, lifecycle identity, non-empty home, group
+member, or any other passwd record whose primary GID is the target group; it
+deletes nothing in those cases. Run it from a host with existing `admin`
+access:
 
 ```sh
 ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n /bin/sh -seu' <<'REMOTE'
@@ -318,6 +319,16 @@ fi
 if "$group_present" && ! "$account_present"; then
   printf 'refusing to delete an unattested standalone group: %s\n' "$group" >&2
   exit 1
+fi
+if "$group_present"; then
+  group_gid=$(printf '%s\n' "$group_record" | cut -d: -f3)
+  primary_gid_users=$(getent passwd | awk -F: -v user="$user" -v gid="$group_gid" \
+    '$1 != user && $4 == gid { print $1 }')
+  if test -n "$primary_gid_users"; then
+    printf 'refusing to delete a group used as a primary GID by: %s\n' \
+      "$primary_gid_users" >&2
+    exit 1
+  fi
 fi
 
 # Verify a lifecycle record, when present, before deleting it. An account also

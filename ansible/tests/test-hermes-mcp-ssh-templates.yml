@@ -8,7 +8,11 @@
     hermes_agent_group: hermes-agent
     hermes_agent_home: /var/lib/hermes-agent
     hermes_agent_codex_home: /var/lib/hermes-agent/.codex
-    hermes_agent_manage_home_assistant_mcp: true
+    # The wrapper is rendered from hermes-agent.yml post_tasks, after the role
+    # variable scope has ended.  Its conditional must therefore use the
+    # PiServ play setting rather than the role default.
+    piserv_hermes_agent_manage_home_assistant_mcp: true
+    hermes_agent_manage_home_assistant_mcp: false
     hermes_agent_home_assistant_mcp_token_env_file: /var/lib/hermes-agent/home-assistant-mcp.env
     hermes_agent_managed_config_path: /etc/hermes-agent/config.yaml
     hermes_agent_binary_path: "/usr/local/bin/hermes;echo mcp-wrapper-injected"
@@ -54,7 +58,8 @@
         dest: "{{ hermes_mcp_ssh_template_test_directory.path }}/wrapper-without-home-assistant.sh"
         mode: "0600"
       vars:
-        hermes_agent_manage_home_assistant_mcp: false
+        piserv_hermes_agent_manage_home_assistant_mcp: false
+        hermes_agent_manage_home_assistant_mcp: true
 
     - name: Render provisioning Hermes MCP SSH lifecycle state
       ansible.builtin.template:
@@ -70,6 +75,15 @@
           - /bin/sh
           - -n
           - "{{ hermes_mcp_ssh_template_test_directory.path }}/wrapper.sh"
+      changed_when: false
+
+    - name: Validate rendered Hermes MCP SSH wrappers with ShellCheck
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - "{{ hermes_mcp_ssh_template_test_directory.path }}/wrapper.sh"
+          - "{{ hermes_mcp_ssh_template_test_directory.path }}/wrapper-without-home-assistant.sh"
       changed_when: false
 
     - name: Read the rendered Hermes MCP SSH templates

@@ -79,6 +79,8 @@ require_text 'Inspect every Hermes MCP SSH wrapper ancestor before mutation' \
   "${task_file}"
 require_text 'Authenticate every Hermes MCP SSH wrapper ancestor before mutation' \
   "${task_file}"
+require_multiline_text "((item.item.policy | default('safe-system-directory')) == 'managed-wrapper-directory' and
+        item.stat.mode == '0755')" "${task_file}"
 require_text 'Canonicalize every existing Hermes MCP SSH wrapper ancestor before mutation' \
   "${task_file}"
 require_text 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' \
@@ -107,8 +109,12 @@ require_text 'Install SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
 require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
   "${task_file}"
-require_text 'Activate SSH forced-command policy before publishing MCP keys' \
+require_text 'Reload SSH service to activate forced-command policy before publishing MCP keys' \
   "${task_file}"
+require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded' "${task_file}"
 require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
         (piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '\''0'\'')' "${task_file}"
@@ -135,12 +141,13 @@ wrapper_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact canonical
 libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexec parent directory' "${task_file}" | cut -d: -f1)
 wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP SSH wrapper directory' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
-if (( provision_line >= ssh_policy_line || ssh_policy_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
-  printf 'Hermes MCP SSH publication order must be state, SSH policy, keys, sudoers, active state.\n' >&2
+if (( provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must be state, SSH policy, reload, keys, sudoers, active state.\n' >&2
   exit 1
 fi
 
@@ -217,6 +224,10 @@ require_text '# requires that record, so a pre-lifecycle partial deployment can 
   "${runbook}"
 require_text 'lifecycle identity does not match this teardown' "${runbook}"
 require_text 'Refuse a home with data outside the two managed SSH paths.' "${runbook}"
+require_text 'any other passwd record whose primary GID is the target group' "${runbook}"
+require_text "primary_gid_users=\$(getent passwd | awk -F:" "${runbook}"
+require_text "'\$1 != user && \$4 == gid { print \$1 }'" "${runbook}"
+require_text 'refusing to delete a group used as a primary GID by:' "${runbook}"
 require_text 'Authenticate only existing managed artifacts.' "${runbook}"
 require_text "require_marker \"\$dropin\" '# Managed by Ansible. Restrict this principal even when its authorized_keys'" \
   "${runbook}"
@@ -230,8 +241,9 @@ require_text '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mc
 teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
 teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | tail -n 1 | cut -d: -f1)
 teardown_state_line=$(rg -n --fixed-strings 'rm -f -- "$state"' "${runbook}" | cut -d: -f1)
+teardown_primary_gid_check_line=$(rg -n --fixed-strings 'primary_gid_users=$(getent passwd | awk -F:' "${runbook}" | cut -d: -f1)
 
-if (( teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line )); then
+if (( teardown_primary_gid_check_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line )); then
   printf 'Hermes MCP SSH teardown must retain lifecycle state until SSH reload succeeds.\n' >&2
   exit 1
 fi
