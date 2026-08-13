@@ -468,11 +468,18 @@ if "$account_present"; then
       test "$teardown_resume" = true
     fi
     # useradd creates this bounded Debian/Raspberry Pi OS skeleton. Authenticate
-    # each copy against /etc/skel before accepting and later removing it.
+    # every remaining copy against /etc/skel before accepting and later removing
+    # it. A verified drain permits a resumed teardown after an earlier run has
+    # already removed any individual expected skeleton copy; unexpected files
+    # still make the following bounded-home check fail closed.
     for skeleton_file in .bash_logout .bashrc .profile; do
-      require_regular "/etc/skel/$skeleton_file" root:root:644
-      require_regular "$home/$skeleton_file" "${user}:${group}:644"
-      cmp -s -- "/etc/skel/$skeleton_file" "$home/$skeleton_file"
+      if path_exists_or_is_symlink "$home/$skeleton_file"; then
+        require_regular "/etc/skel/$skeleton_file" root:root:644
+        require_regular "$home/$skeleton_file" "${user}:${group}:644"
+        cmp -s -- "/etc/skel/$skeleton_file" "$home/$skeleton_file"
+      else
+        test "$teardown_resume" = true
+      fi
     done
     test "$(find "$home" -xdev -mindepth 1 \
       ! -path "$home/.ssh" ! -path "$keys" \

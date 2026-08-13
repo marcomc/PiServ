@@ -113,6 +113,10 @@
     that:
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
+        (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[2] == '') or
         (piserv_hermes_mcp_ssh_account_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_account_passwd_record[1] != '0' and
         piserv_hermes_mcp_ssh_account_passwd_record[2] != '0' and
@@ -120,22 +124,36 @@
         piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh')
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
+        (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[2] == '') or
         (piserv_hermes_mcp_ssh_account_group_record | length == 3 and
         piserv_hermes_mcp_ssh_account_group_record[1] != '0')
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
+        (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[2] == '') or
         (piserv_hermes_mcp_ssh_account_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_account_group_record | length == 3 and
         piserv_hermes_mcp_ssh_account_passwd_record[2] ==
         piserv_hermes_mcp_ssh_account_group_record[1])
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
+        piserv_hermes_mcp_ssh_account_passwd_record | length == 0 or
         (piserv_hermes_mcp_ssh_account_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_account_passwd_record[1] !=
         piserv_hermes_mcp_ssh_runtime_passwd_record[1])
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
+        (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[1] !=
+        piserv_hermes_mcp_ssh_runtime_group_record[1]) or
         (piserv_hermes_mcp_ssh_account_group_record | length == 3 and
         piserv_hermes_mcp_ssh_runtime_group_record | length == 3 and
         piserv_hermes_mcp_ssh_account_group_record[1] !=
@@ -233,46 +251,8 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_privileged_artifact_state.results[0].stat.exists
 
-- name: Require lifecycle provenance before adopting Hermes MCP SSH state
-  ansible.builtin.assert:
-    that:
-      - >-
-        piserv_hermes_mcp_ssh_privileged_artifact_state.results[0].stat.exists or
-        (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
-        piserv_hermes_mcp_ssh_account_group_record | length == 0 and
-        piserv_hermes_mcp_ssh_account_path_state.results |
-        selectattr('stat.exists') | list | length == 0 and
-        piserv_hermes_mcp_ssh_privileged_artifact_state.results[1:] |
-        selectattr('stat.exists') | list | length == 0)
-      - >-
-        not piserv_hermes_mcp_ssh_privileged_artifact_state.results[0].stat.exists or
-        (piserv_hermes_mcp_ssh_lifecycle_state.schema ==
-        'piserv-hermes-mcp-ssh-state-v1' and
-        piserv_hermes_mcp_ssh_lifecycle_state.mcp_ssh_user ==
-        piserv_hermes_mcp_ssh_user and
-        piserv_hermes_mcp_ssh_lifecycle_state.mcp_ssh_group ==
-        piserv_hermes_mcp_ssh_group and
-        piserv_hermes_mcp_ssh_lifecycle_state.mcp_ssh_home ==
-        piserv_hermes_mcp_ssh_home and
-        piserv_hermes_mcp_ssh_lifecycle_state.authorized_keys_path ==
-        piserv_hermes_mcp_ssh_authorized_keys_path and
-        piserv_hermes_mcp_ssh_lifecycle_state.wrapper_path ==
-        piserv_hermes_mcp_ssh_wrapper_path and
-        piserv_hermes_mcp_ssh_lifecycle_state.sudoers_path ==
-        piserv_hermes_mcp_ssh_sudoers_path and
-        piserv_hermes_mcp_ssh_lifecycle_state.key_provenance ==
-        piserv_hermes_mcp_ssh_key_provenance and
-        piserv_hermes_mcp_ssh_lifecycle_state.key_source_user ==
-        piserv_hermes_mcp_ssh_source_user and
-        piserv_hermes_mcp_ssh_lifecycle_state.key_source_path ==
-        piserv_hermes_mcp_ssh_source_authorized_keys_path and
-        (piserv_hermes_mcp_ssh_lifecycle_state.phase | default('active')) in
-        ['provisioning', 'active'])
-    fail_msg: >-
-      Refusing to adopt or rotate a Hermes MCP SSH identity without matching
-      root-owned lifecycle provenance. Remove the complete old deployment with
-      the documented rollback before changing its identity or key-management
-      mode.
+- name: Validate Hermes MCP SSH lifecycle provenance before adoption
+  ansible.builtin.import_tasks: hermes-mcp-ssh-provenance.yml
 
 - name: Read markers from existing managed Hermes MCP SSH artifacts
   ansible.builtin.slurp:

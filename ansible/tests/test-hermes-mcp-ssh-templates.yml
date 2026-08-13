@@ -339,6 +339,106 @@
         that:
           - hermes_mcp_ssh_complete_legacy_fixture_rejected | default(false)
 
+    - name: Model an authenticated group-only provisioning resume
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_account_passwd_record: []
+        piserv_hermes_mcp_ssh_account_group_record: ['x', '995', '']
+        piserv_hermes_mcp_ssh_account_identity_is_absent: false
+        piserv_hermes_mcp_ssh_account_path_state:
+          results:
+            - stat: {exists: false}
+            - stat: {exists: false}
+        piserv_hermes_mcp_ssh_privileged_artifact_state:
+          results:
+            - stat: {exists: true}
+            - stat: {exists: false}
+            - stat: {exists: false}
+            - stat: {exists: false}
+        piserv_hermes_mcp_ssh_lifecycle_state:
+          schema: piserv-hermes-mcp-ssh-state-v1
+          phase: provisioning
+          mcp_ssh_user: codex-hermes-mcp
+          mcp_ssh_group: codex-hermes-mcp
+          mcp_ssh_home: /var/lib/codex-hermes-mcp
+          authorized_keys_path: /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+          wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
+          sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+          key_provenance: automatic-admin-copy
+          key_source_user: admin
+          key_source_path: /home/admin/.ssh/authorized_keys
+
+    - name: Exercise the production provenance gate for a group-only resume
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-provenance.yml
+
+    - name: Require exact authenticated group-only provisioning resume acceptance
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_mcp_ssh_account_group_only_provisioning_resume
+
+    - name: Model a group-only resume with active lifecycle provenance
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_lifecycle_state: >-
+          {{ piserv_hermes_mcp_ssh_lifecycle_state | combine({'phase': 'active'}) }}
+
+    - name: Reject an active lifecycle group-only resume through the production gate
+      block:
+        - name: Exercise the production provenance gate with active lifecycle state
+          ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-provenance.yml
+
+        - name: Fail if active lifecycle group-only fixture was accepted
+          ansible.builtin.fail:
+            msg: Active lifecycle group-only fixture was accepted.
+      rescue:
+        - name: Verify the active group-only fixture failed provenance validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require lifecycle provenance before adopting Hermes MCP SSH state'
+
+        - name: Record expected active group-only provenance rejection
+          ansible.builtin.set_fact:
+            hermes_mcp_ssh_group_only_fixture_active_rejected: true
+
+    - name: Require rejection of the active lifecycle group-only fixture
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_group_only_fixture_active_rejected | default(false)
+
+    - name: Model a group-only resume without lifecycle provenance
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_privileged_artifact_state:
+          results:
+            - stat: {exists: false}
+            - stat: {exists: false}
+            - stat: {exists: false}
+            - stat: {exists: false}
+
+    - name: Reject an unprovenanced group-only resume through the production gate
+      block:
+        - name: Exercise the production provenance gate without lifecycle state
+          ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-provenance.yml
+
+        - name: Fail if unprovenanced group-only fixture was accepted
+          ansible.builtin.fail:
+            msg: Unprovenanced group-only fixture was accepted.
+      rescue:
+        - name: Verify the absent group-only fixture failed provenance validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require lifecycle provenance before adopting Hermes MCP SSH state'
+
+        - name: Record expected absent group-only provenance rejection
+          ansible.builtin.set_fact:
+            hermes_mcp_ssh_group_only_fixture_absent_rejected: true
+
+    - name: Require rejection of the unprovenanced group-only fixture
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_group_only_fixture_absent_rejected | default(false)
+
   post_tasks:
     - name: Remove the temporary Hermes MCP SSH template test directory
       ansible.builtin.file:

@@ -5,6 +5,7 @@ set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "${script_dir}/../.." && pwd)
 task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh.yml"
+provenance_task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh-provenance.yml"
 wrapper_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-wrapper.sh.j2"
 sudoers_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sudoers.j2"
 keys_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-authorized_keys.j2"
@@ -52,6 +53,21 @@ require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutat
   "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
 require_text 'Classify an absent Hermes MCP SSH account identity' "${task_file}"
+require_text 'Validate Hermes MCP SSH lifecycle provenance before adoption' "${task_file}"
+require_text 'hermes-mcp-ssh-provenance.yml' "${task_file}"
+require_text 'Classify an authenticated group-only provisioning resume' "${provenance_task_file}"
+require_multiline_text "piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
+      piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+      piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+      piserv_hermes_mcp_ssh_account_group_record[2] == '' and
+      (piserv_hermes_mcp_ssh_lifecycle_state | default({}, true)).phase | default('') ==
+      'provisioning' and
+      piserv_hermes_mcp_ssh_account_path_state.results |
+      selectattr('stat.exists') | list | length == 0" "${provenance_task_file}"
+require_multiline_text "piserv_hermes_mcp_ssh_account_identity_is_absent or
+        piserv_hermes_mcp_ssh_account_group_only_provisioning_resume or
+        (piserv_hermes_mcp_ssh_account_passwd_record | length == 6 and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3)" "${provenance_task_file}"
 require_text 'Require complete Hermes runtime identity records' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh'" \
   "${task_file}"
@@ -61,7 +77,7 @@ require_text 'Inspect existing privileged Hermes MCP SSH artifacts before mutati
 require_text 'Authenticate existing privileged Hermes MCP SSH artifacts' \
   "${task_file}"
 require_text 'Require lifecycle provenance before adopting Hermes MCP SSH state' \
-  "${task_file}"
+  "${provenance_task_file}"
 require_text 'Require managed markers before replacing Hermes MCP SSH artifacts' \
   "${task_file}"
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
@@ -101,6 +117,12 @@ require_text 'hermes_mcp_ssh_fresh_provisioning_state_publication is skipped' \
 require_text 'Exercise active lifecycle publication guard on a fresh host' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'hermes_mcp_ssh_fresh_active_state_publication is skipped' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'Exercise the production provenance gate for a group-only resume' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'Verify the active group-only fixture failed provenance validation' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'Verify the absent group-only fixture failed provenance validation' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Reject administrator keys that already declare a forced command' \
   "${task_file}"
@@ -288,6 +310,23 @@ require_text 'load_lifecycle_state' "${runbook}"
 require_text "find \"\$home/.ssh\" -xdev -mindepth 1 -print -quit" "${runbook}"
 require_text 'useradd creates this bounded Debian/Raspberry Pi OS skeleton.' "${runbook}"
 require_text 'for skeleton_file in .bash_logout .bashrc .profile; do' "${runbook}"
+skeleton_home_file_ref="\$home/\$skeleton_file"
+skeleton_source_file_ref="/etc/skel/\$skeleton_file"
+skeleton_identity_ref="\${user}:\${group}:644"
+skeleton_resume_ref="\$teardown_resume"
+require_multiline_text "for skeleton_file in .bash_logout .bashrc .profile; do
+      if path_exists_or_is_symlink \"${skeleton_home_file_ref}\"; then
+        require_regular \"${skeleton_source_file_ref}\" root:root:644
+        require_regular \"${skeleton_home_file_ref}\" \"${skeleton_identity_ref}\"
+        cmp -s -- \"${skeleton_source_file_ref}\" \"${skeleton_home_file_ref}\"
+      else
+        test \"${skeleton_resume_ref}\" = true
+      fi
+    done" "${runbook}"
+require_text 'every remaining copy against /etc/skel before accepting and later removing' \
+  "${runbook}"
+require_text 'still make the following bounded-home check fail closed.' \
+  "${runbook}"
 require_text "require_regular \"/etc/skel/\$skeleton_file\" root:root:644" "${runbook}"
 require_text "require_regular \"\$home/\$skeleton_file\" \"\${user}:\${group}:644\"" "${runbook}"
 require_text "cmp -s -- \"/etc/skel/\$skeleton_file\" \"\$home/\$skeleton_file\"" "${runbook}"
