@@ -46,7 +46,7 @@ require_text 'piserv_hermes_mcp_ssh_manage: true' "${group_variables}"
 require_text 'piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true' \
   "${group_variables}"
 require_text 'shell: /bin/sh' "${task_file}"
-require_text 'force: false' "${task_file}"
+require_text 'force: false' "${repository_root}/ansible/tasks/hermes-mcp-ssh-user-owned-mutations.yml"
 require_text "piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'" "${task_file}"
 require_text 'Normalize Hermes runtime identity records' "${task_file}"
 require_text '((ansible_facts.getent_passwd | default({}, true)).get(hermes_agent_user, []) | default([], true))' "${task_file}"
@@ -80,6 +80,26 @@ if ! rg --fixed-strings --quiet -- \
   printf 'Fresh check-mode identity simulation must defer dependent MCP SSH user creation.\n' >&2
   exit 1
 fi
+user_owned_mutation_task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh-user-owned-mutations.yml"
+user_owned_mutation_tasks=$(<"${user_owned_mutation_task_file}")
+user_owned_mutation_when_count=$(rg --fixed-strings --count \
+  'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${user_owned_mutation_tasks}")
+if (( user_owned_mutation_when_count != 5 )); then
+  printf 'Fresh check-mode identity simulation must defer all five user-owned MCP SSH mutations.\n' >&2
+  exit 1
+fi
+for mutation in home legacy-skeletons ssh-directory manual-key automatic-key; do
+  require_text "piserv_hermes_mcp_ssh_user_owned_mutation: ${mutation}" "${task_file}"
+done
+for mutation_task in \
+  'Set dedicated Hermes MCP SSH home permissions' \
+  'Remove legacy Hermes MCP SSH account skeleton files' \
+  'Create private Hermes MCP SSH directory' \
+  'Create an empty operator-managed Hermes MCP SSH authorized keys file' \
+  'Publish restricted copies of administrator SSH public keys'; do
+  require_text "${mutation_task}" "${user_owned_mutation_task_file}"
+done
 require_text 'Read passwd records before adopting the Hermes MCP SSH group' "${task_file}"
 require_text 'Identify existing primary-GID users of the Hermes MCP SSH group' "${task_file}"
 require_text "rejectattr('key', 'equalto', piserv_hermes_mcp_ssh_user)" "${task_file}"
@@ -496,11 +516,15 @@ require_multiline_text '- name: Remove legacy Hermes MCP SSH account skeleton fi
   loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
   loop_control:
     label: "{{ item.item }}"
-  when: item.stat.exists' "${task_file}"
+  register: piserv_hermes_mcp_ssh_skeleton_mutation
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == '\''legacy-skeletons'\''
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
+    - item.stat.exists' "${user_owned_mutation_task_file}"
 require_multiline_text '- name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \
-  "${task_file}"
+  "${user_owned_mutation_task_file}"
 require_text 'Reinspect administrator authorized keys immediately before automatic MCP SSH publication' \
   "${task_file}"
 require_text 'Revalidate the administrator authorized keys source before automatic MCP SSH publication' \
@@ -555,8 +579,6 @@ require_text 'Preserve active lifecycle provenance through the production phase 
 require_multiline_text '- name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"' \
-  "${task_file}"
-require_text "selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh')" \
   "${task_file}"
 require_text '"schema": "piserv-hermes-mcp-ssh-state-v1"' "${state_template}"
 require_text '"phase": {{ piserv_hermes_mcp_ssh_lifecycle_phase | default('\''active'\'') | to_json }}' \

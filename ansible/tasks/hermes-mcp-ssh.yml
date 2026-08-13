@@ -900,12 +900,9 @@
   when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Set dedicated Hermes MCP SSH home permissions
-  ansible.builtin.file:
-    path: "{{ piserv_hermes_mcp_ssh_home }}"
-    state: directory
-    owner: "{{ piserv_hermes_mcp_ssh_user }}"
-    group: "{{ piserv_hermes_mcp_ssh_group }}"
-    mode: "0750"
+  ansible.builtin.include_tasks: hermes-mcp-ssh-user-owned-mutations.yml
+  vars:
+    piserv_hermes_mcp_ssh_user_owned_mutation: home
 
 - name: Require global SSH admission for the Hermes MCP SSH account before publishing keys
   ansible.builtin.command:
@@ -1034,21 +1031,14 @@
     label: "{{ item.item }}"
 
 - name: Remove legacy Hermes MCP SSH account skeleton files
-  ansible.builtin.file:
-    path: "{{ item.item }}"
-    state: absent
-  loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: item.stat.exists
+  ansible.builtin.include_tasks: hermes-mcp-ssh-user-owned-mutations.yml
+  vars:
+    piserv_hermes_mcp_ssh_user_owned_mutation: legacy-skeletons
 
 - name: Create private Hermes MCP SSH directory
-  ansible.builtin.file:
-    path: "{{ piserv_hermes_mcp_ssh_home }}/.ssh"
-    state: directory
-    owner: "{{ piserv_hermes_mcp_ssh_user }}"
-    group: "{{ piserv_hermes_mcp_ssh_group }}"
-    mode: "0700"
+  ansible.builtin.include_tasks: hermes-mcp-ssh-user-owned-mutations.yml
+  vars:
+    piserv_hermes_mcp_ssh_user_owned_mutation: ssh-directory
 
 - name: Read the automatic Hermes MCP SSH authorized keys marker
   ansible.builtin.slurp:
@@ -1074,20 +1064,9 @@
     - piserv_hermes_mcp_ssh_authorized_keys_state.stat.exists
 
 - name: Create an empty operator-managed Hermes MCP SSH authorized keys file
-  ansible.builtin.copy:
-    content: ""
-    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
-    owner: "{{ piserv_hermes_mcp_ssh_user }}"
-    group: "{{ piserv_hermes_mcp_ssh_group }}"
-    mode: "0600"
-    force: false
-  when:
-    - not piserv_hermes_mcp_ssh_copy_admin_authorized_keys
-    - >-
-      not ansible_check_mode or
-      (piserv_hermes_mcp_ssh_account_path_state.results |
-      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
-      map(attribute='stat.exists') | first)
+  ansible.builtin.include_tasks: hermes-mcp-ssh-user-owned-mutations.yml
+  vars:
+    piserv_hermes_mcp_ssh_user_owned_mutation: manual-key
 
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
@@ -1269,20 +1248,9 @@
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
 - name: Publish restricted copies of administrator SSH public keys
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
-    owner: "{{ piserv_hermes_mcp_ssh_user }}"
-    group: "{{ piserv_hermes_mcp_ssh_group }}"
-    mode: "0600"
-  no_log: true
-  when:
-    - piserv_hermes_mcp_ssh_copy_admin_authorized_keys
-    - >-
-      not ansible_check_mode or
-      (piserv_hermes_mcp_ssh_account_path_state.results |
-      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
-      map(attribute='stat.exists') | first)
+  ansible.builtin.include_tasks: hermes-mcp-ssh-user-owned-mutations.yml
+  vars:
+    piserv_hermes_mcp_ssh_user_owned_mutation: automatic-key
 
 - name: Mark Hermes MCP SSH lifecycle provenance active after credential publication
   ansible.builtin.set_fact:

@@ -295,6 +295,61 @@
           - piserv_hermes_mcp_ssh_lifecycle_publication is skipped
       when: ansible_check_mode
 
+    - name: Model fresh-runtime user-owned mutation guards
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode: true
+        piserv_hermes_mcp_ssh_copy_admin_authorized_keys: false
+        piserv_hermes_mcp_ssh_skeleton_file_state:
+          results:
+            - item: /var/lib/codex-hermes-mcp/.bash_logout
+              stat:
+                exists: false
+
+    - name: Exercise the production dedicated-home mutation on a fresh host
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-user-owned-mutations.yml
+      vars:
+        piserv_hermes_mcp_ssh_user_owned_mutation: home
+      when: ansible_check_mode
+
+    - name: Exercise the production legacy-skeleton mutation on a fresh host
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-user-owned-mutations.yml
+      vars:
+        piserv_hermes_mcp_ssh_user_owned_mutation: legacy-skeletons
+      when: ansible_check_mode
+
+    - name: Exercise the production SSH-directory mutation on a fresh host
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-user-owned-mutations.yml
+      vars:
+        piserv_hermes_mcp_ssh_user_owned_mutation: ssh-directory
+      when: ansible_check_mode
+
+    - name: Exercise the production manual-key mutation on a fresh host
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-user-owned-mutations.yml
+      vars:
+        piserv_hermes_mcp_ssh_user_owned_mutation: manual-key
+      when: ansible_check_mode
+
+    - name: Exercise the production automatic-key mutation on a fresh host
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-user-owned-mutations.yml
+      vars:
+        piserv_hermes_mcp_ssh_user_owned_mutation: automatic-key
+        piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
+      when: ansible_check_mode
+
+    - name: Require fresh runtime identity to defer production user-owned mutations
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_mcp_ssh_home_mutation is skipped
+          - piserv_hermes_mcp_ssh_skeleton_mutation.results[0] is skipped
+          - piserv_hermes_mcp_ssh_directory_mutation is skipped
+          - piserv_hermes_mcp_ssh_manual_key_mutation is skipped
+          - piserv_hermes_mcp_ssh_automatic_key_mutation is skipped
+        fail_msg: >-
+          Fresh-runtime check mode must defer each production user-owned MCP
+          SSH mutation: dedicated-home, legacy skeleton, .ssh-directory,
+          manual-key, and automatic-key publication.
+      when: ansible_check_mode
+
     - name: Model an unprovenanced partial Hermes MCP SSH deployment
       ansible.builtin.set_fact:
         hermes_mcp_ssh_fixture_account_record: ['x', '995', '995', '', '/var/lib/codex-hermes-mcp', '/bin/sh']
