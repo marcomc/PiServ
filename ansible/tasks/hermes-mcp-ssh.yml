@@ -14,7 +14,10 @@
       - piserv_hermes_mcp_ssh_sudoers_path is match('^/etc/sudoers\.d/[a-z0-9_-]+$')
       - piserv_hermes_mcp_ssh_source_user == 'admin'
       - piserv_hermes_mcp_ssh_source_authorized_keys_path == '/home/admin/.ssh/authorized_keys'
-      - hermes_agent_user != 'root'
+      - hermes_agent_user is match('^[a-z_][a-z0-9_-]*$')
+      - hermes_agent_user not in ['root', piserv_hermes_mcp_ssh_user]
+      - hermes_agent_group is match('^[a-z_][a-z0-9_-]*$')
+      - hermes_agent_group not in ['root', piserv_hermes_mcp_ssh_group]
       - hermes_agent_home is match('^/')
       - hermes_agent_codex_home is match('^/')
       - hermes_agent_binary_path is match('^/')
@@ -22,19 +25,47 @@
       Hermes MCP SSH access must use dedicated non-root identities and the
       fixed, system-owned paths declared by the PiServ playbook.
 
-- name: Read Hermes runtime account before MCP SSH access setup
+- name: Read Hermes runtime account and group before MCP SSH access setup
   ansible.builtin.getent:
-    database: passwd
-    key: "{{ hermes_agent_user }}"
+    database: "{{ item }}"
+    key: "{{ hermes_agent_user if item == 'passwd' else hermes_agent_group }}"
     fail_key: false
+  loop:
+    - passwd
+    - group
   check_mode: false
 
 - name: Require the configured Hermes runtime account
   ansible.builtin.assert:
     that:
       - >-
+        ansible_check_mode or
         (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)
         is not none
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)[0]
+        == hermes_agent_user
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)[2]
+        != '0'
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)[3]
+        != '0'
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group)
+        is not none
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group)[0]
+        == hermes_agent_group
+      - >-
+        ansible_check_mode or
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group)[2]
+        != '0'
     fail_msg: >-
       Deploy Hermes before configuring its restricted SSH MCP entry point.
 
@@ -55,21 +86,45 @@
         (ansible_facts.getent_passwd | default({})).get(
         piserv_hermes_mcp_ssh_user) is none or
         ((ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[0] == piserv_hermes_mcp_ssh_user and
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[2] != '0' and
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[3] != '0' and
+        (ansible_facts.getent_passwd | default({})).get(
         piserv_hermes_mcp_ssh_user)[4] == piserv_hermes_mcp_ssh_home and
         (ansible_facts.getent_passwd | default({})).get(
         piserv_hermes_mcp_ssh_user)[5] == '/bin/sh')
       - >-
+        (ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group) is none or
+        ((ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group)[0] == piserv_hermes_mcp_ssh_group and
+        (ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group)[2] != '0')
+      - >-
         (ansible_facts.getent_passwd | default({})).get(
         piserv_hermes_mcp_ssh_user) is none or
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)
+        is none or
+        (ansible_facts.getent_passwd | default({})).get(
+        piserv_hermes_mcp_ssh_user)[2] ==
         (ansible_facts.getent_group | default({})).get(
-        piserv_hermes_mcp_ssh_group) is not none
+        piserv_hermes_mcp_ssh_group)[2]
       - >-
         (ansible_facts.getent_passwd | default({})).get(
         piserv_hermes_mcp_ssh_user) is none or
         (ansible_facts.getent_passwd | default({})).get(
-        piserv_hermes_mcp_ssh_user)[2] ==
+        piserv_hermes_mcp_ssh_user)[2] !=
+        (ansible_facts.getent_passwd | default({})).get(hermes_agent_user)[2]
+      - >-
         (ansible_facts.getent_group | default({})).get(
-        piserv_hermes_mcp_ssh_group)[1]
+        piserv_hermes_mcp_ssh_group) is none or
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group)
+        is none or
+        (ansible_facts.getent_group | default({})).get(
+        piserv_hermes_mcp_ssh_group)[2] !=
+        (ansible_facts.getent_group | default({})).get(hermes_agent_group)[2]
     fail_msg: >-
       An existing Hermes MCP SSH account must already use the dedicated home,
       shell, and primary group. Refusing to adopt another account.
@@ -253,16 +308,6 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
-- name: Install SSH forced-command policy for the Hermes MCP account
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
-    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
-    owner: root
-    group: root
-    mode: "0644"
-    validate: /usr/sbin/sshd -t -f %s
-  notify: Reload SSH service
-
 - name: Inspect privileged Hermes MCP SSH publication parents
   ansible.builtin.stat:
     path: "{{ item.path }}"
@@ -307,6 +352,46 @@
     mode: "0755"
   when: not piserv_hermes_mcp_ssh_publication_parent_state.results[0].stat.exists
 
+- name: Inspect the Hermes MCP runtime launch prerequisites
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: /usr/bin/systemd-run
+      owner: root
+      group: root
+      mode: "0755"
+  register: piserv_hermes_mcp_ssh_runtime_prerequisite_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate the Hermes MCP runtime launch prerequisites
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == item.item.owner
+      - item.stat.gr_name == item.item.group
+      - item.stat.mode == item.item.mode
+    fail_msg: >-
+      {{ item.item.path }} must be a private, regular, non-symlinked runtime
+      launch prerequisite with its expected owner and mode.
+  loop: "{{ piserv_hermes_mcp_ssh_runtime_prerequisite_state.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: not ansible_check_mode
+
+- name: Install SSH forced-command policy for the Hermes MCP account
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
+    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload SSH service
+
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"
@@ -314,6 +399,15 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Validate the complete SSH daemon configuration after MCP policy publication
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
 
 - name: Install restricted Hermes MCP SSH sudoers policy
   ansible.builtin.template:

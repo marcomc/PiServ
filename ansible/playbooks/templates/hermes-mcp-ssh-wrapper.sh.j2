@@ -3,16 +3,36 @@
 # codex-hermes-mcp SSH principal's sudoers rule.
 set -eu
 
-# SSH starts this wrapper in the MCP account's private home. Hermes loads its
-# private environment relative to its working directory, so enter its owned
-# state root before switching identities.
-cd {{ hermes_agent_home | quote }}
-
-exec /usr/sbin/runuser -u {{ hermes_agent_user | quote }} -- \
-  /usr/bin/env -i \
-  HOME={{ hermes_agent_home | quote }} \
-  HERMES_HOME={{ hermes_agent_home | quote }} \
-  CODEX_HOME={{ hermes_agent_codex_home | quote }} \
-  PYTHONWARNINGS=ignore \
-  PATH=/usr/local/bin:/usr/bin:/bin \
+# The SSH principal may invoke this root-owned wrapper, but never Hermes
+# directly. Run the MCP server in a transient systemd sandbox equivalent to
+# the dashboard service: the runtime owns its private state, while root binds
+# the authoritative configuration and smart-home policy over mutable paths.
+# --pipe preserves the stdio MCP transport across the transient unit.
+exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec \
+  --property=User={{ hermes_agent_user | quote }} \
+  --property=Group={{ hermes_agent_group | quote }} \
+  --property=WorkingDirectory={{ (hermes_agent_home ~ '/workspace') | quote }} \
+  --setenv=HOME={{ hermes_agent_home | quote }} \
+  --setenv=HERMES_HOME={{ hermes_agent_home | quote }} \
+  --setenv=CODEX_HOME={{ hermes_agent_codex_home | quote }} \
+  --setenv=PYTHONWARNINGS=ignore \
+  --setenv=PATH=/usr/local/bin:/usr/bin:/bin \
+{% if hermes_agent_manage_home_assistant_mcp %}
+  --property=EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }} \
+{% endif %}
+  --property=NoNewPrivileges=true \
+  --property=PrivateTmp=true \
+  --property=ProtectSystem=strict \
+  --property=ProtectHome=true \
+  --property=ReadWritePaths={{ hermes_agent_home | quote }} \
+  --property={{ ('BindReadOnlyPaths=' ~ hermes_agent_managed_config_path ~ ':' ~ hermes_agent_home ~ '/config.yaml') | quote }} \
+  --property={{ ('BindReadOnlyPaths=/etc/hermes-agent/policies/smart-home-AGENTS.md:' ~ hermes_agent_home ~ '/workspace/AGENTS.md') | quote }} \
+  --property=ProtectKernelTunables=true \
+  --property=ProtectKernelModules=true \
+  --property=ProtectControlGroups=true \
+  --property=RestrictSUIDSGID=true \
+  --property=LockPersonality=true \
+  --property=CapabilityBoundingSet= \
+  --property='RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' \
+  --property=UMask=0077 \
   {{ hermes_agent_binary_path | quote }} mcp serve

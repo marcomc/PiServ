@@ -44,16 +44,26 @@ require_text 'mode: "0440"' "${task_file}"
 require_text 'validate: /usr/sbin/visudo -cf %s' "${task_file}"
 require_text 'Authenticate privileged Hermes MCP SSH publication parents' \
   "${task_file}"
+require_text 'Inspect the Hermes MCP runtime launch prerequisites' "${task_file}"
 require_text 'Install SSH forced-command policy for the Hermes MCP account' \
   "${task_file}"
+require_text 'ansible_check_mode or' "${task_file}"
+require_text "piserv_hermes_mcp_ssh_user)[2] != '0'" "${task_file}"
+require_text "piserv_hermes_mcp_ssh_group)[2] != '0'" "${task_file}"
 require_text 'when: not ansible_check_mode' "${task_file}"
 require_text 'command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict' \
   "${keys_template}"
-require_text 'exec /usr/sbin/runuser -u {{ hermes_agent_user | quote }} --' \
+require_text 'exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec' \
   "${wrapper_template}"
-require_text 'cd {{ hermes_agent_home | quote }}' "${wrapper_template}"
+require_text '--property=User={{ hermes_agent_user | quote }}' "${wrapper_template}"
+require_text '--property=Group={{ hermes_agent_group | quote }}' "${wrapper_template}"
 require_text 'PYTHONWARNINGS=ignore' "${wrapper_template}"
-require_text '/usr/bin/env -i' "${wrapper_template}"
+require_text '--property=NoNewPrivileges=true' "${wrapper_template}"
+require_text 'BindReadOnlyPaths=' "${wrapper_template}"
+require_text 'EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }}' \
+  "${wrapper_template}"
+require_text 'WorkingDirectory={{ (hermes_agent_home ~ '\''/workspace'\'') | quote }}' \
+  "${wrapper_template}"
 require_text '{{ hermes_agent_binary_path | quote }} mcp serve' "${wrapper_template}"
 require_text 'NOPASSWD: {{ piserv_hermes_mcp_ssh_wrapper_path }} ""' \
   "${sudoers_template}"
@@ -62,6 +72,8 @@ require_text 'Defaults:{{ piserv_hermes_mcp_ssh_user }} !use_pty' \
 require_text 'ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'DisableForwarding yes' \
+  "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'Match all' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'Configure restricted SSH access to the Hermes MCP server' \
   "${playbook}"
