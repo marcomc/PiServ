@@ -242,6 +242,8 @@ require_text "'trustedusercakeys none' in piserv_hermes_mcp_ssh_effective_policy
   "${task_file}"
 require_text "'pubkeyauthentication yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
   "${task_file}"
+require_text "'authenticationmethods publickey' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
 require_text "'passwordauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
   "${task_file}"
 require_text "'kbdinteractiveauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
@@ -259,6 +261,7 @@ require_text 'Reject an existing Hermes MCP SSH user RC hook' "${task_file}"
 require_text 'PermitUserRC no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'TrustedUserCAKeys none' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'PubkeyAuthentication yes' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'AuthenticationMethods publickey' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'PasswordAuthentication no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'KbdInteractiveAuthentication no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'Require global SSH admission for the Hermes MCP SSH account before publishing keys' \
@@ -267,6 +270,9 @@ require_text "allow_users=\$(setting allowusers)" "${task_file}"
 require_text "deny_users=\$(setting denyusers)" "${task_file}"
 require_text "allow_groups=\$(setting allowgroups)" "${task_file}"
 require_text "deny_groups=\$(setting denygroups)" "${task_file}"
+require_text "if (\$0 != \"\" && \$0 != \"none\") {" "${task_file}"
+require_text "values = values (values == \"\" ? \"\" : \" \") \$0" "${task_file}"
+require_text 'print "none"' "${task_file}"
 require_text 'set -f' "${task_file}"
 require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
   ansible.builtin.systemd_service:

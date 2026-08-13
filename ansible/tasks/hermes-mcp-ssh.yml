@@ -759,6 +759,7 @@
       - "'authorizedkeyscommand none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'trustedusercakeys none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'pubkeyauthentication yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'authenticationmethods publickey' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'passwordauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'kbdinteractiveauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - >-
@@ -818,13 +819,15 @@
             $1 == key {
               $1 = ""
               sub(/^ /, "")
-              print
-              found = 1
-              exit
+              if ($0 != "" && $0 != "none") {
+                values = values (values == "" ? "" : " ") $0
+              }
             }
             END {
-              if (!found) {
-                exit 1
+              if (values == "") {
+                print "none"
+              } else {
+                print values
               }
             }')
           printf '%s\n' "$value"

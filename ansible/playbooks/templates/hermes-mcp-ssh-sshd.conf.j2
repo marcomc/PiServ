@@ -5,6 +5,7 @@ Match User {{ piserv_hermes_mcp_ssh_user }}
     AuthorizedKeysCommand none
     TrustedUserCAKeys none
     PubkeyAuthentication yes
+    AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
     ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}

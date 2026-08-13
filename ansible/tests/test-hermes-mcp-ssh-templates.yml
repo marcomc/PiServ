@@ -178,6 +178,9 @@
             'PubkeyAuthentication yes'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
+            'AuthenticationMethods publickey'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
             'PasswordAuthentication no'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
