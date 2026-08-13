@@ -223,7 +223,7 @@ require_text '[0-7][0145][0145]' "${runbook}"
 require_text '# requires that record, so a pre-lifecycle partial deployment can never lose a' \
   "${runbook}"
 require_text 'lifecycle identity does not match this teardown' "${runbook}"
-require_text 'Refuse a home with data outside the two managed SSH paths.' "${runbook}"
+require_text "find \"\$home/.ssh\" -xdev -mindepth 1 -print -quit" "${runbook}"
 require_text 'any other passwd record whose primary GID is the target group' "${runbook}"
 require_text "primary_gid_users=\$(getent passwd | awk -F:" "${runbook}"
 require_text "'\$1 != user && \$4 == gid { print \$1 }'" "${runbook}"
@@ -234,17 +234,43 @@ require_text "require_marker \"\$dropin\" '# Managed by Ansible. Restrict this p
 require_text "require_marker \"\$sudoers\" '# Managed by Ansible. Permit only the no-argument Hermes MCP entry point.'" \
   "${runbook}"
 require_text "visudo -cf \"\$sudoers\"" "${runbook}"
+require_text '# Drain the SSH principal before revoking it.' \
+  "${runbook}"
+require_text 'ForceCommand /usr/bin/false' "${runbook}"
+require_text 'Resume a prior safe drain only when its exact root-owned policy remains.' "${runbook}"
+require_text "require_regular \"\$teardown_deny\" root:root:644" "${runbook}"
+require_text "cmp -s -- \"\$expected_deny\" \"\$teardown_deny\"" "${runbook}"
+require_text 'teardown_resume=true' "${runbook}"
+require_text "test \"\$teardown_resume\" = true" "${runbook}"
+require_text "sshd -T -C \"user=\${user},addr=127.0.0.1,host=localhost\"" "${runbook}"
+require_text "grep -Fx 'forcecommand /usr/bin/false'" "${runbook}"
+require_text "grep -Fx 'disableforwarding yes'" "${runbook}"
+require_text "'sudo -n /bin/sh -seu'" "${runbook}"
+require_text 'systemctl reload ssh' "${runbook}"
+require_text "active_sessions=\$(loginctl list-sessions --no-legend |" "${runbook}"
+require_text "refusing teardown while %s has active SSH sessions" \
+  "${runbook}"
 require_text 'sshd -t' "${runbook}"
-require_text "rmdir -- \"\$home/.ssh\" \"\$home\"" "${runbook}"
+require_text "if path_exists_or_is_symlink \"\$home/.ssh\"; then rmdir -- \"\$home/.ssh\"; fi" \
+  "${runbook}"
 require_text '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mcp' \
   "${runbook}"
 teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
-teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | tail -n 1 | cut -d: -f1)
+teardown_keys_line=$(rg -n --fixed-strings 'rm -f -- "$keys"' "${runbook}" | cut -d: -f1)
+teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | \
+  awk -F: -v after_line="${teardown_artifacts_line}" '$1 > after_line { print $1; exit }')
 teardown_state_line=$(rg -n --fixed-strings 'rm -f -- "$state"' "${runbook}" | cut -d: -f1)
 teardown_primary_gid_check_line=$(rg -n --fixed-strings 'primary_gid_users=$(getent passwd | awk -F:' "${runbook}" | cut -d: -f1)
+teardown_deny_line=$(rg -n --fixed-strings '# Drain the SSH principal before revoking it.' "${runbook}" | cut -d: -f1)
+teardown_deny_publish_line=$(rg -n --fixed-strings 'mv -- "$deny_tmp" "$teardown_deny"' "${runbook}" | cut -d: -f1)
+teardown_deny_validate_line=$(rg -n --fixed-strings 'sshd -t' "${runbook}" | awk -F: -v after_line="${teardown_deny_publish_line}" '$1 > after_line { print $1; exit }')
+teardown_deny_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | awk -F: -v after_line="${teardown_deny_validate_line}" '$1 > after_line { print $1; exit }')
+teardown_deny_effective_line=$(rg -n --fixed-strings 'effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")' "${runbook}" | cut -d: -f1)
+teardown_activity_check_line=$(rg -n --fixed-strings '# No new principal session can now authenticate.' "${runbook}" | cut -d: -f1)
+teardown_deny_remove_line=$(rg -n --fixed-strings 'rm -f -- "$teardown_deny"' "${runbook}" | cut -d: -f1)
 
-if (( teardown_primary_gid_check_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line )); then
-  printf 'Hermes MCP SSH teardown must retain lifecycle state until SSH reload succeeds.\n' >&2
+if (( teardown_primary_gid_check_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line || teardown_state_line >= teardown_deny_remove_line )); then
+  printf 'Hermes MCP SSH teardown must publish and reload its deny policy before scans, retain it through policy removal, and revoke keys before policy artifacts.\n' >&2
   exit 1
 fi
 

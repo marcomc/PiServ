@@ -254,6 +254,7 @@ wrapper=/usr/local/libexec/hermes-agent/codex-mcp-ssh
 dropin=/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
 sudoers=/etc/sudoers.d/codex-hermes-mcp
 state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+teardown_deny=/etc/ssh/sshd_config.d/59-codex-hermes-mcp-teardown.conf
 
 require_directory() {
   test -d "$1" && test ! -L "$1"
@@ -361,16 +362,6 @@ PY
 if path_exists_or_is_symlink "$state"; then
   authenticate_state
 fi
-if "$account_present"; then
-  test -e "$state"
-  require_directory "$home"
-  require_private_directory "$home/.ssh" "${user}:${group}:700"
-  require_regular "$keys" "${user}:${group}:600"
-  # Refuse a home with data outside the two managed SSH paths.
-  test "$(find "$home" -xdev -mindepth 1 \
-    ! -path "$home/.ssh" ! -path "$keys" -print -quit)" = ''
-fi
-
 # Authenticate only existing managed artifacts. Missing files are safe for a
 # partial pre-lifecycle rollback; an unexpected existing file is not.
 if path_exists_or_is_symlink "$wrapper"; then
@@ -387,17 +378,102 @@ if path_exists_or_is_symlink "$sudoers"; then
   visudo -cf "$sudoers"
 fi
 
-sshd -t
-rm -f -- "$sudoers" "$wrapper" "$dropin"
-if "$account_present"; then
-  rm -f -- "$keys"
-  rmdir -- "$home/.ssh" "$home"
-  userdel "$user"
-  if "$group_present"; then groupdel "$group"; fi
+# Drain the SSH principal before revoking it. Publish a temporary, root-owned
+# deny policy first, validate the complete configuration, then reload SSH. If
+# any later check fails, this deny policy intentionally remains in place and no
+# deletion has begun, so repair does not reopen the principal accidentally.
+expected_deny=$(mktemp)
+deny_tmp=
+teardown_resume=false
+cleanup_teardown_files() {
+  rm -f -- "$expected_deny" "${deny_tmp:-}"
+}
+trap cleanup_teardown_files EXIT
+cat >"$expected_deny" <<'DENY'
+# Temporary teardown drain for the dedicated Hermes MCP SSH principal.
+Match User codex-hermes-mcp
+    ForceCommand /usr/bin/false
+    DisableForwarding yes
+    PermitTTY no
+    X11Forwarding no
+Match all
+DENY
+if path_exists_or_is_symlink "$teardown_deny"; then
+  # Resume a prior safe drain only when its exact root-owned policy remains.
+  require_regular "$teardown_deny" root:root:644
+  cmp -s -- "$expected_deny" "$teardown_deny"
+  teardown_resume=true
+else
+  deny_tmp=$(mktemp /etc/ssh/sshd_config.d/.codex-hermes-mcp-teardown.XXXXXX)
+  cp -- "$expected_deny" "$deny_tmp"
+  chown root:root "$deny_tmp"
+  chmod 0644 "$deny_tmp"
+  sshd -t -f "$deny_tmp"
+  mv -- "$deny_tmp" "$teardown_deny"
 fi
 sshd -t
 systemctl reload ssh
+effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")
+printf '%s\n' "$effective_deny" | grep -Fx 'forcecommand /usr/bin/false'
+printf '%s\n' "$effective_deny" | grep -Fx 'disableforwarding yes'
+printf '%s\n' "$effective_deny" | grep -Fx 'permittty no'
+printf '%s\n' "$effective_deny" | grep -Fx 'x11forwarding no'
+
+if "$account_present"; then
+  test -e "$state"
+  if path_exists_or_is_symlink "$home"; then
+    require_directory "$home"
+    if path_exists_or_is_symlink "$home/.ssh"; then
+      require_private_directory "$home/.ssh" "${user}:${group}:700"
+      if path_exists_or_is_symlink "$keys"; then
+        require_regular "$keys" "${user}:${group}:600"
+      else
+        test "$teardown_resume" = true
+        test "$(find "$home/.ssh" -xdev -mindepth 1 -print -quit)" = ''
+      fi
+    else
+      test "$teardown_resume" = true
+    fi
+    test "$(find "$home" -xdev -mindepth 1 \
+      ! -path "$home/.ssh" ! -path "$keys" -print -quit)" = ''
+  else
+    test "$teardown_resume" = true
+  fi
+fi
+
+# No new principal session can now authenticate. Refuse if an existing SSH
+# session remains: logind records the original authenticated UID even after
+# ForceCommand invokes sudo and systemd-run changes child-process identities.
+if "$account_present"; then
+  user_uid=$(id -u "$user")
+  command -v loginctl >/dev/null
+  active_sessions=$(loginctl list-sessions --no-legend | \
+    awk -v uid="$user_uid" '$2 == uid { print }')
+  if test -n "$active_sessions"; then
+    printf 'refusing teardown while %s has active SSH sessions\n' \
+      "$user" >&2
+    test -z "$active_sessions" || printf '%s\n' "$active_sessions" >&2
+    exit 1
+  fi
+fi
+
+sshd -t
+if "$account_present"; then
+  # Keep the ForceCommand policy live while keys are revoked, so a connection
+  # racing this teardown cannot fall back to the account's login shell.
+  if path_exists_or_is_symlink "$keys"; then rm -f -- "$keys"; fi
+  if path_exists_or_is_symlink "$home/.ssh"; then rmdir -- "$home/.ssh"; fi
+  if path_exists_or_is_symlink "$home"; then rmdir -- "$home"; fi
+  userdel "$user"
+  if "$group_present"; then groupdel "$group"; fi
+fi
+rm -f -- "$sudoers" "$wrapper" "$dropin"
+sshd -t
+systemctl reload ssh
 rm -f -- "$state"
+rm -f -- "$teardown_deny"
+sshd -t
+systemctl reload ssh
 REMOTE
 ```
 
