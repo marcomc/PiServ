@@ -236,24 +236,29 @@ codex mcp remove hermes-piserv
 ## Rollback
 
 The normal convergence playbook deliberately does not delete an active remote
-access path. For a failed pre-lifecycle deployment or an intentional teardown,
-first remove the local Codex MCP entry. The following operation inventories and
-authenticates every candidate first. It fails closed on a symlink, unexpected
-owner/mode, unmanaged marker, lifecycle identity, non-empty home, group
-member, or any other passwd record whose primary GID is the target group; it
-deletes nothing in those cases. Run it from a host with existing `admin`
-access:
+access path. For an intentional teardown, first remove the local Codex MCP
+entry. The following operation recovers the account, group, home, key,
+wrapper, and sudoers paths from the root-owned lifecycle record; do not replace
+those recovered values with the documented defaults. It fails closed on a
+missing or invalid lifecycle record, symlink, unexpected owner/mode, unmanaged
+marker, unexpected `/etc/skel` file, non-empty home, group member, or any other
+passwd record whose primary GID is the target group; it deletes nothing in
+those cases. The lifecycle record is created before the account, so a current
+deployment cannot leave a managed account in a pre-lifecycle state. Run it from
+a host with existing `admin` access:
 
 ```sh
 ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n /bin/sh -seu' <<'REMOTE'
-user=codex-hermes-mcp
-group=codex-hermes-mcp
-home=/var/lib/codex-hermes-mcp
-keys="$home/.ssh/authorized_keys"
-wrapper=/usr/local/libexec/hermes-agent/codex-mcp-ssh
-dropin=/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
-sudoers=/etc/sudoers.d/codex-hermes-mcp
+# This location is fixed by the allowed wrapper directory. The record itself
+# supplies the configured identity and all managed artifact paths below.
 state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+user=
+group=
+home=
+keys=
+wrapper=
+sudoers=
+dropin=/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
 teardown_deny=/etc/ssh/sshd_config.d/59-codex-hermes-mcp-teardown.conf
 
 require_directory() {
@@ -290,6 +295,10 @@ require_marker() {
   grep -Fq -- "$2" "$1"
 }
 
+require_exact_line() {
+  grep -Fxq -- "$2" "$1"
+}
+
 path_exists_or_is_symlink() {
   test -e "$1" || test -L "$1"
 }
@@ -300,6 +309,55 @@ for parent in /etc /etc/ssh /etc/ssh/sshd_config.d /etc/sudoers.d \
   /usr /usr/local /usr/local/libexec /usr/local/libexec/hermes-agent /var /var/lib; do
   require_safe_parent "$parent"
 done
+
+# Recover and authenticate the configured lifecycle identity before inspecting
+# or changing any target. The parser accepts only the same constrained values
+# as the playbook, then emits a delimiter that none of those values can contain.
+load_lifecycle_state() {
+  require_regular "$state" root:root:600
+  lifecycle_values=$(python3 - "$state" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    state = json.load(source)
+if state.get("schema") != "piserv-hermes-mcp-ssh-state-v1":
+    raise SystemExit("unexpected lifecycle schema")
+user = state.get("mcp_ssh_user")
+group = state.get("mcp_ssh_group")
+home = state.get("mcp_ssh_home")
+keys = state.get("authorized_keys_path")
+wrapper = state.get("wrapper_path")
+sudoers = state.get("sudoers_path")
+if not all(isinstance(value, str) for value in (user, group, home, keys, wrapper, sudoers)):
+    raise SystemExit("lifecycle identity is incomplete")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
+    raise SystemExit("unexpected lifecycle user")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
+    raise SystemExit("unexpected lifecycle group")
+if not re.fullmatch(r"/var/lib/[a-z0-9_-]+", home):
+    raise SystemExit("unexpected lifecycle home")
+if keys != f"{home}/.ssh/authorized_keys":
+    raise SystemExit("unexpected lifecycle authorized_keys path")
+if not re.fullmatch(r"/usr/local/libexec/hermes-agent/[a-z0-9_-]+", wrapper):
+    raise SystemExit("unexpected lifecycle wrapper path")
+if not re.fullmatch(r"/etc/sudoers\.d/[a-z0-9_-]+", sudoers):
+    raise SystemExit("unexpected lifecycle sudoers path")
+if state.get("phase") not in {"provisioning", "active"}:
+    raise SystemExit("unexpected lifecycle phase")
+print("|".join((user, group, home, keys, wrapper, sudoers)))
+PY
+)
+  IFS='|' read -r user group home keys wrapper sudoers <<EOF
+$lifecycle_values
+EOF
+  test -n "$user" && test -n "$group" && test -n "$home" && test -n "$keys"
+  test -n "$wrapper" && test -n "$sudoers"
+}
+
+# Recover the configured identity before looking up its account or group.
+load_lifecycle_state
 
 account_present=false
 group_present=false
@@ -313,6 +371,7 @@ if getent passwd "$user" >/dev/null; then
   test -n "$group_record"
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f6)" = "$home"
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f7)" = /bin/sh
+  test "$(printf '%s\n' "$passwd_record" | cut -d: -f3)" != 0
   test "$(printf '%s\n' "$passwd_record" | cut -d: -f4)" = \
     "$(printf '%s\n' "$group_record" | cut -d: -f3)"
   test -z "$(printf '%s\n' "$group_record" | cut -d: -f4)"
@@ -323,6 +382,7 @@ if "$group_present" && ! "$account_present"; then
 fi
 if "$group_present"; then
   group_gid=$(printf '%s\n' "$group_record" | cut -d: -f3)
+  test "$group_gid" != 0
   primary_gid_users=$(getent passwd | awk -F: -v user="$user" -v gid="$group_gid" \
     '$1 != user && $4 == gid { print $1 }')
   if test -n "$primary_gid_users"; then
@@ -332,38 +392,8 @@ if "$group_present"; then
   fi
 fi
 
-# Verify a lifecycle record, when present, before deleting it. An account also
-# requires that record, so a pre-lifecycle partial deployment can never lose a
-# user or home by this command.
-authenticate_state() {
-  require_regular "$state" root:root:600
-  python3 - "$state" "$user" "$group" "$home" "$keys" "$wrapper" "$sudoers" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as source:
-    state = json.load(source)
-expected = {
-    "schema": "piserv-hermes-mcp-ssh-state-v1",
-    "mcp_ssh_user": sys.argv[2],
-    "mcp_ssh_group": sys.argv[3],
-    "mcp_ssh_home": sys.argv[4],
-    "authorized_keys_path": sys.argv[5],
-    "wrapper_path": sys.argv[6],
-    "sudoers_path": sys.argv[7],
-}
-if any(state.get(key) != value for key, value in expected.items()):
-    raise SystemExit("lifecycle identity does not match this teardown")
-if state.get("phase", "active") not in {"provisioning", "active"}:
-    raise SystemExit("unexpected lifecycle phase")
-PY
-}
-
-if path_exists_or_is_symlink "$state"; then
-  authenticate_state
-fi
-# Authenticate only existing managed artifacts. Missing files are safe for a
-# partial pre-lifecycle rollback; an unexpected existing file is not.
+# Authenticate every existing managed artifact. A missing path is accepted only
+# later as a resumable stage after the authenticated temporary deny is active.
 if path_exists_or_is_symlink "$wrapper"; then
   require_regular "$wrapper" root:root:755
   require_marker "$wrapper" '# Managed by Ansible. This entry point'
@@ -371,10 +401,14 @@ fi
 if path_exists_or_is_symlink "$dropin"; then
   require_regular "$dropin" root:root:644
   require_marker "$dropin" '# Managed by Ansible. Restrict this principal even when its authorized_keys'
+  require_exact_line "$dropin" "Match User $user"
+  require_exact_line "$dropin" "    ForceCommand /usr/bin/sudo -n $wrapper"
 fi
 if path_exists_or_is_symlink "$sudoers"; then
   require_regular "$sudoers" root:root:440
   require_marker "$sudoers" '# Managed by Ansible. Permit only the no-argument Hermes MCP entry point.'
+  require_exact_line "$sudoers" "Defaults:$user !use_pty"
+  require_exact_line "$sudoers" "$user ALL=(root) NOPASSWD: $wrapper \"\""
   visudo -cf "$sudoers"
 fi
 
@@ -389,9 +423,9 @@ cleanup_teardown_files() {
   rm -f -- "$expected_deny" "${deny_tmp:-}"
 }
 trap cleanup_teardown_files EXIT
-cat >"$expected_deny" <<'DENY'
+cat >"$expected_deny" <<DENY
 # Temporary teardown drain for the dedicated Hermes MCP SSH principal.
-Match User codex-hermes-mcp
+Match User $user
     ForceCommand /usr/bin/false
     DisableForwarding yes
     PermitTTY no
@@ -420,7 +454,6 @@ printf '%s\n' "$effective_deny" | grep -Fx 'permittty no'
 printf '%s\n' "$effective_deny" | grep -Fx 'x11forwarding no'
 
 if "$account_present"; then
-  test -e "$state"
   if path_exists_or_is_symlink "$home"; then
     require_directory "$home"
     if path_exists_or_is_symlink "$home/.ssh"; then
@@ -434,11 +467,24 @@ if "$account_present"; then
     else
       test "$teardown_resume" = true
     fi
+    # useradd creates this bounded Debian/Raspberry Pi OS skeleton. Authenticate
+    # each copy against /etc/skel before accepting and later removing it.
+    for skeleton_file in .bash_logout .bashrc .profile; do
+      require_regular "/etc/skel/$skeleton_file" root:root:644
+      require_regular "$home/$skeleton_file" "${user}:${group}:644"
+      cmp -s -- "/etc/skel/$skeleton_file" "$home/$skeleton_file"
+    done
     test "$(find "$home" -xdev -mindepth 1 \
-      ! -path "$home/.ssh" ! -path "$keys" -print -quit)" = ''
+      ! -path "$home/.ssh" ! -path "$keys" \
+      ! -path "$home/.bash_logout" ! -path "$home/.bashrc" \
+      ! -path "$home/.profile" -print -quit)" = ''
   else
     test "$teardown_resume" = true
   fi
+elif path_exists_or_is_symlink "$home"; then
+  printf 'refusing to leave recovered home without its lifecycle account: %s\n' \
+    "$home" >&2
+  exit 1
 fi
 
 # No new principal session can now authenticate. Refuse if an existing SSH
@@ -463,6 +509,9 @@ if "$account_present"; then
   # racing this teardown cannot fall back to the account's login shell.
   if path_exists_or_is_symlink "$keys"; then rm -f -- "$keys"; fi
   if path_exists_or_is_symlink "$home/.ssh"; then rmdir -- "$home/.ssh"; fi
+  for skeleton_file in .bash_logout .bashrc .profile; do
+    rm -f -- "$home/$skeleton_file"
+  done
   if path_exists_or_is_symlink "$home"; then rmdir -- "$home"; fi
   userdel "$user"
   if "$group_present"; then groupdel "$group"; fi
@@ -470,20 +519,22 @@ fi
 rm -f -- "$sudoers" "$wrapper" "$dropin"
 sshd -t
 systemctl reload ssh
+! getent passwd "$user" && ! getent group "$group"
+! path_exists_or_is_symlink "$home"
+! path_exists_or_is_symlink "$home/.ssh"
+! path_exists_or_is_symlink "$keys"
+! path_exists_or_is_symlink "$wrapper"
+! path_exists_or_is_symlink "$dropin"
+! path_exists_or_is_symlink "$sudoers"
 rm -f -- "$state"
+! path_exists_or_is_symlink "$state"
 rm -f -- "$teardown_deny"
 sshd -t
 systemctl reload ssh
 REMOTE
 ```
 
-Then confirm that no account, keys, wrapper, SSH drop-in, sudoers policy, or
-lifecycle record remains:
-
-```sh
-ssh "admin@${PISERV_IP:-PiServ.local}" \
-  '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mcp && test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -L /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -L /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -L /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -e /etc/sudoers.d/codex-hermes-mcp && test ! -L /etc/sudoers.d/codex-hermes-mcp && test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json && test ! -L /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
-```
-
-The verification command must exit successfully and produce no account entry
-before a clean apply or `piserv_hermes_mcp_ssh_manage: false` is used.
+The command verifies the recovered identity and every recovered managed path
+before it deletes the lifecycle record. It must exit successfully and produce
+no account entry before a clean apply or `piserv_hermes_mcp_ssh_manage: false`
+is used.

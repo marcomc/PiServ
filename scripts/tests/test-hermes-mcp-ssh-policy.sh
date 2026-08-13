@@ -48,6 +48,8 @@ require_text 'force: false' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'" "${task_file}"
 require_text 'Normalize Hermes runtime identity records' "${task_file}"
 require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "${task_file}"
+require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
+  "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
 require_text 'Classify an absent Hermes MCP SSH account identity' "${task_file}"
 require_text 'Require complete Hermes runtime identity records' "${task_file}"
@@ -64,10 +66,42 @@ require_text 'Require managed markers before replacing Hermes MCP SSH artifacts'
   "${task_file}"
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
+require_multiline_text '- name: Provision Hermes MCP SSH lifecycle provenance before account mutation
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('\''item.path'\'', '\''equalto'\'', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='\''stat.exists'\'') | first)' "${task_file}"
 require_text 'Mark Hermes MCP SSH lifecycle provenance active after sudoers publication' \
   "${task_file}"
 require_text 'Publish active Hermes MCP SSH lifecycle provenance' \
   "${task_file}"
+require_multiline_text '- name: Publish active Hermes MCP SSH lifecycle provenance
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('\''item.path'\'', '\''equalto'\'', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='\''stat.exists'\'') | first)' "${task_file}"
+require_text 'Exercise provisioning lifecycle publication guard on a fresh host' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'hermes_mcp_ssh_fresh_provisioning_state_publication is skipped' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'Exercise active lifecycle publication guard on a fresh host' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'hermes_mcp_ssh_fresh_active_state_publication is skipped' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Reject administrator keys that already declare a forced command' \
   "${task_file}"
 require_text 'Require plain administrator public keys for automatic MCP SSH access' \
@@ -93,8 +127,8 @@ require_multiline_text '    - path: /
       mode: "0755"
     - path: /usr/local
       required: true
-      mode: "0755"
-    - path: /usr/local/libexec
+      mode: "0755"' "${task_file}"
+require_multiline_text '    - path: /usr/local/libexec
       required: false
       mode: "0755"
       create_if_absent: true
@@ -140,6 +174,7 @@ wrapper_ancestor_canonical_command_line=$(rg -n --fixed-strings 'Canonicalize ev
 wrapper_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' "${task_file}" | cut -d: -f1)
 libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexec parent directory' "${task_file}" | cut -d: -f1)
 wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP SSH wrapper directory' "${task_file}" | cut -d: -f1)
+user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
@@ -155,10 +190,25 @@ if (( wrapper_ancestor_auth_line >= wrapper_ancestor_realpath_line || wrapper_an
   printf 'Hermes MCP SSH wrapper ancestors must be authenticated and canonicalized before parent and leaf creation.\n' >&2
   exit 1
 fi
+
+if (( wrapper_ancestor_canonical_line >= user_create_line )); then
+  printf 'Hermes MCP SSH home ancestors must be canonicalized before user create_home.\n' >&2
+  exit 1
+fi
 require_multiline_text '- path: /usr/local/libexec
       required: false
       mode: "0755"
       create_if_absent: true' "${task_file}"
+require_multiline_text '- path: /var
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
+    - path: /var/lib
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory' "${task_file}"
 require_multiline_text "selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
     map(attribute='stat.exists') | first" "${task_file}"
 require_text 'command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict' \
@@ -212,26 +262,51 @@ require_text '| Approved reversible entity |' "${runbook}"
 require_text '| Configured target forwarding |' "${runbook}"
 require_text '| Sibling-entity negative |' "${runbook}"
 require_text '| Unreachable-dependency negative |' "${runbook}"
-require_text 'For a failed pre-lifecycle deployment or an intentional teardown,' "${runbook}"
-require_text 'It fails closed on a symlink, unexpected' "${runbook}"
+require_text 'For an intentional teardown, first remove the local Codex MCP' "${runbook}"
+require_text 'It fails closed on a' "${runbook}"
+require_text 'missing or invalid lifecycle record, symlink, unexpected' "${runbook}"
 require_text 'Authenticate containment before touching a path' "${runbook}"
 require_text 'path_exists_or_is_symlink() {' "${runbook}"
 require_text "test -e \"\$1\" || test -L \"\$1\"" "${runbook}"
 require_text 'require_safe_parent() {' "${runbook}"
 require_text "test \"\${metadata%%:*}\" = root" "${runbook}"
 require_text '[0-7][0145][0145]' "${runbook}"
-require_text '# requires that record, so a pre-lifecycle partial deployment can never lose a' \
-  "${runbook}"
-require_text 'lifecycle identity does not match this teardown' "${runbook}"
+require_text 'recovers the account, group, home, key,' "${runbook}"
+require_text 'wrapper, and sudoers paths from the root-owned lifecycle record' "${runbook}"
+require_text 'load_lifecycle_state() {' "${runbook}"
+require_text 'lifecycle identity is incomplete' "${runbook}"
+require_text 're.fullmatch(r"/etc/sudoers\.d/[a-z0-9_-]+", sudoers)' "${runbook}"
+require_text 'refusing to leave recovered home without its lifecycle account:' "${runbook}"
+require_text "test \"\$group_gid\" != 0" "${runbook}"
+require_text 'unexpected lifecycle authorized_keys path' "${runbook}"
+require_text 'unexpected lifecycle wrapper path' "${runbook}"
+require_text 'unexpected lifecycle sudoers path' "${runbook}"
+require_text 'if state.get("phase") not in {"provisioning", "active"}:' "${runbook}"
+require_text 'print("|".join((user, group, home, keys, wrapper, sudoers)))' "${runbook}"
+require_text "IFS='|' read -r user group home keys wrapper sudoers" "${runbook}"
+require_text 'load_lifecycle_state' "${runbook}"
 require_text "find \"\$home/.ssh\" -xdev -mindepth 1 -print -quit" "${runbook}"
-require_text 'any other passwd record whose primary GID is the target group' "${runbook}"
+require_text 'useradd creates this bounded Debian/Raspberry Pi OS skeleton.' "${runbook}"
+require_text 'for skeleton_file in .bash_logout .bashrc .profile; do' "${runbook}"
+require_text "require_regular \"/etc/skel/\$skeleton_file\" root:root:644" "${runbook}"
+require_text "require_regular \"\$home/\$skeleton_file\" \"\${user}:\${group}:644\"" "${runbook}"
+require_text "cmp -s -- \"/etc/skel/\$skeleton_file\" \"\$home/\$skeleton_file\"" "${runbook}"
+require_text "rm -f -- \"\$home/\$skeleton_file\"" "${runbook}"
+require_text 'primary GID is the target group' "${runbook}"
 require_text "primary_gid_users=\$(getent passwd | awk -F:" "${runbook}"
 require_text "'\$1 != user && \$4 == gid { print \$1 }'" "${runbook}"
 require_text 'refusing to delete a group used as a primary GID by:' "${runbook}"
-require_text 'Authenticate only existing managed artifacts.' "${runbook}"
+require_text 'Authenticate every existing managed artifact.' "${runbook}"
+require_text 'require_exact_line() {' "${runbook}"
 require_text "require_marker \"\$dropin\" '# Managed by Ansible. Restrict this principal even when its authorized_keys'" \
   "${runbook}"
+require_text "require_exact_line \"\$dropin\" \"Match User \$user\"" "${runbook}"
+require_text "require_exact_line \"\$dropin\" \"    ForceCommand /usr/bin/sudo -n \$wrapper\"" \
+  "${runbook}"
 require_text "require_marker \"\$sudoers\" '# Managed by Ansible. Permit only the no-argument Hermes MCP entry point.'" \
+  "${runbook}"
+require_text "require_exact_line \"\$sudoers\" \"Defaults:\$user !use_pty\"" "${runbook}"
+require_text "require_exact_line \"\$sudoers\" \"\$user ALL=(root) NOPASSWD: \$wrapper \\\"\\\"\"" \
   "${runbook}"
 require_text "visudo -cf \"\$sudoers\"" "${runbook}"
 require_text '# Drain the SSH principal before revoking it.' \
@@ -253,10 +328,15 @@ require_text "refusing teardown while %s has active SSH sessions" \
 require_text 'sshd -t' "${runbook}"
 require_text "if path_exists_or_is_symlink \"\$home/.ssh\"; then rmdir -- \"\$home/.ssh\"; fi" \
   "${runbook}"
-require_text '! getent passwd codex-hermes-mcp && ! getent group codex-hermes-mcp' \
-  "${runbook}"
+require_text "! getent passwd \"\$user\" && ! getent group \"\$group\"" "${runbook}"
+require_text "! path_exists_or_is_symlink \"\$home\"" "${runbook}"
+require_text "! path_exists_or_is_symlink \"\$home/.ssh\"" "${runbook}"
+require_text "! path_exists_or_is_symlink \"\$keys\"" "${runbook}"
+require_text "! path_exists_or_is_symlink \"\$wrapper\"" "${runbook}"
+require_text "! path_exists_or_is_symlink \"\$sudoers\"" "${runbook}"
 teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
 teardown_keys_line=$(rg -n --fixed-strings 'rm -f -- "$keys"' "${runbook}" | cut -d: -f1)
+teardown_skeleton_line=$(rg -n --fixed-strings 'rm -f -- "$home/$skeleton_file"' "${runbook}" | cut -d: -f1)
 teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | \
   awk -F: -v after_line="${teardown_artifacts_line}" '$1 > after_line { print $1; exit }')
 teardown_state_line=$(rg -n --fixed-strings 'rm -f -- "$state"' "${runbook}" | cut -d: -f1)
@@ -268,14 +348,18 @@ teardown_deny_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runb
 teardown_deny_effective_line=$(rg -n --fixed-strings 'effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")' "${runbook}" | cut -d: -f1)
 teardown_activity_check_line=$(rg -n --fixed-strings '# No new principal session can now authenticate.' "${runbook}" | cut -d: -f1)
 teardown_deny_remove_line=$(rg -n --fixed-strings 'rm -f -- "$teardown_deny"' "${runbook}" | cut -d: -f1)
+teardown_dropin_match_line=$(rg -n --fixed-strings 'require_exact_line "$dropin" "Match User $user"' "${runbook}" | cut -d: -f1)
+teardown_dropin_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$dropin" "    ForceCommand /usr/bin/sudo -n $wrapper"' "${runbook}" | cut -d: -f1)
+teardown_sudoers_user_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "Defaults:$user !use_pty"' "${runbook}" | cut -d: -f1)
+teardown_sudoers_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "$user ALL=(root) NOPASSWD: $wrapper \"\""' "${runbook}" | cut -d: -f1)
 
-if (( teardown_primary_gid_check_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line || teardown_state_line >= teardown_deny_remove_line )); then
-  printf 'Hermes MCP SSH teardown must publish and reload its deny policy before scans, retain it through policy removal, and revoke keys before policy artifacts.\n' >&2
+if (( teardown_primary_gid_check_line >= teardown_dropin_match_line || teardown_dropin_match_line >= teardown_dropin_wrapper_line || teardown_dropin_wrapper_line >= teardown_sudoers_user_line || teardown_sudoers_user_line >= teardown_sudoers_wrapper_line || teardown_sudoers_wrapper_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_skeleton_line || teardown_skeleton_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line || teardown_state_line >= teardown_deny_remove_line )); then
+  printf 'Hermes MCP SSH teardown must authenticate recovered policy identities, then publish and reload its deny policy before scans and deletion.\n' >&2
   exit 1
 fi
 
-require_text "before a clean apply or \`piserv_hermes_mcp_ssh_manage: false\` is used." \
-  "${runbook}"
+require_multiline_text "no account entry before a clean apply or \`piserv_hermes_mcp_ssh_manage: false\`
+is used." "${runbook}"
 require_multiline_text 'Do not substitute a successful tool-list response for any matrix row. Do not
 test destructive actions or an entity whose restoration is uncertain.' "${runbook}"
 
@@ -285,6 +369,9 @@ if rg --fixed-strings --quiet -- 'NOPASSWD: ALL' "${sudoers_template}"; then
 fi
 
 ansible-playbook --inventory localhost, --connection local \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml" >/dev/null
+
+ansible-playbook --inventory localhost, --connection local --check \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml" >/dev/null
 
 printf 'HERMES_MCP_SSH_POLICY_OK\n'

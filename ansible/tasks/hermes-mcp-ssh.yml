@@ -313,6 +313,19 @@
     - path: /usr/local
       required: true
       mode: "0755"
+    # The user module creates the dedicated home below this fixed hierarchy.
+    # Authenticate and canonicalize both existing parents before create_home can
+    # traverse them.
+    - path: /var
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
+    - path: /var/lib
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
     - path: /usr/local/libexec
       required: false
       mode: "0755"
@@ -539,6 +552,11 @@
     owner: root
     group: root
     mode: "0600"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first)
 
 - name: Install SSH forced-command policy before publishing MCP keys
   ansible.builtin.template:
@@ -693,6 +711,11 @@
     owner: root
     group: root
     mode: "0600"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first)
 
 - name: Verify the dedicated Hermes MCP SSH account has only the wrapper privilege
   ansible.builtin.command:

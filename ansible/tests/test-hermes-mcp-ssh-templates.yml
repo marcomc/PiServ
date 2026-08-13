@@ -36,6 +36,10 @@
         state: directory
         prefix: hermes-mcp-ssh-test-
       register: hermes_mcp_ssh_template_test_directory
+      # This fixture intentionally materializes only under Ansible's temporary
+      # directory so that its rendered-template checks also execute under
+      # --check.  The managed MCP task itself must leave a fresh host untouched.
+      check_mode: false
 
     - name: Render the Hermes MCP SSH templates
       ansible.builtin.template:
@@ -51,6 +55,7 @@
           destination: sshd.conf
         - source: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
           destination: lifecycle-state.json
+      check_mode: false
 
     - name: Render the Hermes MCP SSH wrapper without Home Assistant MCP
       ansible.builtin.template:
@@ -60,6 +65,7 @@
       vars:
         piserv_hermes_agent_manage_home_assistant_mcp: false
         hermes_agent_manage_home_assistant_mcp: true
+      check_mode: false
 
     - name: Render provisioning Hermes MCP SSH lifecycle state
       ansible.builtin.template:
@@ -68,6 +74,7 @@
         mode: "0600"
       vars:
         piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
+      check_mode: false
 
     - name: Validate the rendered Hermes MCP SSH wrapper shell syntax
       ansible.builtin.command:
@@ -112,6 +119,9 @@
 
     - name: Require safe rendered Hermes MCP SSH template contracts
       ansible.builtin.assert:
+        fail_msg: >-
+          A fresh check-mode fixture must model missing Hermes runtime identities
+          and a missing wrapper parent before the MCP task predicts publication.
         that:
           - >-
             '--property=User=hermes-agent'
@@ -190,6 +200,68 @@
           - >-
             hermes_mcp_ssh_lifecycle_state.key_source_path ==
             '/home/admin/.ssh/authorized_keys'
+
+    - name: Model absent wrapper parent for fresh-host check mode
+      ansible.builtin.set_fact:
+        hermes_mcp_ssh_fresh_wrapper_parent: >-
+          {{ hermes_mcp_ssh_template_test_directory.path }}/missing-wrapper-parent
+        piserv_hermes_mcp_ssh_publication_parent_state:
+          results:
+            - item:
+                path: /usr/local/libexec
+              stat:
+                exists: false
+            - item:
+                path: >-
+                  {{ hermes_mcp_ssh_template_test_directory.path }}/missing-wrapper-parent
+              stat:
+                exists: false
+
+    - name: Exercise provisioning lifecycle publication guard on a fresh host
+      ansible.builtin.template:
+        src: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
+        dest: "{{ hermes_mcp_ssh_fresh_wrapper_parent }}/provisioning-state.json"
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
+      register: hermes_mcp_ssh_fresh_provisioning_state_publication
+      # The real task uses this condition.  In --check, a publication attempt
+      # against the intentionally absent parent would be reported as changed.
+      when: >-
+        ansible_check_mode and
+        (not ansible_check_mode or
+        (piserv_hermes_mcp_ssh_publication_parent_state.results |
+        selectattr('item.path', 'equalto', hermes_mcp_ssh_fresh_wrapper_parent) |
+        map(attribute='stat.exists') | first))
+
+    - name: Require provisioning lifecycle publication to defer on a fresh check-mode host
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_fresh_provisioning_state_publication is skipped
+
+    - name: Exercise active lifecycle publication guard on a fresh host
+      ansible.builtin.template:
+        src: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
+        dest: "{{ hermes_mcp_ssh_fresh_wrapper_parent }}/active-state.json"
+        owner: root
+        group: root
+        mode: "0600"
+      register: hermes_mcp_ssh_fresh_active_state_publication
+      # The real task uses this condition.  In --check, a publication attempt
+      # against the intentionally absent parent would be reported as changed.
+      when: >-
+        ansible_check_mode and
+        (not ansible_check_mode or
+        (piserv_hermes_mcp_ssh_publication_parent_state.results |
+        selectattr('item.path', 'equalto', hermes_mcp_ssh_fresh_wrapper_parent) |
+        map(attribute='stat.exists') | first))
+
+    - name: Require active lifecycle publication to defer on a fresh check-mode host
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_fresh_active_state_publication is skipped
 
     - name: Model an unprovenanced partial Hermes MCP SSH deployment
       ansible.builtin.set_fact:
@@ -273,3 +345,4 @@
         path: "{{ hermes_mcp_ssh_template_test_directory.path }}"
         state: absent
       when: hermes_mcp_ssh_template_test_directory is defined
+      check_mode: false
