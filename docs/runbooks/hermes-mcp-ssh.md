@@ -314,6 +314,60 @@ require_exact_line() {
   grep -Fxq -- "$2" "$1"
 }
 
+require_unscoped_preceding_match_context() {
+  # The main configuration determines the include graph. Accept only the
+  # standard Debian drop-in glob, then inspect every preceding fragment before
+  # the temporary 59-* policy. A scoped Match or another Include can change
+  # the context in which that policy is read, so fail closed rather than
+  # relying on fragment-local parsing.
+  require_regular /etc/ssh/sshd_config root:root:644
+  main_context=$(awk '
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      lower = tolower(line)
+      if (lower ~ /^#/) next
+      if (lower ~ /^match[[:space:]]/ &&
+          lower !~ /^match[[:space:]]+all([[:space:]]|$)/) {
+        print FILENAME ":" line
+      }
+      if (lower ~ /^include[[:space:]]/ &&
+          lower !~ /^include[[:space:]]+\/etc\/ssh\/sshd_config\.d\/\*\.conf$/) {
+        print FILENAME ":" line
+      }
+    }
+  ' /etc/ssh/sshd_config)
+  if test -n "${main_context}"; then
+    printf 'refusing SSH teardown with scoped Match directives or unproven Includes in the main configuration:\n%s\n' \
+      "${main_context}" >&2
+    exit 1
+  fi
+  preceding_context=$(find /etc/ssh/sshd_config.d -xdev -maxdepth 1 -type f \
+    -name '*.conf' ! -name '59-codex-hermes-mcp-teardown.conf' -print | \
+    LC_ALL=C sort | awk -v deny="${teardown_deny}" '
+      $0 < deny {
+        path = $0
+        while ((getline line < path) > 0) {
+          sub(/^[[:space:]]+/, "", line)
+          lower = tolower(line)
+          if (lower !~ /^#/ &&
+              ((lower ~ /^match[[:space:]]/ &&
+                lower !~ /^match[[:space:]]+all([[:space:]]|$)/) ||
+               lower ~ /^include[[:space:]]/)) {
+            print path ":" line
+          }
+        }
+        close(path)
+      }
+    ')
+  if test -n "${preceding_context}"; then
+    printf 'refusing SSH teardown with preceding scoped Match directives or Includes:\n%s\n' \
+      "${preceding_context}" >&2
+    exit 1
+  fi
+}
+
 path_exists_or_is_symlink() {
   test -e "$1" || test -L "$1"
 }
@@ -436,18 +490,19 @@ fi
 # deletion has begun, so repair does not reopen the principal accidentally.
 expected_deny=$(mktemp)
 deny_tmp=
-teardown_resume=false
 teardown_drain_verified=false
 cleanup_teardown_files() {
   rm -f -- "$expected_deny" "${deny_tmp:-}"
 }
 trap cleanup_teardown_files EXIT
+require_unscoped_preceding_match_context
 cat >"$expected_deny" <<DENY
 # Temporary teardown drain for the dedicated Hermes MCP SSH principal.
 Match User $user
     ForceCommand /usr/bin/false
     DisableForwarding yes
     PermitTTY no
+    PermitUserRC no
     X11Forwarding no
 Match all
 DENY
@@ -455,7 +510,6 @@ if path_exists_or_is_symlink "$teardown_deny"; then
   # Resume a prior safe drain only when its exact root-owned policy remains.
   require_regular "$teardown_deny" root:root:644
   cmp -s -- "$expected_deny" "$teardown_deny"
-  teardown_resume=true
 else
   deny_tmp=$(mktemp /etc/ssh/sshd_config.d/.codex-hermes-mcp-teardown.XXXXXX)
   cp -- "$expected_deny" "$deny_tmp"
@@ -470,6 +524,7 @@ effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")
 printf '%s\n' "$effective_deny" | grep -Fx 'forcecommand /usr/bin/false'
 printf '%s\n' "$effective_deny" | grep -Fx 'disableforwarding yes'
 printf '%s\n' "$effective_deny" | grep -Fx 'permittty no'
+printf '%s\n' "$effective_deny" | grep -Fx 'permituserrc no'
 printf '%s\n' "$effective_deny" | grep -Fx 'x11forwarding no'
 teardown_drain_verified=true
 
@@ -498,11 +553,11 @@ if "$account_present"; then
       if path_exists_or_is_symlink "$keys"; then
         require_regular "$keys" "${user}:${group}:600"
       else
-        test "$teardown_resume" = true
+        test "$teardown_drain_verified" = true
         test "$(find "$home/.ssh" -xdev -mindepth 1 -print -quit)" = ''
       fi
     else
-      test "$teardown_resume" = true
+      test "$teardown_drain_verified" = true
     fi
     # Current provisioning creates the dedicated home explicitly and keeps it
     # empty. Older deployments can contain these bounded useradd skeleton paths;
@@ -519,7 +574,7 @@ if "$account_present"; then
       ! -path "$home/.bash_logout" ! -path "$home/.bashrc" \
       ! -path "$home/.profile" -print -quit)" = ''
   else
-    test "$teardown_resume" = true
+    test "$teardown_drain_verified" = true
   fi
 elif path_exists_or_is_symlink "$home"; then
   printf 'refusing to leave recovered home without its lifecycle account: %s\n' \

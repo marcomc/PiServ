@@ -150,6 +150,16 @@ require_multiline_text '    - path: /
     - path: /usr/local
       required: true
       mode: "0755"' "${task_file}"
+require_multiline_text '    - path: /etc
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
+    - path: /etc/ssh
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory' "${task_file}"
 require_multiline_text '    - path: /usr/local/libexec
       required: false
       mode: "0755"
@@ -200,8 +210,13 @@ require_text "'disableforwarding yes' in piserv_hermes_mcp_ssh_effective_policy.
   "${task_file}"
 require_text "'permittty no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
   "${task_file}"
+require_text "'permituserrc no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
 require_text "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
   "${task_file}"
+require_text 'Inspect the Hermes MCP SSH user RC hook before mutation' "${task_file}"
+require_text 'Reject an existing Hermes MCP SSH user RC hook' "${task_file}"
+require_text 'PermitUserRC no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
   ansible.builtin.systemd_service:
     name: ssh
@@ -431,14 +446,22 @@ require_text "visudo -cf \"\$sudoers\"" "${runbook}"
 require_text '# Drain the SSH principal before revoking it.' \
   "${runbook}"
 require_text 'ForceCommand /usr/bin/false' "${runbook}"
+require_text 'require_unscoped_preceding_match_context() {' "${runbook}"
+require_text 'require_regular /etc/ssh/sshd_config root:root:644' "${runbook}"
+require_text "' /etc/ssh/sshd_config)" "${runbook}"
+require_text 'refusing SSH teardown with scoped Match directives or unproven Includes in the main configuration:' \
+  "${runbook}"
+require_text 'refusing SSH teardown with preceding scoped Match directives or Includes:' "${runbook}"
+require_text "require_unscoped_preceding_match_context" "${runbook}"
 require_text 'Resume a prior safe drain only when its exact root-owned policy remains.' "${runbook}"
 require_text "require_regular \"\$teardown_deny\" root:root:644" "${runbook}"
 require_text "cmp -s -- \"\$expected_deny\" \"\$teardown_deny\"" "${runbook}"
-require_text 'teardown_resume=true' "${runbook}"
-require_text "test \"\$teardown_resume\" = true" "${runbook}"
+require_text "test \"\$teardown_drain_verified\" = true" "${runbook}"
 require_text "sshd -T -C \"user=\${user},addr=127.0.0.1,host=localhost\"" "${runbook}"
 require_text "grep -Fx 'forcecommand /usr/bin/false'" "${runbook}"
 require_text "grep -Fx 'disableforwarding yes'" "${runbook}"
+require_text 'PermitUserRC no' "${runbook}"
+require_text "grep -Fx 'permituserrc no'" "${runbook}"
 require_text "'sudo -n /bin/sh -seu'" "${runbook}"
 require_text 'systemctl reload ssh' "${runbook}"
 require_text "active_sessions=\$(loginctl list-sessions --no-legend |" "${runbook}"
@@ -453,6 +476,10 @@ require_text "! path_exists_or_is_symlink \"\$home/.ssh\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$keys\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$wrapper\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$sudoers\"" "${runbook}"
+if rg --fixed-strings --quiet -- 'test "$teardown_resume" = true' "${runbook}"; then
+  printf 'Hermes MCP SSH teardown may accept missing key material only after the drain is proven effective.\n' >&2
+  exit 1
+fi
 teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
 teardown_keys_line=$(rg -n --fixed-strings 'rm -f -- "$keys"' "${runbook}" | cut -d: -f1)
 teardown_skeleton_line=$(rg -n --fixed-strings 'rm -f -- "$home/$skeleton_file"' "${runbook}" | cut -d: -f1)

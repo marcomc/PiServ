@@ -189,6 +189,22 @@
   loop_control:
     label: "{{ item.item }}"
 
+- name: Inspect the Hermes MCP SSH user RC hook before mutation
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_home }}/.ssh/rc"
+    follow: false
+  register: piserv_hermes_mcp_ssh_user_rc_state
+  changed_when: false
+  check_mode: false
+
+- name: Reject an existing Hermes MCP SSH user RC hook
+  ansible.builtin.assert:
+    that:
+      - not piserv_hermes_mcp_ssh_user_rc_state.stat.exists
+    fail_msg: >-
+      {{ piserv_hermes_mcp_ssh_home }}/.ssh/rc must be absent before the
+      restricted Hermes MCP SSH account is managed.
+
 - name: Define the Hermes MCP SSH lifecycle state path
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_state_path: >-
@@ -293,6 +309,16 @@
     - path: /usr/local
       required: true
       mode: "0755"
+    - path: /etc
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
+    - path: /etc/ssh
+      required: true
+      mode: "0755"
+      create_if_absent: false
+      policy: safe-system-directory
     # The explicit home-directory task creates below this fixed hierarchy.
     # Authenticate and canonicalize both existing parents before it traverses
     # them as root.
@@ -649,6 +675,7 @@
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
       - "'disableforwarding yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'permittty no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'permituserrc no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
     fail_msg: >-
       The active SSH daemon does not enforce the Hermes MCP forced-command

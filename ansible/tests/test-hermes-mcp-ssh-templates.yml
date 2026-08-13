@@ -175,6 +175,9 @@
             'PermitTTY no'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
+            'PermitUserRC no'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
             'X11Forwarding no'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-

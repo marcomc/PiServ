@@ -4,6 +4,7 @@ Match User {{ piserv_hermes_mcp_ssh_user }}
     ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}
     DisableForwarding yes
     PermitTTY no
+    PermitUserRC no
     X11Forwarding no
 
 # Do not let this account-specific Match block affect later global settings.
