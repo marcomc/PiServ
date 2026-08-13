@@ -256,7 +256,7 @@ entry. The following operation recovers the account, group, home, key,
 wrapper, and sudoers paths from the root-owned lifecycle record; do not replace
 those recovered values with the documented defaults. It fails closed on a
 missing or invalid lifecycle record, symlink, unexpected owner/mode, unmanaged
-marker, unexpected `/etc/skel` file, non-empty home, group member, or any other
+marker, unexpected legacy skeleton file, non-empty home, group member, or any other
 passwd record whose primary GID is the target group; it deletes nothing in
 those cases. The lifecycle record is created before the account, so a current
 deployment cannot leave a managed account in a pre-lifecycle state. Run it from
@@ -502,16 +502,15 @@ if "$account_present"; then
     else
       test "$teardown_resume" = true
     fi
-    # useradd creates this bounded Debian/Raspberry Pi OS skeleton. Authenticate
-    # every remaining copy against /etc/skel before accepting and later removing
-    # it. A verified drain permits a resumed teardown after an earlier run has
-    # already removed any individual expected skeleton copy; unexpected files
-    # still make the following bounded-home check fail closed.
+    # Current provisioning creates the dedicated home explicitly and keeps it
+    # empty. Older deployments can contain these bounded useradd skeleton paths;
+    # accept only regular, private files at those exact paths. Do not compare
+    # against mutable /etc/skel content. A verified drain permits a resumed
+    # teardown after an earlier run has already removed one of these files;
+    # unexpected files still make the bounded-home check fail closed.
     for skeleton_file in .bash_logout .bashrc .profile; do
       if path_exists_or_is_symlink "$home/$skeleton_file"; then
-        require_regular "/etc/skel/$skeleton_file" root:root:644
         require_regular "$home/$skeleton_file" "${user}:${group}:644"
-        cmp -s -- "/etc/skel/$skeleton_file" "$home/$skeleton_file"
       else
         test "$teardown_resume" = true
       fi

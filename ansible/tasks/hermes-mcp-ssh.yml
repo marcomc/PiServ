@@ -293,9 +293,9 @@
     - path: /usr/local
       required: true
       mode: "0755"
-    # The user module creates the dedicated home below this fixed hierarchy.
-    # Authenticate and canonicalize both existing parents before create_home can
-    # traverse them.
+    # The explicit home-directory task creates below this fixed hierarchy.
+    # Authenticate and canonicalize both existing parents before it traverses
+    # them as root.
     - path: /var
       required: true
       mode: "0755"
@@ -541,7 +541,7 @@
 - name: Discover SSH configuration drop-ins before the Hermes MCP policy
   ansible.builtin.find:
     paths: /etc/ssh/sshd_config.d
-    file_type: file
+    file_type: any
     patterns: '*.conf'
     use_regex: false
   register: piserv_hermes_mcp_ssh_sshd_dropins
@@ -553,8 +553,25 @@
     piserv_hermes_mcp_ssh_preceding_sshd_config_paths: >-
       {{ ['/etc/ssh/sshd_config'] +
       (piserv_hermes_mcp_ssh_sshd_dropins.files |
+      selectattr('isreg') |
       selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
       map(attribute='path') | list) }}
+
+- name: Reject symlinked SSH configuration drop-ins before the Hermes MCP policy
+  ansible.builtin.assert:
+    that:
+      - not item.islnk
+    fail_msg: >-
+      {{ item.path }} is a symlinked SSH configuration drop-in before the
+      Hermes MCP policy. Refusing to publish MCP SSH access through an
+      unverified included configuration path.
+  loop: >-
+    {{ piserv_hermes_mcp_ssh_sshd_dropins.files |
+    selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
+    list }}
+  loop_control:
+    label: "{{ item.path }}"
+  when: not ansible_check_mode
 
 - name: Read SSH configuration before the Hermes MCP policy
   ansible.builtin.slurp:
@@ -564,16 +581,25 @@
   changed_when: false
   check_mode: false
 
-- name: Reject address-scoped SSH policy before the Hermes MCP policy
+- name: Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy
   ansible.builtin.assert:
     that:
       - >-
         item.content | b64decode is not search(
-        '(?im)^\\s*Match\\s+[^\\r\\n#]*\\bAddress\\b')
+        '(?im)^\\s*Match\\s+(?!all\\s*(?:#.*)?$)')
+      - >-
+        item.item == '/etc/ssh/sshd_config' or
+        item.content | b64decode is not search('(?im)^\\s*Include\\s+')
+      - >-
+        item.item != '/etc/ssh/sshd_config' or
+        item.content | b64decode is not search(
+        '(?im)^\\s*Include\\s+(?!/etc/ssh/sshd_config\\.d/\\*\\.conf\\s*(?:#.*)?$)')
     fail_msg: >-
-      {{ item.item }} has an address-scoped Match policy before the Hermes MCP
-      policy. Its effective forced-command policy cannot be proven for every
-      permitted ingress context, so refusing to publish MCP SSH access.
+      {{ item.item }} has a scoped Match policy or an Include that
+      cannot be proven to resolve only through /etc/ssh/sshd_config.d/*.conf
+      before the Hermes MCP policy. Its effective forced-command policy cannot
+      be proven for every permitted ingress context, so refusing to publish MCP
+      SSH access.
   loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -642,7 +668,7 @@
     groups: []
     append: false
     home: "{{ piserv_hermes_mcp_ssh_home }}"
-    create_home: true
+    create_home: false
     shell: /bin/sh
     password_lock: true
     system: true
@@ -655,6 +681,15 @@
     owner: "{{ piserv_hermes_mcp_ssh_user }}"
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0750"
+
+- name: Remove legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
+    state: absent
+  loop:
+    - .bash_logout
+    - .bashrc
+    - .profile
 
 - name: Create private Hermes MCP SSH directory
   ansible.builtin.file:

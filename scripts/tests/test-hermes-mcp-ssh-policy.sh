@@ -169,11 +169,17 @@ require_text 'Define SSH configuration files before the Hermes MCP policy' \
   "${task_file}"
 require_text 'Read SSH configuration before the Hermes MCP policy' \
   "${task_file}"
-require_text 'Reject address-scoped SSH policy before the Hermes MCP policy' \
+require_text 'Reject symlinked SSH configuration drop-ins before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' \
   "${task_file}"
 require_text "selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf')" \
   "${task_file}"
-require_text "'(?im)^\\\\s*Match\\\\s+[^\\\\r\\\\n#]*\\\\bAddress\\\\b'" \
+require_text "'(?im)^\\\\s*Match\\\\s+(?!all\\\\s*(?:#.*)?$)'" \
+  "${task_file}"
+require_text "item.content | b64decode is not search('(?im)^\\\\s*Include\\\\s+')" \
+  "${task_file}"
+require_text "'(?im)^\\\\s*Include\\\\s+(?!/etc/ssh/sshd_config\\\\.d/\\\\*\\\\.conf\\\\s*(?:#.*)?$)'" \
   "${task_file}"
 require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
   "${task_file}"
@@ -228,7 +234,8 @@ wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP 
 user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_context_discover_line=$(rg -n --fixed-strings 'Discover SSH configuration drop-ins before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
-ssh_context_reject_line=$(rg -n --fixed-strings 'Reject address-scoped SSH policy before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_symlink_reject_line=$(rg -n --fixed-strings 'Reject symlinked SSH configuration drop-ins before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_reject_line=$(rg -n --fixed-strings 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
 ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_assert_line=$(rg -n --fixed-strings 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
@@ -236,8 +243,8 @@ keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SS
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
-if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
-  printf 'Hermes MCP SSH publication order must reject earlier address-scoped SSH policy before state publication, SSH policy, reload, effective-policy assertion, account, keys, sudoers, and active state.\n' >&2
+if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must reject earlier scoped policy and symlinked drop-ins before policy activation and credential publication.\n' >&2
   exit 1
 fi
 
@@ -272,6 +279,15 @@ require_text 'Managed by Ansible: automatic administrator key copy for Hermes MC
   "${keys_template}"
 require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
   "${task_file}"
+require_text 'create_home: false' "${task_file}"
+require_multiline_text '- name: Remove legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
+    state: absent
+  loop:
+    - .bash_logout
+    - .bashrc
+    - .profile' "${task_file}"
 require_multiline_text '- name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \
@@ -375,28 +391,26 @@ require_text 'print("|".join((user, group, home, keys, wrapper, sudoers)))' "${r
 require_text "IFS='|' read -r user group home keys wrapper sudoers" "${runbook}"
 require_text 'load_lifecycle_state' "${runbook}"
 require_text "find \"\$home/.ssh\" -xdev -mindepth 1 -print -quit" "${runbook}"
-require_text 'useradd creates this bounded Debian/Raspberry Pi OS skeleton.' "${runbook}"
+require_text 'Older deployments can contain these bounded useradd skeleton paths;' \
+  "${runbook}"
 require_text 'for skeleton_file in .bash_logout .bashrc .profile; do' "${runbook}"
 skeleton_home_file_ref="\$home/\$skeleton_file"
-skeleton_source_file_ref="/etc/skel/\$skeleton_file"
 skeleton_identity_ref="\${user}:\${group}:644"
 skeleton_resume_ref="\$teardown_resume"
 require_multiline_text "for skeleton_file in .bash_logout .bashrc .profile; do
       if path_exists_or_is_symlink \"${skeleton_home_file_ref}\"; then
-        require_regular \"${skeleton_source_file_ref}\" root:root:644
         require_regular \"${skeleton_home_file_ref}\" \"${skeleton_identity_ref}\"
-        cmp -s -- \"${skeleton_source_file_ref}\" \"${skeleton_home_file_ref}\"
       else
         test \"${skeleton_resume_ref}\" = true
       fi
     done" "${runbook}"
-require_text 'every remaining copy against /etc/skel before accepting and later removing' \
+require_text 'Current provisioning creates the dedicated home explicitly and keeps it' \
   "${runbook}"
-require_text 'still make the following bounded-home check fail closed.' \
+require_multiline_text 'against mutable /etc/skel content. A verified drain permits a resumed' \
   "${runbook}"
-require_text "require_regular \"/etc/skel/\$skeleton_file\" root:root:644" "${runbook}"
+require_text 'unexpected files still make the bounded-home check fail closed.' \
+  "${runbook}"
 require_text "require_regular \"\$home/\$skeleton_file\" \"\${user}:\${group}:644\"" "${runbook}"
-require_text "cmp -s -- \"/etc/skel/\$skeleton_file\" \"\$home/\$skeleton_file\"" "${runbook}"
 require_text "rm -f -- \"\$home/\$skeleton_file\"" "${runbook}"
 require_text 'primary GID is the target group' "${runbook}"
 require_text "primary_gid_users=\$(getent passwd | awk -F:" "${runbook}"
