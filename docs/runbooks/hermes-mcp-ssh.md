@@ -101,15 +101,30 @@ cat ~/.ssh/id_ed25519.pub | \
     esac
     if IFS= read -r extra; then exit 1; fi
 
-    /usr/bin/grep -Fqx -- "$key" "$keys" || printf "%s\\n" "$key" >> "$keys"
+    if ! /usr/bin/grep -Fqx -- "$key" "$keys"; then
+      key_directory=${keys%/*}
+      test -d "$key_directory" && test ! -L "$key_directory"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$key_directory")" = "codex-hermes-mcp:codex-hermes-mcp:700"
+      umask 077
+      staged=$(mktemp "${keys}.XXXXXX")
+      cleanup_staged() { rm -f -- "$staged"; }
+      trap cleanup_staged EXIT
+      /usr/bin/awk "1" "$keys" >"$staged"
+      printf "%s\n" "$key" >>"$staged"
+      chmod 0600 "$staged"
+      mv -- "$staged" "$keys"
+      trap - EXIT
+    fi
   '\'''
 ```
 
 The command first validates the local key, then validates that Ansible's
-dedicated regular file still has its expected identity and `0600` mode. It runs
-as `codex-hermes-mcp`, appends only a non-duplicate plain public-key line, and
-does not rewrite existing keys. Re-run the playbook to repair ownership or mode
-drift rather than using a root-owned redirection.
+dedicated `.ssh` directory and regular key file have their expected identities
+and modes. It runs as `codex-hermes-mcp`, atomically publishes a
+newline-delimited non-duplicate plain public-key set, including when the
+previous final line lacked a newline, and preserves existing keys. Re-run the
+playbook to repair ownership or mode drift rather than using a root-owned
+redirection.
 
 ## Configure an SSH Client
 
