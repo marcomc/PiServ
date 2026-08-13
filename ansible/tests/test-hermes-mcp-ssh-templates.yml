@@ -201,6 +201,13 @@
           ansible.builtin.fail:
             msg: Unprovenanced partial Hermes MCP SSH deployment was accepted.
       rescue:
+        - name: Verify the partial fixture failed lifecycle provenance validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require lifecycle provenance for the partial fixture'
+
         - name: Record expected provenance rejection
           ansible.builtin.set_fact:
             hermes_mcp_ssh_partial_fixture_rejected: true
@@ -230,6 +237,13 @@
           ansible.builtin.fail:
             msg: Complete legacy-shaped deployment without provenance was accepted.
       rescue:
+        - name: Verify the complete legacy fixture failed lifecycle provenance validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require lifecycle provenance for the complete legacy fixture'
+
         - name: Record expected complete legacy provenance rejection
           ansible.builtin.set_fact:
             hermes_mcp_ssh_complete_legacy_fixture_rejected: true

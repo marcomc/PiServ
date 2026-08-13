@@ -237,21 +237,157 @@ codex mcp remove hermes-piserv
 
 The normal convergence playbook deliberately does not delete an active remote
 access path. For a failed pre-lifecycle deployment or an intentional teardown,
-first remove the local Codex MCP entry, then run this explicit administrator
-operation from a host with existing `admin` access:
+first remove the local Codex MCP entry. The following operation inventories and
+authenticates every candidate first. It fails closed on a symlink, unexpected
+owner/mode, unmanaged marker, lifecycle identity, non-empty home, or group
+member; it deletes nothing in those cases. Run it from a host with existing
+`admin` access:
 
 ```sh
-ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n sh -eu -c '\''
-  rm -f -- /etc/sudoers.d/codex-hermes-mcp \
-    /usr/local/libexec/hermes-agent/codex-mcp-ssh \
-    /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf \
-    /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
-  rm -rf -- /var/lib/codex-hermes-mcp
-  userdel codex-hermes-mcp 2>/dev/null || true
-  groupdel codex-hermes-mcp 2>/dev/null || true
-  sshd -t
-  systemctl reload ssh
-'\'''
+ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n /bin/sh -seu' <<'REMOTE'
+user=codex-hermes-mcp
+group=codex-hermes-mcp
+home=/var/lib/codex-hermes-mcp
+keys="$home/.ssh/authorized_keys"
+wrapper=/usr/local/libexec/hermes-agent/codex-mcp-ssh
+dropin=/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+sudoers=/etc/sudoers.d/codex-hermes-mcp
+state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+
+require_directory() {
+  test -d "$1" && test ! -L "$1"
+  test "$(readlink -f -- "$1")" = "$1"
+}
+
+require_safe_parent() {
+  require_directory "$1"
+  metadata=$(stat -c '%U:%a' -- "$1")
+  test "${metadata%%:*}" = root
+  mode=${metadata#*:}
+  case "$mode" in
+    [0-7][0145][0145]) ;;
+    *)
+      printf 'refusing unsafe parent directory: %s\n' "$1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+require_regular() {
+  test -f "$1" && test ! -L "$1"
+  test "$(readlink -f -- "$1")" = "$1"
+  test "$(stat -c '%U:%G:%a' -- "$1")" = "$2"
+}
+
+require_private_directory() {
+  require_directory "$1"
+  test "$(stat -c '%U:%G:%a' -- "$1")" = "$2"
+}
+
+require_marker() {
+  grep -Fq -- "$2" "$1"
+}
+
+path_exists_or_is_symlink() {
+  test -e "$1" || test -L "$1"
+}
+
+# Authenticate containment before touching a path; none of these parent
+# directories is owned by this teardown.
+for parent in /etc /etc/ssh /etc/ssh/sshd_config.d /etc/sudoers.d \
+  /usr /usr/local /usr/local/libexec /usr/local/libexec/hermes-agent /var /var/lib; do
+  require_safe_parent "$parent"
+done
+
+account_present=false
+group_present=false
+if getent group "$group" >/dev/null; then
+  group_present=true
+fi
+if getent passwd "$user" >/dev/null; then
+  account_present=true
+  passwd_record=$(getent passwd "$user")
+  group_record=$(getent group "$group")
+  test -n "$group_record"
+  test "$(printf '%s\n' "$passwd_record" | cut -d: -f6)" = "$home"
+  test "$(printf '%s\n' "$passwd_record" | cut -d: -f7)" = /bin/sh
+  test "$(printf '%s\n' "$passwd_record" | cut -d: -f4)" = \
+    "$(printf '%s\n' "$group_record" | cut -d: -f3)"
+  test -z "$(printf '%s\n' "$group_record" | cut -d: -f4)"
+fi
+if "$group_present" && ! "$account_present"; then
+  printf 'refusing to delete an unattested standalone group: %s\n' "$group" >&2
+  exit 1
+fi
+
+# Verify a lifecycle record, when present, before deleting it. An account also
+# requires that record, so a pre-lifecycle partial deployment can never lose a
+# user or home by this command.
+authenticate_state() {
+  require_regular "$state" root:root:600
+  python3 - "$state" "$user" "$group" "$home" "$keys" "$wrapper" "$sudoers" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    state = json.load(source)
+expected = {
+    "schema": "piserv-hermes-mcp-ssh-state-v1",
+    "mcp_ssh_user": sys.argv[2],
+    "mcp_ssh_group": sys.argv[3],
+    "mcp_ssh_home": sys.argv[4],
+    "authorized_keys_path": sys.argv[5],
+    "wrapper_path": sys.argv[6],
+    "sudoers_path": sys.argv[7],
+}
+if any(state.get(key) != value for key, value in expected.items()):
+    raise SystemExit("lifecycle identity does not match this teardown")
+if state.get("phase", "active") not in {"provisioning", "active"}:
+    raise SystemExit("unexpected lifecycle phase")
+PY
+}
+
+if path_exists_or_is_symlink "$state"; then
+  authenticate_state
+fi
+if "$account_present"; then
+  test -e "$state"
+  require_directory "$home"
+  require_private_directory "$home/.ssh" "${user}:${group}:700"
+  require_regular "$keys" "${user}:${group}:600"
+  # Refuse a home with data outside the two managed SSH paths.
+  test "$(find "$home" -xdev -mindepth 1 \
+    ! -path "$home/.ssh" ! -path "$keys" -print -quit)" = ''
+fi
+
+# Authenticate only existing managed artifacts. Missing files are safe for a
+# partial pre-lifecycle rollback; an unexpected existing file is not.
+if path_exists_or_is_symlink "$wrapper"; then
+  require_regular "$wrapper" root:root:755
+  require_marker "$wrapper" '# Managed by Ansible. This entry point'
+fi
+if path_exists_or_is_symlink "$dropin"; then
+  require_regular "$dropin" root:root:644
+  require_marker "$dropin" '# Managed by Ansible: restricted Hermes MCP SSH access.'
+fi
+if path_exists_or_is_symlink "$sudoers"; then
+  require_regular "$sudoers" root:root:440
+  require_marker "$sudoers" '# Managed by Ansible: restricted Hermes MCP SSH sudo policy.'
+  visudo -cf "$sudoers"
+fi
+
+sshd -t
+rm -f -- "$sudoers" "$wrapper" "$dropin"
+if "$account_present"; then
+  rm -f -- "$keys"
+  rmdir -- "$home/.ssh" "$home"
+  userdel "$user"
+  if "$group_present"; then groupdel "$group"; fi
+fi
+sshd -t
+systemctl reload ssh
+rm -f -- "$state"
+REMOTE
 ```
 
 Then confirm that no account, keys, wrapper, SSH drop-in, sudoers policy, or
@@ -259,7 +395,7 @@ lifecycle record remains:
 
 ```sh
 ssh "admin@${PISERV_IP:-PiServ.local}" \
-  'getent passwd codex-hermes-mcp; test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys; test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh; test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf; test ! -e /etc/sudoers.d/codex-hermes-mcp; test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
+  'getent passwd codex-hermes-mcp; test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys && test ! -L /var/lib/codex-hermes-mcp/.ssh/authorized_keys; test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh && test ! -L /usr/local/libexec/hermes-agent/codex-mcp-ssh; test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf && test ! -L /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf; test ! -e /etc/sudoers.d/codex-hermes-mcp && test ! -L /etc/sudoers.d/codex-hermes-mcp; test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json && test ! -L /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
 ```
 
 The verification command must exit successfully and produce no account entry

@@ -154,7 +154,30 @@ require_text '| Configured target forwarding |' "${runbook}"
 require_text '| Sibling-entity negative |' "${runbook}"
 require_text '| Unreachable-dependency negative |' "${runbook}"
 require_text 'For a failed pre-lifecycle deployment or an intentional teardown,' "${runbook}"
-require_text 'rm -rf -- /var/lib/codex-hermes-mcp' "${runbook}"
+require_text 'It fails closed on a symlink, unexpected' "${runbook}"
+require_text 'Authenticate containment before touching a path' "${runbook}"
+require_text 'path_exists_or_is_symlink() {' "${runbook}"
+require_text "test -e \"\$1\" || test -L \"\$1\"" "${runbook}"
+require_text 'require_safe_parent() {' "${runbook}"
+require_text "test \"\${metadata%%:*}\" = root" "${runbook}"
+require_text '[0-7][0145][0145]' "${runbook}"
+require_text '# requires that record, so a pre-lifecycle partial deployment can never lose a' \
+  "${runbook}"
+require_text 'lifecycle identity does not match this teardown' "${runbook}"
+require_text 'Refuse a home with data outside the two managed SSH paths.' "${runbook}"
+require_text 'Authenticate only existing managed artifacts.' "${runbook}"
+require_text "visudo -cf \"\$sudoers\"" "${runbook}"
+require_text 'sshd -t' "${runbook}"
+require_text "rmdir -- \"\$home/.ssh\" \"\$home\"" "${runbook}"
+teardown_artifacts_line=$(rg -n --fixed-strings 'rm -f -- "$sudoers" "$wrapper" "$dropin"' "${runbook}" | cut -d: -f1)
+teardown_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | tail -n 1 | cut -d: -f1)
+teardown_state_line=$(rg -n --fixed-strings 'rm -f -- "$state"' "${runbook}" | cut -d: -f1)
+
+if (( teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line )); then
+  printf 'Hermes MCP SSH teardown must retain lifecycle state until SSH reload succeeds.\n' >&2
+  exit 1
+fi
+
 require_text "before a clean apply or \`piserv_hermes_mcp_ssh_manage: false\` is used." \
   "${runbook}"
 require_multiline_text 'Do not substitute a successful tool-list response for any matrix row. Do not
