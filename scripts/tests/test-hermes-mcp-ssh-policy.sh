@@ -378,6 +378,45 @@ require_multiline_text '- name: Publish restricted copies of administrator SSH p
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \
   "${task_file}"
+require_text 'Reinspect administrator authorized keys immediately before automatic MCP SSH publication' \
+  "${task_file}"
+require_text 'Revalidate the administrator authorized keys source before automatic MCP SSH publication' \
+  "${task_file}"
+require_text 'Reread administrator authorized keys immediately before automatic MCP SSH publication' \
+  "${task_file}"
+require_text 'Reinspect administrator authorized keys after automatic MCP SSH reread' \
+  "${task_file}"
+require_text 'Renormalize administrator public keys before automatic MCP SSH publication' \
+  "${task_file}"
+require_text 'Reject newly forced administrator keys before automatic MCP SSH publication' \
+  "${task_file}"
+require_text 'Require plain administrator public keys before automatic MCP SSH publication' \
+  "${task_file}"
+source_reinspect_line=$(rg -n --fixed-strings \
+  'Reinspect administrator authorized keys immediately before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+source_revalidate_line=$(rg -n --fixed-strings \
+  'Revalidate the administrator authorized keys source before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+source_reread_line=$(rg -n --fixed-strings \
+  'Reread administrator authorized keys immediately before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+source_reread_reinspect_line=$(rg -n --fixed-strings \
+  'Reinspect administrator authorized keys after automatic MCP SSH reread' \
+  "${task_file}" | cut -d: -f1)
+source_renormalize_line=$(rg -n --fixed-strings \
+  'Renormalize administrator public keys before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+source_reject_line=$(rg -n --fixed-strings \
+  'Reject newly forced administrator keys before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+source_plain_line=$(rg -n --fixed-strings \
+  'Require plain administrator public keys before automatic MCP SSH publication' \
+  "${task_file}" | cut -d: -f1)
+if (( source_reinspect_line >= source_reread_line || source_reread_line >= source_reread_reinspect_line || source_reread_reinspect_line >= source_revalidate_line || source_revalidate_line >= source_renormalize_line || source_renormalize_line >= source_reject_line || source_reject_line >= source_plain_line || source_plain_line >= keys_line )); then
+  printf 'Administrator key material must be reauthenticated, reread, and revalidated immediately before publication.\n' >&2
+  exit 1
+fi
 require_multiline_text '- name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"' \
@@ -457,6 +496,17 @@ require_text 'mv --' "${runbook}"
 require_text "Ansible deliberately fails closed if the existing home or \`.ssh\` directory has" \
   "${runbook}"
 require_text 'manual permission repair requires manual key provenance' "${runbook}"
+require_text 'Re-authenticate the root-owned manual-key policy immediately before' "${runbook}"
+require_text "reauthenticated_lifecycle_values=\$(read_manual_lifecycle)" "${runbook}"
+require_text "test \"\$reauthenticated_lifecycle_values\" = \"\$lifecycle_values\"" "${runbook}"
+manual_stage_line=$(rg -n --fixed-strings "staged=\$(mktemp \"\${keys}.XXXXXX\")" "${runbook}" | cut -d: -f1)
+manual_reauth_line=$(rg -n --fixed-strings \
+  "reauthenticated_lifecycle_values=\$(read_manual_lifecycle)" "${runbook}" | cut -d: -f1)
+manual_replace_line=$(rg -n --fixed-strings "mv -- \"\$staged\" \"\$keys\"" "${runbook}" | cut -d: -f1)
+if (( manual_stage_line >= manual_reauth_line || manual_reauth_line >= manual_replace_line )); then
+  printf 'Manual key publication must reauthenticate lifecycle policy after staging and before atomic replacement.\n' >&2
+  exit 1
+fi
 require_text "test -d \"\$home\" && test ! -L \"\$home\"" "${runbook}"
 require_text "test -d \"\$ssh_directory\" && test ! -L \"\$ssh_directory\"" "${runbook}"
 require_text "test -f \"\$keys\" && test ! -L \"\$keys\"" "${runbook}"
@@ -521,6 +571,12 @@ require_text "primary_gid_users=\$(getent passwd | awk -F:" "${runbook}"
 require_text "'\$1 != user && \$4 == gid { print \$1 }'" "${runbook}"
 require_text 'refusing to delete a group used as a primary GID by:' "${runbook}"
 require_text 'Authenticate every existing managed artifact.' "${runbook}"
+require_text 'require_expected_home_filesystem() {' "${runbook}"
+require_text 'findmnt --noheadings --output SOURCE,FSTYPE --target /var/lib' "${runbook}"
+require_text "findmnt --noheadings --output SOURCE,FSTYPE --target \"\$home\"" "${runbook}"
+require_text 'refusing teardown of lifecycle home mountpoint:' "${runbook}"
+require_text 'refusing teardown of lifecycle SSH directory mountpoint:' "${runbook}"
+require_text 'require_expected_home_filesystem' "${runbook}"
 require_text 'require_exact_line() {' "${runbook}"
 require_text "require_marker \"\$dropin\" '# Managed by Ansible. Restrict this principal even when its authorized_keys'" \
   "${runbook}"

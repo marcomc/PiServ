@@ -1065,6 +1065,105 @@
       no broad sudo privilege.
   when: not ansible_check_mode
 
+- name: Reinspect administrator authorized keys immediately before automatic MCP SSH publication
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
+    follow: false
+  register: piserv_hermes_mcp_ssh_source_authorized_keys_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Reread administrator authorized keys immediately before automatic MCP SSH publication
+  ansible.builtin.slurp:
+    src: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
+  register: piserv_hermes_mcp_ssh_source_authorized_keys
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Reinspect administrator authorized keys after automatic MCP SSH reread
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_mcp_ssh_source_authorized_keys_path }}"
+    follow: false
+  register: piserv_hermes_mcp_ssh_source_authorized_keys_reread_state
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Revalidate the administrator authorized keys source before automatic MCP SSH publication
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.exists
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.isreg
+      - not piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.islnk
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.pw_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.gr_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.mode == '0600'
+      - piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.exists
+      - piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.isreg
+      - not piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.islnk
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.pw_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.gr_name ==
+        piserv_hermes_mcp_ssh_source_user
+      - piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.mode == '0600'
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.dev ==
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.dev
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.inode ==
+        piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.inode
+    fail_msg: >-
+      Automatic key copying requires a stable, private regular authorized_keys
+      file owned by the configured administrator. Refusing to read another path.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Renormalize administrator public keys before automatic MCP SSH publication
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_source_public_key_lines: >-
+      {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+      split('\n') | map('trim') | reject('equalto', '') |
+      reject('match', '^#') | list }}
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Reject newly forced administrator keys before automatic MCP SSH publication
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode
+        is not search('(^|\\s)command=')
+    fail_msg: >-
+      Automatic key copying cannot safely compose an existing SSH forced
+      command with the Hermes MCP forced command. Use manual key management.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require plain administrator public keys before automatic MCP SSH publication
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_mcp_ssh_source_public_key_lines | length > 0
+      - >-
+        piserv_hermes_mcp_ssh_source_public_key_lines |
+        select('match',
+        '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com|sk-ecdsa-sha2-nistp256@openssh\\.com)\\s+[^\\s]+(?:\\s+.*)?$') |
+        list | length == piserv_hermes_mcp_ssh_source_public_key_lines | length
+    fail_msg: >-
+      Automatic key copying requires at least one plain SSH public-key line.
+      Keys with SSH options, including source restrictions, must be installed
+      manually because their options cannot be safely composed.
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
 - name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"

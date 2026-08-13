@@ -92,7 +92,10 @@ cat ~/.ssh/id_ed25519.pub | \
     state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
     test -f "$state" && test ! -L "$state"
     test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
-    lifecycle_values=$(/usr/bin/python3 - "$state" <<'\''PY'\''
+    read_manual_lifecycle() {
+      test -f "$state" && test ! -L "$state"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
+      /usr/bin/python3 - "$state" <<'\''PY'\''
 import json
 import re
 import sys
@@ -122,13 +125,14 @@ if keys != f"{home}/.ssh/authorized_keys":
     raise SystemExit("unexpected lifecycle authorized_keys path")
 print("|".join((user, group, home, keys)))
 PY
-)
+    }
+    lifecycle_values=$(read_manual_lifecycle)
     IFS="|" read -r user group home keys <<EOF
 $lifecycle_values
 EOF
     test -n "$user" && test -n "$group" && test -n "$home" && test -n "$keys"
 
-    /usr/bin/sudo -n -u "$user" /bin/sh -ceu '\''
+    publication=$(/usr/bin/sudo -n -u "$user" /bin/sh -ceu '\''
       user=$1
       group=$2
       home=$3
@@ -144,21 +148,36 @@ EOF
     esac
     if IFS= read -r extra; then exit 1; fi
 
-    if ! /usr/bin/grep -Fqx -- "$key" "$keys"; then
+    if /usr/bin/grep -Fqx -- "$key" "$keys"; then
+      printf '%s\n' unchanged
+    else
       key_directory=${keys%/*}
       test -d "$key_directory" && test ! -L "$key_directory"
       test "$(/usr/bin/stat -c "%U:%G:%a" -- "$key_directory")" = "$user:$group:700"
       umask 077
       staged=$(mktemp "${keys}.XXXXXX")
-      cleanup_staged() { rm -f -- "$staged"; }
-      trap cleanup_staged EXIT
       /usr/bin/awk "1" "$keys" >"$staged"
       printf "%s\n" "$key" >>"$staged"
       chmod 0600 "$staged"
+      printf '%s\n' "$staged"
+    fi
+    '\'' sh "$user" "$group" "$home" "$keys")
+    if test "$publication" != unchanged; then
+      key_directory=${keys%/*}
+      staged=$publication
+      test "${staged%/*}" = "$key_directory"
+      test -f "$staged" && test ! -L "$staged"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$staged")" = "$user:$group:600"
+      cleanup_staged() { rm -f -- "$staged"; }
+      trap cleanup_staged EXIT
+
+      # Re-authenticate the root-owned manual-key policy immediately before
+      # atomically replacing the recovered key file with the staged content.
+      reauthenticated_lifecycle_values=$(read_manual_lifecycle)
+      test "$reauthenticated_lifecycle_values" = "$lifecycle_values"
       mv -- "$staged" "$keys"
       trap - EXIT
     fi
-    '\'' sh "$user" "$group" "$home" "$keys"
   '\'''
 ```
 
@@ -430,6 +449,31 @@ require_regular() {
 require_private_directory() {
   require_directory "$1"
   test "$(stat -c '%U:%G:%a' -- "$1")" = "$2"
+}
+
+require_expected_home_filesystem() {
+  # The managed home must remain an ordinary directory on the same filesystem
+  # as its fixed /var/lib parent. A mount or a different source/filesystem can
+  # turn a bounded rmdir into an operation on operator-managed storage.
+  command -v findmnt >/dev/null
+  command -v mountpoint >/dev/null
+  test ! -L "$home"
+  test ! -L /var/lib
+  expected_home_filesystem=$(findmnt --noheadings --output SOURCE,FSTYPE --target /var/lib | \
+    sed 's/^[[:space:]]*//')
+  actual_home_filesystem=$(findmnt --noheadings --output SOURCE,FSTYPE --target "$home" | \
+    sed 's/^[[:space:]]*//')
+  test -n "$expected_home_filesystem"
+  test "$actual_home_filesystem" = "$expected_home_filesystem"
+  if mountpoint -q -- "$home"; then
+    printf 'refusing teardown of lifecycle home mountpoint: %s\n' "$home" >&2
+    exit 1
+  fi
+  if path_exists_or_is_symlink "$home/.ssh" && mountpoint -q -- "$home/.ssh"; then
+    printf 'refusing teardown of lifecycle SSH directory mountpoint: %s\n' \
+      "$home/.ssh" >&2
+    exit 1
+  fi
 }
 
 require_marker() {
@@ -713,6 +757,7 @@ remove_private_group_if_present() {
 if "$account_present"; then
   if path_exists_or_is_symlink "$home"; then
     require_directory "$home"
+    require_expected_home_filesystem
     if path_exists_or_is_symlink "$home/.ssh"; then
       require_private_directory "$home/.ssh" "${user}:${group}:700"
       if path_exists_or_is_symlink "$keys"; then
