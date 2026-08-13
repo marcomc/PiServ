@@ -533,15 +533,21 @@ systemctl reload ssh
 ! path_exists_or_is_symlink "$wrapper"
 ! path_exists_or_is_symlink "$dropin"
 ! path_exists_or_is_symlink "$sudoers"
-rm -f -- "$state"
-! path_exists_or_is_symlink "$state"
+# Keep the authenticated lifecycle record until the temporary deny policy has
+# been removed and SSH has accepted and reloaded the final configuration. If
+# either step fails, the record remains for a safe retry; the account and keys
+# have already been removed, so the absence of the temporary deny is harmless.
 rm -f -- "$teardown_deny"
 sshd -t
 systemctl reload ssh
+rm -f -- "$state"
+! path_exists_or_is_symlink "$state"
 REMOTE
 ```
 
 The command verifies the recovered identity and every recovered managed path
-before it deletes the lifecycle record. It must exit successfully and produce
+before it deletes the lifecycle record, and deletes that record only after the
+temporary deny policy has been removed and SSH has accepted and reloaded the
+final configuration. It must exit successfully and produce
 no account entry before a clean apply or `piserv_hermes_mcp_ssh_manage: false`
 is used.

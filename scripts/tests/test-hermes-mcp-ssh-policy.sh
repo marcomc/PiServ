@@ -167,6 +167,23 @@ require_text 'Validate the complete SSH daemon configuration before publishing M
   "${task_file}"
 require_text 'Reload SSH service to activate forced-command policy before publishing MCP keys' \
   "${task_file}"
+require_text 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' \
+  "${task_file}"
+require_text 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' \
+  "${task_file}"
+require_text '      - /usr/sbin/sshd' "${task_file}"
+require_text '      - -T' "${task_file}"
+require_text '      - -C' "${task_file}"
+require_text 'user={{ piserv_hermes_mcp_ssh_user }},addr=127.0.0.1,host=localhost' \
+  "${task_file}"
+require_text "'forcecommand /usr/bin/sudo -n ' ~ piserv_hermes_mcp_ssh_wrapper_path" \
+  "${task_file}"
+require_text "'disableforwarding yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
+require_text "'permittty no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
+require_text "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
 require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
   ansible.builtin.systemd_service:
     name: ssh
@@ -199,12 +216,14 @@ wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP 
 user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_effective_policy_assert_line=$(rg -n --fixed-strings 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
-if (( provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
-  printf 'Hermes MCP SSH publication order must be state, SSH policy, reload, keys, sudoers, active state.\n' >&2
+if (( provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must be state, SSH policy, reload, effective-policy assertion, account, keys, sudoers, active state.\n' >&2
   exit 1
 fi
 
@@ -387,13 +406,17 @@ teardown_deny_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runb
 teardown_deny_effective_line=$(rg -n --fixed-strings 'effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")' "${runbook}" | cut -d: -f1)
 teardown_activity_check_line=$(rg -n --fixed-strings '# No new principal session can now authenticate.' "${runbook}" | cut -d: -f1)
 teardown_deny_remove_line=$(rg -n --fixed-strings 'rm -f -- "$teardown_deny"' "${runbook}" | cut -d: -f1)
+teardown_final_validate_line=$(rg -n --fixed-strings 'sshd -t' "${runbook}" | \
+  awk -F: -v after_line="${teardown_deny_remove_line}" '$1 > after_line { print $1; exit }')
+teardown_final_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | \
+  awk -F: -v after_line="${teardown_final_validate_line}" '$1 > after_line { print $1; exit }')
 teardown_dropin_match_line=$(rg -n --fixed-strings 'require_exact_line "$dropin" "Match User $user"' "${runbook}" | cut -d: -f1)
 teardown_dropin_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$dropin" "    ForceCommand /usr/bin/sudo -n $wrapper"' "${runbook}" | cut -d: -f1)
 teardown_sudoers_user_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "Defaults:$user !use_pty"' "${runbook}" | cut -d: -f1)
 teardown_sudoers_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "$user ALL=(root) NOPASSWD: $wrapper \"\""' "${runbook}" | cut -d: -f1)
 
-if (( teardown_primary_gid_check_line >= teardown_dropin_match_line || teardown_dropin_match_line >= teardown_dropin_wrapper_line || teardown_dropin_wrapper_line >= teardown_sudoers_user_line || teardown_sudoers_user_line >= teardown_sudoers_wrapper_line || teardown_sudoers_wrapper_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_skeleton_line || teardown_skeleton_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_state_line || teardown_state_line >= teardown_deny_remove_line )); then
-  printf 'Hermes MCP SSH teardown must authenticate recovered policy identities, then publish and reload its deny policy before scans and deletion.\n' >&2
+if (( teardown_primary_gid_check_line >= teardown_dropin_match_line || teardown_dropin_match_line >= teardown_dropin_wrapper_line || teardown_dropin_wrapper_line >= teardown_sudoers_user_line || teardown_sudoers_user_line >= teardown_sudoers_wrapper_line || teardown_sudoers_wrapper_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_skeleton_line || teardown_skeleton_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_deny_remove_line || teardown_deny_remove_line >= teardown_final_validate_line || teardown_final_validate_line >= teardown_final_reload_line || teardown_final_reload_line >= teardown_state_line )); then
+  printf 'Hermes MCP SSH teardown must retain authenticated lifecycle state until the deny policy is removed and final SSH validation and reload succeed.\n' >&2
   exit 1
 fi
 
