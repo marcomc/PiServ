@@ -538,6 +538,47 @@
     selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
     map(attribute='stat.exists') | first)
 
+- name: Discover SSH configuration drop-ins before the Hermes MCP policy
+  ansible.builtin.find:
+    paths: /etc/ssh/sshd_config.d
+    file_type: file
+    patterns: '*.conf'
+    use_regex: false
+  register: piserv_hermes_mcp_ssh_sshd_dropins
+  changed_when: false
+  check_mode: false
+
+- name: Define SSH configuration files before the Hermes MCP policy
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_preceding_sshd_config_paths: >-
+      {{ ['/etc/ssh/sshd_config'] +
+      (piserv_hermes_mcp_ssh_sshd_dropins.files |
+      selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
+      map(attribute='path') | list) }}
+
+- name: Read SSH configuration before the Hermes MCP policy
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config_paths }}"
+  register: piserv_hermes_mcp_ssh_preceding_sshd_config
+  changed_when: false
+  check_mode: false
+
+- name: Reject address-scoped SSH policy before the Hermes MCP policy
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.content | b64decode is not search(
+        '(?im)^\\s*Match\\s+[^\\r\\n#]*\\bAddress\\b')
+    fail_msg: >-
+      {{ item.item }} has an address-scoped Match policy before the Hermes MCP
+      policy. Its effective forced-command policy cannot be proven for every
+      permitted ingress context, so refusing to publish MCP SSH access.
+  loop: "{{ piserv_hermes_mcp_ssh_preceding_sshd_config.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
 - name: Install SSH forced-command policy before publishing MCP keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
@@ -709,6 +750,11 @@
     owner: root
     group: root
     mode: "0755"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first)
 
 - name: Install restricted Hermes MCP SSH sudoers policy
   ansible.builtin.template:

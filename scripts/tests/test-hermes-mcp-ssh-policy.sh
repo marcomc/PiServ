@@ -163,6 +163,18 @@ require_text 'Authenticate the Hermes MCP SSH ancestor canonicalization executab
 require_text 'Inspect the Hermes MCP runtime launch prerequisites' "${task_file}"
 require_text 'Install SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
+require_text 'Discover SSH configuration drop-ins before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Define SSH configuration files before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Read SSH configuration before the Hermes MCP policy' \
+  "${task_file}"
+require_text 'Reject address-scoped SSH policy before the Hermes MCP policy' \
+  "${task_file}"
+require_text "selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf')" \
+  "${task_file}"
+require_text "'(?im)^\\\\s*Match\\\\s+[^\\\\r\\\\n#]*\\\\bAddress\\\\b'" \
+  "${task_file}"
 require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
   "${task_file}"
 require_text 'Reload SSH service to activate forced-command policy before publishing MCP keys' \
@@ -215,6 +227,8 @@ libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexe
 wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP SSH wrapper directory' "${task_file}" | cut -d: -f1)
 user_create_line=$(rg -n --fixed-strings 'Create password-locked Hermes MCP SSH system user' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_context_discover_line=$(rg -n --fixed-strings 'Discover SSH configuration drop-ins before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
+ssh_context_reject_line=$(rg -n --fixed-strings 'Reject address-scoped SSH policy before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
 ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_assert_line=$(rg -n --fixed-strings 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
@@ -222,8 +236,8 @@ keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SS
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
-if (( provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
-  printf 'Hermes MCP SSH publication order must be state, SSH policy, reload, effective-policy assertion, account, keys, sudoers, active state.\n' >&2
+if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must reject earlier address-scoped SSH policy before state publication, SSH policy, reload, effective-policy assertion, account, keys, sudoers, and active state.\n' >&2
   exit 1
 fi
 
@@ -261,6 +275,10 @@ require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
 require_multiline_text '- name: Publish restricted copies of administrator SSH public keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"' \
+  "${task_file}"
+require_multiline_text '- name: Install root-owned Hermes MCP SSH wrapper
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"' \
   "${task_file}"
 require_text "selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh')" \
   "${task_file}"
@@ -341,7 +359,14 @@ require_text 'A standalone group is permitted only for a resumed, already-draine
 require_text "if \"\$group_only_resume\"; then" "${runbook}"
 require_text "test \"\$teardown_resume\" = true" "${runbook}"
 require_text "elif \"\$group_only_resume\"; then" "${runbook}"
-require_text "groupdel \"\$group\"" "${runbook}"
+require_text "Debian's USERGROUPS_ENAB policy can remove the account's private group" \
+  "${runbook}"
+require_multiline_text "remove_private_group_if_present() {
+  if getent group \"\$group\" >/dev/null; then
+    groupdel \"\$group\"
+  fi
+}" "${runbook}"
+require_text '  remove_private_group_if_present' "${runbook}"
 require_text 'unexpected lifecycle authorized_keys path' "${runbook}"
 require_text 'unexpected lifecycle wrapper path' "${runbook}"
 require_text 'unexpected lifecycle sudoers path' "${runbook}"

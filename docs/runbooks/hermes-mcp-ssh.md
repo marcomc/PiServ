@@ -478,6 +478,16 @@ if "$group_only_resume"; then
   test "$teardown_resume" = true
 fi
 
+# Debian's USERGROUPS_ENAB policy can remove the account's private group as part
+# of userdel. Re-check instead of treating the earlier lookup as a promise:
+# an interrupted, already-drained teardown is safe whether that group remains
+# for this command or was removed with the account.
+remove_private_group_if_present() {
+  if getent group "$group" >/dev/null; then
+    groupdel "$group"
+  fi
+}
+
 if "$account_present"; then
   if path_exists_or_is_symlink "$home"; then
     require_directory "$home"
@@ -546,9 +556,9 @@ if "$account_present"; then
   done
   if path_exists_or_is_symlink "$home"; then rmdir -- "$home"; fi
   userdel "$user"
-  if "$group_present"; then groupdel "$group"; fi
+  remove_private_group_if_present
 elif "$group_only_resume"; then
-  groupdel "$group"
+  remove_private_group_if_present
 fi
 rm -f -- "$sudoers" "$wrapper" "$dropin"
 sshd -t
