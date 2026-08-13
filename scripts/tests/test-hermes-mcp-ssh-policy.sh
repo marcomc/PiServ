@@ -274,7 +274,7 @@ if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${ssh_config
 fi
 require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
   "${task_file}"
-require_text 'Reload SSH service to activate forced-command policy before publishing MCP keys' \
+require_text 'Activate a changed SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
 require_text 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
@@ -341,10 +341,22 @@ if (( ssh_admission_when_count != 1 )); then
   printf 'Hermes MCP SSH global-admission audit must skip only fresh identity simulation.\n' >&2
   exit 1
 fi
-require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
+require_multiline_text '- name: Install SSH forced-command policy before publishing MCP keys
+  ansible.builtin.template:' "${task_file}"
+require_multiline_text '    validate: /usr/sbin/sshd -t -f %s
+  register: piserv_hermes_mcp_ssh_forced_command_policy
+  notify: Reload SSH service' "${task_file}"
+require_multiline_text '- name: Activate a changed SSH forced-command policy before publishing MCP keys
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode' "${task_file}"
+require_multiline_text '- name: Reload the existing SSH forced-command policy when resuming provisioning
   ansible.builtin.systemd_service:
     name: ssh
-    state: reloaded' "${task_file}"
+    state: reloaded
+  when:
+    - not ansible_check_mode
+    - piserv_hermes_mcp_ssh_lifecycle_phase == '\''provisioning'\''
+    - not piserv_hermes_mcp_ssh_forced_command_policy.changed' "${task_file}"
 require_multiline_text '- name: Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys
   ansible.builtin.command:
     argv:
@@ -432,7 +444,8 @@ ssh_context_read_line=$(rg -n --fixed-strings 'Read authenticated SSH configurat
 ssh_context_reinspect_line=$(rg -n --fixed-strings 'Reinspect consumed SSH configuration leaves after reading policy' "${task_file}" | cut -d: -f1)
 ssh_context_inode_line=$(rg -n --fixed-strings 'Require consumed SSH configuration leaves to retain their authenticated inode' "${task_file}" | cut -d: -f1)
 ssh_context_reject_line=$(rg -n --fixed-strings 'Reject scoped SSH Match policy and unverified Includes before the Hermes MCP policy' "${task_file}" | cut -d: -f1)
-ssh_reload_line=$(rg -n --fixed-strings 'Reload SSH service to activate forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_reload_line=$(rg -n --fixed-strings 'Activate a changed SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+ssh_provisioning_reload_line=$(rg -n --fixed-strings 'Reload the existing SSH forced-command policy when resuming provisioning' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 ssh_effective_policy_assert_line=$(rg -n --fixed-strings 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
@@ -445,7 +458,7 @@ if (( authorized_keys_inspect_count != 1 || authorized_keys_auth_count != 1 )); 
   exit 1
 fi
 
-if (( ssh_context_discover_line >= ssh_context_define_line || ssh_context_define_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_inspect_line || ssh_context_inspect_line >= ssh_context_authenticate_line || ssh_context_authenticate_line >= ssh_context_read_line || ssh_context_read_line >= ssh_context_reinspect_line || ssh_context_reinspect_line >= ssh_context_inode_line || ssh_context_inode_line >= ssh_context_reject_line || ssh_context_reject_line >= provision_line || provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
+if (( ssh_context_discover_line >= ssh_context_define_line || ssh_context_define_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_inspect_line || ssh_context_inspect_line >= ssh_context_authenticate_line || ssh_context_authenticate_line >= ssh_context_read_line || ssh_context_read_line >= ssh_context_reinspect_line || ssh_context_reinspect_line >= ssh_context_inode_line || ssh_context_inode_line >= ssh_context_reject_line || ssh_context_reject_line >= provision_line || provision_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_provisioning_reload_line || ssh_provisioning_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
   printf 'Hermes MCP SSH publication order must authenticate earlier SSH policy before lifecycle state, policy activation, and credential publication.\n' >&2
   exit 1
 fi
