@@ -592,15 +592,18 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
-- name: Reject administrator keys that already declare a forced command
+- name: Reject administrator SSH key options before automatic MCP SSH access
   ansible.builtin.assert:
     that:
       - >-
-        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode
-        is not search('(^|\\s)command=')
+        piserv_hermes_mcp_ssh_source_public_key_lines |
+        reject('match',
+        '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com|sk-ecdsa-sha2-nistp256@openssh\\.com)\\s+') |
+        list | length == 0
     fail_msg: >-
-      Automatic key copying cannot safely compose an existing SSH forced
-      command with the Hermes MCP forced command. Use manual key management.
+      Automatic key copying accepts only plain SSH public keys without any
+      options. Use manual key management for a forced command or other key
+      options.
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
@@ -696,11 +699,12 @@
 - name: Reject symlinked SSH configuration drop-ins before the Hermes MCP policy
   ansible.builtin.assert:
     that:
+      - item.isreg
       - not item.islnk
     fail_msg: >-
-      {{ item.path }} is a symlinked SSH configuration drop-in before the
-      Hermes MCP policy. Refusing to publish MCP SSH access through an
-      unverified included configuration path.
+      {{ item.path }} is not a regular, non-symlinked SSH configuration
+      drop-in before the Hermes MCP policy. Refusing to publish MCP SSH access
+      through an unverified included configuration path.
   loop: >-
     {{ piserv_hermes_mcp_ssh_sshd_dropins.files |
     selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
@@ -1139,7 +1143,7 @@
         length == 1
       - >-
         piserv_hermes_mcp_ssh_sudo_policy.stdout is regex(
-          '(?m)^\s*!use_pty(?:\s|$)'
+          '(?m)(?:^|,)\s*!use_pty(?:\s|,|$)'
         )
     fail_msg: >-
       The MCP SSH account must have exactly one no-argument sudo command, no
@@ -1233,15 +1237,18 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
-- name: Reject newly forced administrator keys before automatic MCP SSH publication
+- name: Reject newly added administrator SSH key options before automatic MCP SSH publication
   ansible.builtin.assert:
     that:
       - >-
-        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode
-        is not search('(^|\\s)command=')
+        piserv_hermes_mcp_ssh_source_public_key_lines |
+        reject('match',
+        '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com|sk-ecdsa-sha2-nistp256@openssh\\.com)\\s+') |
+        list | length == 0
     fail_msg: >-
-      Automatic key copying cannot safely compose an existing SSH forced
-      command with the Hermes MCP forced command. Use manual key management.
+      Automatic key copying accepts only plain SSH public keys without any
+      options. Use manual key management for a forced command or other key
+      options.
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 

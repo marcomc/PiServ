@@ -198,8 +198,9 @@ file. Do not use a root-owned redirection to repair the file. While the
 lifecycle record is active and says that keys are manually managed, use this
 bounded repair procedure instead. It authenticates the
 root-owned lifecycle record, confirms the recovered account and group, refuses
-missing, non-directory, or symlinked paths, and changes only the three managed
-paths to the modes Ansible requires.
+missing, non-directory, symlinked, mounted, or bind-mounted paths, and
+authenticates the home filesystem against `/var/lib` immediately before making
+changes. It changes only the three managed paths to the modes Ansible requires.
 
 ```sh
 ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n /bin/sh -ceu '\''
@@ -256,6 +257,30 @@ EOF
   test -d "$home" && test ! -L "$home"
   test -d "$ssh_directory" && test ! -L "$ssh_directory"
   test -f "$keys" && test ! -L "$keys"
+
+  require_expected_home_filesystem() {
+    command -v findmnt >/dev/null
+    command -v mountpoint >/dev/null
+    test ! -L /var/lib
+    expected_home_filesystem=$(findmnt --noheadings --output SOURCE,FSTYPE --target /var/lib | \
+      sed 's/^[[:space:]]*//')
+    actual_home_filesystem=$(findmnt --noheadings --output SOURCE,FSTYPE --target "$home" | \
+      sed 's/^[[:space:]]*//')
+    test -n "$expected_home_filesystem"
+    test "$actual_home_filesystem" = "$expected_home_filesystem"
+    if mountpoint -q -- "$home"; then
+      printf 'refusing manual permission repair of lifecycle home mountpoint: %s\n' \
+        "$home" >&2
+      exit 1
+    fi
+    if mountpoint -q -- "$ssh_directory"; then
+      printf 'refusing manual permission repair of lifecycle SSH directory mountpoint: %s\n' \
+        "$ssh_directory" >&2
+      exit 1
+    fi
+  }
+
+  require_expected_home_filesystem
 
   chown -- "$user:$group" "$home" "$ssh_directory" "$keys"
   chmod 0750 "$home"

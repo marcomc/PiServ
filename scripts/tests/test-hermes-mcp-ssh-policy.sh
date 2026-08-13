@@ -156,8 +156,16 @@ require_text 'Verify the active group-only fixture failed provenance validation'
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Verify the absent group-only fixture failed provenance validation' \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
-require_text 'Reject administrator keys that already declare a forced command' \
+require_text 'Reject administrator SSH key options before automatic MCP SSH access' \
   "${task_file}"
+require_text 'Verify automatic key copy rejects every SSH key option' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'is not match(hermes_mcp_ssh_plain_public_key_pattern)' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text "no-command=\"not a forced command\"" \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
+require_text 'environment="X ssh-ed25519 placeholder",command="unsafe"' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_text 'Require plain administrator public keys for automatic MCP SSH access' \
   "${task_file}"
 require_text 'mode: "0600"' "${task_file}"
@@ -211,6 +219,7 @@ require_text 'Define SSH configuration files before the Hermes MCP policy' \
   "${task_file}"
 require_text 'Reject symlinked SSH configuration drop-ins before the Hermes MCP policy' \
   "${task_file}"
+require_text '- item.isreg' "${task_file}"
 require_text 'Inspect consumed SSH configuration leaves before the Hermes MCP policy' \
   "${task_file}"
 require_text 'Authenticate consumed SSH configuration leaves before the Hermes MCP policy' \
@@ -359,7 +368,7 @@ if (( sudo_policy_when_count != 2 )); then
   exit 1
 fi
 require_multiline_text "piserv_hermes_mcp_ssh_sudo_policy.stdout is regex(
-          '(?m)^\\s*!use_pty(?:\\s|\$)'" "${task_file}"
+          '(?m)(?:^|,)\\s*!use_pty(?:\\s|,|\$)'" "${task_file}"
 require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
         (piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '\''0'\'')' "${task_file}"
@@ -504,7 +513,7 @@ require_text 'Renormalize administrator public keys before automatic MCP SSH pub
   "${task_file}"
 require_text 'Require unchanged administrator key material across automatic MCP SSH publication guard' \
   "${task_file}"
-require_text 'Reject newly forced administrator keys before automatic MCP SSH publication' \
+require_text 'Reject newly added administrator SSH key options before automatic MCP SSH publication' \
   "${task_file}"
 require_text 'Require plain administrator public keys before automatic MCP SSH publication' \
   "${task_file}"
@@ -527,7 +536,7 @@ source_unchanged_line=$(rg -n --fixed-strings \
   'Require unchanged administrator key material across automatic MCP SSH publication guard' \
   "${task_file}" | cut -d: -f1)
 source_reject_line=$(rg -n --fixed-strings \
-  'Reject newly forced administrator keys before automatic MCP SSH publication' \
+  'Reject newly added administrator SSH key options before automatic MCP SSH publication' \
   "${task_file}" | cut -d: -f1)
 source_plain_line=$(rg -n --fixed-strings \
   'Require plain administrator public keys before automatic MCP SSH publication' \
@@ -636,6 +645,16 @@ fi
 require_text "test -d \"\$home\" && test ! -L \"\$home\"" "${runbook}"
 require_text "test -d \"\$ssh_directory\" && test ! -L \"\$ssh_directory\"" "${runbook}"
 require_text "test -f \"\$keys\" && test ! -L \"\$keys\"" "${runbook}"
+require_text 'require_expected_home_filesystem() {' "${runbook}"
+require_text 'findmnt --noheadings --output SOURCE,FSTYPE --target /var/lib' "${runbook}"
+require_text "findmnt --noheadings --output SOURCE,FSTYPE --target \"\$home\"" "${runbook}"
+require_text 'refusing manual permission repair of lifecycle home mountpoint:' "${runbook}"
+require_text 'refusing manual permission repair of lifecycle SSH directory mountpoint:' "${runbook}"
+require_text "if mountpoint -q -- \"\$home\"; then" "${runbook}"
+require_text "if mountpoint -q -- \"\$ssh_directory\"; then" "${runbook}"
+require_multiline_text "  require_expected_home_filesystem
+
+  chown -- \"\$user:\$group\" \"\$home\" \"\$ssh_directory\" \"\$keys\"" "${runbook}"
 require_text "chmod 0750 \"\$home\"" "${runbook}"
 require_text "chmod 0700 \"\$ssh_directory\"" "${runbook}"
 require_text "chmod 0600 \"\$keys\"" "${runbook}"
