@@ -1,3 +1,4 @@
+### Managed by Ansible: automatic administrator key copy for Hermes MCP SSH.
 {% for public_key in piserv_hermes_mcp_ssh_source_public_key_lines %}
 command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict {{ public_key }}
 {% endfor %}

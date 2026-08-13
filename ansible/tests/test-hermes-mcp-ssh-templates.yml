@@ -13,7 +13,15 @@
     hermes_agent_managed_config_path: /etc/hermes-agent/config.yaml
     hermes_agent_binary_path: "/usr/local/bin/hermes;echo mcp-wrapper-injected"
     piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_group: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_home: /var/lib/codex-hermes-mcp
+    piserv_hermes_mcp_ssh_authorized_keys_path: /var/lib/codex-hermes-mcp/.ssh/authorized_keys
     piserv_hermes_mcp_ssh_wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
+    piserv_hermes_mcp_ssh_sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+    piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
+    piserv_hermes_mcp_ssh_source_user: admin
+    piserv_hermes_mcp_ssh_source_authorized_keys_path: /home/admin/.ssh/authorized_keys
+    piserv_hermes_mcp_ssh_key_provenance: automatic-admin-copy
     piserv_hermes_mcp_ssh_source_public_key_lines:
       - >-
         ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1
@@ -37,6 +45,8 @@
           destination: authorized_keys
         - source: ../playbooks/templates/hermes-mcp-ssh-sshd.conf.j2
           destination: sshd.conf
+        - source: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
+          destination: lifecycle-state.json
 
     - name: Render the Hermes MCP SSH wrapper without Home Assistant MCP
       ansible.builtin.template:
@@ -62,7 +72,14 @@
         - wrapper-without-home-assistant.sh
         - authorized_keys
         - sshd.conf
+        - lifecycle-state.json
       register: hermes_mcp_ssh_rendered_templates
+
+    - name: Parse the rendered Hermes MCP SSH lifecycle state
+      ansible.builtin.set_fact:
+        hermes_mcp_ssh_lifecycle_state: >-
+          {{ hermes_mcp_ssh_rendered_templates.results[4].content | b64decode |
+          from_json }}
 
     - name: Require safe rendered Hermes MCP SSH template contracts
       ansible.builtin.assert:
@@ -116,8 +133,32 @@
             'DisableForwarding yes'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
+            'PermitTTY no'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
+            'X11Forwarding no'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
             'Match all'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - hermes_mcp_ssh_lifecycle_state.schema == 'piserv-hermes-mcp-ssh-state-v1'
+          - hermes_mcp_ssh_lifecycle_state.mcp_ssh_user == 'codex-hermes-mcp'
+          - hermes_mcp_ssh_lifecycle_state.mcp_ssh_group == 'codex-hermes-mcp'
+          - hermes_mcp_ssh_lifecycle_state.mcp_ssh_home == '/var/lib/codex-hermes-mcp'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.authorized_keys_path ==
+            '/var/lib/codex-hermes-mcp/.ssh/authorized_keys'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.wrapper_path ==
+            '/usr/local/libexec/hermes-agent/codex-mcp-ssh'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.sudoers_path ==
+            '/etc/sudoers.d/codex-hermes-mcp'
+          - hermes_mcp_ssh_lifecycle_state.key_provenance == 'automatic-admin-copy'
+          - hermes_mcp_ssh_lifecycle_state.key_source_user == 'admin'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.key_source_path ==
+            '/home/admin/.ssh/authorized_keys'
 
   post_tasks:
     - name: Remove the temporary Hermes MCP SSH template test directory

@@ -66,6 +66,12 @@ an empty, `0600` `authorized_keys` file. Later applies preserve its contents;
 add or remove plain public keys as the operator. The server-side `Match User`
 policy continues to enforce the MCP command for every such key.
 
+After the first successful apply, the playbook records the configured account,
+paths, and key-management mode in a root-owned lifecycle record. It refuses an
+identity, path, or automatic/manual-mode change until the existing deployment
+has been removed deliberately; this prevents an old account from retaining an
+unrestricted SSH login.
+
 Apply the dedicated playbook:
 
 ```sh
@@ -78,15 +84,32 @@ Use a known administrator connection to install a local public key. Replace
 the key path if the Mac uses another key type.
 
 ```sh
-{
-  cat ~/.ssh/id_ed25519.pub
-} | ssh "admin@${PISERV_IP:-PiServ.local}" \
-  'sudo tee /var/lib/codex-hermes-mcp/.ssh/authorized_keys >/dev/null'
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+
+cat ~/.ssh/id_ed25519.pub | \
+  ssh "admin@${PISERV_IP:-PiServ.local}" \
+  'sudo -u codex-hermes-mcp /bin/sh -ceu '\''
+    keys=/var/lib/codex-hermes-mcp/.ssh/authorized_keys
+    test -f "$keys" && test ! -L "$keys"
+    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$keys")" = "codex-hermes-mcp:codex-hermes-mcp:600"
+
+    IFS= read -r key
+    test -n "$key"
+    case "$key" in
+      ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-nistp256\ *|ecdsa-sha2-nistp384\ *|ecdsa-sha2-nistp521\ *|sk-ssh-ed25519@openssh.com\ *|sk-ecdsa-sha2-nistp256@openssh.com\ *) ;;
+      *) exit 1 ;;
+    esac
+    if IFS= read -r extra; then exit 1; fi
+
+    /usr/bin/grep -Fqx -- "$key" "$keys" || printf "%s\\n" "$key" >> "$keys"
+  '\'''
 ```
 
-The file already has the correct owner and mode when Ansible created it. After
-editing it manually, keep it owned by `codex-hermes-mcp:codex-hermes-mcp` with
-mode `0600`.
+The command first validates the local key, then validates that Ansible's
+dedicated regular file still has its expected identity and `0600` mode. It runs
+as `codex-hermes-mcp`, appends only a non-duplicate plain public-key line, and
+does not rewrite existing keys. Re-run the playbook to repair ownership or mode
+drift rather than using a root-owned redirection.
 
 ## Configure an SSH Client
 
@@ -189,7 +212,8 @@ codex mcp remove hermes-piserv
 ## Rollback
 
 Set `piserv_hermes_mcp_ssh_manage: false` only after removing the account,
-sudoers file, wrapper, and authorized keys with an explicit removal playbook.
+sudoers file, wrapper, SSH drop-in, lifecycle record, and authorized keys with
+an explicit removal playbook.
 The normal convergence playbook deliberately does not delete an active remote
 access path. Until a removal workflow is added, remove the local Codex MCP
 entry and empty the restricted account's `authorized_keys` file to revoke

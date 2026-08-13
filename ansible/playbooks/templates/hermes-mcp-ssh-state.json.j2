@@ -1,0 +1,12 @@
+{
+  "schema": "piserv-hermes-mcp-ssh-state-v1",
+  "mcp_ssh_user": {{ piserv_hermes_mcp_ssh_user | to_json }},
+  "mcp_ssh_group": {{ piserv_hermes_mcp_ssh_group | to_json }},
+  "mcp_ssh_home": {{ piserv_hermes_mcp_ssh_home | to_json }},
+  "authorized_keys_path": {{ piserv_hermes_mcp_ssh_authorized_keys_path | to_json }},
+  "wrapper_path": {{ piserv_hermes_mcp_ssh_wrapper_path | to_json }},
+  "sudoers_path": {{ piserv_hermes_mcp_ssh_sudoers_path | to_json }},
+  "key_provenance": {{ piserv_hermes_mcp_ssh_key_provenance | to_json }},
+  "key_source_user": {{ piserv_hermes_mcp_ssh_source_user | to_json }},
+  "key_source_path": {{ piserv_hermes_mcp_ssh_source_authorized_keys_path | to_json }}
+}

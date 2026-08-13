@@ -8,6 +8,7 @@ task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh.yml"
 wrapper_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-wrapper.sh.j2"
 sudoers_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sudoers.j2"
 keys_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-authorized_keys.j2"
+state_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-state.json.j2"
 playbook="${repository_root}/ansible/playbooks/hermes-agent.yml"
 runbook="${repository_root}/docs/runbooks/hermes-mcp-ssh.md"
 variables_example="${repository_root}/ansible/vars/hermes-agent.yml.example"
@@ -34,7 +35,22 @@ require_text 'piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true' \
 require_text 'shell: /bin/sh' "${task_file}"
 require_text 'force: false' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'" "${task_file}"
-require_text "piserv_hermes_mcp_ssh_user)[5] == '/bin/sh'" "${task_file}"
+require_text 'Normalize Hermes runtime identity records' "${task_file}"
+require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
+require_text 'Require complete Hermes runtime identity records' "${task_file}"
+require_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh'" \
+  "${task_file}"
+require_text 'Define the Hermes MCP SSH lifecycle state path' "${task_file}"
+require_text 'Inspect existing privileged Hermes MCP SSH artifacts before mutation' \
+  "${task_file}"
+require_text 'Authenticate existing privileged Hermes MCP SSH artifacts' \
+  "${task_file}"
+require_text 'Require lifecycle provenance before adopting Hermes MCP SSH state' \
+  "${task_file}"
+require_text 'Require managed markers before replacing Hermes MCP SSH artifacts' \
+  "${task_file}"
+require_text 'Publish Hermes MCP SSH lifecycle provenance after policy installation' \
+  "${task_file}"
 require_text 'Reject administrator keys that already declare a forced command' \
   "${task_file}"
 require_text 'Require plain administrator public keys for automatic MCP SSH access' \
@@ -48,11 +64,26 @@ require_text 'Inspect the Hermes MCP runtime launch prerequisites' "${task_file}
 require_text 'Install SSH forced-command policy for the Hermes MCP account' \
   "${task_file}"
 require_text 'ansible_check_mode or' "${task_file}"
-require_text "piserv_hermes_mcp_ssh_user)[2] != '0'" "${task_file}"
-require_text "piserv_hermes_mcp_ssh_group)[2] != '0'" "${task_file}"
+require_text "piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '0'" \
+  "${task_file}"
+require_text "piserv_hermes_mcp_ssh_runtime_group_record[1] != '0'" \
+  "${task_file}"
+require_text "piserv_hermes_mcp_ssh_account_passwd_record[1] != '0'" \
+  "${task_file}"
+require_text "piserv_hermes_mcp_ssh_account_group_record[1] != '0'" \
+  "${task_file}"
 require_text 'when: not ansible_check_mode' "${task_file}"
 require_text 'command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict' \
   "${keys_template}"
+require_text 'Managed by Ansible: automatic administrator key copy for Hermes MCP SSH.' \
+  "${keys_template}"
+require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
+  "${task_file}"
+require_text '"schema": "piserv-hermes-mcp-ssh-state-v1"' "${state_template}"
+require_text '"mcp_ssh_user": {{ piserv_hermes_mcp_ssh_user | to_json }}' \
+  "${state_template}"
+require_text '"key_provenance": {{ piserv_hermes_mcp_ssh_key_provenance | to_json }}' \
+  "${state_template}"
 require_text 'exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec' \
   "${wrapper_template}"
 require_text '--property=User={{ hermes_agent_user | quote }}' "${wrapper_template}"
@@ -72,6 +103,10 @@ require_text 'Defaults:{{ piserv_hermes_mcp_ssh_user }} !use_pty' \
 require_text 'ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'DisableForwarding yes' \
+  "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'PermitTTY no' \
+  "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'X11Forwarding no' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'Match all' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
