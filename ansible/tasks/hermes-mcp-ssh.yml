@@ -757,6 +757,10 @@
         'authorizedkeysfile ' ~ piserv_hermes_mcp_ssh_authorized_keys_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
       - "'authorizedkeyscommand none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'trustedusercakeys none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'pubkeyauthentication yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'passwordauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
+      - "'kbdinteractiveauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - >-
         'forcecommand /usr/bin/sudo -n ' ~ piserv_hermes_mcp_ssh_wrapper_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
@@ -796,6 +800,102 @@
     owner: "{{ piserv_hermes_mcp_ssh_user }}"
     group: "{{ piserv_hermes_mcp_ssh_group }}"
     mode: "0750"
+
+- name: Require global SSH admission for the Hermes MCP SSH account before publishing keys
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        user="$1"
+        set -f
+        policy=$(/usr/sbin/sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")
+
+        setting() {
+          key="$1"
+          value=$(printf '%s\n' "$policy" | awk -v key="$key" '
+            $1 == key {
+              $1 = ""
+              sub(/^ /, "")
+              print
+              found = 1
+              exit
+            }
+            END {
+              if (!found) {
+                exit 1
+              }
+            }')
+          printf '%s\n' "$value"
+        }
+
+        validate_patterns() {
+          for pattern in $1; do
+            case "$pattern" in
+              *"@"*|"!"*)
+                printf 'cannot prove SSH admission for %s because it uses unsupported pattern: %s\n' \
+                  "$user" "$pattern" >&2
+                exit 1
+                ;;
+            esac
+          done
+        }
+
+        matches_any() {
+          subject="$1"
+          patterns="$2"
+          for pattern in $patterns; do
+            case "$subject" in
+              $pattern) return 0 ;;
+            esac
+          done
+          return 1
+        }
+
+        allow_users=$(setting allowusers)
+        deny_users=$(setting denyusers)
+        allow_groups=$(setting allowgroups)
+        deny_groups=$(setting denygroups)
+        groups=$(id -nG "$user")
+
+        validate_patterns "$allow_users"
+        validate_patterns "$deny_users"
+        validate_patterns "$allow_groups"
+        validate_patterns "$deny_groups"
+
+        if [ "$deny_users" != none ] && matches_any "$user" "$deny_users"; then
+          printf 'global DenyUsers rejects the Hermes MCP SSH account: %s\n' "$user" >&2
+          exit 1
+        fi
+        if [ "$allow_users" != none ] && ! matches_any "$user" "$allow_users"; then
+          printf 'global AllowUsers does not admit the Hermes MCP SSH account: %s\n' "$user" >&2
+          exit 1
+        fi
+        for group in $groups; do
+          if [ "$deny_groups" != none ] && matches_any "$group" "$deny_groups"; then
+            printf 'global DenyGroups rejects Hermes MCP SSH group: %s\n' "$group" >&2
+            exit 1
+          fi
+        done
+        if [ "$allow_groups" != none ]; then
+          group_admitted=false
+          for group in $groups; do
+            if matches_any "$group" "$allow_groups"; then
+              group_admitted=true
+              break
+            fi
+          done
+          if [ "$group_admitted" != true ]; then
+            printf 'global AllowGroups does not admit any Hermes MCP SSH group for: %s\n' "$user" >&2
+            exit 1
+          fi
+        fi
+      - --
+      - "{{ piserv_hermes_mcp_ssh_user }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
 
 - name: Inspect legacy Hermes MCP SSH account skeleton files before removal
   ansible.builtin.stat:

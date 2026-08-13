@@ -238,6 +238,14 @@ require_text 'user={{ piserv_hermes_mcp_ssh_user }},addr=127.0.0.1,host=localhos
   "${task_file}"
 require_text "'forcecommand /usr/bin/sudo -n ' ~ piserv_hermes_mcp_ssh_wrapper_path" \
   "${task_file}"
+require_text "'trustedusercakeys none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
+require_text "'pubkeyauthentication yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
+require_text "'passwordauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
+require_text "'kbdinteractiveauthentication no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
 require_text "'disableforwarding yes' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
   "${task_file}"
 require_text "'permittty no' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
@@ -249,6 +257,17 @@ require_text "'x11forwarding no' in piserv_hermes_mcp_ssh_effective_policy.stdou
 require_text 'Inspect the Hermes MCP SSH user RC hook before mutation' "${task_file}"
 require_text 'Reject an existing Hermes MCP SSH user RC hook' "${task_file}"
 require_text 'PermitUserRC no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'TrustedUserCAKeys none' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'PubkeyAuthentication yes' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'PasswordAuthentication no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'KbdInteractiveAuthentication no' "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'Require global SSH admission for the Hermes MCP SSH account before publishing keys' \
+  "${task_file}"
+require_text "allow_users=\$(setting allowusers)" "${task_file}"
+require_text "deny_users=\$(setting denyusers)" "${task_file}"
+require_text "allow_groups=\$(setting allowgroups)" "${task_file}"
+require_text "deny_groups=\$(setting denygroups)" "${task_file}"
+require_text 'set -f' "${task_file}"
 require_multiline_text '- name: Reload SSH service to activate forced-command policy before publishing MCP keys
   ansible.builtin.systemd_service:
     name: ssh
@@ -429,6 +448,16 @@ require_text "cleanup_staged() { rm -f -- \"\$staged\"; }" "${runbook}"
 require_text 'trap cleanup_staged EXIT' "${runbook}"
 require_text "/usr/bin/awk \"1\" \"\$keys\" >\"\$staged\"" "${runbook}"
 require_text 'mv --' "${runbook}"
+require_text "Ansible deliberately fails closed if the existing home or \`.ssh\` directory has" \
+  "${runbook}"
+require_text 'manual permission repair requires manual key provenance' "${runbook}"
+require_text "test -d \"\$home\" && test ! -L \"\$home\"" "${runbook}"
+require_text "test -d \"\$ssh_directory\" && test ! -L \"\$ssh_directory\"" "${runbook}"
+require_text "test -f \"\$keys\" && test ! -L \"\$keys\"" "${runbook}"
+require_text "chmod 0750 \"\$home\"" "${runbook}"
+require_text "chmod 0700 \"\$ssh_directory\"" "${runbook}"
+require_text "chmod 0600 \"\$keys\"" "${runbook}"
+require_text 'do not weaken the Ansible preflight or broaden this command' "${runbook}"
 require_text 'wrapper, and sudoers paths from the root-owned lifecycle record' "${runbook}"
 require_text 'load_lifecycle_state() {' "${runbook}"
 require_text 'lifecycle identity is incomplete' "${runbook}"

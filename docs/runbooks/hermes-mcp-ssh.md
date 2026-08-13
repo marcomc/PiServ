@@ -168,8 +168,89 @@ regular key file have the recovered identities and modes. It runs as the
 recovered MCP user, atomically publishes a
 newline-delimited non-duplicate plain public-key set, including when the
 previous final line lacked a newline, and preserves existing keys. Re-run the
-playbook to repair ownership or mode drift rather than using a root-owned
-redirection.
+playbook after a successful manual change.
+
+### Repair Manual-Key Permissions
+
+Ansible deliberately fails closed if the existing home or `.ssh` directory has
+ownership drift, or `authorized_keys` has ownership or mode drift. It can
+normalize directory modes, but never normalizes or replaces an existing key
+file. Do not use a root-owned redirection to repair the file. While the
+lifecycle record is active and says that keys are manually managed, use this
+bounded repair procedure instead. It authenticates the
+root-owned lifecycle record, confirms the recovered account and group, refuses
+missing, non-directory, or symlinked paths, and changes only the three managed
+paths to the modes Ansible requires.
+
+```sh
+ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n /bin/sh -ceu '\''
+  state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+  test -f "$state" && test ! -L "$state"
+  test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
+  lifecycle_values=$(/usr/bin/python3 - "$state" <<'\''PY'\''
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    state = json.load(source)
+if state.get("schema") != "piserv-hermes-mcp-ssh-state-v1":
+    raise SystemExit("unexpected lifecycle schema")
+user = state.get("mcp_ssh_user")
+group = state.get("mcp_ssh_group")
+home = state.get("mcp_ssh_home")
+keys = state.get("authorized_keys_path")
+if state.get("phase") != "active":
+    raise SystemExit("Hermes MCP SSH lifecycle is not active")
+if state.get("key_provenance") != "manual-operator-managed":
+    raise SystemExit("manual permission repair requires manual key provenance")
+if not all(isinstance(value, str) for value in (user, group, home, keys)):
+    raise SystemExit("lifecycle identity is incomplete")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
+    raise SystemExit("unexpected lifecycle user")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
+    raise SystemExit("unexpected lifecycle group")
+if not re.fullmatch(r"/var/lib/[a-z0-9_-]+", home):
+    raise SystemExit("unexpected lifecycle home")
+if keys != f"{home}/.ssh/authorized_keys":
+    raise SystemExit("unexpected lifecycle authorized_keys path")
+print("|".join((user, group, home, keys)))
+PY
+)
+  IFS="|" read -r user group home keys <<EOF
+$lifecycle_values
+EOF
+  test -n "$user" && test -n "$group" && test -n "$home" && test -n "$keys"
+  ssh_directory=${keys%/*}
+
+  passwd_record=$(getent passwd "$user")
+  group_record=$(getent group "$group")
+  test -n "$passwd_record" && test -n "$group_record"
+  IFS=: read -r _ _ user_uid user_gid _ account_home _ <<EOF
+$passwd_record
+EOF
+  IFS=: read -r _ _ group_gid _ <<EOF
+$group_record
+EOF
+  test "$user_uid" != 0 && test "$user_gid" != 0 && test "$group_gid" != 0
+  test "$user_gid" = "$group_gid" && test "$account_home" = "$home"
+  test -d "$home" && test ! -L "$home"
+  test -d "$ssh_directory" && test ! -L "$ssh_directory"
+  test -f "$keys" && test ! -L "$keys"
+
+  chown -- "$user:$group" "$home" "$ssh_directory" "$keys"
+  chmod 0750 "$home"
+  chmod 0700 "$ssh_directory"
+  chmod 0600 "$keys"
+  test "$(/usr/bin/stat -c "%U:%G:%a" -- "$home")" = "$user:$group:750"
+  test "$(/usr/bin/stat -c "%U:%G:%a" -- "$ssh_directory")" = "$user:$group:700"
+  test "$(/usr/bin/stat -c "%U:%G:%a" -- "$keys")" = "$user:$group:600"
+'\''
+```
+
+If any check fails, do not weaken the Ansible preflight or broaden this command;
+inspect the unexpected state and use the intentional teardown procedure below
+before a clean reprovisioning.
 
 ## Configure an SSH Client
 

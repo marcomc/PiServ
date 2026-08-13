@@ -172,6 +172,18 @@
             'AuthorizedKeysCommand none'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
+            'TrustedUserCAKeys none'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
+            'PubkeyAuthentication yes'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
+            'PasswordAuthentication no'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
+            'KbdInteractiveAuthentication no'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
             'ForceCommand /usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-mcp-ssh'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
