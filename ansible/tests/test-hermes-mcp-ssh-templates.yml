@@ -169,6 +169,9 @@
             'AuthorizedKeysFile /var/lib/codex-hermes-mcp/.ssh/authorized_keys'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-
+            'AuthorizedKeysCommand none'
+            in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
+          - >-
             'ForceCommand /usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-mcp-ssh'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - >-

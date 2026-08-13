@@ -48,6 +48,8 @@ require_text 'shell: /bin/sh' "${task_file}"
 require_text 'force: false' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'" "${task_file}"
 require_text 'Normalize Hermes runtime identity records' "${task_file}"
+require_text '((ansible_facts.getent_passwd | default({}, true)).get(hermes_agent_user, []) | default([], true))' "${task_file}"
+require_text '((ansible_facts.getent_group | default({}, true)).get(hermes_agent_group, []) | default([], true))' "${task_file}"
 require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "${task_file}"
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
@@ -107,7 +109,7 @@ require_multiline_text '- name: Provision Hermes MCP SSH lifecycle provenance be
     (piserv_hermes_mcp_ssh_publication_parent_state.results |
     selectattr('\''item.path'\'', '\''equalto'\'', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
     map(attribute='\''stat.exists'\'') | first)' "${task_file}"
-require_text 'Mark Hermes MCP SSH lifecycle provenance active after sudoers publication' \
+require_text 'Mark Hermes MCP SSH lifecycle provenance active after credential publication' \
   "${task_file}"
 require_text 'Publish active Hermes MCP SSH lifecycle provenance' \
   "${task_file}"
@@ -286,9 +288,10 @@ ssh_effective_policy_line=$(rg -n --fixed-strings 'Read the effective Hermes MCP
 ssh_effective_policy_assert_line=$(rg -n --fixed-strings 'Require the effective Hermes MCP SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
+sudo_verify_line=$(rg -n --fixed-strings 'Require the exact Hermes MCP SSH sudo privilege' "${task_file}" | cut -d: -f1)
 active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
 
-if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+if (( provision_line >= ssh_context_discover_line || ssh_context_discover_line >= ssh_context_symlink_reject_line || ssh_context_symlink_reject_line >= ssh_context_reject_line || ssh_context_reject_line >= ssh_policy_line || ssh_policy_line >= ssh_reload_line || ssh_reload_line >= ssh_effective_policy_line || ssh_effective_policy_line >= ssh_effective_policy_assert_line || ssh_effective_policy_assert_line >= user_create_line || user_create_line >= sudoers_line || sudoers_line >= sudo_verify_line || sudo_verify_line >= keys_line || keys_line >= active_line )); then
   printf 'Hermes MCP SSH publication order must reject earlier scoped policy and symlinked drop-ins before policy activation and credential publication.\n' >&2
   exit 1
 fi
@@ -327,12 +330,12 @@ require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
 require_text 'create_home: false' "${task_file}"
 require_multiline_text '- name: Inspect legacy Hermes MCP SSH account skeleton files before removal
   ansible.builtin.stat:
-    path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
+    path: "{{ item }}"
     follow: false
   loop:
-    - .bash_logout
-    - .bashrc
-    - .profile
+    - "{{ piserv_hermes_mcp_ssh_home }}/.bash_logout"
+    - "{{ piserv_hermes_mcp_ssh_home }}/.bashrc"
+    - "{{ piserv_hermes_mcp_ssh_home }}/.profile"
   register: piserv_hermes_mcp_ssh_skeleton_file_state
   changed_when: false
   check_mode: false' "${task_file}"
@@ -383,6 +386,8 @@ require_text 'ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_pat
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'AuthorizedKeysFile {{ piserv_hermes_mcp_ssh_authorized_keys_path }}' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
+require_text 'AuthorizedKeysCommand none' \
+  "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'DisableForwarding yes' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_text 'PermitTTY no' \
@@ -393,6 +398,8 @@ require_text 'Match all' \
   "${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-sshd.conf.j2"
 require_multiline_text "'authorizedkeysfile ' ~ piserv_hermes_mcp_ssh_authorized_keys_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" "${task_file}"
+require_text "'authorizedkeyscommand none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines" \
+  "${task_file}"
 require_text 'Configure restricted SSH access to the Hermes MCP server' \
   "${playbook}"
 require_text 'Reload SSH service' "${playbook}"

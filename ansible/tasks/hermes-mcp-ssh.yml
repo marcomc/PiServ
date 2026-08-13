@@ -38,9 +38,9 @@
 - name: Normalize Hermes runtime identity records
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_runtime_passwd_record: >-
-      {{ (ansible_facts.getent_passwd | default({}, true)).get(hermes_agent_user, []) }}
+      {{ ((ansible_facts.getent_passwd | default({}, true)).get(hermes_agent_user, []) | default([], true)) }}
     piserv_hermes_mcp_ssh_runtime_group_record: >-
-      {{ (ansible_facts.getent_group | default({}, true)).get(hermes_agent_group, []) }}
+      {{ ((ansible_facts.getent_group | default({}, true)).get(hermes_agent_group, []) | default([], true)) }}
 
 - name: Classify a fresh check-mode Hermes runtime identity simulation
   ansible.builtin.set_fact:
@@ -756,6 +756,7 @@
       - >-
         'authorizedkeysfile ' ~ piserv_hermes_mcp_ssh_authorized_keys_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
+      - "'authorizedkeyscommand none' in piserv_hermes_mcp_ssh_effective_policy.stdout_lines"
       - >-
         'forcecommand /usr/bin/sudo -n ' ~ piserv_hermes_mcp_ssh_wrapper_path
         in piserv_hermes_mcp_ssh_effective_policy.stdout_lines
@@ -798,12 +799,12 @@
 
 - name: Inspect legacy Hermes MCP SSH account skeleton files before removal
   ansible.builtin.stat:
-    path: "{{ piserv_hermes_mcp_ssh_home }}/{{ item }}"
+    path: "{{ item }}"
     follow: false
   loop:
-    - .bash_logout
-    - .bashrc
-    - .profile
+    - "{{ piserv_hermes_mcp_ssh_home }}/.bash_logout"
+    - "{{ piserv_hermes_mcp_ssh_home }}/.bashrc"
+    - "{{ piserv_hermes_mcp_ssh_home }}/.profile"
   register: piserv_hermes_mcp_ssh_skeleton_file_state
   changed_when: false
   check_mode: false
@@ -904,22 +905,6 @@
       selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
       map(attribute='stat.exists') | first)
 
-- name: Publish restricted copies of administrator SSH public keys
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
-    owner: "{{ piserv_hermes_mcp_ssh_user }}"
-    group: "{{ piserv_hermes_mcp_ssh_group }}"
-    mode: "0600"
-  no_log: true
-  when:
-    - piserv_hermes_mcp_ssh_copy_admin_authorized_keys
-    - >-
-      not ansible_check_mode or
-      (piserv_hermes_mcp_ssh_account_path_state.results |
-      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
-      map(attribute='stat.exists') | first)
-
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"
@@ -941,23 +926,6 @@
     group: root
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
-
-- name: Mark Hermes MCP SSH lifecycle provenance active after sudoers publication
-  ansible.builtin.set_fact:
-    piserv_hermes_mcp_ssh_lifecycle_phase: active
-
-- name: Publish active Hermes MCP SSH lifecycle provenance
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
-    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
-    owner: root
-    group: root
-    mode: "0600"
-  when: >-
-    not ansible_check_mode or
-    (piserv_hermes_mcp_ssh_publication_parent_state.results |
-    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
-    map(attribute='stat.exists') | first)
 
 - name: Verify the dedicated Hermes MCP SSH account has only the wrapper privilege
   ansible.builtin.command:
@@ -993,3 +961,36 @@
       The MCP SSH account must have exactly one no-argument sudo command and
       no broad sudo privilege.
   when: not ansible_check_mode
+
+- name: Publish restricted copies of administrator SSH public keys
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+    - >-
+      not ansible_check_mode or
+      (piserv_hermes_mcp_ssh_account_path_state.results |
+      selectattr('item', 'equalto', piserv_hermes_mcp_ssh_home ~ '/.ssh') |
+      map(attribute='stat.exists') | first)
+
+- name: Mark Hermes MCP SSH lifecycle provenance active after credential publication
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_lifecycle_phase: active
+
+- name: Publish active Hermes MCP SSH lifecycle provenance
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: >-
+    not ansible_check_mode or
+    (piserv_hermes_mcp_ssh_publication_parent_state.results |
+    selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first)
