@@ -47,7 +47,9 @@ require_text 'shell: /bin/sh' "${task_file}"
 require_text 'force: false' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'" "${task_file}"
 require_text 'Normalize Hermes runtime identity records' "${task_file}"
+require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
+require_text 'Classify an absent Hermes MCP SSH account identity' "${task_file}"
 require_text 'Require complete Hermes runtime identity records' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh'" \
   "${task_file}"
@@ -73,7 +75,32 @@ require_text 'Require plain administrator public keys for automatic MCP SSH acce
 require_text 'mode: "0600"' "${task_file}"
 require_text 'mode: "0440"' "${task_file}"
 require_text 'validate: /usr/sbin/visudo -cf %s' "${task_file}"
-require_text 'Authenticate privileged Hermes MCP SSH publication parents' \
+require_text 'Inspect every Hermes MCP SSH wrapper ancestor before mutation' \
+  "${task_file}"
+require_text 'Authenticate every Hermes MCP SSH wrapper ancestor before mutation' \
+  "${task_file}"
+require_text 'Canonicalize every existing Hermes MCP SSH wrapper ancestor before mutation' \
+  "${task_file}"
+require_text 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' \
+  "${task_file}"
+require_multiline_text '    - path: /
+      required: true
+      mode: "0755"
+    - path: /usr
+      required: true
+      mode: "0755"
+    - path: /usr/local
+      required: true
+      mode: "0755"
+    - path: /usr/local/libexec
+      required: false
+      mode: "0755"
+      create_if_absent: true
+      policy: managed-wrapper-directory
+    - path: "{{ piserv_hermes_mcp_ssh_wrapper_path | dirname }}"
+      required: false
+      mode: "0755"' "${task_file}"
+require_text 'Authenticate the Hermes MCP SSH ancestor canonicalization executable' \
   "${task_file}"
 require_text 'Inspect the Hermes MCP runtime launch prerequisites' "${task_file}"
 require_text 'Install SSH forced-command policy before publishing MCP keys' \
@@ -82,17 +109,31 @@ require_text 'Validate the complete SSH daemon configuration before publishing M
   "${task_file}"
 require_text 'Activate SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
-require_text 'ansible_check_mode or' "${task_file}"
-require_text "piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '0'" \
-  "${task_file}"
-require_text "piserv_hermes_mcp_ssh_runtime_group_record[1] != '0'" \
-  "${task_file}"
+require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
+        (piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
+        piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '\''0'\'')' "${task_file}"
+require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
+        (piserv_hermes_mcp_ssh_runtime_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_runtime_group_record[1] != '\''0'\'')' "${task_file}"
+runtime_identity_tasks=$(sed -n \
+  '/^- name: Require complete Hermes runtime identity records$/,/^- name: Read existing Hermes MCP SSH account and group$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'ansible_check_mode or' <<<"${runtime_identity_tasks}"; then
+  printf 'Converged Hermes runtime identities must not bypass validation in check mode.\n' >&2
+  exit 1
+fi
 require_text "piserv_hermes_mcp_ssh_account_passwd_record[1] != '0'" \
   "${task_file}"
 require_text "piserv_hermes_mcp_ssh_account_group_record[1] != '0'" \
   "${task_file}"
 require_text 'when: not ansible_check_mode' "${task_file}"
 provision_line=$(rg -n --fixed-strings 'Provision Hermes MCP SSH lifecycle provenance before account mutation' "${task_file}" | cut -d: -f1)
+wrapper_ancestor_auth_line=$(rg -n --fixed-strings 'Authenticate every Hermes MCP SSH wrapper ancestor before mutation' "${task_file}" | cut -d: -f1)
+wrapper_ancestor_realpath_line=$(rg -n --fixed-strings 'Authenticate the Hermes MCP SSH ancestor canonicalization executable' "${task_file}" | cut -d: -f1)
+wrapper_ancestor_canonical_command_line=$(rg -n --fixed-strings 'Canonicalize every existing Hermes MCP SSH wrapper ancestor before mutation' "${task_file}" | cut -d: -f1)
+wrapper_ancestor_canonical_line=$(rg -n --fixed-strings 'Require exact canonical Hermes MCP SSH wrapper ancestors before mutation' "${task_file}" | cut -d: -f1)
+libexec_directory_line=$(rg -n --fixed-strings 'Create the Hermes MCP SSH libexec parent directory' "${task_file}" | cut -d: -f1)
+wrapper_directory_line=$(rg -n --fixed-strings 'Create the dedicated Hermes MCP SSH wrapper directory' "${task_file}" | cut -d: -f1)
 ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
 keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
 sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
@@ -102,6 +143,17 @@ if (( provision_line >= ssh_policy_line || ssh_policy_line >= keys_line || keys_
   printf 'Hermes MCP SSH publication order must be state, SSH policy, keys, sudoers, active state.\n' >&2
   exit 1
 fi
+
+if (( wrapper_ancestor_auth_line >= wrapper_ancestor_realpath_line || wrapper_ancestor_realpath_line >= wrapper_ancestor_canonical_command_line || wrapper_ancestor_canonical_command_line >= wrapper_ancestor_canonical_line || wrapper_ancestor_canonical_line >= libexec_directory_line || libexec_directory_line >= wrapper_directory_line )); then
+  printf 'Hermes MCP SSH wrapper ancestors must be authenticated and canonicalized before parent and leaf creation.\n' >&2
+  exit 1
+fi
+require_multiline_text '- path: /usr/local/libexec
+      required: false
+      mode: "0755"
+      create_if_absent: true' "${task_file}"
+require_multiline_text "selectattr('item.path', 'equalto', piserv_hermes_mcp_ssh_wrapper_path | dirname) |
+    map(attribute='stat.exists') | first" "${task_file}"
 require_text 'command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict' \
   "${keys_template}"
 require_text 'Managed by Ansible: automatic administrator key copy for Hermes MCP SSH.' \
@@ -166,6 +218,10 @@ require_text '# requires that record, so a pre-lifecycle partial deployment can 
 require_text 'lifecycle identity does not match this teardown' "${runbook}"
 require_text 'Refuse a home with data outside the two managed SSH paths.' "${runbook}"
 require_text 'Authenticate only existing managed artifacts.' "${runbook}"
+require_text "require_marker \"\$dropin\" '# Managed by Ansible. Restrict this principal even when its authorized_keys'" \
+  "${runbook}"
+require_text "require_marker \"\$sudoers\" '# Managed by Ansible. Permit only the no-argument Hermes MCP entry point.'" \
+  "${runbook}"
 require_text "visudo -cf \"\$sudoers\"" "${runbook}"
 require_text 'sshd -t' "${runbook}"
 require_text "rmdir -- \"\$home/.ssh\" \"\$home\"" "${runbook}"

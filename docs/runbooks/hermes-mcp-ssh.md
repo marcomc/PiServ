@@ -368,11 +368,11 @@ if path_exists_or_is_symlink "$wrapper"; then
 fi
 if path_exists_or_is_symlink "$dropin"; then
   require_regular "$dropin" root:root:644
-  require_marker "$dropin" '# Managed by Ansible: restricted Hermes MCP SSH access.'
+  require_marker "$dropin" '# Managed by Ansible. Restrict this principal even when its authorized_keys'
 fi
 if path_exists_or_is_symlink "$sudoers"; then
   require_regular "$sudoers" root:root:440
-  require_marker "$sudoers" '# Managed by Ansible: restricted Hermes MCP SSH sudo policy.'
+  require_marker "$sudoers" '# Managed by Ansible. Permit only the no-argument Hermes MCP entry point.'
   visudo -cf "$sudoers"
 fi
 
