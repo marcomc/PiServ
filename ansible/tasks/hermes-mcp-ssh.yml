@@ -261,7 +261,6 @@
       {{ 'automatic-admin-copy' if
       piserv_hermes_mcp_ssh_copy_admin_authorized_keys else
       'manual-operator-managed' }}
-    piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
 
 - name: Inspect existing privileged Hermes MCP SSH artifacts before mutation
   ansible.builtin.stat:
@@ -316,6 +315,9 @@
 
 - name: Validate Hermes MCP SSH lifecycle provenance before adoption
   ansible.builtin.import_tasks: hermes-mcp-ssh-provenance.yml
+
+- name: Set the Hermes MCP SSH lifecycle phase for this convergence
+  ansible.builtin.import_tasks: hermes-mcp-ssh-lifecycle-phase.yml
 
 - name: Read markers from existing managed Hermes MCP SSH artifacts
   ansible.builtin.slurp:
@@ -513,6 +515,13 @@
       {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
       split('\n') | map('trim') | reject('equalto', '') |
       reject('match', '^#') | list }}
+    piserv_hermes_mcp_ssh_source_authorized_keys_checksum: >-
+      {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+      hash('sha256') }}
+    piserv_hermes_mcp_ssh_source_public_key_lines_before_publication: >-
+      {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+      split('\n') | map('trim') | reject('equalto', '') |
+      reject('match', '^#') | list }}
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
@@ -572,7 +581,7 @@
   loop: "{{ piserv_hermes_mcp_ssh_runtime_prerequisite_state.results }}"
   loop_control:
     label: "{{ item.item.path }}"
-  when: not ansible_check_mode
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Create the Hermes MCP SSH libexec parent directory
   ansible.builtin.file:
@@ -810,6 +819,7 @@
     password_lock: true
     system: true
     state: present
+  when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Set dedicated Hermes MCP SSH home permissions
   ansible.builtin.file:
@@ -1053,9 +1063,13 @@
         piserv_hermes_mcp_ssh_sudo_policy.stdout |
         regex_findall('(?m)^\s*\([^)]*\)(?:\s+NOPASSWD:)?\s+.*$') |
         length == 1
+      - >-
+        piserv_hermes_mcp_ssh_sudo_policy.stdout is regex(
+          '(?m)^\s*!use_pty(?:\s|$)'
+        )
     fail_msg: >-
-      The MCP SSH account must have exactly one no-argument sudo command and
-      no broad sudo privilege.
+      The MCP SSH account must have exactly one no-argument sudo command, no
+      broad sudo privilege, and an effective !use_pty policy.
   when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
 
 - name: Reinspect administrator authorized keys immediately before automatic MCP SSH publication
@@ -1114,6 +1128,10 @@
       - >-
         piserv_hermes_mcp_ssh_source_authorized_keys_reread_state.stat.inode ==
         piserv_hermes_mcp_ssh_source_authorized_keys_state.stat.inode
+      - >-
+        piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
+        hash('sha256') ==
+        piserv_hermes_mcp_ssh_source_authorized_keys_checksum
     fail_msg: >-
       Automatic key copying requires a stable, private regular authorized_keys
       file owned by the configured administrator. Refusing to read another path.
@@ -1126,6 +1144,18 @@
       {{ piserv_hermes_mcp_ssh_source_authorized_keys.content | b64decode |
       split('\n') | map('trim') | reject('equalto', '') |
       reject('match', '^#') | list }}
+  no_log: true
+  when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+
+- name: Require unchanged administrator key material across automatic MCP SSH publication guard
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_mcp_ssh_source_public_key_lines ==
+        piserv_hermes_mcp_ssh_source_public_key_lines_before_publication
+    fail_msg: >-
+      Administrator authorized_keys changed while the automatic MCP SSH
+      publication guard was in progress. Refusing to publish a stale key set.
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 

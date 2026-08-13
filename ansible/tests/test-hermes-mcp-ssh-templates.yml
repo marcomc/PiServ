@@ -392,6 +392,14 @@
         piserv_hermes_mcp_ssh_lifecycle_state: >-
           {{ piserv_hermes_mcp_ssh_lifecycle_state | combine({'phase': 'active'}) }}
 
+    - name: Preserve active lifecycle provenance through the production phase selector
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-lifecycle-phase.yml
+
+    - name: Require active lifecycle provenance to remain active on convergence
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_mcp_ssh_lifecycle_phase == 'active'
+
     - name: Reject an active lifecycle group-only resume through the production gate
       block:
         - name: Exercise the production provenance gate with active lifecycle state

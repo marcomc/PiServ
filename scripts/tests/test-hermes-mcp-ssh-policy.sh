@@ -55,6 +55,31 @@ require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "$
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
+runtime_prerequisite_tasks=$(sed -n \
+  '/^- name: Inspect the Hermes MCP runtime launch prerequisites$/,/^- name: Create the Hermes MCP SSH libexec parent directory$/p' \
+  "${task_file}")
+if rg --fixed-strings --quiet -- 'when: not ansible_check_mode' <<<"${runtime_prerequisite_tasks}"; then
+  printf 'Hermes MCP runtime prerequisite authentication must run during converged check mode.\n' >&2
+  exit 1
+fi
+runtime_prerequisite_when_count=$(rg --fixed-strings --count \
+  'when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${runtime_prerequisite_tasks}")
+if (( runtime_prerequisite_when_count != 1 )); then
+  printf 'Hermes MCP runtime prerequisite authentication must skip only fresh identity simulation.\n' >&2
+  exit 1
+fi
+require_multiline_text '- name: Create password-locked Hermes MCP SSH system user
+  ansible.builtin.user:' "${task_file}"
+user_creation_tasks=$(sed -n \
+  '/^- name: Create password-locked Hermes MCP SSH system user$/,/^- name: Set dedicated Hermes MCP SSH home permissions$/p' \
+  "${task_file}")
+if ! rg --fixed-strings --quiet -- \
+  'when: not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode' \
+  <<<"${user_creation_tasks}"; then
+  printf 'Fresh check-mode identity simulation must defer dependent MCP SSH user creation.\n' >&2
+  exit 1
+fi
 require_text 'Read passwd records before adopting the Hermes MCP SSH group' "${task_file}"
 require_text 'Identify existing primary-GID users of the Hermes MCP SSH group' "${task_file}"
 require_text "rejectattr('key', 'equalto', piserv_hermes_mcp_ssh_user)" "${task_file}"
@@ -329,6 +354,8 @@ if (( sudo_policy_when_count != 2 )); then
   printf 'Hermes MCP SSH sudo-policy read and assertion must skip only fresh identity simulation.\n' >&2
   exit 1
 fi
+require_multiline_text "piserv_hermes_mcp_ssh_sudo_policy.stdout is regex(
+          '(?m)^\\s*!use_pty(?:\\s|\$)'" "${task_file}"
 require_multiline_text 'piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode or
         (piserv_hermes_mcp_ssh_runtime_passwd_record | length == 6 and
         piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '\''0'\'')' "${task_file}"
@@ -453,6 +480,8 @@ require_text 'Reinspect administrator authorized keys after automatic MCP SSH re
   "${task_file}"
 require_text 'Renormalize administrator public keys before automatic MCP SSH publication' \
   "${task_file}"
+require_text 'Require unchanged administrator key material across automatic MCP SSH publication guard' \
+  "${task_file}"
 require_text 'Reject newly forced administrator keys before automatic MCP SSH publication' \
   "${task_file}"
 require_text 'Require plain administrator public keys before automatic MCP SSH publication' \
@@ -472,16 +501,26 @@ source_reread_reinspect_line=$(rg -n --fixed-strings \
 source_renormalize_line=$(rg -n --fixed-strings \
   'Renormalize administrator public keys before automatic MCP SSH publication' \
   "${task_file}" | cut -d: -f1)
+source_unchanged_line=$(rg -n --fixed-strings \
+  'Require unchanged administrator key material across automatic MCP SSH publication guard' \
+  "${task_file}" | cut -d: -f1)
 source_reject_line=$(rg -n --fixed-strings \
   'Reject newly forced administrator keys before automatic MCP SSH publication' \
   "${task_file}" | cut -d: -f1)
 source_plain_line=$(rg -n --fixed-strings \
   'Require plain administrator public keys before automatic MCP SSH publication' \
   "${task_file}" | cut -d: -f1)
-if (( source_reinspect_line >= source_reread_line || source_reread_line >= source_reread_reinspect_line || source_reread_reinspect_line >= source_revalidate_line || source_revalidate_line >= source_renormalize_line || source_renormalize_line >= source_reject_line || source_reject_line >= source_plain_line || source_plain_line >= keys_line )); then
+if (( source_reinspect_line >= source_reread_line || source_reread_line >= source_reread_reinspect_line || source_reread_reinspect_line >= source_revalidate_line || source_revalidate_line >= source_renormalize_line || source_renormalize_line >= source_unchanged_line || source_unchanged_line >= source_reject_line || source_reject_line >= source_plain_line || source_plain_line >= keys_line )); then
   printf 'Administrator key material must be reauthenticated, reread, and revalidated immediately before publication.\n' >&2
   exit 1
 fi
+require_text "hash('sha256') ==" "${task_file}"
+require_text 'piserv_hermes_mcp_ssh_source_authorized_keys_checksum' "${task_file}"
+require_text 'piserv_hermes_mcp_ssh_source_public_key_lines_before_publication' \
+  "${task_file}"
+require_text 'hermes-mcp-ssh-lifecycle-phase.yml' "${task_file}"
+require_text 'Preserve active lifecycle provenance through the production phase selector' \
+  "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml"
 require_multiline_text '- name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"' \

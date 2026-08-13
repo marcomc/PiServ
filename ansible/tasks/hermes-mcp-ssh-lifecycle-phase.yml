@@ -1,0 +1,6 @@
+---
+- name: Preserve the existing Hermes MCP SSH lifecycle phase during convergence
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_lifecycle_phase: >-
+      {{ (piserv_hermes_mcp_ssh_lifecycle_state | default({}, true)).phase |
+      default('provisioning') }}
