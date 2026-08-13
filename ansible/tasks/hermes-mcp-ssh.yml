@@ -38,9 +38,9 @@
 - name: Normalize Hermes runtime identity records
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_runtime_passwd_record: >-
-      {{ (ansible_facts.getent_passwd | default({})).get(hermes_agent_user, []) }}
+      {{ (ansible_facts.getent_passwd | default({}, true)).get(hermes_agent_user, []) }}
     piserv_hermes_mcp_ssh_runtime_group_record: >-
-      {{ (ansible_facts.getent_group | default({})).get(hermes_agent_group, []) }}
+      {{ (ansible_facts.getent_group | default({}, true)).get(hermes_agent_group, []) }}
 
 - name: Require complete Hermes runtime identity records
   ansible.builtin.assert:
@@ -88,9 +88,9 @@
 - name: Normalize existing Hermes MCP SSH identity records
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_account_passwd_record: >-
-      {{ (ansible_facts.getent_passwd | default({})).get(piserv_hermes_mcp_ssh_user, []) }}
+      {{ (ansible_facts.getent_passwd | default({}, true)).get(piserv_hermes_mcp_ssh_user, []) }}
     piserv_hermes_mcp_ssh_account_group_record: >-
-      {{ (ansible_facts.getent_group | default({})).get(piserv_hermes_mcp_ssh_group, []) }}
+      {{ (ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) }}
 
 - name: Require a safe existing Hermes MCP SSH account identity
   ansible.builtin.assert:
@@ -158,6 +158,7 @@
       {{ 'automatic-admin-copy' if
       piserv_hermes_mcp_ssh_copy_admin_authorized_keys else
       'manual-operator-managed' }}
+    piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
 
 - name: Inspect existing privileged Hermes MCP SSH artifacts before mutation
   ansible.builtin.stat:
@@ -166,16 +167,16 @@
   loop:
     - path: "{{ piserv_hermes_mcp_ssh_state_path }}"
       mode: "0600"
-      marker: '"schema": "piserv-hermes-mcp-ssh-state-v1"'
+      marker: '(?m)^  "schema": "piserv-hermes-mcp-ssh-state-v1",$'
     - path: "{{ piserv_hermes_mcp_ssh_wrapper_path }}"
       mode: "0755"
-      marker: '# Managed by Ansible. This entry point'
+      marker: '(?m)^# Managed by Ansible\. This entry point is callable only through the restricted$'
     - path: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
       mode: "0644"
-      marker: '# Managed by Ansible. Restrict this principal'
+      marker: '(?m)^# Managed by Ansible\. Restrict this principal even when its authorized_keys$'
     - path: "{{ piserv_hermes_mcp_ssh_sudoers_path }}"
       mode: "0440"
-      marker: '# Managed by Ansible. Permit only'
+      marker: '(?m)^# Managed by Ansible\. Permit only the no-argument Hermes MCP entry point\.$'
   register: piserv_hermes_mcp_ssh_privileged_artifact_state
   changed_when: false
   check_mode: false
@@ -242,7 +243,9 @@
         piserv_hermes_mcp_ssh_lifecycle_state.key_source_user ==
         piserv_hermes_mcp_ssh_source_user and
         piserv_hermes_mcp_ssh_lifecycle_state.key_source_path ==
-        piserv_hermes_mcp_ssh_source_authorized_keys_path)
+        piserv_hermes_mcp_ssh_source_authorized_keys_path and
+        (piserv_hermes_mcp_ssh_lifecycle_state.phase | default('active')) in
+        ['provisioning', 'active'])
     fail_msg: >-
       Refusing to adopt or rotate a Hermes MCP SSH identity without matching
       root-owned lifecycle provenance. Remove the complete old deployment with
@@ -255,7 +258,6 @@
   register: piserv_hermes_mcp_ssh_privileged_artifact_markers
   no_log: true
   when:
-    - piserv_hermes_mcp_ssh_privileged_artifact_state.results[0].stat.exists
     - item.stat.exists
     - item.item.path != piserv_hermes_mcp_ssh_state_path
   loop: "{{ piserv_hermes_mcp_ssh_privileged_artifact_state.results }}"
@@ -388,6 +390,76 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
+- name: Inspect the Hermes MCP runtime launch prerequisites
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: /usr/bin/systemd-run
+      owner: root
+      group: root
+      mode: "0755"
+  register: piserv_hermes_mcp_ssh_runtime_prerequisite_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate the Hermes MCP runtime launch prerequisites
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == item.item.owner
+      - item.stat.gr_name == item.item.group
+      - item.stat.mode == item.item.mode
+    fail_msg: >-
+      {{ item.item.path }} must be a private, regular, non-symlinked runtime
+      launch prerequisite with its expected owner and mode.
+  loop: "{{ piserv_hermes_mcp_ssh_runtime_prerequisite_state.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: not ansible_check_mode
+
+- name: Create the dedicated Hermes MCP SSH wrapper directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_wrapper_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not piserv_hermes_mcp_ssh_publication_parent_state.results[0].stat.exists
+
+- name: Provision Hermes MCP SSH lifecycle provenance before account mutation
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_state_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install SSH forced-command policy before publishing MCP keys
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
+    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload SSH service
+
+- name: Validate the complete SSH daemon configuration before publishing MCP keys
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Activate SSH forced-command policy before publishing MCP keys
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
 - name: Create Hermes MCP SSH system group
   ansible.builtin.group:
     name: "{{ piserv_hermes_mcp_ssh_group }}"
@@ -461,7 +533,7 @@
     that:
       - >-
         piserv_hermes_mcp_ssh_authorized_keys_marker.content | b64decode is
-        search('^### Managed by Ansible: automatic administrator key copy for Hermes MCP SSH\\.$')
+        search('(?m)^### Managed by Ansible: automatic administrator key copy for Hermes MCP SSH\\.$')
     fail_msg: >-
       Automatic Hermes MCP SSH authorized_keys must carry its managed marker
       before it can be refreshed from administrator keys.
@@ -490,55 +562,6 @@
   no_log: true
   when: piserv_hermes_mcp_ssh_copy_admin_authorized_keys
 
-- name: Create the dedicated Hermes MCP SSH wrapper directory
-  ansible.builtin.file:
-    path: "{{ piserv_hermes_mcp_ssh_wrapper_path | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when: not piserv_hermes_mcp_ssh_publication_parent_state.results[0].stat.exists
-
-- name: Inspect the Hermes MCP runtime launch prerequisites
-  ansible.builtin.stat:
-    path: "{{ item.path }}"
-    follow: false
-  loop:
-    - path: /usr/bin/systemd-run
-      owner: root
-      group: root
-      mode: "0755"
-  register: piserv_hermes_mcp_ssh_runtime_prerequisite_state
-  changed_when: false
-  check_mode: false
-
-- name: Authenticate the Hermes MCP runtime launch prerequisites
-  ansible.builtin.assert:
-    that:
-      - item.stat.exists
-      - item.stat.isreg
-      - not item.stat.islnk
-      - item.stat.pw_name == item.item.owner
-      - item.stat.gr_name == item.item.group
-      - item.stat.mode == item.item.mode
-    fail_msg: >-
-      {{ item.item.path }} must be a private, regular, non-symlinked runtime
-      launch prerequisite with its expected owner and mode.
-  loop: "{{ piserv_hermes_mcp_ssh_runtime_prerequisite_state.results }}"
-  loop_control:
-    label: "{{ item.item.path }}"
-  when: not ansible_check_mode
-
-- name: Install SSH forced-command policy for the Hermes MCP account
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
-    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
-    owner: root
-    group: root
-    mode: "0644"
-    validate: /usr/sbin/sshd -t -f %s
-  notify: Reload SSH service
-
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"
@@ -546,15 +569,6 @@
     owner: root
     group: root
     mode: "0755"
-
-- name: Validate the complete SSH daemon configuration after MCP policy publication
-  ansible.builtin.command:
-    argv:
-      - /usr/sbin/sshd
-      - -t
-  changed_when: false
-  check_mode: false
-  when: not ansible_check_mode
 
 - name: Install restricted Hermes MCP SSH sudoers policy
   ansible.builtin.template:
@@ -565,7 +579,11 @@
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
 
-- name: Publish Hermes MCP SSH lifecycle provenance after policy installation
+- name: Mark Hermes MCP SSH lifecycle provenance active after sudoers publication
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_lifecycle_phase: active
+
+- name: Publish active Hermes MCP SSH lifecycle provenance
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-state.json.j2"
     dest: "{{ piserv_hermes_mcp_ssh_state_path }}"

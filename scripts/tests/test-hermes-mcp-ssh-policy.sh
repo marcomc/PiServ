@@ -25,6 +25,17 @@ require_text() {
   fi
 }
 
+require_multiline_text() {
+  local expected=$1
+  local file_path=$2
+
+  if ! rg --multiline --fixed-strings --quiet -- "${expected}" "${file_path}"; then
+    printf 'Missing required multiline policy text in %s:\n%s\n' "${file_path}" \
+      "${expected}" >&2
+    exit 1
+  fi
+}
+
 require_text 'password_lock: true' "${task_file}"
 require_text 'piserv_hermes_mcp_ssh_manage: true' "${variables_example}"
 require_text 'piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true' \
@@ -49,7 +60,11 @@ require_text 'Require lifecycle provenance before adopting Hermes MCP SSH state'
   "${task_file}"
 require_text 'Require managed markers before replacing Hermes MCP SSH artifacts' \
   "${task_file}"
-require_text 'Publish Hermes MCP SSH lifecycle provenance after policy installation' \
+require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
+  "${task_file}"
+require_text 'Mark Hermes MCP SSH lifecycle provenance active after sudoers publication' \
+  "${task_file}"
+require_text 'Publish active Hermes MCP SSH lifecycle provenance' \
   "${task_file}"
 require_text 'Reject administrator keys that already declare a forced command' \
   "${task_file}"
@@ -61,7 +76,11 @@ require_text 'validate: /usr/sbin/visudo -cf %s' "${task_file}"
 require_text 'Authenticate privileged Hermes MCP SSH publication parents' \
   "${task_file}"
 require_text 'Inspect the Hermes MCP runtime launch prerequisites' "${task_file}"
-require_text 'Install SSH forced-command policy for the Hermes MCP account' \
+require_text 'Install SSH forced-command policy before publishing MCP keys' \
+  "${task_file}"
+require_text 'Validate the complete SSH daemon configuration before publishing MCP keys' \
+  "${task_file}"
+require_text 'Activate SSH forced-command policy before publishing MCP keys' \
   "${task_file}"
 require_text 'ansible_check_mode or' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_runtime_passwd_record[1] != '0'" \
@@ -73,6 +92,16 @@ require_text "piserv_hermes_mcp_ssh_account_passwd_record[1] != '0'" \
 require_text "piserv_hermes_mcp_ssh_account_group_record[1] != '0'" \
   "${task_file}"
 require_text 'when: not ansible_check_mode' "${task_file}"
+provision_line=$(rg -n --fixed-strings 'Provision Hermes MCP SSH lifecycle provenance before account mutation' "${task_file}" | cut -d: -f1)
+ssh_policy_line=$(rg -n --fixed-strings 'Install SSH forced-command policy before publishing MCP keys' "${task_file}" | cut -d: -f1)
+keys_line=$(rg -n --fixed-strings 'Publish restricted copies of administrator SSH public keys' "${task_file}" | cut -d: -f1)
+sudoers_line=$(rg -n --fixed-strings 'Install restricted Hermes MCP SSH sudoers policy' "${task_file}" | cut -d: -f1)
+active_line=$(rg -n --fixed-strings 'Publish active Hermes MCP SSH lifecycle provenance' "${task_file}" | cut -d: -f1)
+
+if (( provision_line >= ssh_policy_line || ssh_policy_line >= keys_line || keys_line >= sudoers_line || sudoers_line >= active_line )); then
+  printf 'Hermes MCP SSH publication order must be state, SSH policy, keys, sudoers, active state.\n' >&2
+  exit 1
+fi
 require_text 'command="/usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}",restrict' \
   "${keys_template}"
 require_text 'Managed by Ansible: automatic administrator key copy for Hermes MCP SSH.' \
@@ -80,6 +109,8 @@ require_text 'Managed by Ansible: automatic administrator key copy for Hermes MC
 require_text 'Require the automatic Hermes MCP SSH authorized keys marker' \
   "${task_file}"
 require_text '"schema": "piserv-hermes-mcp-ssh-state-v1"' "${state_template}"
+require_text '"phase": {{ piserv_hermes_mcp_ssh_lifecycle_phase | default('\''active'\'') | to_json }}' \
+  "${state_template}"
 require_text '"mcp_ssh_user": {{ piserv_hermes_mcp_ssh_user | to_json }}' \
   "${state_template}"
 require_text '"key_provenance": {{ piserv_hermes_mcp_ssh_key_provenance | to_json }}' \
@@ -116,6 +147,18 @@ require_text 'Reload SSH service' "${playbook}"
 require_text '## Configure Codex Client' "${runbook}"
 require_text 'codex mcp add hermes-piserv' "${runbook}"
 require_text '## Configure Another MCP Client' "${runbook}"
+require_text '## Operator Acceptance Matrix' "${runbook}"
+require_text 'This is a transport smoke test only:' "${runbook}"
+require_text '| Approved reversible entity |' "${runbook}"
+require_text '| Configured target forwarding |' "${runbook}"
+require_text '| Sibling-entity negative |' "${runbook}"
+require_text '| Unreachable-dependency negative |' "${runbook}"
+require_text 'For a failed pre-lifecycle deployment or an intentional teardown,' "${runbook}"
+require_text 'rm -rf -- /var/lib/codex-hermes-mcp' "${runbook}"
+require_text "before a clean apply or \`piserv_hermes_mcp_ssh_manage: false\` is used." \
+  "${runbook}"
+require_multiline_text 'Do not substitute a successful tool-list response for any matrix row. Do not
+test destructive actions or an entity whose restoration is uncertain.' "${runbook}"
 
 if rg --fixed-strings --quiet -- 'NOPASSWD: ALL' "${sudoers_template}"; then
   printf 'The Hermes MCP SSH sudoers policy must not grant NOPASSWD: ALL.\n' >&2

@@ -199,9 +199,33 @@ Expected: exactly one no-argument command,
 `/usr/local/libexec/hermes-agent/codex-mcp-ssh`, and no broad sudo rule.
 
 Then start a new Codex task and ask it to list the `hermes-piserv` MCP tools.
-That proves the complete SSH stdio lifecycle; a raw `ssh` test is deliberately
-not useful because the forced command starts the MCP protocol rather than a
-shell.
+This is a transport smoke test only: it proves SSH authentication, the forced
+command, and MCP initialization. It does not prove that Hermes can reach the
+configured Home Assistant target or that a discovered tool affects only its
+intended entity. A raw `ssh` test is deliberately not useful because the
+forced command starts the MCP protocol rather than a shell.
+
+## Operator Acceptance Matrix
+
+Complete this matrix after every first deployment, target change, or Hermes
+tool-policy change. Use a fresh Codex task with `hermes-piserv`; record the
+actual tool name, target, entity identifier, command/result, and timestamp in
+the change record. The placeholders are deliberately not executable defaults:
+choose existing, approved values from the live MCP tool list and Home Assistant
+configuration.
+
+| Acceptance | Operator action in the MCP client | Required evidence |
+| --- | --- | --- |
+| Transport smoke | List `hermes-piserv` tools. | The expected restricted tool set is returned. This proves transport only. |
+| Approved reversible entity | Select `<approved-reversible-entity>` and its exact permitted transition `<before-state>` to `<after-state>`. Invoke the discovered tool, then query the entity through the same MCP client. Restore `<before-state>` and query again. | Both observed states exactly match the selected transition and restoration. Record the tool name and entity identifier. |
+| Configured target forwarding | Invoke the tool selected above against `<configured-target>` and inspect the target's own entity state or event history. | The configured target, rather than a local/default or alternate target, receives the request and reports the expected state transition. |
+| Sibling-entity negative | With the same tool call, query `<sibling-entity-not-approved>` before and after the approved transition. | The sibling's state and history are unchanged. Any sibling mutation is a failure. |
+| Unreachable-dependency negative | Temporarily make the selected dependency unreachable using an approved, reversible test method. Invoke the same tool once, then restore reachability. | The MCP call fails visibly, no requested entity state changes, and Hermes succeeds again only after the dependency is restored. |
+
+Do not substitute a successful tool-list response for any matrix row. Do not
+test destructive actions or an entity whose restoration is uncertain. If the
+tool set cannot express a scoped, reversible entity transition, stop and record
+the missing acceptance contract before granting the MCP client operational use.
 
 To remove the local Codex client configuration without changing PiServ:
 
@@ -211,10 +235,32 @@ codex mcp remove hermes-piserv
 
 ## Rollback
 
-Set `piserv_hermes_mcp_ssh_manage: false` only after removing the account,
-sudoers file, wrapper, SSH drop-in, lifecycle record, and authorized keys with
-an explicit removal playbook.
 The normal convergence playbook deliberately does not delete an active remote
-access path. Until a removal workflow is added, remove the local Codex MCP
-entry and empty the restricted account's `authorized_keys` file to revoke
-access immediately.
+access path. For a failed pre-lifecycle deployment or an intentional teardown,
+first remove the local Codex MCP entry, then run this explicit administrator
+operation from a host with existing `admin` access:
+
+```sh
+ssh "admin@${PISERV_IP:-PiServ.local}" 'sudo -n sh -eu -c '\''
+  rm -f -- /etc/sudoers.d/codex-hermes-mcp \
+    /usr/local/libexec/hermes-agent/codex-mcp-ssh \
+    /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf \
+    /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+  rm -rf -- /var/lib/codex-hermes-mcp
+  userdel codex-hermes-mcp 2>/dev/null || true
+  groupdel codex-hermes-mcp 2>/dev/null || true
+  sshd -t
+  systemctl reload ssh
+'\'''
+```
+
+Then confirm that no account, keys, wrapper, SSH drop-in, sudoers policy, or
+lifecycle record remains:
+
+```sh
+ssh "admin@${PISERV_IP:-PiServ.local}" \
+  'getent passwd codex-hermes-mcp; test ! -e /var/lib/codex-hermes-mcp/.ssh/authorized_keys; test ! -e /usr/local/libexec/hermes-agent/codex-mcp-ssh; test ! -e /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf; test ! -e /etc/sudoers.d/codex-hermes-mcp; test ! -e /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json'
+```
+
+The verification command must exit successfully and produce no account entry
+before a clean apply or `piserv_hermes_mcp_ssh_manage: false` is used.

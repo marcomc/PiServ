@@ -1,5 +1,6 @@
 {
   "schema": "piserv-hermes-mcp-ssh-state-v1",
+  "phase": {{ piserv_hermes_mcp_ssh_lifecycle_phase | default('active') | to_json }},
   "mcp_ssh_user": {{ piserv_hermes_mcp_ssh_user | to_json }},
   "mcp_ssh_group": {{ piserv_hermes_mcp_ssh_group | to_json }},
   "mcp_ssh_home": {{ piserv_hermes_mcp_ssh_home | to_json }},

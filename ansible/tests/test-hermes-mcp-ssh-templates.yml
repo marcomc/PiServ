@@ -56,6 +56,14 @@
       vars:
         hermes_agent_manage_home_assistant_mcp: false
 
+    - name: Render provisioning Hermes MCP SSH lifecycle state
+      ansible.builtin.template:
+        src: ../playbooks/templates/hermes-mcp-ssh-state.json.j2
+        dest: "{{ hermes_mcp_ssh_template_test_directory.path }}/lifecycle-state-provisioning.json"
+        mode: "0600"
+      vars:
+        piserv_hermes_mcp_ssh_lifecycle_phase: provisioning
+
     - name: Validate the rendered Hermes MCP SSH wrapper shell syntax
       ansible.builtin.command:
         argv:
@@ -73,12 +81,19 @@
         - authorized_keys
         - sshd.conf
         - lifecycle-state.json
+        - lifecycle-state-provisioning.json
       register: hermes_mcp_ssh_rendered_templates
 
     - name: Parse the rendered Hermes MCP SSH lifecycle state
       ansible.builtin.set_fact:
         hermes_mcp_ssh_lifecycle_state: >-
           {{ hermes_mcp_ssh_rendered_templates.results[4].content | b64decode |
+          from_json }}
+
+    - name: Parse the rendered provisioning Hermes MCP SSH lifecycle state
+      ansible.builtin.set_fact:
+        hermes_mcp_ssh_provisioning_lifecycle_state: >-
+          {{ hermes_mcp_ssh_rendered_templates.results[5].content | b64decode |
           from_json }}
 
     - name: Require safe rendered Hermes MCP SSH template contracts
@@ -142,6 +157,8 @@
             'Match all'
             in (hermes_mcp_ssh_rendered_templates.results[3].content | b64decode)
           - hermes_mcp_ssh_lifecycle_state.schema == 'piserv-hermes-mcp-ssh-state-v1'
+          - hermes_mcp_ssh_lifecycle_state.phase == 'active'
+          - hermes_mcp_ssh_provisioning_lifecycle_state.phase == 'provisioning'
           - hermes_mcp_ssh_lifecycle_state.mcp_ssh_user == 'codex-hermes-mcp'
           - hermes_mcp_ssh_lifecycle_state.mcp_ssh_group == 'codex-hermes-mcp'
           - hermes_mcp_ssh_lifecycle_state.mcp_ssh_home == '/var/lib/codex-hermes-mcp'
@@ -159,6 +176,68 @@
           - >-
             hermes_mcp_ssh_lifecycle_state.key_source_path ==
             '/home/admin/.ssh/authorized_keys'
+
+    - name: Model an unprovenanced partial Hermes MCP SSH deployment
+      ansible.builtin.set_fact:
+        hermes_mcp_ssh_fixture_account_record: ['x', '995', '995', '', '/var/lib/codex-hermes-mcp', '/bin/sh']
+        hermes_mcp_ssh_fixture_group_record: ['x', '995', '']
+        hermes_mcp_ssh_fixture_account_paths_present: 2
+        hermes_mcp_ssh_fixture_privileged_artifacts_present: 1
+        hermes_mcp_ssh_fixture_state_present: false
+
+    - name: Reject unprovenanced partial Hermes MCP SSH deployment
+      block:
+        - name: Require lifecycle provenance for the partial fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                hermes_mcp_ssh_fixture_state_present or
+                (hermes_mcp_ssh_fixture_account_record | length == 0 and
+                hermes_mcp_ssh_fixture_group_record | length == 0 and
+                hermes_mcp_ssh_fixture_account_paths_present == 0 and
+                hermes_mcp_ssh_fixture_privileged_artifacts_present == 0)
+
+        - name: Fail if unprovenanced partial fixture was accepted
+          ansible.builtin.fail:
+            msg: Unprovenanced partial Hermes MCP SSH deployment was accepted.
+      rescue:
+        - name: Record expected provenance rejection
+          ansible.builtin.set_fact:
+            hermes_mcp_ssh_partial_fixture_rejected: true
+
+    - name: Require rejection of the unprovenanced partial fixture
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_partial_fixture_rejected | default(false)
+
+    - name: Model a complete legacy-shaped deployment without lifecycle provenance
+      ansible.builtin.set_fact:
+        hermes_mcp_ssh_fixture_privileged_artifacts_present: 3
+
+    - name: Reject complete legacy-shaped deployment without lifecycle provenance
+      block:
+        - name: Require lifecycle provenance for the complete legacy fixture
+          ansible.builtin.assert:
+            that:
+              - >-
+                hermes_mcp_ssh_fixture_state_present or
+                (hermes_mcp_ssh_fixture_account_record | length == 0 and
+                hermes_mcp_ssh_fixture_group_record | length == 0 and
+                hermes_mcp_ssh_fixture_account_paths_present == 0 and
+                hermes_mcp_ssh_fixture_privileged_artifacts_present == 0)
+
+        - name: Fail if complete legacy fixture was accepted
+          ansible.builtin.fail:
+            msg: Complete legacy-shaped deployment without provenance was accepted.
+      rescue:
+        - name: Record expected complete legacy provenance rejection
+          ansible.builtin.set_fact:
+            hermes_mcp_ssh_complete_legacy_fixture_rejected: true
+
+    - name: Require rejection of the complete legacy fixture
+      ansible.builtin.assert:
+        that:
+          - hermes_mcp_ssh_complete_legacy_fixture_rejected | default(false)
 
   post_tasks:
     - name: Remove the temporary Hermes MCP SSH template test directory
