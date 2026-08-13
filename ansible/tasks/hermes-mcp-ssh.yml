@@ -102,6 +102,22 @@
     piserv_hermes_mcp_ssh_account_group_record: >-
       {{ ((ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) | default([], true)) }}
 
+- name: Read passwd records before adopting the Hermes MCP SSH group
+  ansible.builtin.getent:
+    database: passwd
+  check_mode: false
+
+- name: Identify existing primary-GID users of the Hermes MCP SSH group
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_account_group_primary_gid_users: >-
+      {{
+        ((ansible_facts.getent_passwd | default({}, true) | dict2items |
+        rejectattr('key', 'equalto', piserv_hermes_mcp_ssh_user) |
+        selectattr('value.2', 'equalto', piserv_hermes_mcp_ssh_account_group_record[1]) |
+        map(attribute='key') | list)
+        if piserv_hermes_mcp_ssh_account_group_record | length == 3 else [])
+      }}
+
 - name: Classify an absent Hermes MCP SSH account identity
   ansible.builtin.set_fact:
     piserv_hermes_mcp_ssh_account_identity_is_absent: >-
@@ -121,7 +137,10 @@
         piserv_hermes_mcp_ssh_account_passwd_record[1] != '0' and
         piserv_hermes_mcp_ssh_account_passwd_record[2] != '0' and
         piserv_hermes_mcp_ssh_account_passwd_record[4] == piserv_hermes_mcp_ssh_home and
-        piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh')
+        piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh' and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[2] == '')
       - >-
         piserv_hermes_mcp_ssh_account_identity_is_absent or
         (piserv_hermes_mcp_ssh_account_passwd_record | length == 0 and
@@ -158,9 +177,13 @@
         piserv_hermes_mcp_ssh_runtime_group_record | length == 3 and
         piserv_hermes_mcp_ssh_account_group_record[1] !=
         piserv_hermes_mcp_ssh_runtime_group_record[1])
+      - >-
+        piserv_hermes_mcp_ssh_account_identity_is_absent or
+        piserv_hermes_mcp_ssh_account_group_primary_gid_users | length == 0
     fail_msg: >-
       An existing Hermes MCP SSH account must already use the dedicated home,
-      shell, and primary group. Refusing to adopt another account.
+      shell, and primary group without other primary-GID users. Refusing to
+      adopt another account or group.
 
 - name: Inspect the Hermes MCP SSH home and key directory before mutation
   ansible.builtin.stat:

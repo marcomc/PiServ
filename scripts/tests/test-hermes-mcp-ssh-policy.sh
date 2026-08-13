@@ -52,6 +52,13 @@ require_text 'Classify a fresh check-mode Hermes runtime identity simulation' "$
 require_text 'Provision Hermes MCP SSH lifecycle provenance before account mutation' \
   "${task_file}"
 require_text 'Normalize existing Hermes MCP SSH identity records' "${task_file}"
+require_text 'Read passwd records before adopting the Hermes MCP SSH group' "${task_file}"
+require_text 'Identify existing primary-GID users of the Hermes MCP SSH group' "${task_file}"
+require_text "rejectattr('key', 'equalto', piserv_hermes_mcp_ssh_user)" "${task_file}"
+require_text "selectattr('value.2', 'equalto', piserv_hermes_mcp_ssh_account_group_record[1])" \
+  "${task_file}"
+require_text 'piserv_hermes_mcp_ssh_account_group_primary_gid_users | length == 0' \
+  "${task_file}"
 require_text '((ansible_facts.getent_passwd | default({}, true)).get(piserv_hermes_mcp_ssh_user, []) | default([], true))' "${task_file}"
 require_text '((ansible_facts.getent_group | default({}, true)).get(piserv_hermes_mcp_ssh_group, []) | default([], true))' "${task_file}"
 require_text 'Classify an absent Hermes MCP SSH account identity' "${task_file}"
@@ -73,6 +80,10 @@ require_multiline_text "piserv_hermes_mcp_ssh_account_identity_is_absent or
 require_text 'Require complete Hermes runtime identity records' "${task_file}"
 require_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh'" \
   "${task_file}"
+require_multiline_text "piserv_hermes_mcp_ssh_account_passwd_record[5] == '/bin/sh' and
+        piserv_hermes_mcp_ssh_account_group_record | length == 3 and
+        piserv_hermes_mcp_ssh_account_group_record[1] != '0' and
+        piserv_hermes_mcp_ssh_account_group_record[2] == '')" "${task_file}"
 require_text 'Define the Hermes MCP SSH lifecycle state path' "${task_file}"
 require_text 'Inspect existing privileged Hermes MCP SSH artifacts before mutation' \
   "${task_file}"
@@ -401,7 +412,7 @@ require_text "test \"\${metadata%%:*}\" = root" "${runbook}"
 require_text '[0-7][0145][0145]' "${runbook}"
 require_text 'recovers the account, group, home, key,' "${runbook}"
 require_text "key_directory=\${keys%/*}" "${runbook}"
-require_text 'codex-hermes-mcp:codex-hermes-mcp:700' "${runbook}"
+require_text "\"\$user:\$group:700\"" "${runbook}"
 require_text 'umask 077' "${runbook}"
 require_text "cleanup_staged() { rm -f -- \"\$staged\"; }" "${runbook}"
 require_text 'trap cleanup_staged EXIT' "${runbook}"
@@ -479,11 +490,19 @@ require_text '# Drain the SSH principal before revoking it.' \
   "${runbook}"
 require_text 'ForceCommand /usr/bin/false' "${runbook}"
 require_text 'require_unscoped_preceding_match_context() {' "${runbook}"
-require_text 'require_regular /etc/ssh/sshd_config root:root:644' "${runbook}"
+require_text 'require_safe_sshd_config_fragment() {' "${runbook}"
+require_text 'for sshd_fragment in /etc/ssh/sshd_config.d/*.conf; do' "${runbook}"
+require_text "require_safe_sshd_config_fragment \"\$sshd_fragment\"" "${runbook}"
+require_text "test \"\$(stat -c '%U:%G' -- \"\$1\")\" = root:root" "${runbook}"
+require_text 'test -f /etc/ssh/sshd_config && test ! -L /etc/ssh/sshd_config' "${runbook}"
+require_text "test \"\$(stat -c '%U:%G' -- /etc/ssh/sshd_config)\" = root:root" "${runbook}"
+require_text '[0-7][0145][0145]' "${runbook}"
 require_text "' /etc/ssh/sshd_config)" "${runbook}"
 require_text 'refusing SSH teardown with scoped Match directives or unproven Includes in the main configuration:' \
   "${runbook}"
 require_text 'refusing SSH teardown with preceding scoped Match directives or Includes:' "${runbook}"
+require_text "find /etc/ssh/sshd_config.d -xdev -maxdepth 1 -type l" "${runbook}"
+require_text 'refusing SSH teardown with symlinked configuration fragments:' "${runbook}"
 require_text "require_unscoped_preceding_match_context" "${runbook}"
 require_text 'Resume a prior safe drain only when its exact root-owned policy remains.' "${runbook}"
 require_text "require_regular \"\$teardown_deny\" root:root:644" "${runbook}"
@@ -503,6 +522,13 @@ require_text 'sshd -t' "${runbook}"
 require_text "if path_exists_or_is_symlink \"\$home/.ssh\"; then rmdir -- \"\$home/.ssh\"; fi" \
   "${runbook}"
 require_text "! getent passwd \"\$user\" && ! getent group \"\$group\"" "${runbook}"
+require_text 'state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json' "${runbook}"
+require_text 'if state.get("phase") != "active":' "${runbook}"
+require_text 'lifecycle identity is incomplete' "${runbook}"
+require_text 'unexpected lifecycle authorized_keys path' "${runbook}"
+require_text "/usr/bin/sudo -n -u \"\$user\" /bin/sh -ceu" "${runbook}"
+require_text "\"\$user:\$group:600\"" "${runbook}"
+require_text "\"\$user:\$group:700\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$home\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$home/.ssh\"" "${runbook}"
 require_text "! path_exists_or_is_symlink \"\$keys\"" "${runbook}"

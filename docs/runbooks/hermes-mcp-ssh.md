@@ -88,10 +88,50 @@ ssh-keygen -lf ~/.ssh/id_ed25519.pub
 
 cat ~/.ssh/id_ed25519.pub | \
   ssh "admin@${PISERV_IP:-PiServ.local}" \
-  'sudo -u codex-hermes-mcp /bin/sh -ceu '\''
-    keys=/var/lib/codex-hermes-mcp/.ssh/authorized_keys
+  'sudo -n /bin/sh -ceu '\''
+    state=/usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+    test -f "$state" && test ! -L "$state"
+    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
+    lifecycle_values=$(/usr/bin/python3 - "$state" <<'\''PY'\''
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    state = json.load(source)
+if state.get("schema") != "piserv-hermes-mcp-ssh-state-v1":
+    raise SystemExit("unexpected lifecycle schema")
+user = state.get("mcp_ssh_user")
+group = state.get("mcp_ssh_group")
+home = state.get("mcp_ssh_home")
+keys = state.get("authorized_keys_path")
+if state.get("phase") != "active":
+    raise SystemExit("Hermes MCP SSH lifecycle is not active")
+if not all(isinstance(value, str) for value in (user, group, home, keys)):
+    raise SystemExit("lifecycle identity is incomplete")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
+    raise SystemExit("unexpected lifecycle user")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
+    raise SystemExit("unexpected lifecycle group")
+if not re.fullmatch(r"/var/lib/[a-z0-9_-]+", home):
+    raise SystemExit("unexpected lifecycle home")
+if keys != f"{home}/.ssh/authorized_keys":
+    raise SystemExit("unexpected lifecycle authorized_keys path")
+print("|".join((user, group, home, keys)))
+PY
+)
+    IFS="|" read -r user group home keys <<EOF
+$lifecycle_values
+EOF
+    test -n "$user" && test -n "$group" && test -n "$home" && test -n "$keys"
+
+    /usr/bin/sudo -n -u "$user" /bin/sh -ceu '\''
+      user=$1
+      group=$2
+      home=$3
+      keys=$4
     test -f "$keys" && test ! -L "$keys"
-    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$keys")" = "codex-hermes-mcp:codex-hermes-mcp:600"
+    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$keys")" = "$user:$group:600"
 
     IFS= read -r key
     test -n "$key"
@@ -104,7 +144,7 @@ cat ~/.ssh/id_ed25519.pub | \
     if ! /usr/bin/grep -Fqx -- "$key" "$keys"; then
       key_directory=${keys%/*}
       test -d "$key_directory" && test ! -L "$key_directory"
-      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$key_directory")" = "codex-hermes-mcp:codex-hermes-mcp:700"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$key_directory")" = "$user:$group:700"
       umask 077
       staged=$(mktemp "${keys}.XXXXXX")
       cleanup_staged() { rm -f -- "$staged"; }
@@ -115,12 +155,14 @@ cat ~/.ssh/id_ed25519.pub | \
       mv -- "$staged" "$keys"
       trap - EXIT
     fi
+    '\'' sh "$user" "$group" "$home" "$keys"
   '\'''
 ```
 
-The command first validates the local key, then validates that Ansible's
-dedicated `.ssh` directory and regular key file have their expected identities
-and modes. It runs as `codex-hermes-mcp`, atomically publishes a
+The command first authenticates and recovers the active lifecycle identity,
+then validates the local key and that Ansible's dedicated `.ssh` directory and
+regular key file have the recovered identities and modes. It runs as the
+recovered MCP user, atomically publishes a
 newline-delimited non-duplicate plain public-key set, including when the
 previous final line lacked a newline, and preserves existing keys. Re-run the
 playbook to repair ownership or mode drift rather than using a root-owned
@@ -314,13 +356,38 @@ require_exact_line() {
   grep -Fxq -- "$2" "$1"
 }
 
+require_safe_sshd_config_fragment() {
+  test -f "$1" && test ! -L "$1"
+  test "$(readlink -f -- "$1")" = "$1"
+  test "$(stat -c '%U:%G' -- "$1")" = root:root
+  fragment_mode=$(stat -c '%a' -- "$1")
+  case "$fragment_mode" in
+    [0-7][0145][0145]) ;;
+    *)
+      printf 'refusing unsafe SSH configuration fragment mode: %s (%s)\n' \
+        "$fragment_mode" "$1" >&2
+      exit 1
+      ;;
+  esac
+}
+
 require_unscoped_preceding_match_context() {
   # The main configuration determines the include graph. Accept only the
   # standard Debian drop-in glob, then inspect every preceding fragment before
   # the temporary 59-* policy. A scoped Match or another Include can change
   # the context in which that policy is read, so fail closed rather than
   # relying on fragment-local parsing.
-  require_regular /etc/ssh/sshd_config root:root:644
+  test -f /etc/ssh/sshd_config && test ! -L /etc/ssh/sshd_config
+  test "$(readlink -f -- /etc/ssh/sshd_config)" = /etc/ssh/sshd_config
+  test "$(stat -c '%U:%G' -- /etc/ssh/sshd_config)" = root:root
+  main_mode=$(stat -c '%a' -- /etc/ssh/sshd_config)
+  case "$main_mode" in
+    [0-7][0145][0145]) ;;
+    *)
+      printf 'refusing unsafe main SSH configuration mode: %s\n' "$main_mode" >&2
+      exit 1
+      ;;
+  esac
   main_context=$(awk '
     {
       line = $0
@@ -341,6 +408,20 @@ require_unscoped_preceding_match_context() {
   if test -n "${main_context}"; then
     printf 'refusing SSH teardown with scoped Match directives or unproven Includes in the main configuration:\n%s\n' \
       "${main_context}" >&2
+    exit 1
+  fi
+  # Authenticate every fragment before treating its contents as configuration.
+  # The glob intentionally also reaches symlinks and non-regular names, which
+  # the helper rejects rather than silently omitting them from this proof.
+  for sshd_fragment in /etc/ssh/sshd_config.d/*.conf; do
+    test -e "$sshd_fragment" || test -L "$sshd_fragment" || continue
+    require_safe_sshd_config_fragment "$sshd_fragment"
+  done
+  symlinked_fragments=$(find /etc/ssh/sshd_config.d -xdev -maxdepth 1 -type l \
+    -name '*.conf' -print | LC_ALL=C sort)
+  if test -n "${symlinked_fragments}"; then
+    printf 'refusing SSH teardown with symlinked configuration fragments:\n%s\n' \
+      "${symlinked_fragments}" >&2
     exit 1
   fi
   preceding_context=$(find /etc/ssh/sshd_config.d -xdev -maxdepth 1 -type f \
