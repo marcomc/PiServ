@@ -817,6 +817,40 @@ elif path_exists_or_is_symlink "$home"; then
   exit 1
 fi
 
+# Revoke the managed authorization material after authenticating its state.
+# The deny reload applies only to subsequently accepted connections, so this
+# prevents a pre-authentication child from reading the key file after the
+# policy has been published.
+if "$account_present" && path_exists_or_is_symlink "$keys"; then
+  rm -f -- "$keys"
+fi
+
+# An OpenSSH 10 sshd-auth child accepted before the reload can still complete
+# authentication under its inherited configuration. Inventory and drain every
+# root-owned pre-authentication child before checking authenticated sessions:
+# a child that completes while draining becomes an sshd-session and is checked
+# below. The bounded wait fails closed if unrelated connection attempts keep
+# the pre-authentication pool non-empty.
+if "$account_present"; then
+  command -v ps >/dev/null
+  sshd_auth_drain_attempt=0
+  while :; do
+    active_sshd_auth_children=$(ps -eo pid=,user=,comm=,args= | \
+      awk '$2 == "root" && $3 == "sshd-auth" { print }')
+    if test -z "$active_sshd_auth_children"; then
+      break
+    fi
+    sshd_auth_drain_attempt=$((sshd_auth_drain_attempt + 1))
+    if test "$sshd_auth_drain_attempt" -ge 30; then
+      printf 'refusing teardown while OpenSSH pre-authentication children remain\n' \
+        >&2
+      printf '%s\n' "$active_sshd_auth_children" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
+
 # No new principal session can now authenticate. Refuse if an existing SSH
 # session remains. Inspect the root-owned sshd or OpenSSH 10 sshd-session
 # process first: unlike logind, it remains available when sshd is configured
@@ -862,7 +896,6 @@ sshd -t
 if "$account_present"; then
   # Keep the ForceCommand policy live while keys are revoked, so a connection
   # racing this teardown cannot fall back to the account's login shell.
-  if path_exists_or_is_symlink "$keys"; then rm -f -- "$keys"; fi
   if path_exists_or_is_symlink "$home/.ssh"; then rmdir -- "$home/.ssh"; fi
   for skeleton_file in .bash_logout .bashrc .profile; do
     rm -f -- "$home/$skeleton_file"

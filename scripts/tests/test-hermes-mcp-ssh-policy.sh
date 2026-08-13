@@ -803,6 +803,12 @@ require_text "grep -Fx 'permituserrc no'" "${runbook}"
 require_text "'sudo -n /bin/sh -seu'" "${runbook}"
 require_text 'systemctl reload ssh' "${runbook}"
 require_text 'UsePAM no' "${runbook}"
+require_text 'Revoke the managed authorization material after authenticating its state.' "${runbook}"
+require_text 'An OpenSSH 10 sshd-auth child accepted before the reload can still complete' "${runbook}"
+require_text "active_sshd_auth_children=\$(ps -eo pid=,user=,comm=,args= |" "${runbook}"
+require_text "\$2 == \"root\" && \$3 == \"sshd-auth\"" "${runbook}"
+require_text "sshd_auth_drain_attempt=\$((sshd_auth_drain_attempt + 1))" "${runbook}"
+require_text 'refusing teardown while OpenSSH pre-authentication children remain' "${runbook}"
 require_text "active_sshd_sessions=\$(ps -eo pid=,user=,comm=,args= |" "${runbook}"
 require_text "\$3 == \"sshd\" || \$3 == \"sshd-session\"" "${runbook}"
 require_text "index(\$0, \"sshd-session: \" user \" [priv]\")" "${runbook}"
@@ -847,6 +853,7 @@ teardown_deny_publish_line=$(rg -n --fixed-strings 'mv -- "$deny_tmp" "$teardown
 teardown_deny_validate_line=$(rg -n --fixed-strings 'sshd -t' "${runbook}" | awk -F: -v after_line="${teardown_deny_publish_line}" '$1 > after_line { print $1; exit }')
 teardown_deny_reload_line=$(rg -n --fixed-strings 'systemctl reload ssh' "${runbook}" | awk -F: -v after_line="${teardown_deny_validate_line}" '$1 > after_line { print $1; exit }')
 teardown_deny_effective_line=$(rg -n --fixed-strings 'effective_deny=$(sshd -T -C "user=${user},addr=127.0.0.1,host=localhost")' "${runbook}" | cut -d: -f1)
+teardown_pre_auth_drain_line=$(rg -n --fixed-strings 'active_sshd_auth_children=$(ps -eo pid=,user=,comm=,args= |' "${runbook}" | cut -d: -f1)
 teardown_activity_check_line=$(rg -n --fixed-strings '# No new principal session can now authenticate.' "${runbook}" | cut -d: -f1)
 teardown_deny_remove_line=$(rg -n --fixed-strings 'rm -f -- "$teardown_deny"' "${runbook}" | cut -d: -f1)
 teardown_final_validate_line=$(rg -n --fixed-strings 'sshd -t' "${runbook}" | \
@@ -858,7 +865,7 @@ teardown_dropin_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$dropi
 teardown_sudoers_user_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "Defaults:$user !use_pty"' "${runbook}" | cut -d: -f1)
 teardown_sudoers_wrapper_line=$(rg -n --fixed-strings 'require_exact_line "$sudoers" "$user ALL=(root) NOPASSWD: $wrapper \"\""' "${runbook}" | cut -d: -f1)
 
-if (( teardown_primary_gid_check_line >= teardown_dropin_match_line || teardown_dropin_match_line >= teardown_dropin_wrapper_line || teardown_dropin_wrapper_line >= teardown_sudoers_user_line || teardown_sudoers_user_line >= teardown_sudoers_wrapper_line || teardown_sudoers_wrapper_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_keys_line || teardown_keys_line >= teardown_skeleton_line || teardown_skeleton_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_deny_remove_line || teardown_deny_remove_line >= teardown_final_validate_line || teardown_final_validate_line >= teardown_final_reload_line || teardown_final_reload_line >= teardown_state_line )); then
+if (( teardown_primary_gid_check_line >= teardown_dropin_match_line || teardown_dropin_match_line >= teardown_dropin_wrapper_line || teardown_dropin_wrapper_line >= teardown_sudoers_user_line || teardown_sudoers_user_line >= teardown_sudoers_wrapper_line || teardown_sudoers_wrapper_line >= teardown_deny_line || teardown_deny_line >= teardown_deny_publish_line || teardown_deny_publish_line >= teardown_deny_validate_line || teardown_deny_validate_line >= teardown_deny_reload_line || teardown_deny_reload_line >= teardown_deny_effective_line || teardown_deny_effective_line >= teardown_keys_line || teardown_keys_line >= teardown_pre_auth_drain_line || teardown_pre_auth_drain_line >= teardown_activity_check_line || teardown_activity_check_line >= teardown_skeleton_line || teardown_skeleton_line >= teardown_artifacts_line || teardown_artifacts_line >= teardown_reload_line || teardown_reload_line >= teardown_deny_remove_line || teardown_deny_remove_line >= teardown_final_validate_line || teardown_final_validate_line >= teardown_final_reload_line || teardown_final_reload_line >= teardown_state_line )); then
   printf 'Hermes MCP SSH teardown must retain authenticated lifecycle state until the deny policy is removed and final SSH validation and reload succeed.\n' >&2
   exit 1
 fi
