@@ -3,11 +3,14 @@
   block:
     - name: Hand dashboard build workspace to the runtime identity
       ansible.builtin.file:
-        path: "{{ hermes_agent_install_dir }}/hermes_cli"
+        path: "{{ item }}"
         owner: "{{ hermes_agent_user }}"
         group: "{{ hermes_agent_group }}"
         recurse: true
         follow: false
+      loop:
+        - "{{ hermes_agent_install_dir }}/hermes_cli"
+        - "{{ hermes_agent_install_dir }}/web"
 
     - name: Build pinned Hermes dashboard assets
       ansible.builtin.command:
@@ -23,8 +26,11 @@
   always:
     - name: Return dashboard build workspace to root ownership
       ansible.builtin.file:
-        path: "{{ hermes_agent_install_dir }}/hermes_cli"
+        path: "{{ item }}"
         owner: root
         group: root
         recurse: true
         follow: false
+      loop:
+        - "{{ hermes_agent_install_dir }}/hermes_cli"
+        - "{{ hermes_agent_install_dir }}/web"

@@ -4,6 +4,10 @@ All notable changes to this role are documented here.
 
 ## [Unreleased]
 
+- Hand both Hermes dashboard build workspaces, including TypeScript's
+  `web/node_modules/.tmp` cache, to the runtime identity for the build and
+  restore root ownership afterward; cover the writable-cache path in Molecule.
+
 - GitHub CI for this role is intentionally disabled in this repository while
   Hermes Agent remains integrated inside PiServ. Local validation remains via
   the project playbooks; full role-level Molecule + lint CI is deferred to the

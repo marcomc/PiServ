@@ -1,0 +1,144 @@
+---
+- name: Verify Hermes delegation MCP setting validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_agent_binary_path: /usr/local/bin/hermes
+    piserv_hermes_delegation_mcp_adapter_path: >-
+      /usr/local/libexec/hermes-agent/hermes-delegation-mcp.py
+    piserv_hermes_delegation_mcp_config_path: >-
+      /usr/local/lib/hermes-agent/.hermes-delegation-config.yaml
+    piserv_hermes_delegation_mcp_python_path: >-
+      /usr/local/lib/hermes-agent/venv/bin/python
+    piserv_hermes_agent_manage_home_assistant_mcp: true
+    piserv_hermes_agent_home_assistant_mcp_name: home-assistant-assist
+    piserv_hermes_delegation_mcp_timeout_seconds: 300
+    piserv_hermes_delegation_mcp_terminate_grace_seconds: 5
+    piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
+    piserv_hermes_delegation_mcp_max_output_bytes: 1048576
+    piserv_hermes_delegation_mcp_max_turns: 50
+    piserv_hermes_delegation_mcp_native_toolsets:
+      - delegation
+      - file
+      - memory
+      - session_search
+      - skills
+      - terminal
+      - todo
+    piserv_hermes_delegation_mcp_integration_toolsets:
+      - home-assistant-assist
+  tasks:
+    - name: Accept bounded Hermes delegation MCP settings
+      ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+
+    - name: Reject a string delegation timeout before integer conversion
+      block:
+        - name: Validate string Hermes delegation timeout
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_timeout_seconds: "300"
+
+        - name: Fail if a string delegation timeout was accepted
+          ansible.builtin.fail:
+            msg: String timeouts must fail before template integer conversion.
+      rescue:
+        - name: Assert string timeout failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject an unordered termination grace period
+      block:
+        - name: Validate unordered Hermes delegation grace period
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_timeout_seconds: 30
+            piserv_hermes_delegation_mcp_terminate_grace_seconds: 30
+
+        - name: Fail if an unordered delegation grace period was accepted
+          ansible.builtin.fail:
+            msg: Termination grace must remain below the overall timeout.
+      rescue:
+        - name: Assert grace ordering failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject an adapter path outside the managed libexec root
+      block:
+        - name: Validate unsafe Hermes delegation adapter path
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_adapter_path: /tmp/delegate.py
+
+        - name: Fail if an unsafe delegation adapter path was accepted
+          ansible.builtin.fail:
+            msg: Adapter publication must stay in the managed libexec root.
+      rescue:
+        - name: Assert unsafe path failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject a delegation config outside the managed Hermes root
+      block:
+        - name: Validate unsafe Hermes delegation config path
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_config_path: /tmp/config.yaml
+
+        - name: Fail if an unsafe delegation config path was accepted
+          ansible.builtin.fail:
+            msg: Delegation config must stay in the managed Hermes root.
+      rescue:
+        - name: Assert unsafe config path failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject a delegation policy missing stateful native tools
+      block:
+        - name: Validate incomplete Hermes delegation tool policy
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_native_toolsets:
+              - memory
+              - terminal
+
+        - name: Fail if an incomplete delegation tool policy was accepted
+          ansible.builtin.fail:
+            msg: Delegated Hermes must retain every required native toolset.
+      rescue:
+        - name: Assert incomplete policy failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject a delegation policy missing Home Assistant MCP
+      block:
+        - name: Validate incomplete Hermes delegation integration policy
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_integration_toolsets: []
+
+        - name: Fail if an incomplete integration policy was accepted
+          ansible.builtin.fail:
+            msg: Delegated Hermes must retain the configured Home Assistant MCP.
+      rescue:
+        - name: Assert incomplete integration failed in the intended task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'

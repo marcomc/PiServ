@@ -2,9 +2,14 @@
 
 ## Purpose
 
-Expose the PiServ Hermes MCP server only through an authenticated SSH stdio
-session from Codex. The server has no network listener: each Codex MCP session
-starts `hermes mcp serve` and it exits when the SSH connection closes.
+Expose the PiServ Hermes messaging MCP bridge only through an authenticated SSH
+stdio session from Codex. The server has no network listener: each Codex MCP
+session starts `hermes mcp serve` and it exits when the SSH connection closes.
+
+This bridge lists and operates messaging conversations. It does not run Hermes
+as a delegated agent. Register the separate
+[Hermes delegation MCP](hermes-delegation-mcp-ssh.md) for
+`delegate_task(prompt)`.
 
 ## Access Model
 

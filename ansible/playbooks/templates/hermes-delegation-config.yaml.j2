@@ -1,0 +1,16 @@
+---
+{% set delegation_overrides = {
+  'agent': {
+    'disabled_toolsets':
+      piserv_hermes_delegation_mcp_base_config.agent.disabled_toolsets |
+      difference(piserv_hermes_delegation_mcp_native_toolsets)
+  },
+  'memory': {'write_approval': false},
+  'skills': {'write_approval': false}
+} %}
+{% set delegation_config = piserv_hermes_delegation_mcp_base_config |
+  combine(delegation_overrides, recursive=true) %}
+{% for config_item in delegation_config | dict2items if config_item.key != 'dashboard' %}
+{{ {config_item.key: config_item.value} |
+  to_nice_yaml(indent=2, sort_keys=false) | trim }}
+{% endfor %}

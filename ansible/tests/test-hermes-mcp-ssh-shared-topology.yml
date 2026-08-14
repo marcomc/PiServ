@@ -1,0 +1,57 @@
+---
+- name: Verify coexisting hardened Hermes MCP SSH Match policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_mcp_ssh_messaging_path: >-
+      /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    hermes_mcp_ssh_messaging_policy: |
+      # Managed by Ansible. Restrict this principal even when its authorized_keys
+      # file is manually managed.
+      Match User codex-hermes-mcp
+          AuthorizedKeysFile /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+          AuthorizedKeysCommand none
+          ForceCommand /usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-mcp-ssh
+      Match all
+    piserv_hermes_mcp_ssh_trusted_preceding_match_configs:
+      - path: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+        user: codex-hermes-mcp
+        authorized_keys_path: /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+        wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
+  tasks:
+    - name: Model the authenticated messaging policy read before delegation
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_preceding_sshd_config:
+          results:
+            - item: "{{ hermes_mcp_ssh_messaging_path }}"
+              content: "{{ hermes_mcp_ssh_messaging_policy | b64encode }}"
+
+    - name: Accept the exact managed messaging policy before delegation
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-trusted-preceding.yml
+
+    - name: Reject a preceding managed policy without Match all reset
+      block:
+        - name: Model a messaging policy missing its Match reset
+          ansible.builtin.set_fact:
+            piserv_hermes_mcp_ssh_preceding_sshd_config:
+              results:
+                - item: "{{ hermes_mcp_ssh_messaging_path }}"
+                  content: >-
+                    {{ (hermes_mcp_ssh_messaging_policy |
+                    regex_replace('(?m)^Match all$', 'Match User accidental')) |
+                    b64encode }}
+
+        - name: Validate the incomplete preceding messaging policy
+          ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-trusted-preceding.yml
+
+        - name: Fail if the incomplete preceding policy was accepted
+          ansible.builtin.fail:
+            msg: A sibling Match policy must end with Match all.
+      rescue:
+        - name: Assert the intended sibling policy validation failed
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require exact trusted preceding Hermes MCP SSH Match policies'

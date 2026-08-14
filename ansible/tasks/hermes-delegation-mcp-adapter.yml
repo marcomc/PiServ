@@ -1,0 +1,236 @@
+---
+- name: Validate Hermes delegation MCP adapter settings
+  ansible.builtin.include_tasks: hermes-delegation-mcp-validate.yml
+
+- name: Inspect the Hermes delegation configuration parent
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_delegation_mcp_config_path | dirname }}"
+    follow: false
+  register: piserv_hermes_delegation_mcp_config_parent_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate the Hermes delegation configuration parent
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_delegation_mcp_config_parent_state.stat.exists
+      - piserv_hermes_delegation_mcp_config_parent_state.stat.isdir
+      - not piserv_hermes_delegation_mcp_config_parent_state.stat.islnk
+      - piserv_hermes_delegation_mcp_config_parent_state.stat.pw_name == 'root'
+      - piserv_hermes_delegation_mcp_config_parent_state.stat.gr_name == 'root'
+      - piserv_hermes_delegation_mcp_config_parent_state.stat.mode == '0755'
+    fail_msg: >-
+      Deploy the authenticated root-owned Hermes install directory before
+      publishing the delegation-only configuration.
+
+- name: Inspect the authoritative Hermes configuration for delegation
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_managed_config_path }}"
+    follow: false
+  register: piserv_hermes_delegation_mcp_base_config_state
+  changed_when: false
+  check_mode: false
+
+- name: Require the authoritative Hermes configuration for delegation
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_delegation_mcp_base_config_state.stat.exists
+      - piserv_hermes_delegation_mcp_base_config_state.stat.isreg
+      - not piserv_hermes_delegation_mcp_base_config_state.stat.islnk
+      - piserv_hermes_delegation_mcp_base_config_state.stat.pw_name == 'root'
+      - >-
+        piserv_hermes_delegation_mcp_base_config_state.stat.gr_name ==
+        hermes_agent_group
+      - piserv_hermes_delegation_mcp_base_config_state.stat.mode == '0640'
+    fail_msg: >-
+      Deploy the authenticated root-controlled Hermes configuration before
+      deriving the isolated delegation policy.
+
+- name: Read the authoritative Hermes configuration for delegation
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_managed_config_path }}"
+  register: piserv_hermes_delegation_mcp_base_config_content
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Parse the authoritative Hermes configuration for delegation
+  ansible.builtin.set_fact:
+    piserv_hermes_delegation_mcp_base_config: >-
+      {{ piserv_hermes_delegation_mcp_base_config_content.content |
+      b64decode | from_yaml }}
+  no_log: true
+
+- name: Require a compatible Hermes configuration for delegation
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_delegation_mcp_base_config is mapping
+      - piserv_hermes_delegation_mcp_base_config.agent is mapping
+      - >-
+        piserv_hermes_delegation_mcp_base_config.agent.disabled_toolsets is
+        sequence
+      - >-
+        piserv_hermes_delegation_mcp_base_config.agent.disabled_toolsets is not
+        string
+      - >-
+        (piserv_hermes_delegation_mcp_base_config.mcp_servers | default({})) is
+        mapping
+      - >-
+        piserv_hermes_delegation_mcp_integration_toolsets |
+        difference((piserv_hermes_delegation_mcp_base_config.mcp_servers |
+        default({})).keys() | list) | length == 0
+    fail_msg: >-
+      The authoritative Hermes configuration must expose the configured MCP
+      integrations and a bounded global toolset deny-list before delegation.
+  no_log: true
+
+- name: Inspect the isolated Hermes delegation configuration
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_delegation_mcp_config_path }}"
+    follow: false
+  register: piserv_hermes_delegation_mcp_config_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate the isolated Hermes delegation configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        not piserv_hermes_delegation_mcp_config_state.stat.exists or
+        (piserv_hermes_delegation_mcp_config_state.stat.isreg and
+        not piserv_hermes_delegation_mcp_config_state.stat.islnk and
+        piserv_hermes_delegation_mcp_config_state.stat.pw_name == 'root' and
+        piserv_hermes_delegation_mcp_config_state.stat.gr_name ==
+        hermes_agent_group and
+        piserv_hermes_delegation_mcp_config_state.stat.mode == '0640')
+    fail_msg: >-
+      The isolated Hermes delegation configuration must be absent or an
+      authenticated root-controlled regular file.
+
+- name: Install the isolated Hermes delegation configuration
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-delegation-config.yaml.j2"
+    dest: "{{ piserv_hermes_delegation_mcp_config_path }}"
+    owner: root
+    group: "{{ hermes_agent_group }}"
+    mode: "0640"
+  no_log: true
+
+- name: Inspect the Hermes delegation MCP Python runtime
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_delegation_mcp_python_path }}"
+    follow: false
+  register: piserv_hermes_delegation_mcp_python_link_state
+  changed_when: false
+  check_mode: false
+
+- name: Inspect the resolved Hermes delegation MCP Python runtime
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_delegation_mcp_python_path }}"
+    follow: true
+  register: piserv_hermes_delegation_mcp_python_state
+  changed_when: false
+  check_mode: false
+
+- name: Require the managed Hermes Python runtime for delegation
+  ansible.builtin.assert:
+    that:
+      - piserv_hermes_delegation_mcp_python_link_state.stat.exists
+      - piserv_hermes_delegation_mcp_python_link_state.stat.islnk
+      - piserv_hermes_delegation_mcp_python_link_state.stat.pw_name == 'root'
+      - piserv_hermes_delegation_mcp_python_link_state.stat.gr_name == 'root'
+      - >-
+        piserv_hermes_delegation_mcp_python_link_state.stat.lnk_source is
+        match('^/usr/local/share/uv/python/[a-z0-9._-]+/bin/python[0-9.]+$')
+      - piserv_hermes_delegation_mcp_python_state.stat.exists
+      - piserv_hermes_delegation_mcp_python_state.stat.isreg
+      - piserv_hermes_delegation_mcp_python_state.stat.pw_name == 'root'
+      - piserv_hermes_delegation_mcp_python_state.stat.gr_name == 'root'
+      - >-
+        piserv_hermes_delegation_mcp_python_state.stat.mode in
+        ['0755', '0775']
+    fail_msg: >-
+      Deploy the root-owned Hermes virtual environment before publishing the
+      delegation MCP adapter.
+
+- name: Inspect the Hermes delegation MCP publication parent
+  ansible.builtin.stat:
+    path: "{{ piserv_hermes_delegation_mcp_adapter_path | dirname }}"
+    follow: false
+  register: piserv_hermes_delegation_mcp_parent_state
+  changed_when: false
+  check_mode: false
+
+- name: Authenticate the Hermes delegation MCP publication parent
+  ansible.builtin.assert:
+    that:
+      - >-
+        not piserv_hermes_delegation_mcp_parent_state.stat.exists or
+        (piserv_hermes_delegation_mcp_parent_state.stat.isdir and
+        not piserv_hermes_delegation_mcp_parent_state.stat.islnk and
+        piserv_hermes_delegation_mcp_parent_state.stat.pw_name == 'root' and
+        piserv_hermes_delegation_mcp_parent_state.stat.gr_name == 'root' and
+        piserv_hermes_delegation_mcp_parent_state.stat.mode == '0755')
+    fail_msg: >-
+      The delegation adapter parent must be absent or a canonical root-owned
+      directory with mode 0755.
+
+- name: Create the Hermes delegation MCP publication parent
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_delegation_mcp_adapter_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not piserv_hermes_delegation_mcp_parent_state.stat.exists
+
+- name: Install the Hermes delegation MCP adapter
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-delegation-mcp.py.j2"
+    dest: "{{ piserv_hermes_delegation_mcp_adapter_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Validate the installed Hermes delegation MCP adapter syntax
+  ansible.builtin.command:
+    argv:
+      - "{{ piserv_hermes_delegation_mcp_python_path }}"
+      - -c
+      - >-
+        import pathlib,sys;
+        source=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8');
+        compile(source,sys.argv[1],'exec')
+      - "{{ piserv_hermes_delegation_mcp_adapter_path }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Read the isolated Hermes delegation configuration
+  ansible.builtin.slurp:
+    src: "{{ piserv_hermes_delegation_mcp_config_path }}"
+  register: piserv_hermes_delegation_mcp_config_content
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Require the isolated write-capable Hermes delegation policy
+  ansible.builtin.assert:
+    that:
+      - >-
+        (piserv_hermes_delegation_mcp_config_content.content | b64decode |
+        from_yaml).dashboard is not defined
+      - >-
+        (piserv_hermes_delegation_mcp_config_content.content | b64decode |
+        from_yaml).agent.disabled_toolsets |
+        intersect(piserv_hermes_delegation_mcp_native_toolsets) | length == 0
+      - >-
+        not (piserv_hermes_delegation_mcp_config_content.content | b64decode |
+        from_yaml).memory.write_approval
+      - >-
+        not (piserv_hermes_delegation_mcp_config_content.content | b64decode |
+        from_yaml).skills.write_approval
+    fail_msg: >-
+      The delegation-only Hermes configuration must remove the requested native
+      tool deny-list and stateful write gates without exposing dashboard policy.
+  no_log: true
