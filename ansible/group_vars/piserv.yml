@@ -50,3 +50,19 @@ piserv_external_storage_directories:
   - name: backups
     mode: "2770"
     other_permissions: "---"
+
+# Hermes MCP SSH defaults remain available when an ignored local
+# ansible/vars/hermes-agent.yml overrides the example vars file entirely.
+piserv_hermes_mcp_ssh_manage: true
+piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+piserv_hermes_mcp_ssh_group: codex-hermes-mcp
+piserv_hermes_mcp_ssh_home: /var/lib/codex-hermes-mcp
+piserv_hermes_mcp_ssh_authorized_keys_path: >-
+  /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+piserv_hermes_mcp_ssh_wrapper_path: >-
+  /usr/local/libexec/hermes-agent/codex-mcp-ssh
+piserv_hermes_mcp_ssh_sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
+piserv_hermes_mcp_ssh_source_user: admin
+piserv_hermes_mcp_ssh_source_authorized_keys_path: >-
+  /home/admin/.ssh/authorized_keys

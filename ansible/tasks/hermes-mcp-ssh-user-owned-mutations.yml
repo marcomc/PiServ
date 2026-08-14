@@ -1,0 +1,65 @@
+---
+- name: Set dedicated Hermes MCP SSH home permissions
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}"
+    state: directory
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0750"
+  register: piserv_hermes_mcp_ssh_home_mutation
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == 'home'
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
+
+- name: Remove legacy Hermes MCP SSH account skeleton files
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: absent
+  loop: "{{ piserv_hermes_mcp_ssh_skeleton_file_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: piserv_hermes_mcp_ssh_skeleton_mutation
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == 'legacy-skeletons'
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
+    - item.stat.exists
+
+- name: Create private Hermes MCP SSH directory
+  ansible.builtin.file:
+    path: "{{ piserv_hermes_mcp_ssh_home }}/.ssh"
+    state: directory
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0700"
+  register: piserv_hermes_mcp_ssh_directory_mutation
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == 'ssh-directory'
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
+
+- name: Create an empty operator-managed Hermes MCP SSH authorized keys file
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0600"
+    force: false
+  register: piserv_hermes_mcp_ssh_manual_key_mutation
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == 'manual-key'
+    - not piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode
+
+- name: Publish restricted copies of administrator SSH public keys
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-authorized_keys.j2"
+    dest: "{{ piserv_hermes_mcp_ssh_authorized_keys_path }}"
+    owner: "{{ piserv_hermes_mcp_ssh_user }}"
+    group: "{{ piserv_hermes_mcp_ssh_group }}"
+    mode: "0600"
+  register: piserv_hermes_mcp_ssh_automatic_key_mutation
+  no_log: true
+  when:
+    - piserv_hermes_mcp_ssh_user_owned_mutation == 'automatic-key'
+    - piserv_hermes_mcp_ssh_copy_admin_authorized_keys
+    - not piserv_hermes_mcp_ssh_runtime_identity_is_fresh_check_mode

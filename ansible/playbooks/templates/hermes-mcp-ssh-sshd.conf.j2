@@ -1,0 +1,18 @@
+# Managed by Ansible. Restrict this principal even when its authorized_keys
+# file is manually managed.
+Match User {{ piserv_hermes_mcp_ssh_user }}
+    AuthorizedKeysFile {{ piserv_hermes_mcp_ssh_authorized_keys_path }}
+    AuthorizedKeysCommand none
+    TrustedUserCAKeys none
+    PubkeyAuthentication yes
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    ForceCommand /usr/bin/sudo -n {{ piserv_hermes_mcp_ssh_wrapper_path }}
+    DisableForwarding yes
+    PermitTTY no
+    PermitUserRC no
+    X11Forwarding no
+
+# Do not let this account-specific Match block affect later global settings.
+Match all
