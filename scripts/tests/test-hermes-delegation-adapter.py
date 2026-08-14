@@ -83,8 +83,6 @@ class AdapterTests(unittest.TestCase):
                 if prompt == "fail":
                     print("credential=must-not-be-returned", file=sys.stderr)
                     raise SystemExit(7)
-                if prompt == "sleep":
-                    time.sleep(5)
                 if prompt == "sleep-with-child":
                     marker = pathlib.Path(sys.argv[0]).with_name(
                         "timed-out-child-marker"
