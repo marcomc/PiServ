@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import textwrap
+import time
 import types
 import unittest
 from pathlib import Path
@@ -73,6 +74,8 @@ class AdapterTests(unittest.TestCase):
                 """\
                 #!/usr/bin/env python3
                 import json
+                import pathlib
+                import subprocess
                 import sys
                 import time
 
@@ -81,6 +84,22 @@ class AdapterTests(unittest.TestCase):
                     print("credential=must-not-be-returned", file=sys.stderr)
                     raise SystemExit(7)
                 if prompt == "sleep":
+                    time.sleep(5)
+                if prompt == "sleep-with-child":
+                    marker = pathlib.Path(sys.argv[0]).with_name(
+                        "timed-out-child-marker"
+                    )
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-c",
+                            (
+                                "import pathlib, sys, time; time.sleep(1); "
+                                "pathlib.Path(sys.argv[1]).touch()"
+                            ),
+                            str(marker),
+                        ]
+                    )
                     time.sleep(5)
                 if prompt == "flood":
                     print("x" * 100000)
@@ -137,6 +156,10 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "byte limit"):
             self.adapter.delegate_task("x" * 4097)
 
+    def test_multibyte_oversized_prompt_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ToolError, "byte limit"):
+            self.adapter.delegate_task("€" * 1366)
+
     def test_nonzero_exit_is_generic_and_redacted(self) -> None:
         with self.assertRaises(ToolError) as raised:
             self.adapter.delegate_task("fail")
@@ -148,7 +171,10 @@ class AdapterTests(unittest.TestCase):
         self.adapter.TIMEOUT_SECONDS = 0.2
         try:
             with self.assertRaisesRegex(ToolError, "second limit"):
-                self.adapter.delegate_task("sleep")
+                self.adapter.delegate_task("sleep-with-child")
+            child_marker = self.fake_hermes.with_name("timed-out-child-marker")
+            time.sleep(1.1)
+            self.assertFalse(child_marker.exists())
         finally:
             self.adapter.TIMEOUT_SECONDS = original_timeout
 

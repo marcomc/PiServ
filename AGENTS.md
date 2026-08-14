@@ -54,6 +54,10 @@ Follow `$HOME/AGENTS.md` for canonical user-wide policy.
 - Before rendering a configurable timeout, retry, interval, or escalation value
   into shell or service configuration, assert its explicit range and every
   required relationship to related values; cover invalid values and ordering.
+- When an adapter limits text by encoded byte length, cover a multibyte input
+  immediately over the boundary. When timeout cleanup relies on a process
+  group, prove a spawned descendant cannot complete a delayed side effect; a
+  sleeping direct child is insufficient.
 - When validating required managed files with `ansible.builtin.stat`, assert
   that the result exists before reading nested metadata; cover an otherwise
   compatible fixture with the required marker absent.

@@ -74,7 +74,119 @@ ansible-playbook ansible/playbooks/hermes-agent.yml
 
 Automatic key mode copies the same plain `admin` public keys into a separate
 forced-command `authorized_keys` file. Set the delegation copy flag to `false`
-only for an operator-managed key lifecycle.
+only for an operator-managed key lifecycle. Select that mode before the first
+deployment: the lifecycle provenance refuses a later automatic/manual change
+until the existing endpoint is deliberately removed.
+
+## Add a Manual Key
+
+After the first successful manual-mode deployment, use a known administrator
+connection to install a local public key. The procedure authenticates this
+endpoint's dedicated lifecycle record before it modifies the recovered
+`authorized_keys` path, preserves existing plain keys, and is idempotent for
+the supplied key. Replace the key path if the Mac uses another key type.
+
+```sh
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+
+cat ~/.ssh/id_ed25519.pub | \
+  ssh "admin@${PISERV_IP:-PiServ.local}" \
+  'sudo -n /bin/sh -ceu '\''
+    state=/usr/local/libexec/hermes-agent/.codex-hermes-delegation-mcp-state.json
+    test -f "$state" && test ! -L "$state"
+    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
+    read_manual_lifecycle() {
+      test -f "$state" && test ! -L "$state"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$state")" = "root:root:600"
+      /usr/bin/python3 - "$state" <<'\''PY'\''
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    state = json.load(source)
+if state.get("schema") != "piserv-hermes-mcp-ssh-state-v1":
+    raise SystemExit("unexpected lifecycle schema")
+user = state.get("mcp_ssh_user")
+group = state.get("mcp_ssh_group")
+home = state.get("mcp_ssh_home")
+keys = state.get("authorized_keys_path")
+key_provenance = state.get("key_provenance")
+if state.get("phase") != "active":
+    raise SystemExit("Hermes delegation MCP SSH lifecycle is not active")
+if not all(isinstance(value, str) for value in (user, group, home, keys, key_provenance)):
+    raise SystemExit("lifecycle identity is incomplete")
+if key_provenance != "manual-operator-managed":
+    raise SystemExit("manual keys require manual-operator-managed lifecycle provenance")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
+    raise SystemExit("unexpected lifecycle user")
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
+    raise SystemExit("unexpected lifecycle group")
+if not re.fullmatch(r"/var/lib/[a-z0-9_-]+", home):
+    raise SystemExit("unexpected lifecycle home")
+if keys != f"{home}/.ssh/authorized_keys":
+    raise SystemExit("unexpected lifecycle authorized_keys path")
+print("|".join((user, group, home, keys)))
+PY
+    }
+    lifecycle_values=$(read_manual_lifecycle)
+    IFS="|" read -r user group home keys <<EOF
+$lifecycle_values
+EOF
+    test -n "$user" && test -n "$group" && test -n "$home" && test -n "$keys"
+
+    publication=$(/usr/bin/sudo -n -u "$user" /bin/sh -ceu '\''
+      user=$1
+      group=$2
+      home=$3
+      keys=$4
+    test -f "$keys" && test ! -L "$keys"
+    test "$(/usr/bin/stat -c "%U:%G:%a" -- "$keys")" = "$user:$group:600"
+
+    IFS= read -r key
+    test -n "$key"
+    case "$key" in
+      ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-nistp256\ *|ecdsa-sha2-nistp384\ *|ecdsa-sha2-nistp521\ *|sk-ssh-ed25519@openssh.com\ *|sk-ecdsa-sha2-nistp256@openssh.com\ *) ;;
+      *) exit 1 ;;
+    esac
+    if IFS= read -r extra; then exit 1; fi
+
+    if /usr/bin/grep -Fqx -- "$key" "$keys"; then
+      printf "%s\n" unchanged
+    else
+      key_directory=${keys%/*}
+      test -d "$key_directory" && test ! -L "$key_directory"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$key_directory")" = "$user:$group:700"
+      umask 077
+      staged=$(mktemp "${keys}.XXXXXX")
+      /usr/bin/awk "1" "$keys" >"$staged"
+      printf "%s\n" "$key" >>"$staged"
+      chmod 0600 "$staged"
+      printf "%s\n" "$staged"
+    fi
+    '\'' sh "$user" "$group" "$home" "$keys")
+    if test "$publication" != unchanged; then
+      key_directory=${keys%/*}
+      staged=$publication
+      test "${staged%/*}" = "$key_directory"
+      test -f "$staged" && test ! -L "$staged"
+      test "$(/usr/bin/stat -c "%U:%G:%a" -- "$staged")" = "$user:$group:600"
+      cleanup_staged() { rm -f -- "$staged"; }
+      trap cleanup_staged EXIT
+
+      reauthenticated_lifecycle_values=$(read_manual_lifecycle)
+      test "$reauthenticated_lifecycle_values" = "$lifecycle_values"
+      mv -- "$staged" "$keys"
+      trap - EXIT
+    fi
+  '\''
+```
+
+To rotate a key, add and validate the replacement with this command first.
+Then remove the old key through an administrator session only after confirming
+the replacement opens the restricted `piserv-hermes-delegate` MCP transport.
+Reapply the playbook after any manual key change; it preserves the managed
+manual-key file contents.
 
 ## Configure SSH
 
@@ -166,11 +278,11 @@ with `failed=0`. The raw MCP harness completed a read-only Home Assistant
 request through `delegate_task`, reporting `Lampadina Salotto: on, brightness
 38% (Salotto)`; no Home Assistant write was issued.
 
-Codex CLI 0.147.0 registered and started
-`hermes-delegate-piserv.delegate_task`, but cancelled both the Home Assistant
-read and a minimal no-tool turn after about ten seconds, despite configured
-`tool_timeout_sec = 360`. Treat Codex-client acceptance as pending until that
-client-side cancellation behavior is resolved or a newer CLI is validated.
+On 2026-08-15, the updated Codex client invoked
+`hermes-delegate-piserv.delegate_task` through the registered SSH stdio server.
+Hermes reported one exposed Home Assistant media-player entity as `off`; no
+changes were made. This completed client discovery and the harmless end-to-end
+read acceptance.
 
 ## Revoke and Roll Back
 
