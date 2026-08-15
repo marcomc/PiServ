@@ -1,0 +1,38 @@
+---
+- name: Verify Hermes MCP SSH path authentication accepts stat records without ismount
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_group: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_account_path_state:
+      results:
+        - item: /var/lib/codex-hermes-mcp
+          stat:
+            exists: true
+            isdir: true
+            islnk: false
+            pw_name: codex-hermes-mcp
+            gr_name: codex-hermes-mcp
+        - item: /var/lib/codex-hermes-mcp/.ssh
+          stat:
+            exists: true
+            isdir: true
+            islnk: false
+            pw_name: codex-hermes-mcp
+            gr_name: codex-hermes-mcp
+  tasks:
+    - name: Authenticate fixture paths with optional mount metadata
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists or item.stat.isdir
+          - not item.stat.exists or not item.stat.islnk
+          - not item.stat.exists or not (item.stat.ismount | default(false))
+          - >-
+            not item.stat.exists or
+            (item.stat.pw_name == piserv_hermes_mcp_ssh_user and
+            item.stat.gr_name == piserv_hermes_mcp_ssh_group)
+      loop: "{{ piserv_hermes_mcp_ssh_account_path_state.results }}"
+      loop_control:
+        label: "{{ item.item }}"

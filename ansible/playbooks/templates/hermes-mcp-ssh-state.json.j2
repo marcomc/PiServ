@@ -7,6 +7,8 @@
   "authorized_keys_path": {{ piserv_hermes_mcp_ssh_authorized_keys_path | to_json }},
   "wrapper_path": {{ piserv_hermes_mcp_ssh_wrapper_path | to_json }},
   "sudoers_path": {{ piserv_hermes_mcp_ssh_sudoers_path | to_json }},
+  "sshd_config_path": {{ piserv_hermes_mcp_ssh_sshd_config_path | to_json }},
+  "trusted_preceding_match_configs": {{ piserv_hermes_mcp_ssh_trusted_preceding_match_configs | to_json }},
   "key_provenance": {{ piserv_hermes_mcp_ssh_key_provenance | to_json }},
   "key_source_user": {{ piserv_hermes_mcp_ssh_source_user | to_json }},
   "key_source_path": {{ piserv_hermes_mcp_ssh_source_authorized_keys_path | to_json }}

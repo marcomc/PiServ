@@ -166,6 +166,8 @@
           {{ piserv_hermes_agent_dashboard_basic_auth_username }}
         hermes_agent_manage_home_assistant_mcp: >-
           {{ piserv_hermes_agent_manage_home_assistant_mcp }}
+        hermes_agent_home_assistant_mcp_name: >-
+          {{ piserv_hermes_agent_home_assistant_mcp_name }}
         hermes_agent_home_assistant_mcp_url: >-
           {{ piserv_hermes_agent_home_assistant_mcp_url }}
         hermes_agent_enabled_toolsets: >-
@@ -208,6 +210,39 @@
     - name: Configure restricted SSH access to the Hermes MCP server
       ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh.yml
       when: piserv_hermes_mcp_ssh_manage | bool
+
+    - name: Install the Hermes delegation MCP adapter
+      ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-adapter.yml
+      when: piserv_hermes_delegation_mcp_ssh_manage | bool
+
+    - name: Configure restricted SSH access to Hermes delegation
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh.yml
+      vars:
+        piserv_hermes_mcp_ssh_user: "{{ piserv_hermes_delegation_mcp_ssh_user }}"
+        piserv_hermes_mcp_ssh_group: "{{ piserv_hermes_delegation_mcp_ssh_group }}"
+        piserv_hermes_mcp_ssh_home: "{{ piserv_hermes_delegation_mcp_ssh_home }}"
+        piserv_hermes_mcp_ssh_authorized_keys_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_authorized_keys_path }}
+        piserv_hermes_mcp_ssh_wrapper_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_wrapper_path }}
+        piserv_hermes_mcp_ssh_wrapper_template: >-
+          hermes-delegation-mcp-ssh-wrapper.sh.j2
+        piserv_hermes_mcp_ssh_sudoers_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_sudoers_path }}
+        piserv_hermes_mcp_ssh_sshd_config_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_sshd_config_path }}
+        piserv_hermes_mcp_ssh_state_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_state_path }}
+        piserv_hermes_mcp_ssh_trusted_preceding_match_configs: >-
+          {{ piserv_hermes_delegation_mcp_ssh_trusted_preceding_match_configs
+          if (piserv_hermes_mcp_ssh_manage | bool) else [] }}
+        piserv_hermes_mcp_ssh_copy_admin_authorized_keys: >-
+          {{ piserv_hermes_delegation_mcp_ssh_copy_admin_authorized_keys }}
+        piserv_hermes_mcp_ssh_source_user: >-
+          {{ piserv_hermes_delegation_mcp_ssh_source_user }}
+        piserv_hermes_mcp_ssh_source_authorized_keys_path: >-
+          {{ piserv_hermes_delegation_mcp_ssh_source_authorized_keys_path }}
+      when: piserv_hermes_delegation_mcp_ssh_manage | bool
 
   handlers:
     - name: Reload SSH service

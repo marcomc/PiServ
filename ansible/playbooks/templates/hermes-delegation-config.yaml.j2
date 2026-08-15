@@ -1,0 +1,41 @@
+---
+{% set active_integration_toolsets =
+  piserv_hermes_delegation_mcp_integration_toolsets %}
+{% set delegation_mcp_servers =
+  piserv_hermes_delegation_mcp_base_config.mcp_servers | default({}) %}
+{% set delegation_brokered_mcp_servers = {} %}
+{% for integration_name in active_integration_toolsets %}
+{% set integration = delegation_mcp_servers[integration_name] | default({}) %}
+{% set sanitized_integration = integration | dict2items |
+  rejectattr('key', 'in', ['env', 'headers', 'url']) | items2dict |
+  combine({
+    'command': '/usr/bin/sudo',
+    'args': ['-n', piserv_hermes_delegation_mcp_broker_wrapper_path]
+  }, recursive=true) %}
+{% set ignored = delegation_brokered_mcp_servers.update({
+  integration_name: sanitized_integration
+}) %}
+{% endfor %}
+{% set delegation_overrides = {
+  'agent': {
+    'disabled_toolsets':
+      piserv_hermes_delegation_mcp_base_config.agent.disabled_toolsets |
+      difference(piserv_hermes_delegation_mcp_native_toolsets) | sort
+  },
+  'memory': {'write_approval': false},
+  'skills': {'write_approval': false},
+  'platform_toolsets': {
+    'cli': piserv_hermes_delegation_mcp_native_toolsets +
+    active_integration_toolsets
+  },
+  'mcp_servers': delegation_brokered_mcp_servers
+} %}
+{% set delegation_base_config = piserv_hermes_delegation_mcp_base_config |
+  dict2items | rejectattr('key', 'in', ['dashboard', 'mcp_servers']) |
+  items2dict %}
+{% set delegation_config = delegation_base_config |
+  combine(delegation_overrides, recursive=true) %}
+{% for config_item in delegation_config | dict2items %}
+{{ {config_item.key: config_item.value} |
+  to_nice_yaml(indent=2, sort_keys=false) | trim }}
+{% endfor %}

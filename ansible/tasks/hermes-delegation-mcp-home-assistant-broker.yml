@@ -1,0 +1,44 @@
+---
+- name: Install the Home Assistant MCP credential broker
+  ansible.builtin.template:
+    src: "{{ item.source }}"
+    dest: "{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - source: >-
+        {{ playbook_dir }}/templates/hermes-delegation-home-assistant-mcp-broker.py.j2
+      destination: "{{ piserv_hermes_delegation_mcp_broker_path }}"
+      mode: "0755"
+    - source: >-
+        {{ playbook_dir }}/templates/hermes-delegation-home-assistant-mcp-broker-wrapper.sh.j2
+      destination: "{{ piserv_hermes_delegation_mcp_broker_wrapper_path }}"
+      mode: "0755"
+  register: piserv_hermes_delegation_mcp_broker_publication
+  no_log: true
+  when: piserv_hermes_agent_manage_home_assistant_mcp | bool
+
+- name: Install the validated Home Assistant MCP broker sudoers policy
+  ansible.builtin.template:
+    src: >-
+      {{ playbook_dir }}/templates/hermes-delegation-home-assistant-mcp-broker-sudoers.j2
+    dest: "{{ piserv_hermes_delegation_mcp_broker_sudoers_path }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  no_log: true
+  register: piserv_hermes_delegation_mcp_broker_sudoers_publication
+  when: piserv_hermes_agent_manage_home_assistant_mcp | bool
+
+- name: Remove the Home Assistant MCP credential broker when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ piserv_hermes_delegation_mcp_broker_path }}"
+    - "{{ piserv_hermes_delegation_mcp_broker_wrapper_path }}"
+    - "{{ piserv_hermes_delegation_mcp_broker_sudoers_path }}"
+  register: piserv_hermes_delegation_mcp_broker_removal
+  when: not (piserv_hermes_agent_manage_home_assistant_mcp | bool)

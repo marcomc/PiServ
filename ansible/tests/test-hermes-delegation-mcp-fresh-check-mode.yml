@@ -1,0 +1,118 @@
+---
+- name: Verify fresh check-mode Hermes delegation convergence
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_agent_binary_path: /usr/local/bin/hermes
+    piserv_hermes_agent_manage_home_assistant_mcp: false
+    piserv_hermes_agent_home_assistant_mcp_name: home-assistant-assist
+    piserv_hermes_delegation_mcp_adapter_path: >-
+      /usr/local/libexec/hermes-agent/hermes-delegation-mcp.py
+    piserv_hermes_delegation_mcp_python_path: >-
+      /usr/local/lib/hermes-agent/venv/bin/python
+    piserv_hermes_delegation_mcp_config_path: >-
+      /usr/local/lib/hermes-agent/.hermes-delegation-config.yaml
+    piserv_hermes_delegation_mcp_broker_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker.py
+    piserv_hermes_delegation_mcp_broker_wrapper_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker
+    piserv_hermes_delegation_mcp_broker_sudoers_path: >-
+      /etc/sudoers.d/hermes-home-assistant-mcp-broker
+    piserv_hermes_delegation_mcp_timeout_seconds: 300
+    piserv_hermes_delegation_mcp_terminate_grace_seconds: 5
+    piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
+    piserv_hermes_delegation_mcp_max_output_bytes: 1048576
+    piserv_hermes_delegation_mcp_max_turns: 50
+    piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+    piserv_hermes_delegation_mcp_limit_as_bytes: 1073741824
+    piserv_hermes_delegation_mcp_broker_max_frame_bytes: 131072
+    piserv_hermes_delegation_mcp_native_toolsets:
+      - delegation
+      - file
+      - memory
+      - session_search
+      - skills
+      - terminal
+      - todo
+    piserv_hermes_delegation_mcp_integration_toolsets: []
+  tasks:
+    - name: Defer native-only delegation artifacts on a fresh check-mode host
+      ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-adapter.yml
+
+    - name: Require native-only fresh check-mode artifact deferral
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_delegation_mcp_is_fresh_check_mode
+          - >-
+            piserv_hermes_delegation_mcp_deferred_artifacts | sort ==
+            [
+              piserv_hermes_delegation_mcp_adapter_path,
+              piserv_hermes_delegation_mcp_broker_path,
+              piserv_hermes_delegation_mcp_broker_sudoers_path,
+              piserv_hermes_delegation_mcp_broker_wrapper_path,
+              piserv_hermes_delegation_mcp_config_path
+            ] | sort
+          - piserv_hermes_delegation_mcp_config_publication.skipped | default(false)
+          - piserv_hermes_delegation_mcp_adapter_publication.skipped | default(false)
+          - piserv_hermes_delegation_mcp_broker_publication is not defined
+          - piserv_hermes_delegation_mcp_broker_sudoers_publication is not defined
+          - piserv_hermes_delegation_mcp_broker_removal is not defined
+
+    - name: Inspect native-only fresh check-mode delegation artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop: "{{ piserv_hermes_delegation_mcp_deferred_artifacts }}"
+      register: piserv_hermes_delegation_mcp_native_fresh_artifact_states
+      changed_when: false
+      check_mode: false
+
+    - name: Require native-only fresh check-mode artifacts remain absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            piserv_hermes_delegation_mcp_native_fresh_artifact_states.results |
+            selectattr('stat.exists') | list | length == 0
+
+    - name: Defer Home Assistant delegation artifacts on a fresh check-mode host
+      ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-adapter.yml
+      vars:
+        piserv_hermes_agent_manage_home_assistant_mcp: true
+        piserv_hermes_delegation_mcp_integration_toolsets:
+          - home-assistant-assist
+
+    - name: Require Home Assistant fresh check-mode artifact deferral
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_delegation_mcp_is_fresh_check_mode
+          - >-
+            piserv_hermes_delegation_mcp_deferred_artifacts | sort ==
+            [
+              piserv_hermes_delegation_mcp_adapter_path,
+              piserv_hermes_delegation_mcp_broker_path,
+              piserv_hermes_delegation_mcp_broker_sudoers_path,
+              piserv_hermes_delegation_mcp_broker_wrapper_path,
+              piserv_hermes_delegation_mcp_config_path
+            ] | sort
+          - piserv_hermes_delegation_mcp_config_publication.skipped | default(false)
+          - piserv_hermes_delegation_mcp_adapter_publication.skipped | default(false)
+          - piserv_hermes_delegation_mcp_broker_publication is not defined
+          - piserv_hermes_delegation_mcp_broker_sudoers_publication is not defined
+          - piserv_hermes_delegation_mcp_broker_removal is not defined
+
+    - name: Inspect Home Assistant fresh check-mode delegation artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop: "{{ piserv_hermes_delegation_mcp_deferred_artifacts }}"
+      register: piserv_hermes_delegation_mcp_home_assistant_fresh_artifact_states
+      changed_when: false
+      check_mode: false
+
+    - name: Require Home Assistant fresh check-mode artifacts remain absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            piserv_hermes_delegation_mcp_home_assistant_fresh_artifact_states.results |
+            selectattr('stat.exists') | list | length == 0

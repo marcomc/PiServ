@@ -22,6 +22,9 @@
     piserv_hermes_mcp_ssh_authorized_keys_path: /var/lib/codex-hermes-mcp/.ssh/authorized_keys
     piserv_hermes_mcp_ssh_wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
     piserv_hermes_mcp_ssh_sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+    piserv_hermes_mcp_ssh_sshd_config_path: >-
+      /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    piserv_hermes_mcp_ssh_trusted_preceding_match_configs: []
     piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
     piserv_hermes_mcp_ssh_source_user: admin
     piserv_hermes_mcp_ssh_source_authorized_keys_path: /home/admin/.ssh/authorized_keys
@@ -219,6 +222,11 @@
           - >-
             hermes_mcp_ssh_lifecycle_state.sudoers_path ==
             '/etc/sudoers.d/codex-hermes-mcp'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.sshd_config_path ==
+            '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf'
+          - >-
+            hermes_mcp_ssh_lifecycle_state.trusted_preceding_match_configs == []
           - hermes_mcp_ssh_lifecycle_state.key_provenance == 'automatic-admin-copy'
           - hermes_mcp_ssh_lifecycle_state.key_source_user == 'admin'
           - >-

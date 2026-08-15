@@ -1,0 +1,180 @@
+#!{{ piserv_hermes_delegation_mcp_python_path }}
+"""Proxy one stdio MCP connection to the fixed Home Assistant MCP target."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from http.client import HTTPConnection, HTTPSConnection
+from typing import Any
+from urllib.parse import urlsplit
+
+TARGET_URL = {{ piserv_hermes_agent_home_assistant_mcp_url | to_json }}
+TOKEN_ENV_VAR = {{ hermes_agent_home_assistant_mcp_token_env_var | to_json }}
+MAX_FRAME_BYTES = {{ piserv_hermes_delegation_mcp_broker_max_frame_bytes | int }}
+MAX_RESPONSE_BYTES = {{ piserv_hermes_delegation_mcp_max_output_bytes | int }}
+REQUEST_TIMEOUT_SECONDS = {{ piserv_hermes_delegation_mcp_timeout_seconds | int }}
+MCP_PROTOCOL_VERSION = "2025-06-18"
+
+
+class BrokerError(RuntimeError):
+    """Raised when a fixed-target MCP proxy request cannot complete safely."""
+
+
+def _parse_target() -> tuple[type[HTTPConnection], str, int | None, str]:
+    """Return a validated stdlib connection class and the fixed request path."""
+    target = urlsplit(TARGET_URL)
+    if target.scheme not in {"http", "https"} or not target.hostname:
+        raise BrokerError("Home Assistant MCP target is invalid")
+    if target.username or target.password or target.fragment:
+        raise BrokerError("Home Assistant MCP target is invalid")
+    path = target.path or "/"
+    if path != "/api/mcp":
+        raise BrokerError("Home Assistant MCP target is invalid")
+    if target.query:
+        path = f"{path}?{target.query}"
+    connection_type = HTTPSConnection if target.scheme == "https" else HTTPConnection
+    try:
+        port = target.port
+    except ValueError as error:
+        raise BrokerError("Home Assistant MCP target is invalid") from error
+    return connection_type, target.hostname, port, path
+
+
+def _bounded_body(response: Any) -> bytes:
+    """Read one upstream response without allowing unbounded proxy buffering."""
+    body = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(body) > MAX_RESPONSE_BYTES:
+        raise BrokerError("Home Assistant MCP response exceeded the configured limit")
+    return body
+
+
+def _response_messages(body: bytes, content_type: str) -> list[str]:
+    """Convert JSON or SSE streamable-HTTP output into stdio JSON-RPC lines."""
+    if not body:
+        return []
+    text = body.decode("utf-8", errors="strict")
+    if content_type.split(";", 1)[0].strip().lower() != "text/event-stream":
+        json.loads(text)
+        return [text]
+
+    messages: list[str] = []
+    event_data: list[str] = []
+    for line in text.splitlines():
+        if not line:
+            if event_data:
+                message = "\n".join(event_data)
+                json.loads(message)
+                messages.append(message)
+                event_data = []
+        elif line.startswith("data:"):
+            event_data.append(line[5:].lstrip())
+    if event_data:
+        message = "\n".join(event_data)
+        json.loads(message)
+        messages.append(message)
+    return messages
+
+
+def forward_frame(frame: bytes, token: str, session_id: str | None) -> tuple[list[str], str | None]:
+    """Forward one bounded stdio JSON-RPC frame to the configured MCP target."""
+    if len(frame) > MAX_FRAME_BYTES:
+        raise BrokerError("MCP frame exceeded the configured limit")
+    try:
+        request = json.loads(frame)
+    except json.JSONDecodeError as error:
+        raise BrokerError("MCP frame was not valid JSON") from error
+    if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
+        raise BrokerError("MCP frame was not a JSON-RPC request")
+
+    connection_type, hostname, port, path = _parse_target()
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+    }
+    if session_id:
+        headers["Mcp-Session-Id"] = session_id
+    connection = connection_type(hostname, port, timeout=REQUEST_TIMEOUT_SECONDS)
+    try:
+        connection.request("POST", path, body=frame, headers=headers)
+        response = connection.getresponse()
+        next_session_id = response.getheader("Mcp-Session-Id") or session_id
+        body = _bounded_body(response)
+    except OSError as error:
+        raise BrokerError("Home Assistant MCP request failed") from error
+    finally:
+        connection.close()
+
+    if response.status < 200 or response.status >= 300:
+        raise BrokerError("Home Assistant MCP request was rejected")
+    return _response_messages(body, response.getheader("Content-Type", "")), next_session_id
+
+
+def _write_error(request_id: object, message: str) -> None:
+    """Return one non-sensitive JSON-RPC error to the local MCP client."""
+    response = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": -32000, "message": message},
+    }
+    sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def _bounded_frames(input_stream: Any):
+    """Yield bounded JSON-RPC lines while draining oversized input safely."""
+    drain_chunk_bytes = 8192
+    while True:
+        # The extra two bytes permit a MAX_FRAME_BYTES payload ending in CRLF.
+        # readline() never allocates more than this limit before an oversized
+        # frame is rejected and drained in bounded chunks below.
+        frame = input_stream.readline(MAX_FRAME_BYTES + 2)
+        if not frame:
+            return
+        if frame.endswith(b"\n"):
+            frame = frame.rstrip(b"\r\n")
+            if len(frame) <= MAX_FRAME_BYTES:
+                yield frame
+                continue
+
+        # A line that reaches the bound without its newline, or a newline
+        # terminated payload above the bound, must never reach JSON parsing or
+        # the upstream connection.
+        if len(frame) <= MAX_FRAME_BYTES:
+            yield frame
+            continue
+
+        while frame and not frame.endswith(b"\n"):
+            frame = input_stream.readline(drain_chunk_bytes)
+        yield None
+
+
+def main() -> int:
+    """Bridge the delegated Hermes MCP stdio connection without exposing its token."""
+    token = os.environ.get(TOKEN_ENV_VAR, "")
+    if not token or "\n" in token or "\r" in token:
+        raise SystemExit("Home Assistant MCP token is unavailable")
+    session_id: str | None = None
+    for frame in _bounded_frames(sys.stdin.buffer):
+        request_id: object = None
+        try:
+            if frame is None:
+                raise BrokerError("MCP frame exceeded the configured limit")
+            decoded = json.loads(frame)
+            if isinstance(decoded, dict):
+                request_id = decoded.get("id")
+            messages, session_id = forward_frame(frame, token, session_id)
+        except (BrokerError, UnicodeDecodeError, json.JSONDecodeError):
+            _write_error(request_id, "Home Assistant MCP broker rejected the request")
+            continue
+        for message in messages:
+            sys.stdout.write(message + "\n")
+        sys.stdout.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

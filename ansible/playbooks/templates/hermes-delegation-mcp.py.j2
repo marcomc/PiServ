@@ -1,0 +1,153 @@
+"""Bounded stdio MCP adapter for one-shot Hermes agent delegation."""
+
+from __future__ import annotations
+
+import os
+import signal
+import subprocess
+import tempfile
+import threading
+import time
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+
+HERMES_BINARY = {{ hermes_agent_binary_path | to_json }}
+MAX_TURNS = {{ piserv_hermes_delegation_mcp_max_turns | int }}
+TIMEOUT_SECONDS = {{ piserv_hermes_delegation_mcp_timeout_seconds | int }}
+TERMINATE_GRACE_SECONDS = {{ piserv_hermes_delegation_mcp_terminate_grace_seconds | int }}
+MAX_PROMPT_BYTES = {{ piserv_hermes_delegation_mcp_max_prompt_bytes | int }}
+MAX_OUTPUT_BYTES = {{ piserv_hermes_delegation_mcp_max_output_bytes | int }}
+TOOLSETS = {{ (piserv_hermes_delegation_mcp_native_toolsets + piserv_hermes_delegation_mcp_integration_toolsets) | join(',') | to_json }}
+POLL_SECONDS = 0.1
+
+_delegation_lock = threading.Lock()
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Stop a Hermes turn and every child it started."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # On macOS a just-exited child can make the process-group operation
+        # fail even though the parent still owns the child handle.
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=TERMINATE_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (PermissionError, ProcessLookupError):
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=TERMINATE_GRACE_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("Hermes delegation process did not terminate") from error
+
+
+def _read_bounded(file_object, limit: int) -> bytes:
+    file_object.seek(0)
+    return file_object.read(limit + 1)
+
+
+def _run_hermes(prompt: str) -> str:
+    """Execute one Hermes chat turn without a shell or inherited stdin."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ToolError("prompt must be a non-empty string")
+    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
+        raise ToolError(f"prompt exceeds the {MAX_PROMPT_BYTES}-byte limit")
+    if not _delegation_lock.acquire(blocking=False):
+        raise ToolError("Hermes delegation is already processing another task")
+
+    try:
+        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+            process = subprocess.Popen(
+                [
+                    HERMES_BINARY,
+                    "chat",
+                    "--query",
+                    prompt,
+                    "--quiet",
+                    "--yolo",
+                    "--source",
+                    "tool",
+                    "--max-turns",
+                    str(MAX_TURNS),
+                    "--toolsets",
+                    TOOLSETS,
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                start_new_session=True,
+                close_fds=True,
+            )
+            deadline = time.monotonic() + TIMEOUT_SECONDS
+            output_exceeded = False
+
+            while process.poll() is None:
+                if time.monotonic() >= deadline:
+                    _terminate_process_group(process)
+                    raise ToolError(
+                        f"Hermes delegation exceeded the {TIMEOUT_SECONDS}-second limit"
+                    )
+                if (
+                    os.fstat(stdout_file.fileno()).st_size > MAX_OUTPUT_BYTES
+                    or os.fstat(stderr_file.fileno()).st_size > MAX_OUTPUT_BYTES
+                ):
+                    output_exceeded = True
+                    _terminate_process_group(process)
+                    break
+                time.sleep(POLL_SECONDS)
+
+            stdout = _read_bounded(stdout_file, MAX_OUTPUT_BYTES)
+            stderr = _read_bounded(stderr_file, MAX_OUTPUT_BYTES)
+
+        if output_exceeded or len(stdout) > MAX_OUTPUT_BYTES or len(stderr) > MAX_OUTPUT_BYTES:
+            raise ToolError("Hermes delegation exceeded its output limit")
+        if process.returncode != 0:
+            raise ToolError(
+                f"Hermes delegation failed with exit status {process.returncode}"
+            )
+
+        result = stdout.decode("utf-8", errors="replace").strip()
+        if not result:
+            raise ToolError("Hermes delegation returned an empty result")
+        return result
+    except OSError as error:
+        raise ToolError("Hermes delegation could not start") from error
+    finally:
+        _delegation_lock.release()
+
+
+mcp = FastMCP(
+    "hermes-delegation",
+    instructions=(
+        "Delegate a task to the persistent Hermes Agent identity on PiServ. "
+        "Hermes may use every tool and MCP integration enabled in its managed "
+        "configuration, including write-capable Home Assistant tools."
+    ),
+)
+
+
+@mcp.tool()
+def delegate_task(prompt: str) -> str:
+    """Run one bounded Hermes agent turn and return its final result.
+
+    Args:
+        prompt: Complete task and context for the Hermes agent.
+    """
+    return _run_hermes(prompt)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

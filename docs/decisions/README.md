@@ -33,6 +33,8 @@ Decision records explain why PiServ setup choices were made.
 | [0017: External SSD storage](0017-external-ssd-storage.md) | Accepted and implemented |
 | [0018: PiServ installation entry point](0018-piserv-install-entry-point.md) | Accepted and implemented |
 | [0019: Hermes Home Assistant MCP write surface](0019-hermes-home-assistant-mcp-write-surface.md) | Accepted |
+| [0020: Hermes Home and Apple Home release scope](0020-hermes-home-apple-home-release-scope.md) | Accepted |
+| [0021: Hermes agent delegation over SSH stdio MCP](0021-hermes-agent-delegation-mcp.md) | Accepted |
 
 ## Template
 

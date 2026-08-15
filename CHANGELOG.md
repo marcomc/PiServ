@@ -22,6 +22,21 @@
   preserves subsequent operator edits.
 - Documented Codex registration, validation, and revocation for SSH-only MCP
   access without a LAN or Tailnet MCP listener.
+- Added a distinct `codex-hermes-delegate` SSH principal and bounded stdio MCP
+  adapter that exposes `delegate_task(prompt)` and runs one Hermes agent turn
+  with its persistent identity, configured tools, and Home Assistant MCP.
+- Isolated the delegated CLI policy from the dashboard and conversations MCP;
+  the native Hermes loop receives delegation, file, memory, session search,
+  skills, terminal, todo, and configured Home Assistant MCP tools rather than
+  stateless MCP callbacks. A delegation-only config bypasses non-interactive
+  approval staging without changing dashboard or conversations policy.
+- Kept the existing `hermes-piserv` messaging bridge bound to
+  `hermes mcp serve`; delegation uses a separately named client entry without
+  adding a network listener, shell access, general sudo, or credential output.
+- Moved the delegated Home Assistant bearer token into a separate fixed-target
+  `DynamicUser` MCP broker. Delegated Hermes now has explicit `MemoryMax` and
+  `LimitAS` containment, cannot read the token file, and can invoke only the
+  broker's exact sudo rule; convergence verifies the effective Hermes catalog.
 
 ## [0.5.0] - 2026-08-11
 

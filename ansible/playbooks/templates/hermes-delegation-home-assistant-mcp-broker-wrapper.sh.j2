@@ -1,0 +1,24 @@
+#!/bin/sh
+# Managed by Ansible. The fixed sudoers rule permits no arguments.
+set -eu
+
+exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec \
+  --property=DynamicUser=yes \
+  --property=EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }} \
+  --property=NoNewPrivileges=true \
+  --property=PrivateTmp=true \
+  --property=ProtectSystem=strict \
+  --property=ProtectHome=true \
+  --property=ProtectKernelTunables=true \
+  --property=ProtectKernelModules=true \
+  --property=ProtectControlGroups=true \
+  --property=ProtectProc=invisible \
+  --property=ProcSubset=pid \
+  --property=RestrictSUIDSGID=true \
+  --property=LockPersonality=true \
+  --property=CapabilityBoundingSet= \
+  --property='RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' \
+  --property=UMask=0077 \
+  --setenv=PYTHONDONTWRITEBYTECODE=1 \
+  {{ piserv_hermes_delegation_mcp_python_path | quote }} \
+  {{ piserv_hermes_delegation_mcp_broker_path | quote }}

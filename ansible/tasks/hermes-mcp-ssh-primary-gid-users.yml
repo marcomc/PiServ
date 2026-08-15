@@ -1,0 +1,19 @@
+---
+- name: Initialize existing primary-GID Hermes MCP SSH users
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_account_group_primary_gid_users: []
+
+- name: Record existing primary-GID Hermes MCP SSH users
+  ansible.builtin.set_fact:
+    piserv_hermes_mcp_ssh_account_group_primary_gid_users: >-
+      {{ piserv_hermes_mcp_ssh_account_group_primary_gid_users + [item.key] }}
+  loop: "{{ ansible_facts.getent_passwd | default({}, true) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - piserv_hermes_mcp_ssh_account_group_record | length == 3
+    - item.key != piserv_hermes_mcp_ssh_user
+    - item.value is sequence
+    - item.value is not string
+    - item.value | length == 6
+    - item.value[2] == piserv_hermes_mcp_ssh_account_group_record[1]

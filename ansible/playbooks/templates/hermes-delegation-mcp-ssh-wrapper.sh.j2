@@ -1,0 +1,40 @@
+#!/bin/sh
+# Managed by Ansible. This entry point is callable only through the restricted
+# codex-hermes-delegate SSH principal's sudoers rule.
+set -eu
+
+# Keep this endpoint inside the same transient systemd sandbox used by the
+# hardened conversations MCP. The adapter starts the native Hermes agent loop.
+exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec \
+  --property=User={{ hermes_agent_user | quote }} \
+  --property=Group={{ hermes_agent_group | quote }} \
+  --property=WorkingDirectory={{ (hermes_agent_home ~ '/workspace') | quote }} \
+  --setenv=HOME={{ hermes_agent_home | quote }} \
+  --setenv=HERMES_HOME={{ hermes_agent_home | quote }} \
+  --setenv=CODEX_HOME={{ hermes_agent_codex_home | quote }} \
+  --setenv=PYTHONUNBUFFERED=1 \
+  --setenv=PYTHONWARNINGS=ignore \
+  --setenv=PATH=/usr/local/bin:/usr/bin:/bin \
+  --property=MemoryMax={{ piserv_hermes_delegation_mcp_memory_max_bytes }} \
+  --property=LimitAS={{ piserv_hermes_delegation_mcp_limit_as_bytes }} \
+{% if piserv_hermes_agent_manage_home_assistant_mcp | bool %}
+  --property=InaccessiblePaths={{ hermes_agent_home_assistant_mcp_token_env_file | quote }} \
+  --property=UnsetEnvironment={{ hermes_agent_home_assistant_mcp_token_env_var }} \
+{% endif %}
+  --property=NoNewPrivileges=true \
+  --property=PrivateTmp=true \
+  --property=ProtectSystem=strict \
+  --property=ProtectHome=true \
+  --property=ReadWritePaths={{ hermes_agent_home | quote }} \
+  --property={{ ('BindReadOnlyPaths=' ~ piserv_hermes_delegation_mcp_config_path ~ ':' ~ hermes_agent_home ~ '/config.yaml') | quote }} \
+  --property={{ ('BindReadOnlyPaths=/etc/hermes-agent/policies/smart-home-AGENTS.md:' ~ hermes_agent_home ~ '/workspace/AGENTS.md') | quote }} \
+  --property=ProtectKernelTunables=true \
+  --property=ProtectKernelModules=true \
+  --property=ProtectControlGroups=true \
+  --property=RestrictSUIDSGID=true \
+  --property=LockPersonality=true \
+  --property=CapabilityBoundingSet= \
+  --property='RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' \
+  --property=UMask=0077 \
+  {{ piserv_hermes_delegation_mcp_python_path | quote }} \
+  {{ piserv_hermes_delegation_mcp_adapter_path | quote }}

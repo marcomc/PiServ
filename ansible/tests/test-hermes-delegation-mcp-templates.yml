@@ -1,0 +1,316 @@
+---
+- name: Verify Hermes delegation MCP templates and adapter behavior
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hermes_agent_user: hermes-agent
+    hermes_agent_group: hermes-agent
+    hermes_agent_home: /var/lib/hermes-agent
+    hermes_agent_codex_home: /var/lib/hermes-agent/codex
+    hermes_agent_binary_path: /usr/local/bin/hermes
+    hermes_agent_managed_config_path: /etc/hermes-agent/config.yaml
+    hermes_agent_home_assistant_mcp_token_env_file: >-
+      /var/lib/hermes-agent/home-assistant-mcp.env
+    hermes_agent_home_assistant_mcp_token_env_var: HASS_MCP_TOKEN
+    piserv_hermes_agent_home_assistant_mcp_url: >-
+      http://homeassistant.invalid/api/mcp
+    piserv_hermes_agent_manage_home_assistant_mcp: true
+    piserv_hermes_agent_home_assistant_mcp_name: home-assistant-assist
+    piserv_hermes_mcp_ssh_user: codex-hermes-delegate
+    piserv_hermes_mcp_ssh_authorized_keys_path: >-
+      /var/lib/codex-hermes-delegate/.ssh/authorized_keys
+    piserv_hermes_mcp_ssh_wrapper_path: >-
+      /usr/local/libexec/hermes-agent/codex-delegation-mcp-ssh
+    piserv_hermes_mcp_ssh_source_public_key_lines:
+      - >-
+        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1
+        test@example.invalid
+    piserv_hermes_delegation_mcp_python_path: >-
+      /usr/local/lib/hermes-agent/venv/bin/python
+    piserv_hermes_delegation_mcp_adapter_path: >-
+      /usr/local/libexec/hermes-agent/hermes-delegation-mcp.py
+    piserv_hermes_delegation_mcp_config_path: >-
+      /usr/local/lib/hermes-agent/.hermes-delegation-config.yaml
+    piserv_hermes_delegation_mcp_timeout_seconds: 300
+    piserv_hermes_delegation_mcp_terminate_grace_seconds: 5
+    piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
+    piserv_hermes_delegation_mcp_max_output_bytes: 1048576
+    piserv_hermes_delegation_mcp_max_turns: 50
+    piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+    piserv_hermes_delegation_mcp_limit_as_bytes: 1073741824
+    piserv_hermes_delegation_mcp_broker_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker.py
+    piserv_hermes_delegation_mcp_broker_wrapper_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker
+    piserv_hermes_delegation_mcp_broker_sudoers_path: >-
+      /etc/sudoers.d/hermes-home-assistant-mcp-broker
+    piserv_hermes_delegation_mcp_broker_max_frame_bytes: 131072
+    piserv_hermes_delegation_mcp_native_toolsets:
+      - delegation
+      - file
+      - memory
+      - session_search
+      - skills
+      - terminal
+      - todo
+    piserv_hermes_delegation_mcp_integration_toolsets:
+      - home-assistant-assist
+    piserv_hermes_delegation_mcp_base_config:
+      model:
+        default: test-model
+      mcp_servers:
+        home-assistant-assist:
+          url: http://homeassistant.invalid/api/mcp
+          env:
+            HASS_MCP_TOKEN: must-not-enter-delegation-config
+          headers:
+            Authorization: Bearer ${HASS_MCP_TOKEN}
+      dashboard:
+        basic_auth:
+          secret: must-not-enter-delegation-config
+      agent:
+        disabled_toolsets:
+          - delegation
+          - file
+          - memory
+          - session_search
+          - todo
+          - web
+          - browser
+          - vision
+      memory:
+        memory_enabled: true
+        write_approval: true
+      skills:
+        write_approval: true
+  tasks:
+    - name: Create a private temporary delegation template test directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: hermes-delegation-mcp-test-
+      register: hermes_delegation_mcp_template_test_directory
+
+    - name: Render Hermes delegation MCP templates
+      ansible.builtin.template:
+        src: "{{ item.source }}"
+        dest: >-
+          {{ hermes_delegation_mcp_template_test_directory.path }}/{{ item.destination }}
+        mode: "0700"
+      loop:
+        - source: ../playbooks/templates/hermes-delegation-mcp.py.j2
+          destination: adapter.py
+        - source: ../playbooks/templates/hermes-delegation-home-assistant-mcp-broker.py.j2
+          destination: broker.py
+        - source: ../playbooks/templates/hermes-delegation-home-assistant-mcp-broker-wrapper.sh.j2
+          destination: broker-wrapper.sh
+        - source: ../playbooks/templates/hermes-delegation-home-assistant-mcp-broker-sudoers.j2
+          destination: broker-sudoers
+        - source: ../playbooks/templates/hermes-delegation-mcp-ssh-wrapper.sh.j2
+          destination: wrapper.sh
+        - source: ../playbooks/templates/hermes-mcp-ssh-authorized_keys.j2
+          destination: authorized_keys
+        - source: ../playbooks/templates/hermes-mcp-ssh-sshd.conf.j2
+          destination: sshd.conf
+        - source: ../playbooks/templates/hermes-mcp-ssh-sudoers.j2
+          destination: sudoers
+        - source: ../playbooks/templates/hermes-delegation-config.yaml.j2
+          destination: delegation-config.yaml
+
+    - name: Render a Home Assistant-disabled delegation policy
+      ansible.builtin.template:
+        src: ../playbooks/templates/hermes-delegation-config.yaml.j2
+        dest: >-
+          {{ hermes_delegation_mcp_template_test_directory.path }}/delegation-config-no-ha.yaml
+        mode: "0700"
+      vars:
+        piserv_hermes_agent_manage_home_assistant_mcp: false
+        piserv_hermes_delegation_mcp_integration_toolsets: []
+        piserv_hermes_delegation_mcp_base_config:
+          model:
+            default: test-model
+          agent:
+            disabled_toolsets:
+              - delegation
+              - file
+              - memory
+              - session_search
+              - todo
+              - web
+          memory:
+            write_approval: true
+          skills:
+            write_approval: true
+
+    - name: Render a Home Assistant-disabled delegation wrapper
+      ansible.builtin.template:
+        src: ../playbooks/templates/hermes-delegation-mcp-ssh-wrapper.sh.j2
+        dest: >-
+          {{ hermes_delegation_mcp_template_test_directory.path }}/wrapper-no-ha.sh
+        mode: "0700"
+      vars:
+        piserv_hermes_agent_manage_home_assistant_mcp: false
+
+    - name: Validate the rendered delegation wrapper shell
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/wrapper.sh"
+      changed_when: false
+
+    - name: Validate the rendered Home Assistant MCP broker wrapper shell
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - --enable=all
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/broker-wrapper.sh"
+      changed_when: false
+
+    - name: Compile the rendered delegation MCP adapter
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -m
+          - py_compile
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/adapter.py"
+      changed_when: false
+
+    - name: Compile the rendered Home Assistant MCP credential broker
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -m
+          - py_compile
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/broker.py"
+      changed_when: false
+
+
+    - name: Exercise the rendered delegation MCP adapter behavior
+      ansible.builtin.command:
+        argv:
+          - python3
+          - >-
+            {{ playbook_dir }}/../../scripts/tests/test-hermes-delegation-adapter.py
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/adapter.py"
+      changed_when: false
+
+    - name: Exercise the rendered Home Assistant MCP credential broker
+      ansible.builtin.command:
+        argv:
+          - python3
+          - >-
+            {{ playbook_dir }}/../../scripts/tests/test-hermes-delegation-mcp-broker.py
+          - "{{ hermes_delegation_mcp_template_test_directory.path }}/broker.py"
+      changed_when: false
+
+    - name: Read the rendered delegation access policy templates
+      ansible.builtin.slurp:
+        src: >-
+          {{ hermes_delegation_mcp_template_test_directory.path }}/{{ item }}
+      loop:
+        - wrapper.sh
+        - authorized_keys
+        - sshd.conf
+        - sudoers
+        - delegation-config.yaml
+        - broker-wrapper.sh
+        - broker-sudoers
+        - delegation-config-no-ha.yaml
+        - wrapper-no-ha.sh
+      register: hermes_delegation_mcp_rendered_templates
+
+    - name: Parse the isolated Hermes delegation configuration
+      ansible.builtin.set_fact:
+        hermes_delegation_mcp_config: >-
+          {{ hermes_delegation_mcp_rendered_templates.results[4].content |
+          b64decode | from_yaml }}
+
+    - name: Parse the Home Assistant-disabled delegation configuration
+      ansible.builtin.set_fact:
+        hermes_delegation_mcp_no_ha_config: >-
+          {{ hermes_delegation_mcp_rendered_templates.results[7].content |
+          b64decode | from_yaml }}
+
+    - name: Require exact delegation SSH boundary contracts
+      ansible.builtin.assert:
+        that:
+          - >-
+            '/usr/local/lib/hermes-agent/venv/bin/python'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            '/usr/local/libexec/hermes-agent/hermes-delegation-mcp.py'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            '--property=ProtectSystem=strict'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            '--property=MemoryMax=1073741824'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            '--property=LimitAS=1073741824'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            '--property=InaccessiblePaths=/var/lib/hermes-agent/home-assistant-mcp.env'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            'EnvironmentFile=/var/lib/hermes-agent/home-assistant-mcp.env'
+            not in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            'UnsetEnvironment=HASS_MCP_TOKEN'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            'BindReadOnlyPaths=/usr/local/lib/hermes-agent/.hermes-delegation-config.yaml:/var/lib/hermes-agent/config.yaml'
+            in (hermes_delegation_mcp_rendered_templates.results[0].content | b64decode)
+          - >-
+            'command="/usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-delegation-mcp-ssh",restrict'
+            in (hermes_delegation_mcp_rendered_templates.results[1].content | b64decode)
+          - >-
+            'ForceCommand /usr/bin/sudo -n /usr/local/libexec/hermes-agent/codex-delegation-mcp-ssh'
+            in (hermes_delegation_mcp_rendered_templates.results[2].content | b64decode)
+          - >-
+            'codex-hermes-delegate ALL=(root) NOPASSWD: /usr/local/libexec/hermes-agent/codex-delegation-mcp-ssh ""'
+            in (hermes_delegation_mcp_rendered_templates.results[3].content | b64decode)
+          - hermes_delegation_mcp_config.dashboard is not defined
+          - >-
+            'must-not-enter-delegation-config' not in
+            (hermes_delegation_mcp_rendered_templates.results[4].content |
+            b64decode)
+          - >-
+            hermes_delegation_mcp_config.agent.disabled_toolsets ==
+            ['browser', 'vision', 'web']
+          - not hermes_delegation_mcp_config.memory.write_approval
+          - not hermes_delegation_mcp_config.skills.write_approval
+          - >-
+            hermes_delegation_mcp_config.platform_toolsets.cli ==
+            ['delegation', 'file', 'memory', 'session_search', 'skills',
+            'terminal', 'todo', 'home-assistant-assist']
+          - >-
+            hermes_delegation_mcp_config.mcp_servers['home-assistant-assist'].command == '/usr/bin/sudo'
+          - >-
+            hermes_delegation_mcp_config.mcp_servers['home-assistant-assist'].args ==
+            ['-n', '/usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker']
+          - >-
+            hermes_delegation_mcp_config.mcp_servers['home-assistant-assist'].headers is not defined
+          - >-
+            hermes_delegation_mcp_config.mcp_servers['home-assistant-assist'].env is not defined
+          - >-
+            '--property=DynamicUser=yes'
+            in (hermes_delegation_mcp_rendered_templates.results[5].content | b64decode)
+          - >-
+            '--property=EnvironmentFile=/var/lib/hermes-agent/home-assistant-mcp.env'
+            in (hermes_delegation_mcp_rendered_templates.results[5].content | b64decode)
+          - >-
+            'hermes-agent ALL=(root) NOPASSWD: /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker ""'
+            in (hermes_delegation_mcp_rendered_templates.results[6].content | b64decode)
+          - hermes_delegation_mcp_no_ha_config.mcp_servers == {}
+          - >-
+            'InaccessiblePaths=/var/lib/hermes-agent/home-assistant-mcp.env'
+            not in (hermes_delegation_mcp_rendered_templates.results[8].content | b64decode)
+
+  post_tasks:
+    - name: Remove the temporary delegation template test directory
+      ansible.builtin.file:
+        path: "{{ hermes_delegation_mcp_template_test_directory.path }}"
+        state: absent
+      when: hermes_delegation_mcp_template_test_directory is defined

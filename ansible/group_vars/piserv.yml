@@ -61,8 +61,72 @@ piserv_hermes_mcp_ssh_authorized_keys_path: >-
   /var/lib/codex-hermes-mcp/.ssh/authorized_keys
 piserv_hermes_mcp_ssh_wrapper_path: >-
   /usr/local/libexec/hermes-agent/codex-mcp-ssh
+piserv_hermes_mcp_ssh_wrapper_template: hermes-mcp-ssh-wrapper.sh.j2
 piserv_hermes_mcp_ssh_sudoers_path: /etc/sudoers.d/codex-hermes-mcp
+piserv_hermes_mcp_ssh_sshd_config_path: >-
+  /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+piserv_hermes_mcp_ssh_state_path: >-
+  /usr/local/libexec/hermes-agent/.codex-hermes-mcp-state.json
+piserv_hermes_mcp_ssh_trusted_preceding_match_configs: []
 piserv_hermes_mcp_ssh_copy_admin_authorized_keys: true
 piserv_hermes_mcp_ssh_source_user: admin
 piserv_hermes_mcp_ssh_source_authorized_keys_path: >-
   /home/admin/.ssh/authorized_keys
+
+# A separate restricted principal exposes a bounded agent turn. The existing
+# messaging bridge remains permanently bound to `hermes mcp serve`.
+piserv_hermes_agent_home_assistant_mcp_name: home-assistant-assist
+piserv_hermes_delegation_mcp_ssh_manage: true
+piserv_hermes_delegation_mcp_ssh_user: codex-hermes-delegate
+piserv_hermes_delegation_mcp_ssh_group: codex-hermes-delegate
+piserv_hermes_delegation_mcp_ssh_home: /var/lib/codex-hermes-delegate
+piserv_hermes_delegation_mcp_ssh_authorized_keys_path: >-
+  /var/lib/codex-hermes-delegate/.ssh/authorized_keys
+piserv_hermes_delegation_mcp_ssh_wrapper_path: >-
+  /usr/local/libexec/hermes-agent/codex-delegation-mcp-ssh
+piserv_hermes_delegation_mcp_ssh_sudoers_path: >-
+  /etc/sudoers.d/codex-hermes-delegate
+piserv_hermes_delegation_mcp_ssh_sshd_config_path: >-
+  /etc/ssh/sshd_config.d/61-codex-hermes-delegate.conf
+piserv_hermes_delegation_mcp_ssh_state_path: >-
+  /usr/local/libexec/hermes-agent/.codex-hermes-delegation-mcp-state.json
+piserv_hermes_delegation_mcp_ssh_trusted_preceding_match_configs:
+  - path: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    user: codex-hermes-mcp
+    authorized_keys_path: /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+    wrapper_path: /usr/local/libexec/hermes-agent/codex-mcp-ssh
+piserv_hermes_delegation_mcp_ssh_copy_admin_authorized_keys: true
+piserv_hermes_delegation_mcp_ssh_source_user: admin
+piserv_hermes_delegation_mcp_ssh_source_authorized_keys_path: >-
+  /home/admin/.ssh/authorized_keys
+piserv_hermes_delegation_mcp_adapter_path: >-
+  /usr/local/libexec/hermes-agent/hermes-delegation-mcp.py
+piserv_hermes_delegation_mcp_config_path: >-
+  /usr/local/lib/hermes-agent/.hermes-delegation-config.yaml
+piserv_hermes_delegation_mcp_python_path: >-
+  /usr/local/lib/hermes-agent/venv/bin/python
+piserv_hermes_delegation_mcp_timeout_seconds: 300
+piserv_hermes_delegation_mcp_terminate_grace_seconds: 5
+piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
+piserv_hermes_delegation_mcp_max_output_bytes: 1048576
+piserv_hermes_delegation_mcp_max_turns: 50
+piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+piserv_hermes_delegation_mcp_limit_as_bytes: 1073741824
+piserv_hermes_delegation_mcp_broker_path: >-
+  /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker.py
+piserv_hermes_delegation_mcp_broker_wrapper_path: >-
+  /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker
+piserv_hermes_delegation_mcp_broker_sudoers_path: >-
+  /etc/sudoers.d/hermes-home-assistant-mcp-broker
+piserv_hermes_delegation_mcp_broker_max_frame_bytes: 131072
+piserv_hermes_delegation_mcp_native_toolsets:
+  - delegation
+  - file
+  - memory
+  - session_search
+  - skills
+  - terminal
+  - todo
+piserv_hermes_delegation_mcp_integration_toolsets: >-
+  {{ [piserv_hermes_agent_home_assistant_mcp_name]
+  if (piserv_hermes_agent_manage_home_assistant_mcp | bool) else [] }}

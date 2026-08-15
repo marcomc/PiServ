@@ -3993,6 +3993,7 @@
       ansible.builtin.copy:
         content: |
           #!/bin/sh
+          : > "${PWD}/web/node_modules/.tmp/dashboard-build-write-probe"
           exit 42
         dest: /var/lib/hermes-agent/node/bin/npm
         owner: hermes-agent
@@ -4011,16 +4012,31 @@
           ansible.builtin.fail:
             msg: Forced dashboard build failure unexpectedly succeeded.
       rescue:
-        - name: Inspect dashboard workspace after forced failure
+        - name: Inspect dashboard workspaces after forced failure
           ansible.builtin.stat:
-            path: /usr/local/lib/hermes-agent/hermes_cli
-          register: hermes_agent_molecule_failed_dashboard_workspace
+            path: "{{ item }}"
+          loop:
+            - /usr/local/lib/hermes-agent/hermes_cli
+            - /usr/local/lib/hermes-agent/web
+            - /usr/local/lib/hermes-agent/web/node_modules/.tmp/dashboard-build-write-probe
+          register: hermes_agent_molecule_failed_dashboard_workspaces
 
-        - name: Assert dashboard workspace ownership was restored
+        - name: Assert dashboard build used and restored every writable workspace
           ansible.builtin.assert:
             that:
-              - hermes_agent_molecule_failed_dashboard_workspace.stat.pw_name == 'root'
-              - hermes_agent_molecule_failed_dashboard_workspace.stat.gr_name == 'root'
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[0].stat.pw_name == 'root'
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[0].stat.gr_name == 'root'
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[1].stat.pw_name == 'root'
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[1].stat.gr_name == 'root'
+              - hermes_agent_molecule_failed_dashboard_workspaces.results[2].stat.exists
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[2].stat.pw_name == 'root'
+              - >-
+                hermes_agent_molecule_failed_dashboard_workspaces.results[2].stat.gr_name == 'root'
 
     - name: Create forced-failure terminal UI workspace fixture
       ansible.builtin.file:

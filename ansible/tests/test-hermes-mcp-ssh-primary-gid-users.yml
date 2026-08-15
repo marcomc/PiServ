@@ -1,0 +1,22 @@
+---
+- name: Verify Hermes MCP SSH primary-GID collision detection
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    piserv_hermes_mcp_ssh_user: codex-hermes-mcp
+    piserv_hermes_mcp_ssh_account_group_record: ['x', '982', '']
+    ansible_facts:
+      getent_passwd:
+        codex-hermes-mcp: ['x', '982', '982', '', '/var/lib/codex-hermes-mcp', '/bin/sh']
+        another-service: ['x', '983', '982', '', '/var/lib/another-service', '/usr/sbin/nologin']
+        unrelated-service: ['x', '984', '984', '', '/var/lib/unrelated-service', '/usr/sbin/nologin']
+        malformed-record: ['x', '985']
+  tasks:
+    - name: Detect competing primary-GID users without positional attribute lookup
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-primary-gid-users.yml
+
+    - name: Require only the competing primary-GID account
+      ansible.builtin.assert:
+        that:
+          - piserv_hermes_mcp_ssh_account_group_primary_gid_users == ['another-service']

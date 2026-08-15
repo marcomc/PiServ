@@ -11,7 +11,26 @@
         piserv_hermes_mcp_ssh_authorized_keys_path ==
         piserv_hermes_mcp_ssh_home ~ '/.ssh/authorized_keys'
       - piserv_hermes_mcp_ssh_wrapper_path is match('^/usr/local/libexec/hermes-agent/[a-z0-9_-]+$')
+      - >-
+        piserv_hermes_mcp_ssh_wrapper_template in
+        ['hermes-mcp-ssh-wrapper.sh.j2',
+        'hermes-delegation-mcp-ssh-wrapper.sh.j2']
       - piserv_hermes_mcp_ssh_sudoers_path is match('^/etc/sudoers\.d/[a-z0-9_-]+$')
+      - >-
+        piserv_hermes_mcp_ssh_sshd_config_path is match(
+        '^/etc/ssh/sshd_config\.d/[0-9]{2}-[a-z0-9_-]+\.conf$')
+      - >-
+        piserv_hermes_mcp_ssh_state_path is match(
+        '^/usr/local/libexec/hermes-agent/\.[a-z0-9_-]+-state\.json$')
+      - >-
+        piserv_hermes_mcp_ssh_state_path | dirname ==
+        piserv_hermes_mcp_ssh_wrapper_path | dirname
+      - piserv_hermes_mcp_ssh_trusted_preceding_match_configs is sequence
+      - piserv_hermes_mcp_ssh_trusted_preceding_match_configs is not string
+      - >-
+        piserv_hermes_mcp_ssh_trusted_preceding_match_configs |
+        map(attribute='path') | unique | list | length ==
+        piserv_hermes_mcp_ssh_trusted_preceding_match_configs | length
       - piserv_hermes_mcp_ssh_source_user == 'admin'
       - piserv_hermes_mcp_ssh_source_authorized_keys_path == '/home/admin/.ssh/authorized_keys'
       - hermes_agent_user is match('^[a-z_][a-z0-9_-]*$')
@@ -24,6 +43,25 @@
     fail_msg: >-
       Hermes MCP SSH access must use dedicated non-root identities and the
       fixed, system-owned paths declared by the PiServ playbook.
+
+- name: Validate trusted preceding Hermes MCP SSH Match policies
+  ansible.builtin.assert:
+    that:
+      - item.keys() | sort == ['authorized_keys_path', 'path', 'user', 'wrapper_path']
+      - >-
+        item.path is match(
+        '^/etc/ssh/sshd_config\.d/[0-9]{2}-[a-z0-9_-]+\.conf$')
+      - item.path < piserv_hermes_mcp_ssh_sshd_config_path
+      - item.user is match('^[a-z_][a-z0-9_-]*$')
+      - item.user != piserv_hermes_mcp_ssh_user
+      - item.authorized_keys_path is match('^/var/lib/[a-z0-9_-]+/\.ssh/authorized_keys$')
+      - item.wrapper_path is match('^/usr/local/libexec/hermes-agent/[a-z0-9_-]+$')
+    fail_msg: >-
+      A trusted preceding Match policy must identify one earlier managed Hermes
+      SSH endpoint with fixed user, key, and wrapper paths.
+  loop: "{{ piserv_hermes_mcp_ssh_trusted_preceding_match_configs }}"
+  loop_control:
+    label: "{{ item.path | default('invalid') }}"
 
 - name: Read Hermes runtime account and group before MCP SSH access setup
   ansible.builtin.getent:
@@ -108,15 +146,7 @@
   check_mode: false
 
 - name: Identify existing primary-GID users of the Hermes MCP SSH group
-  ansible.builtin.set_fact:
-    piserv_hermes_mcp_ssh_account_group_primary_gid_users: >-
-      {{
-        ((ansible_facts.getent_passwd | default({}, true) | dict2items |
-        rejectattr('key', 'equalto', piserv_hermes_mcp_ssh_user) |
-        selectattr('value.2', 'equalto', piserv_hermes_mcp_ssh_account_group_record[1]) |
-        map(attribute='key') | list)
-        if piserv_hermes_mcp_ssh_account_group_record | length == 3 else [])
-      }}
+  ansible.builtin.include_tasks: hermes-mcp-ssh-primary-gid-users.yml
 
 - name: Classify an absent Hermes MCP SSH account identity
   ansible.builtin.set_fact:
@@ -201,7 +231,7 @@
     that:
       - not item.stat.exists or item.stat.isdir
       - not item.stat.exists or not item.stat.islnk
-      - not item.stat.exists or not item.stat.ismount
+      - not item.stat.exists or not (item.stat.ismount | default(false))
       - >-
         not item.stat.exists or
         (item.stat.pw_name == piserv_hermes_mcp_ssh_user and
@@ -254,11 +284,8 @@
       An existing Hermes MCP SSH authorized_keys file must be a private regular
       file owned by the dedicated account; it is never normalized or replaced.
 
-- name: Define the Hermes MCP SSH lifecycle state path
+- name: Define the Hermes MCP SSH lifecycle key provenance
   ansible.builtin.set_fact:
-    piserv_hermes_mcp_ssh_state_path: >-
-      {{ (piserv_hermes_mcp_ssh_wrapper_path | dirname) ~
-      '/.codex-hermes-mcp-state.json' }}
     piserv_hermes_mcp_ssh_key_provenance: >-
       {{ 'automatic-admin-copy' if
       piserv_hermes_mcp_ssh_copy_admin_authorized_keys else
@@ -275,7 +302,7 @@
     - path: "{{ piserv_hermes_mcp_ssh_wrapper_path }}"
       mode: "0755"
       marker: '(?m)^# Managed by Ansible\. This entry point is callable only through the restricted$'
-    - path: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    - path: "{{ piserv_hermes_mcp_ssh_sshd_config_path }}"
       mode: "0644"
       marker: '(?m)^# Managed by Ansible\. Restrict this principal even when its authorized_keys$'
     - path: "{{ piserv_hermes_mcp_ssh_sudoers_path }}"
@@ -693,7 +720,7 @@
       {{ ['/etc/ssh/sshd_config'] +
       (piserv_hermes_mcp_ssh_sshd_dropins.files |
       selectattr('isreg') |
-      selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
+      selectattr('path', 'lt', piserv_hermes_mcp_ssh_sshd_config_path) |
       map(attribute='path') | list) }}
 
 - name: Reject symlinked SSH configuration drop-ins before the Hermes MCP policy
@@ -707,7 +734,7 @@
       through an unverified included configuration path.
   loop: >-
     {{ piserv_hermes_mcp_ssh_sshd_dropins.files |
-    selectattr('path', 'lt', '/etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf') |
+    selectattr('path', 'lt', piserv_hermes_mcp_ssh_sshd_config_path) |
     list }}
   loop_control:
     label: "{{ item.path }}"
@@ -793,6 +820,9 @@
   ansible.builtin.assert:
     that:
       - >-
+        item.item in
+        (piserv_hermes_mcp_ssh_trusted_preceding_match_configs |
+        map(attribute='path') | list) or
         item.content | b64decode is not search(
         '(?im)^\\s*Match\\s+(?!all\\s*(?:#.*)?$)')
       - >-
@@ -812,6 +842,9 @@
   loop_control:
     label: "{{ item.item }}"
 
+- name: Authenticate trusted preceding Hermes MCP SSH Match policies
+  ansible.builtin.include_tasks: hermes-mcp-ssh-trusted-preceding.yml
+
 - name: Provision Hermes MCP SSH lifecycle provenance before account mutation
   ansible.builtin.include_tasks: hermes-mcp-ssh-publish-lifecycle.yml
   vars:
@@ -821,7 +854,7 @@
 - name: Install SSH forced-command policy before publishing MCP keys
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-sshd.conf.j2"
-    dest: /etc/ssh/sshd_config.d/60-codex-hermes-mcp.conf
+    dest: "{{ piserv_hermes_mcp_ssh_sshd_config_path }}"
     owner: root
     group: root
     mode: "0644"
@@ -1079,7 +1112,7 @@
 
 - name: Install root-owned Hermes MCP SSH wrapper
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/hermes-mcp-ssh-wrapper.sh.j2"
+    src: "{{ playbook_dir }}/templates/{{ piserv_hermes_mcp_ssh_wrapper_template }}"
     dest: "{{ piserv_hermes_mcp_ssh_wrapper_path }}"
     owner: root
     group: root
