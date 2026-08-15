@@ -30,8 +30,27 @@
     - name: Accept the exact managed messaging policy before delegation
       ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-trusted-preceding.yml
 
+    - name: Model a standalone delegation endpoint with messaging disabled
+      ansible.builtin.set_fact:
+        piserv_hermes_mcp_ssh_trusted_preceding_match_configs: []
+        piserv_hermes_mcp_ssh_preceding_sshd_config:
+          results: []
+
+    - name: Accept standalone delegation without a disabled messaging policy
+      ansible.builtin.include_tasks: ../tasks/hermes-mcp-ssh-trusted-preceding.yml
+
     - name: Reject a preceding managed policy without Match all reset
       block:
+        - name: Restore the messaging predecessor requirement
+          ansible.builtin.set_fact:
+            piserv_hermes_mcp_ssh_trusted_preceding_match_configs:
+              - path: "{{ hermes_mcp_ssh_messaging_path }}"
+                user: codex-hermes-mcp
+                authorized_keys_path: >-
+                  /var/lib/codex-hermes-mcp/.ssh/authorized_keys
+                wrapper_path: >-
+                  /usr/local/libexec/hermes-agent/codex-mcp-ssh
+
         - name: Model a messaging policy missing its Match reset
           ansible.builtin.set_fact:
             piserv_hermes_mcp_ssh_preceding_sshd_config:

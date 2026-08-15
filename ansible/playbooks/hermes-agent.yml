@@ -234,7 +234,8 @@
         piserv_hermes_mcp_ssh_state_path: >-
           {{ piserv_hermes_delegation_mcp_ssh_state_path }}
         piserv_hermes_mcp_ssh_trusted_preceding_match_configs: >-
-          {{ piserv_hermes_delegation_mcp_ssh_trusted_preceding_match_configs }}
+          {{ piserv_hermes_delegation_mcp_ssh_trusted_preceding_match_configs
+          if (piserv_hermes_mcp_ssh_manage | bool) else [] }}
         piserv_hermes_mcp_ssh_copy_admin_authorized_keys: >-
           {{ piserv_hermes_delegation_mcp_ssh_copy_admin_authorized_keys }}
         piserv_hermes_mcp_ssh_source_user: >-

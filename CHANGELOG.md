@@ -33,6 +33,10 @@
 - Kept the existing `hermes-piserv` messaging bridge bound to
   `hermes mcp serve`; delegation uses a separately named client entry without
   adding a network listener, shell access, general sudo, or credential output.
+- Moved the delegated Home Assistant bearer token into a separate fixed-target
+  `DynamicUser` MCP broker. Delegated Hermes now has explicit `MemoryMax` and
+  `LimitAS` containment, cannot read the token file, and can invoke only the
+  broker's exact sudo rule; convergence verifies the effective Hermes catalog.
 
 ## [0.5.0] - 2026-08-11
 

@@ -84,5 +84,6 @@ piserv_hermes_delegation_mcp_native_toolsets:
   - skills
   - terminal
   - todo
-piserv_hermes_delegation_mcp_integration_toolsets:
-  - home-assistant-assist
+piserv_hermes_delegation_mcp_integration_toolsets: >-
+  {{ [piserv_hermes_agent_home_assistant_mcp_name]
+  if (piserv_hermes_agent_manage_home_assistant_mcp | bool) else [] }}

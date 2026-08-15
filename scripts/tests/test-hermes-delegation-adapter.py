@@ -92,7 +92,9 @@ class AdapterTests(unittest.TestCase):
                             sys.executable,
                             "-c",
                             (
-                                "import pathlib, sys, time; time.sleep(1); "
+                                "import pathlib, signal, sys, time; "
+                                "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                                "time.sleep(1); "
                                 "pathlib.Path(sys.argv[1]).touch()"
                             ),
                             str(marker),

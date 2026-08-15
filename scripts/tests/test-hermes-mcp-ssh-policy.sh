@@ -13,9 +13,13 @@ state_template="${repository_root}/ansible/playbooks/templates/hermes-mcp-ssh-st
 delegation_adapter_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-mcp.py.j2"
 delegation_config_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-config.yaml.j2"
 delegation_wrapper_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-mcp-ssh-wrapper.sh.j2"
+delegation_broker_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-home-assistant-mcp-broker.py.j2"
+delegation_broker_wrapper_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-home-assistant-mcp-broker-wrapper.sh.j2"
+delegation_broker_sudoers_template="${repository_root}/ansible/playbooks/templates/hermes-delegation-home-assistant-mcp-broker-sudoers.j2"
 lifecycle_publication_task_file="${repository_root}/ansible/tasks/hermes-mcp-ssh-publish-lifecycle.yml"
 playbook="${repository_root}/ansible/playbooks/hermes-agent.yml"
 runbook="${repository_root}/docs/runbooks/hermes-mcp-ssh.md"
+delegation_runbook="${repository_root}/docs/runbooks/hermes-delegation-mcp-ssh.md"
 variables_example="${repository_root}/ansible/vars/hermes-agent.yml.example"
 group_variables="${repository_root}/ansible/group_vars/piserv.yml"
 
@@ -908,6 +912,7 @@ for toolset in delegation file memory session_search skills terminal todo; do
 done
 require_text 'Configure restricted SSH access to Hermes delegation' "${playbook}"
 require_text 'piserv_hermes_mcp_ssh_trusted_preceding_match_configs:' "${playbook}"
+require_text 'if (piserv_hermes_mcp_ssh_manage | bool) else []' "${playbook}"
 require_text 'piserv_hermes_delegation_mcp_native_toolsets' \
   "${delegation_adapter_template}"
 require_text 'piserv_hermes_delegation_mcp_integration_toolsets' \
@@ -925,13 +930,45 @@ require_text 'exec /usr/bin/systemd-run --quiet --wait --pipe --collect --servic
 require_text '--property=NoNewPrivileges=true' "${delegation_wrapper_template}"
 require_text '--property=ProtectSystem=strict' "${delegation_wrapper_template}"
 require_text 'BindReadOnlyPaths=' "${delegation_wrapper_template}"
-require_text 'EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }}' \
+require_text 'MemoryMax={{ piserv_hermes_delegation_mcp_memory_max_bytes }}' \
   "${delegation_wrapper_template}"
+require_text 'LimitAS={{ piserv_hermes_delegation_mcp_limit_as_bytes }}' \
+  "${delegation_wrapper_template}"
+require_text 'InaccessiblePaths={{ hermes_agent_home_assistant_mcp_token_env_file | quote }}' \
+  "${delegation_wrapper_template}"
+require_text 'UnsetEnvironment={{ hermes_agent_home_assistant_mcp_token_env_var }}' \
+  "${delegation_wrapper_template}"
+if rg --fixed-strings --quiet \
+  'EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }}' \
+  "${delegation_wrapper_template}"; then
+  printf 'Delegated Hermes must not inherit the Home Assistant bearer token.\n' >&2
+  exit 1
+fi
 require_text 'piserv_hermes_delegation_mcp_config_path' \
   "${delegation_wrapper_template}"
 require_text "'memory': {'write_approval': false}" "${delegation_config_template}"
 require_text "'skills': {'write_approval': false}" "${delegation_config_template}"
-require_text "config_item.key != 'dashboard'" "${delegation_config_template}"
+require_text "['env', 'headers', 'url']" "${delegation_config_template}"
+require_text "['dashboard', 'mcp_servers']" "${delegation_config_template}"
+require_text "difference(piserv_hermes_delegation_mcp_native_toolsets) | sort" \
+  "${delegation_config_template}"
+require_text "'platform_toolsets'" "${delegation_config_template}"
+require_text 'forward_frame' "${delegation_broker_template}"
+require_text 'MAX_FRAME_BYTES' "${delegation_broker_template}"
+require_text '_bounded_frames' "${delegation_broker_template}"
+require_text 'DynamicUser=yes' "${delegation_broker_wrapper_template}"
+require_text 'EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }}' \
+  "${delegation_broker_wrapper_template}"
+require_text 'NOPASSWD: {{ piserv_hermes_delegation_mcp_broker_wrapper_path }} ""' \
+  "${delegation_broker_sudoers_template}"
+require_text '## Operator Acceptance Matrix' "${delegation_runbook}"
+require_text '| Exact target state |' "${delegation_runbook}"
+require_text '| Configured target forwarding |' "${delegation_runbook}"
+require_text '| Source-scoped tool call |' "${delegation_runbook}"
+require_text '| Sibling-entity negative |' "${delegation_runbook}"
+require_text '| Unreachable-dependency negative |' "${delegation_runbook}"
+require_multiline_text 'The hardened broker
+deployment requires the matrix above' "${delegation_runbook}"
 
 ansible-playbook --inventory localhost, --connection local \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-templates.yml" >/dev/null
@@ -940,6 +977,9 @@ ansible-playbook --inventory localhost, --connection local \
   >/dev/null
 ansible-playbook --inventory localhost, --connection local \
   "${repository_root}/ansible/tests/test-hermes-delegation-mcp-validation.yml" \
+  >/dev/null
+ansible-playbook --inventory localhost, --connection local --check \
+  "${repository_root}/ansible/tests/test-hermes-delegation-mcp-fresh-check-mode.yml" \
   >/dev/null
 ansible-playbook --inventory localhost, --connection local \
   "${repository_root}/ansible/tests/test-hermes-mcp-ssh-shared-topology.yml" \

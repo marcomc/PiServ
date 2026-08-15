@@ -44,12 +44,18 @@ override alone cannot enable the required stateful tools. Ansible therefore
 derives a delegation-only config from the authenticated managed config, removes
 only the required native toolsets from its global deny-list, disables the
 memory and skill write-approval staging gates, and omits dashboard credentials.
+It replaces the Home Assistant MCP configuration with a fixed sudo-mediated
+stdio broker. The delegation service receives no Home Assistant token
+environment and an `InaccessiblePaths` bind hides the private token file. The
+broker runs in a separate transient `DynamicUser` service, reads the token
+there, and forwards bounded JSON-RPC only to the configured `/api/mcp` target.
 The wrapper binds this artifact over `config.yaml` only inside the transient
-delegation service and starts Hermes with `--yolo`; the dashboard and
-conversations MCP retain their original config and confirmation policy. The
-delegation layer adds no read-only or confirmation boundary. Existing Hermes
-hardline guards, the systemd filesystem sandbox, Home Assistant exposure, and
-Home Assistant credentials remain the actual capability boundaries.
+delegation service, applies `MemoryMax` and `LimitAS` containment, and starts
+Hermes with `--yolo`; the dashboard and conversations MCP retain their original
+config and confirmation policy. The delegation layer adds no read-only or
+confirmation boundary. Existing Hermes hardline guards, the systemd filesystem
+sandbox, Home Assistant exposure, and Home Assistant credentials remain the
+actual capability boundaries.
 
 Keep transport identities separate:
 
@@ -71,10 +77,11 @@ arbitrary remote commands, general sudo, or a network listener.
 
 The adapter accepts a non-empty UTF-8 prompt up to 32 KiB, permits one active
 turn, limits Hermes to 50 tool turns and 300 seconds, bounds stdout and stderr
-to 1 MiB each, and terminates the process group on timeout or overflow. Prompt
-text is one subprocess argv value and never enters a shell. Child stderr is not
-returned, preventing accidental credential disclosure; failures become MCP
-tool errors with only bounded status information.
+to 1 MiB each, and sends both SIGTERM and SIGKILL to the process group on
+timeout or overflow, including when the leader exits first. Prompt text is one
+subprocess argv value and never enters a shell. Child stderr is not returned,
+preventing accidental credential disclosure; failures become MCP tool errors
+with only bounded status information.
 
 ## Consequences
 
@@ -90,11 +97,14 @@ tool errors with only bounded status information.
 
 ## Validation
 
-Source validation renders both SSH wrappers and the adapter, runs ShellCheck,
-compiles the rendered Python, and exercises literal prompt handling, failure
-redaction, concurrency rejection, timeout, and output bounds. Live acceptance
-must additionally prove exact SSH/sudo policy, MCP discovery, and a harmless
-Home Assistant read through a real `delegate_task` call.
+Source validation renders both SSH wrappers, the credential broker, and the
+adapter; runs ShellCheck; compiles the rendered Python; and exercises literal
+prompt handling, failure redaction, child-process cleanup, broker forwarding,
+oversized frames, fresh check mode, and output bounds. The playbook verifies
+the effective sandboxed Hermes tool catalog after every convergence. Live
+acceptance must additionally prove exact SSH/sudo policy, MCP discovery, a
+harmless Home Assistant read, and the runbook's target-specific matrix before
+an authorized write.
 
 ## References
 

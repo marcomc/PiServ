@@ -110,6 +110,15 @@ piserv_hermes_delegation_mcp_terminate_grace_seconds: 5
 piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
 piserv_hermes_delegation_mcp_max_output_bytes: 1048576
 piserv_hermes_delegation_mcp_max_turns: 50
+piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+piserv_hermes_delegation_mcp_limit_as_bytes: 1073741824
+piserv_hermes_delegation_mcp_broker_path: >-
+  /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker.py
+piserv_hermes_delegation_mcp_broker_wrapper_path: >-
+  /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker
+piserv_hermes_delegation_mcp_broker_sudoers_path: >-
+  /etc/sudoers.d/hermes-home-assistant-mcp-broker
+piserv_hermes_delegation_mcp_broker_max_frame_bytes: 131072
 piserv_hermes_delegation_mcp_native_toolsets:
   - delegation
   - file
@@ -118,5 +127,6 @@ piserv_hermes_delegation_mcp_native_toolsets:
   - skills
   - terminal
   - todo
-piserv_hermes_delegation_mcp_integration_toolsets:
-  - home-assistant-assist
+piserv_hermes_delegation_mcp_integration_toolsets: >-
+  {{ [piserv_hermes_agent_home_assistant_mcp_name]
+  if (piserv_hermes_agent_manage_home_assistant_mcp | bool) else [] }}

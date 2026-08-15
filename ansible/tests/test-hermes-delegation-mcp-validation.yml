@@ -11,6 +11,12 @@
       /usr/local/lib/hermes-agent/.hermes-delegation-config.yaml
     piserv_hermes_delegation_mcp_python_path: >-
       /usr/local/lib/hermes-agent/venv/bin/python
+    piserv_hermes_delegation_mcp_broker_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker.py
+    piserv_hermes_delegation_mcp_broker_wrapper_path: >-
+      /usr/local/libexec/hermes-agent/hermes-home-assistant-mcp-broker
+    piserv_hermes_delegation_mcp_broker_sudoers_path: >-
+      /etc/sudoers.d/hermes-home-assistant-mcp-broker
     piserv_hermes_agent_manage_home_assistant_mcp: true
     piserv_hermes_agent_home_assistant_mcp_name: home-assistant-assist
     piserv_hermes_delegation_mcp_timeout_seconds: 300
@@ -18,6 +24,9 @@
     piserv_hermes_delegation_mcp_max_prompt_bytes: 32768
     piserv_hermes_delegation_mcp_max_output_bytes: 1048576
     piserv_hermes_delegation_mcp_max_turns: 50
+    piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+    piserv_hermes_delegation_mcp_limit_as_bytes: 1073741824
+    piserv_hermes_delegation_mcp_broker_max_frame_bytes: 131072
     piserv_hermes_delegation_mcp_native_toolsets:
       - delegation
       - file
@@ -31,6 +40,12 @@
   tasks:
     - name: Accept bounded Hermes delegation MCP settings
       ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+
+    - name: Accept a native-only delegation policy when Home Assistant is disabled
+      ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+      vars:
+        piserv_hermes_agent_manage_home_assistant_mcp: false
+        piserv_hermes_delegation_mcp_integration_toolsets: []
 
     - name: Reject a string delegation timeout before integer conversion
       block:
@@ -63,6 +78,25 @@
             msg: Termination grace must remain below the overall timeout.
       rescue:
         - name: Assert grace ordering failed in the intended validation task
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Require bounded Hermes delegation MCP adapter settings'
+
+    - name: Reject a physical-memory ceiling above address space
+      block:
+        - name: Validate unordered memory containment limits
+          ansible.builtin.include_tasks: ../tasks/hermes-delegation-mcp-validate.yml
+          vars:
+            piserv_hermes_delegation_mcp_memory_max_bytes: 1073741824
+            piserv_hermes_delegation_mcp_limit_as_bytes: 536870912
+
+        - name: Fail if invalid memory containment limits were accepted
+          ansible.builtin.fail:
+            msg: MemoryMax must not exceed LimitAS.
+      rescue:
+        - name: Assert memory containment failed in the intended validation task
           ansible.builtin.assert:
             that:
               - >-

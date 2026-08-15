@@ -10,6 +10,22 @@
   changed_when: false
   check_mode: false
 
+- name: Classify a fresh check-mode Hermes delegation simulation
+  ansible.builtin.set_fact:
+    piserv_hermes_delegation_mcp_is_fresh_check_mode: >-
+      {{ ansible_check_mode and
+      not piserv_hermes_delegation_mcp_config_parent_state.stat.exists }}
+
+- name: Record delegation artifacts deferred on a fresh check-mode host
+  ansible.builtin.set_fact:
+    piserv_hermes_delegation_mcp_deferred_artifacts:
+      - "{{ piserv_hermes_delegation_mcp_config_path }}"
+      - "{{ piserv_hermes_delegation_mcp_adapter_path }}"
+      - "{{ piserv_hermes_delegation_mcp_broker_path }}"
+      - "{{ piserv_hermes_delegation_mcp_broker_wrapper_path }}"
+      - "{{ piserv_hermes_delegation_mcp_broker_sudoers_path }}"
+  when: piserv_hermes_delegation_mcp_is_fresh_check_mode
+
 - name: Authenticate the Hermes delegation configuration parent
   ansible.builtin.assert:
     that:
@@ -22,6 +38,7 @@
     fail_msg: >-
       Deploy the authenticated root-owned Hermes install directory before
       publishing the delegation-only configuration.
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Inspect the authoritative Hermes configuration for delegation
   ansible.builtin.stat:
@@ -30,6 +47,7 @@
   register: piserv_hermes_delegation_mcp_base_config_state
   changed_when: false
   check_mode: false
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Require the authoritative Hermes configuration for delegation
   ansible.builtin.assert:
@@ -45,6 +63,7 @@
     fail_msg: >-
       Deploy the authenticated root-controlled Hermes configuration before
       deriving the isolated delegation policy.
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Read the authoritative Hermes configuration for delegation
   ansible.builtin.slurp:
@@ -53,6 +72,7 @@
   changed_when: false
   check_mode: false
   no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Parse the authoritative Hermes configuration for delegation
   ansible.builtin.set_fact:
@@ -60,6 +80,7 @@
       {{ piserv_hermes_delegation_mcp_base_config_content.content |
       b64decode | from_yaml }}
   no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Require a compatible Hermes configuration for delegation
   ansible.builtin.assert:
@@ -83,6 +104,7 @@
       The authoritative Hermes configuration must expose the configured MCP
       integrations and a bounded global toolset deny-list before delegation.
   no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Inspect the isolated Hermes delegation configuration
   ansible.builtin.stat:
@@ -91,6 +113,7 @@
   register: piserv_hermes_delegation_mcp_config_state
   changed_when: false
   check_mode: false
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Authenticate the isolated Hermes delegation configuration
   ansible.builtin.assert:
@@ -106,6 +129,7 @@
     fail_msg: >-
       The isolated Hermes delegation configuration must be absent or an
       authenticated root-controlled regular file.
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Install the isolated Hermes delegation configuration
   ansible.builtin.template:
@@ -115,6 +139,8 @@
     group: "{{ hermes_agent_group }}"
     mode: "0640"
   no_log: true
+  register: piserv_hermes_delegation_mcp_config_publication
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Inspect the Hermes delegation MCP Python runtime
   ansible.builtin.stat:
@@ -123,6 +149,7 @@
   register: piserv_hermes_delegation_mcp_python_link_state
   changed_when: false
   check_mode: false
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Inspect the resolved Hermes delegation MCP Python runtime
   ansible.builtin.stat:
@@ -131,6 +158,7 @@
   register: piserv_hermes_delegation_mcp_python_state
   changed_when: false
   check_mode: false
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Require the managed Hermes Python runtime for delegation
   ansible.builtin.assert:
@@ -152,6 +180,7 @@
     fail_msg: >-
       Deploy the root-owned Hermes virtual environment before publishing the
       delegation MCP adapter.
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Inspect the Hermes delegation MCP publication parent
   ansible.builtin.stat:
@@ -160,6 +189,7 @@
   register: piserv_hermes_delegation_mcp_parent_state
   changed_when: false
   check_mode: false
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Authenticate the Hermes delegation MCP publication parent
   ansible.builtin.assert:
@@ -174,6 +204,7 @@
     fail_msg: >-
       The delegation adapter parent must be absent or a canonical root-owned
       directory with mode 0755.
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Create the Hermes delegation MCP publication parent
   ansible.builtin.file:
@@ -182,7 +213,13 @@
     owner: root
     group: root
     mode: "0755"
-  when: not piserv_hermes_delegation_mcp_parent_state.stat.exists
+  when:
+    - not piserv_hermes_delegation_mcp_is_fresh_check_mode
+    - not piserv_hermes_delegation_mcp_parent_state.stat.exists
+
+- name: Manage the isolated Home Assistant MCP credential broker
+  ansible.builtin.include_tasks: hermes-delegation-mcp-home-assistant-broker.yml
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Install the Hermes delegation MCP adapter
   ansible.builtin.template:
@@ -191,6 +228,8 @@
     owner: root
     group: root
     mode: "0755"
+  register: piserv_hermes_delegation_mcp_adapter_publication
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Validate the installed Hermes delegation MCP adapter syntax
   ansible.builtin.command:
@@ -204,7 +243,9 @@
       - "{{ piserv_hermes_delegation_mcp_adapter_path }}"
   changed_when: false
   check_mode: false
-  when: not ansible_check_mode
+  when:
+    - not piserv_hermes_delegation_mcp_is_fresh_check_mode
+    - not ansible_check_mode
 
 - name: Read the isolated Hermes delegation configuration
   ansible.builtin.slurp:
@@ -213,24 +254,167 @@
   changed_when: false
   check_mode: false
   no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
+
+- name: Parse the isolated Hermes delegation configuration
+  ansible.builtin.set_fact:
+    piserv_hermes_delegation_mcp_config: >-
+      {{
+        (lookup(
+          'ansible.builtin.template',
+          playbook_dir ~ '/templates/hermes-delegation-config.yaml.j2'
+        ) | from_yaml)
+        if (ansible_check_mode and
+        piserv_hermes_delegation_mcp_config_publication.changed)
+        else (piserv_hermes_delegation_mcp_config_content.content |
+        b64decode | from_yaml)
+      }}
+  no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
 
 - name: Require the isolated write-capable Hermes delegation policy
   ansible.builtin.assert:
     that:
       - >-
-        (piserv_hermes_delegation_mcp_config_content.content | b64decode |
-        from_yaml).dashboard is not defined
+        piserv_hermes_delegation_mcp_config.dashboard is not defined
       - >-
-        (piserv_hermes_delegation_mcp_config_content.content | b64decode |
-        from_yaml).agent.disabled_toolsets |
+        piserv_hermes_delegation_mcp_config.agent.disabled_toolsets |
         intersect(piserv_hermes_delegation_mcp_native_toolsets) | length == 0
       - >-
-        not (piserv_hermes_delegation_mcp_config_content.content | b64decode |
-        from_yaml).memory.write_approval
+        not piserv_hermes_delegation_mcp_config.memory.write_approval
       - >-
-        not (piserv_hermes_delegation_mcp_config_content.content | b64decode |
-        from_yaml).skills.write_approval
+        not piserv_hermes_delegation_mcp_config.skills.write_approval
+      - >-
+        piserv_hermes_delegation_mcp_config.platform_toolsets.cli | sort ==
+        (piserv_hermes_delegation_mcp_native_toolsets +
+        piserv_hermes_delegation_mcp_integration_toolsets) | sort
+      - >-
+        (piserv_hermes_delegation_mcp_config.mcp_servers | default({})) |
+        list | sort == piserv_hermes_delegation_mcp_integration_toolsets | sort
+      - >-
+        not (piserv_hermes_agent_manage_home_assistant_mcp | bool) or
+        (piserv_hermes_delegation_mcp_config.mcp_servers[
+        piserv_hermes_agent_home_assistant_mcp_name].command == '/usr/bin/sudo' and
+        piserv_hermes_delegation_mcp_config.mcp_servers[
+        piserv_hermes_agent_home_assistant_mcp_name].args ==
+        ['-n', piserv_hermes_delegation_mcp_broker_wrapper_path] and
+        piserv_hermes_delegation_mcp_config.mcp_servers[
+        piserv_hermes_agent_home_assistant_mcp_name].headers is not defined and
+        piserv_hermes_delegation_mcp_config.mcp_servers[
+        piserv_hermes_agent_home_assistant_mcp_name].env is not defined)
     fail_msg: >-
       The delegation-only Hermes configuration must remove the requested native
-      tool deny-list and stateful write gates without exposing dashboard policy.
+      tool deny-list and stateful write gates without exposing dashboard policy
+      or a Home Assistant bearer credential to the delegated process.
   no_log: true
+  when: not piserv_hermes_delegation_mcp_is_fresh_check_mode
+
+- name: Read the complete delegation-only Hermes CLI tool catalog
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          '/usr/bin/systemd-run',
+          '--quiet',
+          '--wait',
+          '--pipe',
+          '--collect',
+          '--service-type=exec',
+          '--property=User=' ~ hermes_agent_user,
+          '--property=Group=' ~ hermes_agent_group,
+          '--property=WorkingDirectory=' ~ hermes_agent_home ~ '/workspace',
+          '--setenv=HOME=' ~ hermes_agent_home,
+          '--setenv=HERMES_HOME=' ~ hermes_agent_home,
+          '--setenv=CODEX_HOME=' ~ hermes_agent_codex_home,
+          '--setenv=PYTHONUNBUFFERED=1',
+          '--setenv=PYTHONWARNINGS=ignore',
+          '--setenv=PATH=/usr/local/bin:/usr/bin:/bin',
+          '--property=MemoryMax=' ~ piserv_hermes_delegation_mcp_memory_max_bytes,
+          '--property=LimitAS=' ~ piserv_hermes_delegation_mcp_limit_as_bytes
+        ] +
+        (
+          [
+            '--property=InaccessiblePaths=' ~ hermes_agent_home_assistant_mcp_token_env_file,
+            '--property=UnsetEnvironment=' ~ hermes_agent_home_assistant_mcp_token_env_var
+          ]
+          if (piserv_hermes_agent_manage_home_assistant_mcp | bool) else []
+        ) +
+        [
+          '--property=NoNewPrivileges=true',
+          '--property=PrivateTmp=true',
+          '--property=ProtectSystem=strict',
+          '--property=ProtectHome=true',
+          '--property=ReadWritePaths=' ~ hermes_agent_home,
+          '--property=BindReadOnlyPaths=' ~ piserv_hermes_delegation_mcp_config_path ~ ':' ~ hermes_agent_home ~ '/config.yaml',
+          '--property=BindReadOnlyPaths=/etc/hermes-agent/policies/smart-home-AGENTS.md:' ~ hermes_agent_home ~ '/workspace/AGENTS.md',
+          '--property=ProtectKernelTunables=true',
+          '--property=ProtectKernelModules=true',
+          '--property=ProtectControlGroups=true',
+          '--property=RestrictSUIDSGID=true',
+          '--property=LockPersonality=true',
+          '--property=CapabilityBoundingSet=',
+          '--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6',
+          '--property=UMask=0077',
+          '--',
+          hermes_agent_binary_path,
+          'tools',
+          'list',
+          '--platform',
+          'cli'
+        ]
+      }}
+  become: true
+  register: piserv_hermes_delegation_mcp_tool_catalog_output
+  changed_when: false
+  check_mode: false
+  when:
+    - not piserv_hermes_delegation_mcp_is_fresh_check_mode
+    - hermes_agent_runtime_user_available | default(false)
+    - >-
+      not ansible_check_mode or
+      (piserv_hermes_delegation_mcp_base_config_state.stat.exists and
+      piserv_hermes_delegation_mcp_python_link_state.stat.exists)
+
+- name: Require the complete built-in delegation tool catalog
+  ansible.builtin.include_tasks: >-
+    {{ playbook_dir }}/../roles/hermes_agent/tasks/validate-tool-catalog-result.yml
+  vars:
+    hermes_agent_tool_catalog_output: >-
+      {{ piserv_hermes_delegation_mcp_tool_catalog_output }}
+    hermes_agent_enabled_toolsets: >-
+      {{ piserv_hermes_delegation_mcp_native_toolsets }}
+    hermes_agent_disabled_toolsets: >-
+      {{ piserv_hermes_delegation_mcp_config.agent.disabled_toolsets }}
+  when:
+    - piserv_hermes_delegation_mcp_tool_catalog_output is defined
+    - not (piserv_hermes_delegation_mcp_tool_catalog_output.skipped | default(false))
+
+- name: Parse the delegation MCP server catalog
+  ansible.builtin.set_fact:
+    piserv_hermes_delegation_mcp_mcp_catalog: >-
+      {{ piserv_hermes_delegation_mcp_tool_catalog_output.stdout |
+      regex_replace('(?ms)^.*?^\s*MCP servers:\s*$', '') }}
+    piserv_hermes_delegation_mcp_mcp_catalog_rows: >-
+      {{ piserv_hermes_delegation_mcp_tool_catalog_output.stdout |
+      regex_replace('(?ms)^.*?^\s*MCP servers:\s*$', '') |
+      regex_findall('(?m)^\s*([a-z][a-z0-9_-]*)\s{2,}.*$') }}
+  when:
+    - piserv_hermes_delegation_mcp_tool_catalog_output is defined
+    - not (piserv_hermes_delegation_mcp_tool_catalog_output.skipped | default(false))
+
+- name: Require the effective delegation MCP server catalog
+  ansible.builtin.assert:
+    that:
+      - >-
+        piserv_hermes_delegation_mcp_mcp_catalog_rows | sort ==
+        piserv_hermes_delegation_mcp_integration_toolsets | sort
+      - >-
+        piserv_hermes_delegation_mcp_mcp_catalog.split('\n') |
+        map('trim') | reject('equalto', '') | list | length ==
+        piserv_hermes_delegation_mcp_mcp_catalog_rows | length
+    fail_msg: >-
+      The effective delegation MCP catalog must contain exactly the approved
+      integration rows after the derived policy is applied.
+  when:
+    - piserv_hermes_delegation_mcp_tool_catalog_output is defined
+    - not (piserv_hermes_delegation_mcp_tool_catalog_output.skipped | default(false))

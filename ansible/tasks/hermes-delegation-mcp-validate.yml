@@ -11,6 +11,15 @@
       - >-
         piserv_hermes_delegation_mcp_config_path is match(
         '^/usr/local/lib/hermes-agent/\.hermes-delegation-config\.yaml$')
+      - >-
+        piserv_hermes_delegation_mcp_broker_path is match(
+        '^/usr/local/libexec/hermes-agent/[a-z0-9_-]+\.py$')
+      - >-
+        piserv_hermes_delegation_mcp_broker_wrapper_path is match(
+        '^/usr/local/libexec/hermes-agent/[a-z0-9_-]+$')
+      - >-
+        piserv_hermes_delegation_mcp_broker_sudoers_path is match(
+        '^/etc/sudoers\.d/[a-z0-9_-]+$')
       - piserv_hermes_delegation_mcp_timeout_seconds is integer
       - piserv_hermes_delegation_mcp_timeout_seconds >= 30
       - piserv_hermes_delegation_mcp_timeout_seconds <= 1800
@@ -29,6 +38,21 @@
       - piserv_hermes_delegation_mcp_max_turns is integer
       - piserv_hermes_delegation_mcp_max_turns >= 1
       - piserv_hermes_delegation_mcp_max_turns <= 500
+      - piserv_hermes_delegation_mcp_memory_max_bytes is integer
+      - piserv_hermes_delegation_mcp_memory_max_bytes >= 268435456
+      - piserv_hermes_delegation_mcp_memory_max_bytes <= 3221225472
+      - piserv_hermes_delegation_mcp_limit_as_bytes is integer
+      - piserv_hermes_delegation_mcp_limit_as_bytes >= 268435456
+      - piserv_hermes_delegation_mcp_limit_as_bytes <= 3221225472
+      - >-
+        piserv_hermes_delegation_mcp_memory_max_bytes <=
+        piserv_hermes_delegation_mcp_limit_as_bytes
+      - piserv_hermes_delegation_mcp_broker_max_frame_bytes is integer
+      - piserv_hermes_delegation_mcp_broker_max_frame_bytes >= 65536
+      - piserv_hermes_delegation_mcp_broker_max_frame_bytes <= 8388608
+      - >-
+        piserv_hermes_delegation_mcp_broker_max_frame_bytes >=
+        piserv_hermes_delegation_mcp_max_prompt_bytes
       - piserv_hermes_delegation_mcp_native_toolsets is sequence
       - piserv_hermes_delegation_mcp_native_toolsets is not string
       - >-
@@ -44,10 +68,11 @@
         piserv_hermes_delegation_mcp_integration_toolsets |
         reject('match', '^[a-z0-9][a-z0-9_-]*$') | list | length == 0
       - >-
-        not piserv_hermes_agent_manage_home_assistant_mcp or
-        piserv_hermes_agent_home_assistant_mcp_name in
-        piserv_hermes_delegation_mcp_integration_toolsets
+        piserv_hermes_delegation_mcp_integration_toolsets ==
+        ([piserv_hermes_agent_home_assistant_mcp_name]
+        if piserv_hermes_agent_manage_home_assistant_mcp else [])
       - hermes_agent_binary_path is match('^/')
     fail_msg: >-
       Hermes delegation MCP settings must use fixed managed paths and bounded
-      prompt, output, turn, grace, and runtime limits.
+      prompt, output, turn, frame, memory, address-space, grace, and runtime
+      limits, with the Home Assistant integration enabled only when managed.

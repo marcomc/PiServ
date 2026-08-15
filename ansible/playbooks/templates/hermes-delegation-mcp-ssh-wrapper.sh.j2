@@ -15,8 +15,11 @@ exec /usr/bin/systemd-run --quiet --wait --pipe --collect --service-type=exec \
   --setenv=PYTHONUNBUFFERED=1 \
   --setenv=PYTHONWARNINGS=ignore \
   --setenv=PATH=/usr/local/bin:/usr/bin:/bin \
+  --property=MemoryMax={{ piserv_hermes_delegation_mcp_memory_max_bytes }} \
+  --property=LimitAS={{ piserv_hermes_delegation_mcp_limit_as_bytes }} \
 {% if piserv_hermes_agent_manage_home_assistant_mcp | bool %}
-  --property=EnvironmentFile={{ hermes_agent_home_assistant_mcp_token_env_file | quote }} \
+  --property=InaccessiblePaths={{ hermes_agent_home_assistant_mcp_token_env_file | quote }} \
+  --property=UnsetEnvironment={{ hermes_agent_home_assistant_mcp_token_env_var }} \
 {% endif %}
   --property=NoNewPrivileges=true \
   --property=PrivateTmp=true \

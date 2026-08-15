@@ -26,30 +26,32 @@ _delegation_lock = threading.Lock()
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     """Stop a Hermes turn and every child it started."""
-    if process.poll() is not None:
-        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
-        return
+        pass
     except PermissionError:
         # On macOS a just-exited child can make the process-group operation
         # fail even though the parent still owns the child handle.
         try:
             process.terminate()
         except ProcessLookupError:
-            return
+            pass
     try:
         process.wait(timeout=TERMINATE_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (PermissionError, ProcessLookupError):
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except (PermissionError, ProcessLookupError):
-            try:
-                process.kill()
-            except ProcessLookupError:
-                return
-        process.wait()
+            process.kill()
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=TERMINATE_GRACE_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("Hermes delegation process did not terminate") from error
 
 
 def _read_bounded(file_object, limit: int) -> bytes:

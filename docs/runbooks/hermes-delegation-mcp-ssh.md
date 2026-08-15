@@ -16,12 +16,18 @@ codex-hermes-delegate on PiServ
   | forced command, no PTY or forwarding
   v
 root-owned wrapper and one-command sudoers rule
-  | transient systemd sandbox as hermes-agent
+  | transient systemd sandbox as hermes-agent (no HASS token)
   v
 hermes-agent: delegation MCP adapter
   | argv, no shell
   v
 hermes chat --query PROMPT --quiet --source tool
+  | exact sudo rule for home-assistant-assist only
+  v
+root-owned Home Assistant MCP broker wrapper
+  | transient DynamicUser sandbox reads the private token file
+  v
+configured Home Assistant `/api/mcp` target
 ```
 
 Hermes uses `/var/lib/hermes-agent` for its configured provider, persistent
@@ -40,20 +46,28 @@ configured `home-assistant-assist` MCP toolset.
 
 The wrapper binds a delegation-only config over Hermes's runtime `config.yaml`.
 Ansible derives it from the authenticated managed config, preserves provider,
-state, and MCP settings, removes the seven required native toolsets from the
-global deny-list, disables memory and skill write staging, and omits dashboard
-credentials. Hermes runs with `--yolo` because this non-interactive endpoint
-has no approval callback. This policy exists only inside the transient
-delegation service; the dashboard and conversations MCP remain unchanged.
+state, and non-credential MCP settings, removes the seven required native
+toolsets from the global deny-list, disables memory and skill write staging,
+and omits dashboard credentials. It replaces the configured Home Assistant MCP
+server with an exact no-argument `sudo` invocation of a root-owned broker. The
+delegation service receives neither the Home Assistant token environment nor
+access to its private file; its address space is capped with both `MemoryMax`
+and `LimitAS`. The broker runs with `DynamicUser=yes`, reads the token only in
+its separate transient service, and forwards only bounded JSON-RPC frames to
+the configured `/api/mcp` target. Hermes runs with `--yolo` because this
+non-interactive endpoint has no approval callback. This policy exists only
+inside the transient delegation service; the dashboard and conversations MCP
+remain unchanged.
 
-The server has no listening socket. The SSH account is password-locked and
+The server and broker have no listening socket. The SSH account is password-locked and
 cannot obtain a shell, PTY, forwarding, arbitrary remote command, or general
 sudo access. Its wrapper reuses the hardened conversations-MCP transient
 systemd sandbox, including `ProtectSystem=strict`, `NoNewPrivileges`, private
-temporary storage, root-owned read-only config/policy binds, and the managed
-Home Assistant environment file. `ProtectSystem=strict` limits terminal and
-file writes to the explicitly writable Hermes home even though recoverable
-Hermes approval prompts are disabled for delegated turns.
+temporary storage, root-owned read-only config/policy binds, and an
+`InaccessiblePaths` bind over the managed Home Assistant token file.
+`ProtectSystem=strict` limits terminal and file writes to the explicitly
+writable Hermes home even though recoverable Hermes approval prompts are
+disabled for delegated turns.
 
 ## Deploy
 
@@ -271,6 +285,31 @@ Then start a new Codex task and invoke
 This proves Codex client discovery and the complete Hermes-to-Home-Assistant
 path, not only raw SSH transport.
 
+The playbook also runs an isolated `hermes tools list --platform cli` command
+inside the delegation sandbox. It must report exactly the approved native
+toolsets and the configured `home-assistant-assist` integration. Treat a
+successful playbook without that catalog assertion as a failed delegation
+deployment.
+
+## Operator Acceptance Matrix
+
+Run this matrix after a delegation policy, Hermes version, or Home Assistant
+endpoint change. Choose an approved, reversible entity in ignored local
+variables; do not use an entity with uncertain restoration. The state-changing
+row requires explicit operator authorization before it runs.
+
+| Check | Procedure | Required evidence |
+| --- | --- | --- |
+| Exact target state | Read the approved target and sibling directly through Home Assistant, delegate the authorized reversible target transition, then read both again and restore the target. | Target reaches only the requested state; the sibling is unchanged; restoration succeeds. |
+| Configured target forwarding | Run the playbook catalog assertion and the raw MCP harness against `piserv-hermes-delegate`. | The catalog lists only `home-assistant-assist`; the delegation response identifies the approved target from the configured Home Assistant endpoint. |
+| Source-scoped tool call | Prompt `delegate_task` to use only `home-assistant-assist` for the approved read or authorized transition. Confirm the broker's fixed-target request in the Home Assistant MCP audit/log and retain the redacted method and entity identifier. | One broker-mediated request reaches the configured `/api/mcp` target; no terminal or unrelated MCP source is accepted as proof. |
+| Sibling-entity negative | Include a distinct sibling in the before/after direct reads while requesting an action only for the approved target. | The sibling state is byte-for-byte unchanged. |
+| Unreachable-dependency negative | In the isolated broker regression fixture, use an unreachable configured endpoint and submit one bounded frame. | The broker returns a bounded MCP error, sends no fallback request, and the delegation configuration remains unchanged. |
+
+Do not substitute successful tool discovery or a generic agent response for any
+matrix row. Record the command, observed result, and any follow-up in this
+runbook after each live acceptance.
+
 ## Recorded Acceptance
 
 On 2026-08-14, `ansible-playbook ansible/playbooks/hermes-agent.yml` completed
@@ -278,11 +317,22 @@ with `failed=0`. The raw MCP harness completed a read-only Home Assistant
 request through `delegate_task`, reporting `Lampadina Salotto: on, brightness
 38% (Salotto)`; no Home Assistant write was issued.
 
-On 2026-08-15, the updated Codex client invoked
+On 2026-08-15 Europe/Rome (2026-08-14 UTC), the updated Codex client invoked
 `hermes-delegate-piserv.delegate_task` through the registered SSH stdio server.
 Hermes reported one exposed Home Assistant media-player entity as `off`; no
 changes were made. This completed client discovery and the harmless end-to-end
-read acceptance.
+read acceptance for the original delegation deployment. The hardened broker
+deployment requires the matrix above before it can claim an equivalent live
+acceptance.
+
+On 2026-08-15, the targeted hardened deployment completed with `failed=0`.
+The sandboxed catalog listed exactly `delegation`, `file`, `memory`,
+`session_search`, `skills`, `terminal`, and `todo`, plus only
+`home-assistant-assist`. A `tools/list` request sent through the exact
+`hermes-agent` broker sudo rule reached the configured Home Assistant MCP target
+and returned its tool catalog; no entity state or other Home Assistant data was
+changed. The state-changing matrix row remains pending explicit operator
+authorization.
 
 ## Revoke and Roll Back
 
