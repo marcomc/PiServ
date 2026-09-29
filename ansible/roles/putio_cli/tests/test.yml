@@ -92,3 +92,47 @@
         path: "{{ putio_cli_test_root.path }}"
         state: absent
       when: ansible_facts.system == 'Linux'
+
+    - name: Create an unsafe existing Node.js install-root fixture
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: putio-cli-node-root-test-
+      register: putio_cli_node_root_test_root
+      when: ansible_facts.system == 'Linux'
+
+    - name: Set up a world-writable Node.js install root
+      ansible.builtin.file:
+        path: "{{ putio_cli_node_root_test_root.path }}/nodejs"
+        state: directory
+        mode: "1777"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Verify unsafe Node.js install roots are rejected before installation
+      when: ansible_facts.system == 'Linux'
+      block:
+        - name: Attempt role convergence with an unsafe Node.js install root
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            putio_cli_state: present
+            putio_cli_runtime_user: root
+            putio_cli_runtime_group: root
+            putio_cli_source_dir: "{{ putio_cli_node_root_test_root.path }}/source"
+            putio_cli_node_install_root: "{{ putio_cli_node_root_test_root.path }}/nodejs"
+            putio_cli_command_path: "{{ putio_cli_node_root_test_root.path }}/bin/putio"
+
+        - name: Fail if the unsafe Node.js install root is accepted
+          ansible.builtin.fail:
+            msg: The role accepted a world-writable Node.js install root.
+
+      rescue:
+        - name: Assert the unsafe-root failure came from the intended validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Validate the Node.js install root'
+
+    - name: Remove the unsafe Node.js install-root fixture
+      ansible.builtin.file:
+        path: "{{ putio_cli_node_root_test_root.path }}"
+        state: absent
+      when: ansible_facts.system == 'Linux'

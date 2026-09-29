@@ -72,6 +72,10 @@ ansible-galaxy role install marcomc.putio_cli,0.1.0
 The role verifies the Node.js archive against the checksum manifest published
 by nodejs.org, builds the official source release, and installs the resulting
 standalone executable. It never creates or copies an authentication token.
+Missing source and command parent directories are created as needed; existing
+source-parent metadata is preserved. An existing `putio_cli_node_install_root`
+must be a non-symlink, root-owned directory with mode `0755`; unsafe or
+unexpected existing roots are rejected without changing their metadata.
 
 `state: absent` removes the installed command, source tree, and the Node.js
 runtime directory for the configured Node.js version and architecture. Other

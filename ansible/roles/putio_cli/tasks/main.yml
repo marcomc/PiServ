@@ -50,6 +50,28 @@
 - name: Install putio-cli when present
   when: putio_cli_state == 'present'
   block:
+    - name: Inspect the Node.js install root
+      ansible.builtin.stat:
+        path: "{{ putio_cli_node_install_root }}"
+      register: putio_cli_node_install_root_stat
+      check_mode: false
+
+    - name: Validate the Node.js install root
+      ansible.builtin.assert:
+        that:
+          - >-
+            not putio_cli_node_install_root_stat.stat.exists
+            or (
+              putio_cli_node_install_root_stat.stat.isdir
+              and not (putio_cli_node_install_root_stat.stat.islnk | default(false))
+              and putio_cli_node_install_root_stat.stat.pw_name == 'root'
+              and putio_cli_node_install_root_stat.stat.mode == '0755'
+            )
+        fail_msg: >-
+          An existing putio_cli_node_install_root must be a root-owned,
+          non-symlink directory with mode 0755; the role will not change its
+          ownership or permissions.
+
     - name: Install putio-cli build prerequisites
       ansible.builtin.apt:
         name: "{{ putio_cli_apt_packages }}"
@@ -83,12 +105,29 @@
       become: true
       when: not putio_cli_command_parent.stat.exists
 
-    - name: Ensure source parent exists
+    - name: Inspect the putio-cli source parent directory
+      ansible.builtin.stat:
+        path: "{{ putio_cli_source_dir | dirname }}"
+      register: putio_cli_source_parent
+      check_mode: false
+
+    - name: Validate the putio-cli source parent directory
+      ansible.builtin.assert:
+        that:
+          - >-
+            not putio_cli_source_parent.stat.exists
+            or putio_cli_source_parent.stat.isdir
+        fail_msg: >-
+          The parent of putio_cli_source_dir must be a directory when it
+          already exists.
+
+    - name: Create a missing putio-cli source parent directory
       ansible.builtin.file:
         path: "{{ putio_cli_source_dir | dirname }}"
         state: directory
         mode: "0755"
       become: true
+      when: not putio_cli_source_parent.stat.exists
 
     - name: Ensure putio-cli source directory exists
       ansible.builtin.file:
@@ -152,6 +191,7 @@
         group: root
         mode: "0755"
       become: true
+      when: not putio_cli_node_install_root_stat.stat.exists
 
     - name: Download official Node.js archive
       ansible.builtin.get_url:
