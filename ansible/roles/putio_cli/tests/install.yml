@@ -1,0 +1,132 @@
+---
+- name: Build putio-cli in an isolated target directory
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Require a supported Linux build target
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Linux'
+          - ansible_facts.architecture in ['aarch64', 'x86_64']
+        fail_msg: The install test requires Linux aarch64 or x86_64.
+
+    - name: Create an isolated install-test root
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: putio-cli-install-test-
+      register: putio_cli_test_root
+
+    - name: Build and validate putio-cli in the isolated root
+      block:
+        - name: Create a Node.js install root with a non-default safe group
+          ansible.builtin.file:
+            path: "{{ putio_cli_test_root.path }}/nodejs"
+            state: directory
+            owner: root
+            group: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+            mode: "0755"
+          become: true
+
+        - name: Include putio_cli for an isolated source build
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            putio_cli_state: present
+            putio_cli_runtime_user: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_group: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_user_home: "{{ putio_cli_test_root.path }}/home"
+            putio_cli_source_dir: "{{ putio_cli_test_root.path }}/build/source"
+            putio_cli_node_install_root: "{{ putio_cli_test_root.path }}/nodejs"
+            putio_cli_command_path: "{{ putio_cli_test_root.path }}/bin/putio"
+
+        - name: Inspect source parent created by the role
+          ansible.builtin.stat:
+            path: "{{ putio_cli_test_root.path }}/build"
+          register: putio_cli_test_source_parent
+
+        - name: Assert role creates a missing source parent
+          ansible.builtin.assert:
+            that:
+              - putio_cli_test_source_parent.stat.isdir
+              - putio_cli_test_source_parent.stat.mode == '0755'
+
+        - name: Change the source parent to a private existing-directory fixture
+          ansible.builtin.file:
+            path: "{{ putio_cli_test_root.path }}/build"
+            state: directory
+            owner: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+            group: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+            mode: "0700"
+          become: true
+
+        - name: Converge putio_cli again with an existing source parent
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            putio_cli_state: present
+            putio_cli_runtime_user: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_group: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_user_home: "{{ putio_cli_test_root.path }}/home"
+            putio_cli_source_dir: "{{ putio_cli_test_root.path }}/build/source"
+            putio_cli_node_install_root: "{{ putio_cli_test_root.path }}/nodejs"
+            putio_cli_command_path: "{{ putio_cli_test_root.path }}/bin/putio"
+
+        - name: Inspect existing source parent after role convergence
+          ansible.builtin.stat:
+            path: "{{ putio_cli_test_root.path }}/build"
+          register: putio_cli_test_source_parent
+
+        - name: Assert role preserves existing source-parent permissions
+          ansible.builtin.assert:
+            that:
+              - putio_cli_test_source_parent.stat.isdir
+              - putio_cli_test_source_parent.stat.mode == '0700'
+
+        - name: Inspect Node.js install root after role convergence
+          ansible.builtin.stat:
+            path: "{{ putio_cli_test_root.path }}/nodejs"
+          register: putio_cli_test_node_root
+
+        - name: Assert role preserves existing Node.js root metadata
+          ansible.builtin.assert:
+            that:
+              - putio_cli_test_node_root.stat.pw_name == 'root'
+              - putio_cli_test_node_root.stat.gr_name == (ansible_user | default(ansible_facts['user_id'] | default('root')))
+              - putio_cli_test_node_root.stat.mode == '0755'
+
+        - name: Inspect the command parent created by the role
+          ansible.builtin.stat:
+            path: "{{ putio_cli_test_root.path }}/bin"
+          register: putio_cli_test_command_parent
+
+        - name: Assert role creates a missing command parent
+          ansible.builtin.assert:
+            that:
+              - putio_cli_test_command_parent.stat.isdir
+              - putio_cli_test_command_parent.stat.mode == '0755'
+
+        - name: Read the isolated putio-cli version
+          ansible.builtin.command:
+            argv:
+              - "{{ putio_cli_test_root.path }}/bin/putio"
+              - version
+          register: putio_cli_test_version
+          changed_when: false
+          check_mode: false
+
+        - name: Assert the isolated build reports the configured release
+          ansible.builtin.assert:
+            that:
+              - "'1.6.2' in putio_cli_test_version.stdout"
+
+      always:
+        - name: Remove the isolated install-test root
+          ansible.builtin.file:
+            path: "{{ putio_cli_test_root.path }}"
+            state: absent
+          become: true
+          when: putio_cli_test_root.path is defined

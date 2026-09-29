@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### put.io CLI
+
+- Added the project-local `putio_cli` Galaxy-ready role and PiServ integration
+  for building the official put.io CLI on Linux ARM64.
+- Avoided rewriting existing source-parent permissions and validates existing
+  Node.js install-root metadata instead of changing it.
+
+### Jackett Search
+
+- Configured the PiServ Jackett Search playbook to update from upstream `main`
+  on each run instead of pinning a release version.
+
 ### Hermes Desktop
 
 - Advanced the locked Hermes revision to Desktop backend contract 6 and

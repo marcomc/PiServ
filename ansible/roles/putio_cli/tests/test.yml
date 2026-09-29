@@ -1,0 +1,138 @@
+---
+- name: Validate putio_cli role interface without installing software
+  hosts: test
+  gather_facts: true
+  tasks:
+    - name: Create an isolated role cleanup fixture
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: putio-cli-role-test-
+      register: putio_cli_test_root
+      when: ansible_facts.system == 'Linux'
+
+    - name: Select the test architecture label
+      ansible.builtin.set_fact:
+        putio_cli_test_node_arch: >-
+          {{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'x64' }}
+      when: ansible_facts.system == 'Linux'
+
+    - name: Create the role-owned Node.js runtime fixture
+      ansible.builtin.file:
+        path: >-
+          {{ putio_cli_test_root.path }}/nodejs/node-v24.18.0-linux-{{ putio_cli_test_node_arch }}
+        state: directory
+        mode: "0755"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Create a sibling Node.js runtime fixture
+      ansible.builtin.file:
+        path: >-
+          {{ putio_cli_test_root.path }}/nodejs/node-v22.1.0-linux-{{ putio_cli_test_node_arch }}
+        state: directory
+        mode: "0755"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Create the source and command fixtures owned by the role
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ putio_cli_test_root.path }}/source"
+        - "{{ putio_cli_test_root.path }}/bin"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Create the installed command fixture
+      ansible.builtin.file:
+        path: "{{ putio_cli_test_root.path }}/bin/putio"
+        state: touch
+        mode: "0755"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Load putio_cli role defaults and argument validation
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname }}"
+      when: ansible_facts.system == 'Linux'
+      vars:
+        putio_cli_state: absent
+        putio_cli_runtime_user: root
+        putio_cli_source_dir: "{{ putio_cli_test_root.path }}/source"
+        putio_cli_node_install_root: "{{ putio_cli_test_root.path }}/nodejs"
+        putio_cli_command_path: "{{ putio_cli_test_root.path }}/bin/putio"
+
+    - name: Check that the sibling Node.js runtime remains
+      ansible.builtin.stat:
+        path: >-
+          {{ putio_cli_test_root.path }}/nodejs/node-v22.1.0-linux-{{ putio_cli_test_node_arch }}
+      register: putio_cli_sibling_runtime
+      when: ansible_facts.system == 'Linux'
+
+    - name: Assert that cleanup preserves the sibling Node.js runtime
+      ansible.builtin.assert:
+        that:
+          - putio_cli_sibling_runtime.stat.isdir
+      when: ansible_facts.system == 'Linux'
+
+    - name: Check that cleanup removes the configured Node.js runtime
+      ansible.builtin.stat:
+        path: >-
+          {{ putio_cli_test_root.path }}/nodejs/node-v24.18.0-linux-{{ putio_cli_test_node_arch }}
+      register: putio_cli_managed_runtime
+      when: ansible_facts.system == 'Linux'
+
+    - name: Assert that cleanup removes only the configured Node.js runtime
+      ansible.builtin.assert:
+        that:
+          - not putio_cli_managed_runtime.stat.exists
+          - putio_cli_sibling_runtime.stat.isdir
+      when: ansible_facts.system == 'Linux'
+
+    - name: Remove the isolated role cleanup fixture
+      ansible.builtin.file:
+        path: "{{ putio_cli_test_root.path }}"
+        state: absent
+      when: ansible_facts.system == 'Linux'
+
+    - name: Create an unsafe existing Node.js install-root fixture
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: putio-cli-node-root-test-
+      register: putio_cli_node_root_test_root
+      when: ansible_facts.system == 'Linux'
+
+    - name: Set up a world-writable Node.js install root
+      ansible.builtin.file:
+        path: "{{ putio_cli_node_root_test_root.path }}/nodejs"
+        state: directory
+        mode: "1777"
+      when: ansible_facts.system == 'Linux'
+
+    - name: Verify unsafe Node.js install roots are rejected before installation
+      when: ansible_facts.system == 'Linux'
+      block:
+        - name: Attempt role convergence with an unsafe Node.js install root
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            putio_cli_state: present
+            putio_cli_runtime_user: root
+            putio_cli_runtime_group: root
+            putio_cli_source_dir: "{{ putio_cli_node_root_test_root.path }}/source"
+            putio_cli_node_install_root: "{{ putio_cli_node_root_test_root.path }}/nodejs"
+            putio_cli_command_path: "{{ putio_cli_node_root_test_root.path }}/bin/putio"
+
+        - name: Fail if the unsafe Node.js install root is accepted
+          ansible.builtin.fail:
+            msg: The role accepted a world-writable Node.js install root.
+
+      rescue:
+        - name: Assert the unsafe-root failure came from the intended validation
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Validate the Node.js install root'
+
+    - name: Remove the unsafe Node.js install-root fixture
+      ansible.builtin.file:
+        path: "{{ putio_cli_node_root_test_root.path }}"
+        state: absent
+      when: ansible_facts.system == 'Linux'

@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  namespace: marcomc
+  role_name: putio_cli
+  author: Marco Massari Calderone <marco@marcomc.com>
+  description: Build and install the official put.io CLI from source.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+  galaxy_tags:
+    - putio
+    - put
+    - cli
+    - nodejs
+    - arm64
+dependencies: []
