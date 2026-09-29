@@ -1,0 +1,317 @@
+---
+- name: Validate putio-cli role inputs
+  ansible.builtin.assert:
+    that:
+      - putio_cli_state in ['present', 'absent']
+      - ansible_facts.system == 'Linux'
+      - ansible_facts.architecture in putio_cli_node_architectures
+      - putio_cli_node_version is match('^[0-9]+\\.[0-9]+\\.[0-9]+$')
+      - putio_cli_pnpm_version is match('^[0-9]+\\.[0-9]+\\.[0-9]+$')
+      - >-
+        putio_cli_expected_version | length > 0
+        or putio_cli_repo_version is match('^v?[0-9]+\\.[0-9]+\\.[0-9]+$')
+    fail_msg: >-
+      putio-cli requires Linux aarch64 or x86_64, valid Node/pnpm versions,
+      and either a SemVer repository ref or an explicit expected version.
+
+- name: Derive the expected putio-cli version
+  ansible.builtin.set_fact:
+    putio_cli_effective_expected_version: >-
+      {{ putio_cli_expected_version
+      if (putio_cli_expected_version | length > 0)
+      else (putio_cli_repo_version | regex_replace('^v', '')) }}
+
+- name: Derive the versioned Node.js runtime paths
+  ansible.builtin.set_fact:
+    putio_cli_node_arch: "{{ putio_cli_node_architectures[ansible_facts.architecture] }}"
+    putio_cli_node_archive_name: >-
+      node-v{{ putio_cli_node_version }}-linux-{{ putio_cli_node_architectures[ansible_facts.architecture] }}.tar.xz
+    putio_cli_node_prefix: >-
+      {{ putio_cli_node_install_root }}/node-v{{ putio_cli_node_version }}-linux-{{ putio_cli_node_architectures[ansible_facts.architecture] }}
+
+- name: Remove putio-cli when absent
+  when: putio_cli_state == 'absent'
+  block:
+    - name: Remove installed putio command
+      ansible.builtin.file:
+        path: "{{ putio_cli_command_path }}"
+        state: absent
+      become: true
+
+    - name: Remove putio-cli source and its versioned Node build runtime
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ putio_cli_source_dir }}"
+        - "{{ putio_cli_node_prefix }}"
+      become: true
+
+- name: Install putio-cli when present
+  when: putio_cli_state == 'present'
+  block:
+    - name: Install putio-cli build prerequisites
+      ansible.builtin.apt:
+        name: "{{ putio_cli_apt_packages }}"
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Inspect the putio command parent directory
+      ansible.builtin.stat:
+        path: "{{ putio_cli_command_path | dirname }}"
+      register: putio_cli_command_parent
+      check_mode: false
+
+    - name: Validate the putio command parent directory
+      ansible.builtin.assert:
+        that:
+          - >-
+            not putio_cli_command_parent.stat.exists
+            or putio_cli_command_parent.stat.isdir
+        fail_msg: >-
+          The parent of putio_cli_command_path must be a directory when it
+          already exists.
+
+    - name: Create a missing putio command parent directory
+      ansible.builtin.file:
+        path: "{{ putio_cli_command_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      when: not putio_cli_command_parent.stat.exists
+
+    - name: Ensure source parent exists
+      ansible.builtin.file:
+        path: "{{ putio_cli_source_dir | dirname }}"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Ensure putio-cli source directory exists
+      ansible.builtin.file:
+        path: "{{ putio_cli_source_dir }}"
+        state: directory
+        owner: "{{ putio_cli_runtime_user }}"
+        group: "{{ putio_cli_runtime_group }}"
+        mode: "0755"
+      become: true
+
+    - name: Check out official putio-cli source
+      ansible.builtin.git:
+        repo: "{{ putio_cli_repo_url }}"
+        version: "{{ putio_cli_repo_version }}"
+        dest: "{{ putio_cli_source_dir }}"
+        update: true
+        force: false
+      become: true
+      become_user: "{{ putio_cli_runtime_user }}"
+      become_flags: -H
+      register: putio_cli_git_checkout
+
+    - name: Set source ownership
+      ansible.builtin.file:
+        path: "{{ putio_cli_source_dir }}"
+        state: directory
+        owner: "{{ putio_cli_runtime_user }}"
+        group: "{{ putio_cli_runtime_group }}"
+        recurse: true
+      become: true
+
+    - name: Download official Node.js checksum manifest
+      ansible.builtin.get_url:
+        url: "https://nodejs.org/dist/v{{ putio_cli_node_version }}/SHASUMS256.txt"
+        dest: "{{ putio_cli_source_dir }}/.node-SHASUMS256.txt"
+        owner: "{{ putio_cli_runtime_user }}"
+        group: "{{ putio_cli_runtime_group }}"
+        mode: "0644"
+      become: true
+
+    - name: Read expected Node.js archive checksum
+      ansible.builtin.shell: >-
+        awk '$2 == "{{ putio_cli_node_archive_name }}" {print $1}'
+        "{{ putio_cli_source_dir }}/.node-SHASUMS256.txt"
+      args:
+        executable: /bin/sh
+      register: putio_cli_node_checksum
+      changed_when: false
+      check_mode: false
+
+    - name: Assert official Node.js checksum is available
+      ansible.builtin.assert:
+        that:
+          - putio_cli_node_checksum.stdout | trim is match('^[0-9a-fA-F]{64}$')
+
+    - name: Create Node.js install directory
+      ansible.builtin.file:
+        path: "{{ putio_cli_node_install_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Download official Node.js archive
+      ansible.builtin.get_url:
+        url: "https://nodejs.org/dist/v{{ putio_cli_node_version }}/{{ putio_cli_node_archive_name }}"
+        dest: "{{ putio_cli_node_install_root }}/{{ putio_cli_node_archive_name }}"
+        checksum: "sha256:{{ putio_cli_node_checksum.stdout | trim }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
+    - name: Extract official Node.js runtime
+      ansible.builtin.unarchive:
+        src: "{{ putio_cli_node_install_root }}/{{ putio_cli_node_archive_name }}"
+        dest: "{{ putio_cli_node_install_root }}"
+        remote_src: true
+        owner: root
+        group: root
+        creates: "{{ putio_cli_node_prefix }}/bin/node"
+      become: true
+
+    - name: Check for the pinned pnpm build tool
+      ansible.builtin.stat:
+        path: "{{ putio_cli_node_prefix }}/bin/pnpm"
+      register: putio_cli_pnpm_stat
+
+    - name: Install the pinned pnpm build tool
+      ansible.builtin.command:
+        argv:
+          - "{{ putio_cli_node_prefix }}/bin/npm"
+          - install
+          - --global
+          - --prefix
+          - "{{ putio_cli_node_prefix }}"
+          - "pnpm@{{ putio_cli_pnpm_version }}"
+      become: true
+      register: putio_cli_pnpm_install
+      changed_when: putio_cli_pnpm_install.rc == 0
+      when: putio_cli_git_checkout.changed or not putio_cli_pnpm_stat.stat.exists
+
+    - name: Check for the installed putio command
+      ansible.builtin.stat:
+        path: "{{ putio_cli_command_path }}"
+      register: putio_cli_command_stat
+
+    - name: Check for installed putio-cli dependencies
+      ansible.builtin.stat:
+        path: "{{ putio_cli_source_dir }}/node_modules"
+      register: putio_cli_node_modules_stat
+
+    - name: Ensure user-scoped Node build directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ putio_cli_runtime_user }}"
+        group: "{{ putio_cli_runtime_group }}"
+        mode: "0700"
+      loop:
+        - "{{ putio_cli_runtime_user_home }}/.config/pnpm"
+        - "{{ putio_cli_runtime_user_home }}/.cache"
+        - "{{ putio_cli_runtime_user_home }}/.local/share"
+      become: true
+
+    - name: Install pinned putio-cli dependencies
+      ansible.builtin.command:
+        argv:
+          - "{{ putio_cli_node_prefix }}/bin/pnpm"
+          - install
+          - --frozen-lockfile
+      args:
+        chdir: "{{ putio_cli_source_dir }}"
+      become: true
+      become_user: "{{ putio_cli_runtime_user }}"
+      become_flags: -H
+      environment:
+        HOME: "{{ putio_cli_runtime_user_home }}"
+        USER: "{{ putio_cli_runtime_user }}"
+        LOGNAME: "{{ putio_cli_runtime_user }}"
+        XDG_CONFIG_HOME: "{{ putio_cli_runtime_user_home }}/.config"
+        XDG_CACHE_HOME: "{{ putio_cli_runtime_user_home }}/.cache"
+        XDG_DATA_HOME: "{{ putio_cli_runtime_user_home }}/.local/share"
+        PNPM_HOME: "{{ putio_cli_runtime_user_home }}/.local/share/pnpm"
+        PATH: "{{ putio_cli_node_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+      register: putio_cli_dependencies
+      changed_when: true
+      when: putio_cli_git_checkout.changed or not putio_cli_node_modules_stat.stat.exists
+
+    - name: Build the official putio-cli SEA binary
+      ansible.builtin.command:
+        argv:
+          - "{{ putio_cli_node_prefix }}/bin/pnpm"
+          - run
+          - build:sea
+      args:
+        chdir: "{{ putio_cli_source_dir }}"
+      become: true
+      become_user: "{{ putio_cli_runtime_user }}"
+      become_flags: -H
+      environment:
+        HOME: "{{ putio_cli_runtime_user_home }}"
+        USER: "{{ putio_cli_runtime_user }}"
+        LOGNAME: "{{ putio_cli_runtime_user }}"
+        XDG_CONFIG_HOME: "{{ putio_cli_runtime_user_home }}/.config"
+        XDG_CACHE_HOME: "{{ putio_cli_runtime_user_home }}/.cache"
+        XDG_DATA_HOME: "{{ putio_cli_runtime_user_home }}/.local/share"
+        PNPM_HOME: "{{ putio_cli_runtime_user_home }}/.local/share/pnpm"
+        PATH: "{{ putio_cli_node_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+      register: putio_cli_build
+      changed_when: true
+      when: putio_cli_git_checkout.changed or not putio_cli_command_stat.stat.exists
+
+    - name: Verify the official putio-cli SEA binary
+      ansible.builtin.command:
+        argv:
+          - "{{ putio_cli_node_prefix }}/bin/pnpm"
+          - run
+          - verify:sea
+      args:
+        chdir: "{{ putio_cli_source_dir }}"
+      become: true
+      become_user: "{{ putio_cli_runtime_user }}"
+      become_flags: -H
+      environment:
+        HOME: "{{ putio_cli_runtime_user_home }}"
+        USER: "{{ putio_cli_runtime_user }}"
+        LOGNAME: "{{ putio_cli_runtime_user }}"
+        XDG_CONFIG_HOME: "{{ putio_cli_runtime_user_home }}/.config"
+        XDG_CACHE_HOME: "{{ putio_cli_runtime_user_home }}/.cache"
+        XDG_DATA_HOME: "{{ putio_cli_runtime_user_home }}/.local/share"
+        PNPM_HOME: "{{ putio_cli_runtime_user_home }}/.local/share/pnpm"
+        PATH: "{{ putio_cli_node_prefix }}/bin:/usr/local/bin:/usr/bin:/bin"
+      changed_when: false
+      check_mode: false
+      when: putio_cli_git_checkout.changed or putio_cli_build.changed | default(false)
+
+    - name: Install the built putio command
+      ansible.builtin.copy:
+        src: "{{ putio_cli_source_dir }}/.artifacts/sea/putio"
+        dest: "{{ putio_cli_command_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      become: true
+      when: putio_cli_git_checkout.changed or putio_cli_build.changed | default(false)
+
+    - name: Validate installed putio-cli version
+      ansible.builtin.command:
+        argv:
+          - "{{ putio_cli_command_path }}"
+          - version
+      register: putio_cli_version
+      changed_when: false
+      check_mode: false
+
+    - name: Assert expected putio-cli version
+      ansible.builtin.assert:
+        that:
+          - putio_cli_effective_expected_version in putio_cli_version.stdout
+        fail_msg: >-
+          Installed putio-cli did not report
+          {{ putio_cli_effective_expected_version }}:
+          {{ putio_cli_version.stdout }}

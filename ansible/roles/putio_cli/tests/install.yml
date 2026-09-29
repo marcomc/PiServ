@@ -1,0 +1,55 @@
+---
+- name: Build putio-cli in an isolated target directory
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Require a supported Linux build target
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Linux'
+          - ansible_facts.architecture in ['aarch64', 'x86_64']
+        fail_msg: The install test requires Linux aarch64 or x86_64.
+
+    - name: Create an isolated install-test root
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: putio-cli-install-test-
+      register: putio_cli_test_root
+
+    - name: Build and validate putio-cli in the isolated root
+      block:
+        - name: Include putio_cli for an isolated source build
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname }}"
+          vars:
+            putio_cli_state: present
+            putio_cli_runtime_user: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_group: >-
+              {{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}
+            putio_cli_runtime_user_home: "{{ putio_cli_test_root.path }}/home"
+            putio_cli_source_dir: "{{ putio_cli_test_root.path }}/build/source"
+            putio_cli_node_install_root: "{{ putio_cli_test_root.path }}/nodejs"
+            putio_cli_command_path: "{{ putio_cli_test_root.path }}/bin/putio"
+
+        - name: Read the isolated putio-cli version
+          ansible.builtin.command:
+            argv:
+              - "{{ putio_cli_test_root.path }}/bin/putio"
+              - version
+          register: putio_cli_test_version
+          changed_when: false
+          check_mode: false
+
+        - name: Assert the isolated build reports the configured release
+          ansible.builtin.assert:
+            that:
+              - "'1.6.2' in putio_cli_test_version.stdout"
+
+      always:
+        - name: Remove the isolated install-test root
+          ansible.builtin.file:
+            path: "{{ putio_cli_test_root.path }}"
+            state: absent
+          become: true
+          when: putio_cli_test_root.path is defined

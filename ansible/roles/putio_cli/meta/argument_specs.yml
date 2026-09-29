@@ -1,0 +1,53 @@
+---
+argument_specs:
+  main:
+    short_description: Build and install the official putio-cli.
+    options:
+      putio_cli_state:
+        type: str
+        choices: [present, absent]
+        default: present
+      putio_cli_runtime_user:
+        type: str
+        description: User that owns the source and build workspace.
+      putio_cli_runtime_group:
+        type: str
+        description: Group that owns the source and build workspace.
+      putio_cli_runtime_user_home:
+        type: path
+        description: Home directory used for the build user's package state.
+      putio_cli_repo_url:
+        type: str
+        default: https://github.com/putdotio/putio-cli.git
+      putio_cli_repo_version:
+        type: str
+        default: v1.6.2
+      putio_cli_expected_version:
+        type: str
+        default: ""
+      putio_cli_source_dir:
+        type: path
+        default: /opt/putio-cli
+      putio_cli_install_dir:
+        type: path
+        default: /usr/local/bin
+      putio_cli_command_path:
+        type: path
+        default: /usr/local/bin/putio
+      putio_cli_node_version:
+        type: str
+        default: 24.18.0
+      putio_cli_pnpm_version:
+        type: str
+        default: 11.2.2
+      putio_cli_node_install_root:
+        type: path
+        default: /opt/nodejs
+      putio_cli_node_architectures:
+        type: dict
+        default:
+          aarch64: arm64
+          x86_64: x64
+      putio_cli_apt_packages:
+        type: list
+        elements: str

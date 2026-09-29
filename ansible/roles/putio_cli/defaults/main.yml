@@ -1,0 +1,23 @@
+---
+putio_cli_state: present
+putio_cli_runtime_user: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
+putio_cli_runtime_group: "{{ putio_cli_runtime_user }}"
+putio_cli_runtime_user_home: >-
+  {{ '/root' if putio_cli_runtime_user == 'root' else '/home/' ~ putio_cli_runtime_user }}
+putio_cli_repo_url: https://github.com/putdotio/putio-cli.git
+putio_cli_repo_version: v1.6.2
+putio_cli_expected_version: ""
+putio_cli_source_dir: /opt/putio-cli
+putio_cli_install_dir: /usr/local/bin
+putio_cli_command_path: "{{ putio_cli_install_dir }}/putio"
+putio_cli_node_version: 24.18.0
+putio_cli_pnpm_version: 11.2.2
+putio_cli_node_install_root: /opt/nodejs
+putio_cli_node_architectures:
+  aarch64: arm64
+  x86_64: x64
+putio_cli_apt_packages:
+  - ca-certificates
+  - git
+  - tar
+  - xz-utils
