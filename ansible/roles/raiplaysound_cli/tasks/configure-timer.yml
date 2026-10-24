@@ -1,0 +1,60 @@
+---
+- name: Read installed raiplaysound-cli user timer
+  ansible.builtin.stat:
+    path: "{{ raiplaysound_cli_runtime_user_home }}/.config/systemd/user/{{ raiplaysound_cli_user_timer_name }}"
+  register: raiplaysound_cli_user_timer_stat
+
+- name: Install raiplaysound-cli user systemd files
+  become: true
+  block:
+    - name: Ensure raiplaysound-cli user systemd directory exists
+      ansible.builtin.file:
+        path: "{{ raiplaysound_cli_runtime_user_home }}/.config/systemd/user"
+        state: directory
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0755"
+
+    - name: Install raiplaysound-cli user service
+      ansible.builtin.template:
+        src: raiplaysound-cli-daily-sync.service.j2
+        dest: "{{ raiplaysound_cli_runtime_user_home }}/.config/systemd/user/{{ raiplaysound_cli_user_service_name }}"
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0644"
+
+    - name: Install raiplaysound-cli user timer
+      ansible.builtin.template:
+        src: raiplaysound-cli-daily-sync.timer.j2
+        dest: "{{ raiplaysound_cli_runtime_user_home }}/.config/systemd/user/{{ raiplaysound_cli_user_timer_name }}"
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0644"
+
+- name: Read raiplaysound-cli runtime user linger state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/loginctl
+      - show-user
+      - "{{ raiplaysound_cli_runtime_user }}"
+      - -p
+      - Linger
+  register: raiplaysound_cli_linger_state
+  changed_when: false
+  check_mode: false
+
+- name: Enable raiplaysound-cli runtime user linger
+  when:
+    - raiplaysound_cli_enable_linger | bool
+    - "'Linger=yes' not in raiplaysound_cli_linger_state.stdout"
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/loginctl
+      - enable-linger
+      - "{{ raiplaysound_cli_runtime_user }}"
+  become: true
+  changed_when: true
+
+- name: Manage installed raiplaysound-cli user timer
+  ansible.builtin.include_tasks: manage-installed-timer.yml
+  when: not ansible_check_mode or raiplaysound_cli_user_timer_stat.stat.exists
