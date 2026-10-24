@@ -1,0 +1,26 @@
+---
+- name: Prepare raiplaysound-cli system packages and source paths
+  become: true
+  block:
+    - name: Install raiplaysound-cli system packages
+      ansible.builtin.apt:
+        name: "{{ raiplaysound_cli_apt_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure raiplaysound-cli source parent exists
+      ansible.builtin.file:
+        path: "{{ raiplaysound_cli_source_dir | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure raiplaysound-cli source directory exists
+      ansible.builtin.file:
+        path: "{{ raiplaysound_cli_source_dir }}"
+        state: directory
+        owner: "{{ raiplaysound_cli_runtime_user }}"
+        group: "{{ raiplaysound_cli_runtime_user }}"
+        mode: "0755"

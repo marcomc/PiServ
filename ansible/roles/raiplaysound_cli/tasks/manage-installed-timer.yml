@@ -1,0 +1,26 @@
+---
+- name: Manage and validate installed raiplaysound-cli user timer
+  become: true
+  become_user: "{{ raiplaysound_cli_runtime_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ raiplaysound_cli_runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ raiplaysound_cli_runtime_dir }}/bus"
+  block:
+    - name: Manage raiplaysound-cli user timer
+      ansible.builtin.systemd_service:
+        name: "{{ raiplaysound_cli_user_timer_name }}"
+        scope: user
+        daemon_reload: true
+        enabled: "{{ raiplaysound_cli_user_timer_enabled }}"
+        state: "{{ raiplaysound_cli_user_timer_state }}"
+
+    - name: Validate raiplaysound-cli user timer is active
+      when: raiplaysound_cli_user_timer_state == "started"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemctl
+          - --user
+          - is-active
+          - "{{ raiplaysound_cli_user_timer_name }}"
+      changed_when: false
+      check_mode: false

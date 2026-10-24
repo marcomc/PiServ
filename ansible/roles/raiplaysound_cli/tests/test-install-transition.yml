@@ -1,0 +1,16 @@
+---
+- name: Test RaiPlaySound checkout and installation transition
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Include release resolution tasks
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/resolve-release.yml"
+
+    - name: Include source installation tasks
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/install-source.yml"
+
+    - name: Assert expected tag was checked out
+      ansible.builtin.assert:
+        that:
+          - raiplaysound_cli_checkout_version == expected_tag

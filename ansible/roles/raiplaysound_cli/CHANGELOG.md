@@ -2,6 +2,14 @@
 
 All notable changes for the raiplaysound_cli Ansible role are documented here.
 
+## 0.2.0 - Unreleased
+
+### Changed
+
+- Resolve `latest` from the GitHub stable-release API and install its tag.
+- Allow selecting a specific release tag and update the source checkout on
+  each run.
+
 ## 0.1.0 - Unreleased
 
 ### Added

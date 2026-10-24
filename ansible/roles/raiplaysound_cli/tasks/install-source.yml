@@ -1,0 +1,34 @@
+---
+- name: Check out raiplaysound-cli source
+  ansible.builtin.git:
+    repo: "{{ raiplaysound_cli_repo_url }}"
+    dest: "{{ raiplaysound_cli_source_dir }}"
+    version: "{{ raiplaysound_cli_checkout_version }}"
+    update: "{{ raiplaysound_cli_repo_update }}"
+    force: "{{ raiplaysound_cli_repo_force }}"
+  become: true
+  become_user: "{{ raiplaysound_cli_runtime_user }}"
+  register: raiplaysound_cli_git_checkout
+
+- name: Check installed raiplaysound-cli command
+  ansible.builtin.stat:
+    path: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin/raiplaysound-cli"
+  register: raiplaysound_cli_command_stat
+
+- name: Install raiplaysound-cli for runtime user
+  when:
+    - raiplaysound_cli_force_install | bool
+      or raiplaysound_cli_git_checkout.changed
+      or not raiplaysound_cli_command_stat.stat.exists
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/make
+      - install
+  args:
+    chdir: "{{ raiplaysound_cli_source_dir }}"
+  become: true
+  become_user: "{{ raiplaysound_cli_runtime_user }}"
+  environment:
+    HOME: "{{ raiplaysound_cli_runtime_user_home }}"
+    PATH: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  changed_when: true

@@ -1,0 +1,30 @@
+---
+- name: Validate installed raiplaysound-cli commands
+  become: true
+  become_user: "{{ raiplaysound_cli_runtime_user }}"
+  environment:
+    HOME: "{{ raiplaysound_cli_runtime_user_home }}"
+    PATH: "{{ raiplaysound_cli_runtime_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  block:
+    - name: Validate raiplaysound-cli command
+      ansible.builtin.command:
+        argv:
+          - "{{ raiplaysound_cli_runtime_user_home }}/.local/bin/raiplaysound-cli"
+          - --version
+      register: raiplaysound_cli_version
+      changed_when: false
+      check_mode: false
+
+    - name: Assert expected raiplaysound-cli version
+      when: raiplaysound_cli_expected_version | length > 0
+      ansible.builtin.assert:
+        that:
+          - raiplaysound_cli_expected_version in raiplaysound_cli_version.stdout
+
+    - name: Validate raiplaysound-cli daily sync command
+      ansible.builtin.command:
+        argv:
+          - "{{ raiplaysound_cli_runtime_user_home }}/.local/bin/raiplaysound-cli-daily-sync"
+          - --help
+      changed_when: false
+      check_mode: false

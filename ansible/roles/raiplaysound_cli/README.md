@@ -38,7 +38,8 @@ This role automates the validated RaiPlaySound CLI install path:
 | `raiplaysound_cli_runtime_user` | `ansible_user`, with a remote fact or `root` fallback | User that owns the install |
 | `raiplaysound_cli_source_dir` | `/opt/raiplaysound-cli` | Source checkout path |
 | `raiplaysound_cli_repo_url` | GitHub repository URL | Source repository |
-| `raiplaysound_cli_repo_version` | `main` | Git ref to check out |
+| `raiplaysound_cli_release` | `latest` | GitHub release tag to install, or `latest` to resolve the latest stable release |
+| `raiplaysound_cli_latest_release_api` | GitHub API URL | Endpoint used to resolve `latest` |
 | `raiplaysound_cli_expected_version` | empty | Optional version assertion |
 | `raiplaysound_cli_config_path` | runtime user config dir | Config file path |
 | `raiplaysound_cli_config_mode` | `managed` | Config behavior: `managed`, `create`, or `unmanaged` |
@@ -50,6 +51,12 @@ This role automates the validated RaiPlaySound CLI install path:
 | `raiplaysound_cli_service_exec_start_pre` | `[]` | Optional preflight commands |
 
 See `defaults/main.yml` for the full variable set.
+
+The role checks GitHub's latest-release API on each run when
+`raiplaysound_cli_release: latest` is selected, then checks out that release's
+tag. Set the variable to a release tag such as `v2.5.0` to install a specific
+release. The source checkout is updated on each run so newly published tags are
+available without changing the playbook.
 
 ## Example Playbook
 
@@ -98,6 +105,8 @@ site-specific mount or storage health check.
 ```sh
 ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check tests/test.yml
 ansible-lint .
+python3 tests/test_release_resolution.py
+python3 tests/test_install_transition.py
 ```
 
 ## License

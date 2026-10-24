@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0] - 2026-10-24
+
+### RaiPlaySound CLI
+
+- Updated the RaiPlaySound CLI role to install the latest stable GitHub release
+  by default, while allowing a specific release tag to be selected.
+- Configured PiServ to track the latest RaiPlaySound CLI release.
+
 ## [0.5.0] - 2026-08-11
 
 ### Hermes Home Assistant and Apple Home

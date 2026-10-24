@@ -19,13 +19,17 @@ argument_specs:
         type: str
         default: "https://github.com/marcomc/raiplaysound-cli.git"
         description: Git repository URL.
-      raiplaysound_cli_repo_version:
+      raiplaysound_cli_release:
         type: str
-        default: main
-        description: Git ref to check out.
+        default: latest
+        description: GitHub release tag to install, or latest for the latest stable release.
+      raiplaysound_cli_latest_release_api:
+        type: str
+        default: https://api.github.com/repos/marcomc/raiplaysound-cli/releases/latest
+        description: GitHub API endpoint used to resolve the latest release.
       raiplaysound_cli_repo_update:
         type: bool
-        default: false
+        default: true
         description: Whether to update an existing checkout.
       raiplaysound_cli_repo_force:
         type: bool

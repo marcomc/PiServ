@@ -1,0 +1,30 @@
+---
+- name: Test RaiPlaySound release resolution
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Resolve and verify selected release
+      block:
+        - name: Include release resolution tasks
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/resolve-release.yml"
+
+        - name: Assert the expected release tag was selected
+          when: expected_failure_task is not defined
+          ansible.builtin.assert:
+            that:
+              - raiplaysound_cli_checkout_version == expected_tag
+
+        - name: Fail if an expected release validation succeeds
+          when: expected_failure_task is defined
+          ansible.builtin.fail:
+            msg: "The expected release validation unexpectedly succeeded."
+      rescue:
+        - name: Assert failure came from the intended release validation
+          ansible.builtin.assert:
+            that:
+              - expected_failure_task is defined
+              - ansible_failed_task.name == expected_failure_task
+              - >-
+                expected_failure_message is not defined
+                or expected_failure_message in ansible_failed_result.msg

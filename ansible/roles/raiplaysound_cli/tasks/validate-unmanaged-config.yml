@@ -1,0 +1,14 @@
+---
+- name: Read unmanaged raiplaysound-cli config file
+  ansible.builtin.stat:
+    path: "{{ raiplaysound_cli_effective_config_path }}"
+  register: raiplaysound_cli_unmanaged_config_stat
+
+- name: Assert unmanaged raiplaysound-cli config file exists
+  ansible.builtin.assert:
+    that:
+      - raiplaysound_cli_unmanaged_config_stat.stat.exists
+      - raiplaysound_cli_unmanaged_config_stat.stat.isreg
+    fail_msg: >-
+      raiplaysound_cli_config_mode is unmanaged, but the timer requires an
+      existing config file at {{ raiplaysound_cli_effective_config_path }}.
