@@ -27,8 +27,7 @@
   roles:
     - role: raiplaysound_cli
       vars:
-        raiplaysound_cli_repo_version: 55dfb29c0c15cc30c603338072261fabf5e52fe4
-        raiplaysound_cli_expected_version: "2.5.0"
+        raiplaysound_cli_release: latest
         raiplaysound_cli_config_path: "/home/{{ raiplaysound_cli_runtime_user }}/.config/raiplaysound-cli/piserv-daily-sync.conf"
         raiplaysound_cli_config_mode: create
         raiplaysound_cli_manage_user_timer: true

@@ -57,10 +57,12 @@ Run from the PiServ repository root:
 ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
-The playbook installs Debian dependencies, checks out the pinned CLI source,
-runs the upstream `make install` path for `admin`, creates the PiServ config
-when missing, installs the pCloud health helper, and manages the user
-service/timer.
+The playbook installs Debian dependencies, resolves the latest stable GitHub
+release, runs the upstream `make install` path for `admin`, creates the PiServ
+config when missing, installs the pCloud health helper, and manages the user
+service/timer. To select a specific release, set
+`raiplaysound_cli_release` in `ansible/playbooks/raiplaysound-cli-daily-sync.yml`
+to its Git tag, for example `v2.5.0`.
 
 ## Config Management
 

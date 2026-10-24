@@ -2,8 +2,9 @@
 raiplaysound_cli_runtime_user: "{{ ansible_user | default(ansible_facts['user_id'] | default('root')) }}"
 raiplaysound_cli_source_dir: /opt/raiplaysound-cli
 raiplaysound_cli_repo_url: "https://github.com/marcomc/raiplaysound-cli.git"
-raiplaysound_cli_repo_version: main
-raiplaysound_cli_repo_update: false
+raiplaysound_cli_release: latest
+raiplaysound_cli_latest_release_api: https://api.github.com/repos/marcomc/raiplaysound-cli/releases/latest
+raiplaysound_cli_repo_update: true
 raiplaysound_cli_repo_force: false
 raiplaysound_cli_force_install: false
 raiplaysound_cli_expected_version: ""

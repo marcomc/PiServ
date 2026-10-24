@@ -318,12 +318,14 @@ Install and manage the RaiPlaySound daily podcast sync:
 ansible-playbook ansible/playbooks/raiplaysound-cli-daily-sync.yml
 ```
 
-The RaiPlaySound playbook installs the pinned CLI source revision for `admin`,
-creates the PiServ config when missing, installs a user-scoped daily systemd
-timer, and gates the direct-write sync on the pCloud health check. New configs
-send summary mail to local recipient `root` through the system `msmtp` config
-wrapper; existing create-only configs must be edited manually. Current
-user-scoped workloads run under the single human sudo account `admin`.
+The RaiPlaySound playbook installs the latest stable GitHub release for
+`admin`, creates the PiServ config when missing, installs a user-scoped daily
+systemd timer, and gates the direct-write sync on the pCloud health check. Set
+`raiplaysound_cli_release` in the playbook to a Git tag to select a specific
+release. New configs send summary mail to local recipient `root` through the
+system `msmtp` config wrapper; existing create-only configs must be edited
+manually. Current user-scoped workloads run under the single human sudo
+account `admin`.
 
 Install and validate the Home Assistant MQTT Agent:
 
